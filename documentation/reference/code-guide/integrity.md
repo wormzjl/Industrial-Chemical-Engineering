@@ -52,6 +52,14 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `runtime/pollution/Breaches` | Wrecks every device of a blasted structure; heat sides close and release once |
 | `runtime/pollution/IntegrityCommands` | `/icheme integrity get`, `set <loss> <fouling> <wrecked>`, `clear`, by `id <device>` or `at <pos>` |
 | `world/item/RepairKitItem` | Refused on constructed equipment (`USE_CONSTRUCTOR`); queues a `MachineHealth.Repair` on an in-line pump's, compressor's or control valve's pipe block |
+| `world/level/block/EquipmentRepair` | The constructor's repair of the structure on its line: `repair` (its node devices to `queueStructureRepair`; a structure with no fluid device answers `NOTHING_TO_REPAIR`, the seam for a column's repair), `key` (answer text), `state` and `words` (worst used allowance and `THIN WALL`, `WEEPING`, `LEAKING`, `FAILED`, `WRECKED`) |
+| `world/level/block/EquipmentDeconstruction.checked` | The removal group's shared check (reach, build rights, target origin and stamp, loaded and interactable cells; break events only for a removal) |
+| `network/EquipmentNetwork.Repair`, `RepairAnswer`, `StructureState`, `StructureStateAnswer` | The Repair key's request and its answer from the event's reply (dropped when the player left); the state, a read answered at once |
+| `client/gui/common/ConstructorColumn.Removal`, `EquipmentConstructorScreen` | Repair beside Deconstruct; the state line after the keys; asks the state when the target changes and after a repair's answer |
+| `runtime/fluid/FluidView.Integrity`, `FluidView.Trim`, `ViewBuilder.wall`, `trim` | The page's wall (used share, rate, mechanism, life in play seconds, material) and a trimmed control valve's trim (health, life) |
+| `client/gui/common/DeviceMeters.wall`, `trim`, `DeviceColumn.integrity`, `trim` | The Integrity and Trim groups after the Phases (their names wrap, so they stand below the basis key); names under `gui.icheme.mechanism.*` and `gui.icheme.metallurgy.*` |
+| `Integrity.weeps`, `Host.weeping`, `EquipmentShellBlockEntity.weeping` | A weeping wall marks its node's shell cell at every cadence (the cell sends its update tag only when its flag changes; never saved) |
+| `client/WallWeeps` | Drips from the structure's lowest shell cells (one per 10 ticks a structure, at most 16 a tick) and the `wall_weep` loop through `FxSounds`, both within 8 blocks |
 
 ## Flow
 
@@ -68,6 +76,13 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
    `NOTHING_TO_REPAIR`, `NOT_IDLE` (a connection at the device's node, or a heat side's passage, moved more than 1e-10
    kg/s over the island's last slice, or a mover of it runs), `NOT_EMPTY` (a vessel with 1 % of its volume liquid or
    more than 0.2 bar from the ambient), else `REPAIRED` (loss 0, breach closed, machine health 1) or `CLEANED`.
+
+4. The player side (WP4): the constructor's Repair re-checks the structure (`EquipmentDeconstruction.checked`, no break
+   events) and queues one event (`EquipmentRepair.repair`); the reply sends `RepairAnswer` and plays the smithing table sound at
+   the structure on `REPAIRED`. `StructureState` reads `Integrity.wall`, `wrecked`, `MachineHealth.failed` and the breach
+   of the structure's node devices. `ViewBuilder` adds `FluidView.integrity` and `trim` to every view it builds; their words
+   stay on the status line, said once. At each cadence and after a repair, `Integrity.weeps` tells the host each weeping
+   wall; the shell cell carries `Weeping` on its update tag to the clients that track it, and `WallWeeps` drips and plays.
 
 ## Formats
 
@@ -101,7 +116,10 @@ formula's own value where the plan rounds further), the factor table, monotony a
 packages. `runtime/fluid/IntegrityTest` holds the runtime (rates at the time factor, the 256 bound and the round-robin,
 failures once by kind, wrecked, idle-and-empty, cleaning, corrosive air, the switches); `MachineHealthTest` the trims;
 `HeatSideTopologyTest` the closed passage; `IntegrityGameTests` a corroded drum repaired once drained and a failed trim
-standing open; `PollutionBreachGameTests` a wrecked drum; `PumpHealthGameTests` the kit refused on a casing.
+standing open, and the constructor's repair path mending a weeping drum (the cell's flag set, then cleared); `PollutionBreachGameTests` a
+wrecked drum; `PumpHealthGameTests` the kit refused on a casing. `IntegrityTest` also holds the weep calls; `EquipmentRepairTest`
+the answers' lines and the words; `EquipmentNetworkCodecTest` the four payloads; `DeviceMetersTest` the wall and trim readings
+and their JSON; `DeviceColumnTest` and `ConstructorColumnTest` the groups and the Repair key at every width.
 
 ## Traps
 
@@ -120,9 +138,15 @@ standing open; `PollutionBreachGameTests` a wrecked drum; `PumpHealthGameTests` 
 - A failure is applied once per record (`failed`), whatever the timing of its queued edit; a wall set below through and
   through again fails again.
 - `Integrity.idle` and `MachineHealth.idle` read the island's stored last result; nothing solves.
+- The Repair packet handler only queues; send the answer from the reply and check the player's connection there (the player may
+  have left before the engine's drain).
+- The weep flag is never saved: a loaded cell learns it at the next cadence, because `Integrity.weeps` tells the host every
+  weeping wall each time and the cell sends only a change.
+- `FluidView.Integrity` shadows the runtime `Integrity` class inside `FluidView`; name the runtime class in full there.
 
 ## Snapshot
 
 2026-11-16, WP2: the laws (WP1) booked on vessels, heat sides and machines of constructed equipment, trims and `SOLIDS`
 on machine health, wrecked blasts, the structure repair and cleaning events, the config and the command. The pages
-(WP4), the films' fouling (WP5) and the constructor's repair button (WP3) read them next.
+(WP4: the constructor's Repair key and structure state, the Integrity and Trim groups, weeping walls) read them; the
+films' fouling (WP5) and a column's repair (WP8, at `EquipmentRepair.repair`) come next.

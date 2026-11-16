@@ -81,9 +81,11 @@ public final class DeviceColumn {
      */
     public record Input(Kind kind, boolean canEdit, boolean switchable, boolean powerOn, String pressureUnit, String temperatureUnit, String flowTime,
                         Valve valve, @Nullable Opening opening, boolean recoverable, @Nullable Level level, @Nullable String junction,
-                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction,@Nullable String fixedDuty) {
-        public Input(Kind kind,boolean canEdit,boolean switchable,boolean powerOn,String pressureUnit,String temperatureUnit,String flowTime,Valve valve,@Nullable Opening opening,boolean recoverable,@Nullable Level level,@Nullable String junction,List<Column.Row> lead,@Nullable Phases phases,List<Meter> readings,@Nullable Drive drive,@Nullable Power power,@Nullable Suction suction) {this(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,null);}
-        public Input withFixedDuty(String text){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,text);}
+                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction,@Nullable String fixedDuty,@Nullable Wall wall,@Nullable Trim trim) {
+        public Input(Kind kind,boolean canEdit,boolean switchable,boolean powerOn,String pressureUnit,String temperatureUnit,String flowTime,Valve valve,@Nullable Opening opening,boolean recoverable,@Nullable Level level,@Nullable String junction,List<Column.Row> lead,@Nullable Phases phases,List<Meter> readings,@Nullable Drive drive,@Nullable Power power,@Nullable Suction suction) {this(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,null,null,null);}
+        public Input withFixedDuty(String text){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,text,wall,trim);}
+        /** This input with a constructed device's wall and a control valve's trim (batch 2026-11-16-fouling-corrosion, WP4). */
+        public Input withIntegrity(@Nullable Wall w,@Nullable Trim v){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,w,v);}
         public Input {
             lead = List.copyOf(lead);
             readings = List.copyOf(readings);
@@ -98,7 +100,7 @@ public final class DeviceColumn {
 
         /** This input with a pump's readings. */
         public Input withSuction(@Nullable Suction value) {
-            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value,fixedDuty);
+            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value,fixedDuty,wall,trim);
         }
 
         /** A device with no driver and no fans. */
@@ -146,6 +148,35 @@ public final class DeviceColumn {
                         new Column.Reading("life", t.get("life_left"), s.life(), "min", t.get("life_left.hint")))));
     }
 
+    /**
+     * A constructed device's wall (batch 2026-11-16-fouling-corrosion, WP4), as shown: the wall left (% of its corrosion
+     * allowance), the rate (mm per corrosion year), its life (minutes of play; — while it does not thin), the governing
+     * mechanism's and the material's names. Its words (THIN WALL, WEEPING, LEAKING, WRECKED) stay on the message display.
+     */
+    public record Wall(String left, String rate, String life, String mechanism, String material) {
+    }
+
+    /** A control valve's trim (WP4), as shown: its health (%) and its life (minutes of play; — while it does not wear). */
+    public record Trim(String health, String life) {
+    }
+
+    /** The Integrity group: the wall left, its rate and life, LED meters, then the governing mechanism and the material. */
+    public static Column.Group integrity(Wall w, HeatControlColumn.Texts t) {
+        return new Column.Group(t.get("device_group.integrity"), t.get("device_group.integrity.hint"), List.of(
+                new Column.Reading("wall:left", t.get("wall_left"), w.left(), "%", t.get("wall_left.hint")),
+                new Column.Reading("wall:rate", t.get("wall_rate"), w.rate(), "mm/y", t.get("wall_rate.hint")),
+                new Column.Reading("wall:life", t.get("life_left"), w.life(), "min", t.get("wall_life.hint")),
+                new Column.Paragraph(t.get("wall_mechanism", w.mechanism()), Palette.TEXT, t.get("wall_mechanism.hint")),
+                new Column.Paragraph(t.get("wall_material", w.material()), Palette.TEXT, t.get("wall_material.hint"))));
+    }
+
+    /** The Trim group: the trim's health and its life, LED meters. */
+    public static Column.Group trim(Trim v, HeatControlColumn.Texts t) {
+        return new Column.Group(t.get("device_group.trim"), t.get("device_group.trim.hint"), List.of(
+                new Column.Reading("trim:health", t.get("trim_health"), v.health(), "%", t.get("trim_health.hint")),
+                new Column.Reading("trim:life", t.get("life_left"), v.life(), "min", t.get("trim_life.hint"))));
+    }
+
     /** The Drive group: the driver's line and state, then Open driver, a push button (it opens a page; A100). */
     public static Column.Group drive(Drive d, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
@@ -181,6 +212,9 @@ public final class DeviceColumn {
         // fixed height whatever they read, so the Phases' basis key keeps its slot.
         if (in.suction() != null) rows.addAll(suction(in.suction(), t));
         if (in.phases() != null) rows.add(phases(in.phases(), t));
+        // The wall and the trim (WP4): after the Phases' basis key, as the names wrap with what they read at a narrow door.
+        if (in.wall() != null) rows.add(integrity(in.wall(), t));
+        if (in.trim() != null) rows.add(trim(in.trim(), t));
         // From here the texts follow the plant: these groups hold no widget.
         if (in.level() != null) {
             var level = in.level();

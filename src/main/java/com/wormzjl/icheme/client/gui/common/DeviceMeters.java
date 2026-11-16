@@ -257,6 +257,24 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
     }
     private String boxed(Double v){return v==null?"—":value(v);}
     /**
+     * A constructed device's Integrity group (batch 2026-11-16-fouling-corrosion, WP4): the wall left of its allowance, the
+     * rate, its life in minutes of play and the names of the governing mechanism and the material, from {@code names} (lines
+     * under {@code gui.icheme.}: {@code mechanism.<name>}, {@code metallurgy.<name>}); null for a device with no booked wall.
+     */
+    public DeviceColumn.Wall wall(HeatControlColumn.Texts names){
+        var w=data.view().integrity();if(w==null)return null;
+        String mechanism=w.mechanism()==null||w.mechanism().isEmpty()?"—":names.get(mechanismKey(w.mechanism()));
+        String material=w.material()==null||w.material().isEmpty()?"—":names.get("metallurgy."+w.material().toLowerCase(java.util.Locale.ROOT));
+        return new DeviceColumn.Wall(value(100*(1-Math.clamp(w.usedShare(),0,1))),value(w.rate()),w.lifePlaySeconds()==null?"—":value(w.lifePlaySeconds()/60),mechanism,material);
+    }
+    /** A mechanism's line under {@code gui.icheme.}: {@code mechanism.<name in lower case>}. */
+    public static String mechanismKey(String mechanism){return "mechanism."+mechanism.toLowerCase(java.util.Locale.ROOT);}
+    /** A control valve's Trim group (WP4): its health and its life in minutes of play; null for a device that is no trimmed control valve. */
+    public DeviceColumn.Trim trim(){
+        var v=data.view().trim();if(v==null)return null;
+        return new DeviceColumn.Trim(value(100*Math.clamp(v.health(),0,1)),v.lifePlaySeconds()==null?"—":value(v.lifePlaySeconds()/60));
+    }
+    /**
      * A casing's or a turbine's Drive group (W7, owner decision D31, option A): the driver in one line, its state, Open
      * driver; {@code NO DRIVER} where the casing has none and stands closed. Null for a device with no shaft.
      */

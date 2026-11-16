@@ -182,6 +182,12 @@ public final class EquipmentConstructorScreen extends Screen {
     private static long nextDeconstructionRequest;
     private long deconstructionRequest;
     private boolean deconstructing;
+    /** A Repair waits for its answer (batch 2026-11-16-fouling-corrosion, WP4). */
+    private boolean repairing;
+    /** The structure whose state was last asked for (its origin and stamp), and its answer: the worst used wall allowance (NaN while unknown) and its words. */
+    private @Nullable String stateAsked;
+    private double stateUsed = Double.NaN;
+    private String stateWords = "";
     private int targetAge;
     private @Nullable com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel removalTarget;
     private @Nullable Component deconstructionMessage;
@@ -337,8 +343,8 @@ public final class EquipmentConstructorScreen extends Screen {
             var layout = ShapeRasterizer.layout(shape);
             cells = layout.shell().size() + layout.interior().size();
         }
-        return ConstructorColumn.withRemoval(panel, new ConstructorColumn.Removal(target, at, cells, deconstructing,
-                deconstructionMessage == null ? null : deconstructionMessage.getString(), deconstructionFailed), EquipmentConstructorScreen::tr);
+        return ConstructorColumn.withRemoval(panel, new ConstructorColumn.Removal(target, at, cells, deconstructing || repairing,
+                deconstructionMessage == null ? null : deconstructionMessage.getString(), deconstructionFailed, stateUsed, stateWords), EquipmentConstructorScreen::tr);
     }
 
     private ConstructorColumn.Connections connectionInput(){
@@ -484,6 +490,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case "paint" -> show(Page.PAINT);
             case "build" -> build();
             case "deconstruct" -> deconstruct();
+            case "repair" -> repair();
             case "import" -> listImports();
             case "design" -> land(Integer.parseInt(at));
             case "templates" -> {
@@ -924,13 +931,76 @@ public final class EquipmentConstructorScreen extends Screen {
     }
 
     private void updateRemovalTarget() {
-        if (deconstructing) return;
+        if (deconstructing || repairing) return;
         removalTarget = minecraft == null || minecraft.level == null ? null : com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.target(
                 minecraft.level, position, facing, new VesselPlacement(forward, right, up));
+        askState(false);
+    }
+
+    /**
+     * Asks the server for the shown structure's state (WP4) when the target changed since the last ask, or {@code again}
+     * (after a Repair's answer). The server answers at once from cached values; the screen never asks on a timer of its own.
+     * The request carries the screen's placement line, so the server looks where the screen does.
+     */
+    private void askState(boolean again) {
+        var target = removalTarget;
+        if (target == null) {
+            stateAsked = null;
+            stateUsed = Double.NaN;
+            stateWords = "";
+            return;
+        }
+        int stamp = com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.stamp(target);
+        String key = target.origin().asLong() + ":" + stamp;
+        if (!again && key.equals(stateAsked)) return;
+        if (!key.equals(stateAsked)) {
+            stateUsed = Double.NaN;
+            stateWords = "";
+        }
+        stateAsked = key;
+        if (minecraft == null || minecraft.getConnection() == null) return;
+        EquipmentNetwork.sendStructureState(new EquipmentNetwork.StructureState(position, target.origin(), stamp, forward, right, up));
+    }
+
+    /** The server's answer to {@link #askState}: kept while it names the structure shown. */
+    public static void structureState(EquipmentNetwork.StructureStateAnswer answer) {
+        if (!(Minecraft.getInstance().screen instanceof EquipmentConstructorScreen screen) || !screen.position.equals(answer.position())) return;
+        var target = screen.removalTarget;
+        if (target == null || !target.origin().equals(answer.origin())) return;
+        screen.stateUsed = answer.used() >= 0 ? answer.used() : Double.NaN;
+        screen.stateWords = answer.words();
+        screen.refresh();
+    }
+
+    private void repair() {
+        if (removalTarget == null || deconstructing || repairing) return;
+        var target = removalTarget;
+        saved = design();
+        EquipmentNetwork.send(position, saved, EquipmentNetwork.Action.KEEP);
+        deconstructionRequest = ++nextDeconstructionRequest;
+        repairing = true;
+        deconstructionMessage = null;
+        EquipmentNetwork.sendRepair(new EquipmentNetwork.Repair(position, target.origin(),
+                com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.stamp(target), deconstructionRequest));
+        refresh();
+    }
+
+    /** A Repair's answer: on the group's status row while the screen waits for it, else as a chat line. */
+    public static void repaired(EquipmentNetwork.RepairAnswer answer) {
+        var client = Minecraft.getInstance();
+        if (client.screen instanceof EquipmentConstructorScreen screen && screen.position.equals(answer.position())
+                && screen.repairing && screen.deconstructionRequest == answer.request()) {
+            screen.repairing = false;
+            screen.deconstructionMessage = answer.message();
+            screen.deconstructionFailed = !answer.done();
+            screen.updateRemovalTarget();
+            screen.askState(true);
+            screen.refresh();
+        } else if (client.player != null) client.player.displayClientMessage(answer.message(), false);
     }
 
     private void deconstruct() {
-        if (removalTarget == null || deconstructing) return;
+        if (removalTarget == null || deconstructing || repairing) return;
         // Keep the shown target: a changed world must be reviewed rather than silently removing the next unit.
         var target = removalTarget;
         saved = design();
@@ -964,7 +1034,7 @@ public final class EquipmentConstructorScreen extends Screen {
     @Override
     public void tick() {
         if (constructor() == null) onClose();
-        else if (!deconstructing && ++targetAge >= 20) {
+        else if (!deconstructing && !repairing && ++targetAge >= 20) {
             targetAge = 0;
             updateRemovalTarget();
             refresh();

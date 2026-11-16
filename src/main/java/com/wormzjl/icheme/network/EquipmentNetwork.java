@@ -224,6 +224,61 @@ public final class EquipmentNetwork {
     }
 
     /**
+     * Client to server (protocol {@code icheme-5}, batch 2026-11-16-fouling-corrosion, WP4): repair the structure the
+     * constructor's removal group shows, as {@link Deconstruct} names it. The server checks it again and queues one engine
+     * event; {@link RepairAnswer} comes from that event's reply.
+     */
+    public record Repair(BlockPos position, BlockPos origin, int shape, long request) implements CustomPacketPayload {
+        public static final Type<Repair> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_repair"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, Repair> STREAM_CODEC = StreamCodec.composite(
+                BlockPos.STREAM_CODEC, Repair::position, BlockPos.STREAM_CODEC, Repair::origin,
+                ByteBufCodecs.INT, Repair::shape, ByteBufCodecs.VAR_LONG, Repair::request, Repair::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    public record RepairAnswer(BlockPos position, long request, boolean done, Component message) implements CustomPacketPayload {
+        public static final Type<RepairAnswer> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_repair_answer"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, RepairAnswer> STREAM_CODEC = StreamCodec.composite(
+                BlockPos.STREAM_CODEC, RepairAnswer::position, ByteBufCodecs.VAR_LONG, RepairAnswer::request,
+                ByteBufCodecs.BOOL, RepairAnswer::done, ComponentSerialization.TRUSTED_STREAM_CODEC, RepairAnswer::message, RepairAnswer::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /**
+     * Client to server (WP4): the state of the structure the removal group shows, answered at once from cached values. It
+     * carries the screen's placement line ({@code forward}, {@code right}, {@code up}), which the server bounds and looks
+     * along, so that asking needs no save of the draft.
+     */
+    public record StructureState(BlockPos position, BlockPos origin, int shape, int forward, int right, int up) implements CustomPacketPayload {
+        public static final Type<StructureState> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_structure_state"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, StructureState> STREAM_CODEC = StreamCodec.composite(
+                BlockPos.STREAM_CODEC, StructureState::position, BlockPos.STREAM_CODEC, StructureState::origin,
+                ByteBufCodecs.INT, StructureState::shape, ByteBufCodecs.VAR_INT, StructureState::forward, ByteBufCodecs.VAR_INT, StructureState::right,
+                ByteBufCodecs.VAR_INT, StructureState::up, StructureState::new);
+        /** The placement line, bounded as the constructor's steppers bound it. */
+        public VesselPlacement placement() {
+            return new VesselPlacement(Math.clamp(forward, 1, VesselPlacement.MAX_FORWARD), Math.clamp(right, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT),
+                    Math.clamp(up, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT));
+        }
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /** The most characters of a structure's state words. */
+    public static final int MAX_WORDS = 64;
+
+    /**
+     * Server to client (WP4): structure {@code origin}'s worst used wall allowance, 0 to 1 ({@code EquipmentRepair.NO_WALL}
+     * for no booked wall), and its words ({@code THIN WALL}, {@code WEEPING}, {@code LEAKING}, {@code FAILED}, {@code WRECKED}).
+     */
+    public record StructureStateAnswer(BlockPos position, BlockPos origin, float used, String words) implements CustomPacketPayload {
+        public static final Type<StructureStateAnswer> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "equipment_structure_state_answer"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, StructureStateAnswer> STREAM_CODEC = StreamCodec.composite(
+                BlockPos.STREAM_CODEC, StructureStateAnswer::position, BlockPos.STREAM_CODEC, StructureStateAnswer::origin,
+                ByteBufCodecs.FLOAT, StructureStateAnswer::used, ByteBufCodecs.stringUtf8(MAX_WORDS), StructureStateAnswer::words, StructureStateAnswer::new);
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /**
      * Client to server: a column template for a constructor (owner request 2026-10-28), sent after the screen's draft
      * ({@link Action#KEEP}): its name as shown, and its input, the calculator's default input with the template's column
      * settings. The server makes the design from it ({@link ColumnDesign#of}, an air cooler and standard pumps), as a
@@ -337,6 +392,12 @@ public final class EquipmentNetwork {
         registrar.playToServer(ImportChoice.TYPE, ImportChoice.STREAM_CODEC, EquipmentNetwork::importChoice);
         registrar.playToServer(Rename.TYPE, Rename.STREAM_CODEC, EquipmentNetwork::rename);
         registrar.playToServer(Deconstruct.TYPE, Deconstruct.STREAM_CODEC, EquipmentNetwork::deconstruct);
+        registrar.playToServer(Repair.TYPE, Repair.STREAM_CODEC, EquipmentNetwork::repair);
+        registrar.playToServer(StructureState.TYPE, StructureState.STREAM_CODEC, EquipmentNetwork::structureState);
+        registrar.playToClient(RepairAnswer.TYPE, RepairAnswer.STREAM_CODEC, (reply, context) ->
+                com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.repaired(reply));
+        registrar.playToClient(StructureStateAnswer.TYPE, StructureStateAnswer.STREAM_CODEC, (state, context) ->
+                com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen.structureState(state));
         // Protocol 23 (batch 2026-11-10-custom-shader-system, W10): the far silhouettes' subscription and the registry's records.
         registrar.playToServer(SilhouetteWatch.TYPE, SilhouetteWatch.STREAM_CODEC, (request, context) -> {
             if (context.player() instanceof ServerPlayer player)
@@ -384,6 +445,67 @@ public final class EquipmentNetwork {
     }
 
     public static void sendDeconstruct(Deconstruct request) { PacketDistributor.sendToServer(request); }
+
+    /**
+     * Repair (WP4): the structure is checked again as a removal is ({@code EquipmentDeconstruction.checked}, no break
+     * events), then one engine event is queued. The handler only queues: the answer is sent from the event's reply, at the
+     * engine's tick drain, to the player if still connected. An accepted repair plays at the structure.
+     */
+    private static void repair(Repair request, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+        var constructor = editable(player, request.position());
+        var world = com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(player.server).orElse(null);
+        if (constructor == null || world == null) {
+            answerRepair(player, request, false, "message.icheme.equipment.repair.not_editable");
+            return;
+        }
+        EquipmentStructure.Vessel vessel;
+        try {
+            vessel = com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.checked(player, constructor, request.origin(), request.shape(), false).vessel();
+        } catch (IllegalStateException refused) {
+            String reason = java.util.Set.of("not_editable", "changed", "unloaded", "protected").contains(refused.getMessage()) ? refused.getMessage() : "changed";
+            answerRepair(player, request, false, "message.icheme.equipment.repair." + reason);
+            return;
+        }
+        var level = player.serverLevel();
+        var server = player.server;
+        var uuid = player.getUUID();
+        var shape = vessel.shape();
+        var centre = vessel.origin().getCenter().add((shape.sizeX() - 1) / 2.0, (shape.sizeY() - 1) / 2.0, (shape.sizeZ() - 1) / 2.0);
+        com.wormzjl.icheme.world.level.block.EquipmentRepair.repair(world, level, vessel, outcome -> {
+            boolean done = outcome == com.wormzjl.icheme.runtime.fluid.Integrity.Outcome.REPAIRED;
+            if (done) level.playSound(null, centre.x, centre.y, centre.z, net.minecraft.sounds.SoundEvents.SMITHING_TABLE_USE, net.minecraft.sounds.SoundSource.BLOCKS, 1, 1);
+            var to = server.getPlayerList().getPlayer(uuid);
+            if (to != null) answerRepair(to, request, done, com.wormzjl.icheme.world.level.block.EquipmentRepair.key(outcome));
+        });
+    }
+
+    /** A repair's answer, dropped when the player has left (WP2 hit a send to a player with no connection). */
+    private static void answerRepair(ServerPlayer player, Repair request, boolean done, String key) {
+        if (player.isRemoved() || player.hasDisconnected() || player.connection == null) return;
+        PacketDistributor.sendToPlayer(player, new RepairAnswer(request.position(), request.request(), done, Component.translatable(key)));
+    }
+
+    /**
+     * The removal group's structure state (WP4): a replay of cached values ({@code EquipmentRepair.state}), answered at once.
+     * It runs no solver and creates no state. A structure that is no longer the one on the line answers nothing.
+     */
+    private static void structureState(StructureState request, IPayloadContext context) {
+        if (!(context.player() instanceof ServerPlayer player)) return;
+        var constructor = editable(player, request.position());
+        var world = com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(player.server).orElse(null);
+        if (constructor == null || world == null) return;
+        var level = player.serverLevel();
+        var vessel = com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.target(level, constructor.getBlockPos(), constructor.facing(), request.placement());
+        if (vessel == null || !vessel.origin().equals(request.origin()) || com.wormzjl.icheme.world.level.block.EquipmentDeconstruction.stamp(vessel) != request.shape()) return;
+        var state = com.wormzjl.icheme.world.level.block.EquipmentRepair.state(world, level, vessel);
+        String words = state.words().length() > MAX_WORDS ? state.words().substring(0, MAX_WORDS) : state.words();
+        PacketDistributor.sendToPlayer(player, new StructureStateAnswer(request.position(), request.origin(), state.used(), words));
+    }
+
+    public static void sendRepair(Repair request) { PacketDistributor.sendToServer(request); }
+
+    public static void sendStructureState(StructureState request) { PacketDistributor.sendToServer(request); }
 
     /**
      * Client to server (protocol 23, batch 2026-11-10-custom-shader-system, W10): subscribe ({@code on}) to the far

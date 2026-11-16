@@ -95,6 +95,13 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     private @Nullable CompoundTag retiredData;
     private @Nullable FluidView lastView;
     /**
+     * Server: the devices at this cell whose walls weep (batch 2026-11-16-fouling-corrosion, WP4), as the walls' cadence
+     * tells them; presentation state, never saved. Its emptiness rides on the update tag, sent only when it changes.
+     */
+    private final Set<Long> weeps = new java.util.HashSet<>();
+    /** Client: whether a wall of this cell weeps (its drips and weep loop, {@code WallWeeps}). */
+    private boolean weeping;
+    /**
      * A floating-roof tank's node cell: the liquid's level its last view gave, m, saved with the cell and sent with its
      * data, so the roof stands there ({@link FloatingRoofs}) until the tank's first display after a load.
      */
@@ -152,6 +159,23 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
 
     public @Nullable FluidView lastView() {
         return lastView;
+    }
+
+    /**
+     * Server (WP4): device {@code device}'s wall at this cell weeps, or no longer does. A change of whether any wall here
+     * weeps is sent to the clients that track this cell, with its update tag; nothing is saved.
+     */
+    public void weeping(long device, boolean on) {
+        boolean before = !weeps.isEmpty();
+        if (on) weeps.add(device);
+        else weeps.remove(device);
+        if (before != !weeps.isEmpty() && level instanceof ServerLevel)
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+    }
+
+    /** Client: whether a wall of this cell weeps. Server: whether one is told to. */
+    public boolean weeping() {
+        return level != null && level.isClientSide() ? weeping : !weeps.isEmpty();
     }
 
     /** Server: the drum registered with this cell as its node takes its identity; its presentation follows the engine's buckets. */
@@ -304,6 +328,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         CLIENT_PORTS.remove(this);
         CLIENT_NAMED.remove(this);
         leaveStructure();
+        if (level != null && level.isClientSide()) com.wormzjl.icheme.client.WallWeeps.forget(this);
         if (level != null) FloatingRoofs.of(level).remove(worldPosition);
         if (identity != 0 && level instanceof ServerLevel serverLevel && serverLevel.getServer().isSameThread())
             FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world -> world.deviceUnloaded(identity));
@@ -595,6 +620,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     @Override
     protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);instruments.read(tag);
+        weeping = tag.getBoolean("Weeping");
         shape = null;
         key = null;
         paint = Paint.DEFAULT;
@@ -781,6 +807,8 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         var tag = new CompoundTag();instruments.write(tag);
         write(tag);
         if(identity!=0)tag.putLong("FluidIdentity",identity);
+        // A weeping wall (batch 2026-11-16-fouling-corrosion, WP4): presentation only, never saved.
+        if (!weeps.isEmpty()) tag.putBoolean("Weeping", true);
         return tag;
     }
 
@@ -788,6 +816,10 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     protected void clientGeometryChanged() {
         trackMoving();
         trackRoof();
+        if (level != null && level.isClientSide()) {
+            if (weeping) com.wormzjl.icheme.client.WallWeeps.track(this);
+            else com.wormzjl.icheme.client.WallWeeps.forget(this);
+        }
     }
 
     @Override

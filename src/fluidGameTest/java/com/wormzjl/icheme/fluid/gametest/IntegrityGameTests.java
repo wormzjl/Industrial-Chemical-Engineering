@@ -158,6 +158,56 @@ public final class IntegrityGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * The constructor's Repair (WP4) through the server's own path: the structure's devices at its nodes
+     * ({@code EquipmentRepair.repair}), one queued event, its answer at the tick drain. A weeping wall marks the drum's shell
+     * cell for the clients at the walls' cadence, its state reads the wall left and WEEPING, and the repair clears both.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1600, batch = "integrity_repair_key")
+    public static void theConstructorsRepairPathMendsAWeepingDrum(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var shape = EquipmentShape.drum(3, 3, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
+        var origin = helper.absolutePos(new BlockPos(4, 1, 4));
+        var node = cell(origin, ShapeRasterizer.fluidCell(shape));
+        var vessel = new EquipmentStructure.Vessel(origin, shape);
+        EquipmentStructure.place(level, origin, shape, Paint.DEFAULT, Integer.MAX_VALUE);
+        long id = world.at(position(level, node)).orElseThrow().device().id();
+        String[] failure = {null};
+        Integrity.Outcome[] outcome = {null};
+        boolean[] answeredInline = {false};
+        double allowance = Metallurgy.CARBON_STEEL.allowance();
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(world.capture().world().events().isEmpty() && world.integrity().wall(id) != null, "Waiting for the drum and its wall"))
+                .thenExecute(() -> world.integrity().set(id, .95 * allowance, 0, false))
+                .thenWaitUntil(() -> helper.assertTrue(level.getBlockEntity(node) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell && shell.weeping(),
+                        "Waiting for the walls' cadence to mark the weeping drum"))
+                .thenExecute(() -> {
+                    var state = com.wormzjl.icheme.world.level.block.EquipmentRepair.state(world, level, vessel);
+                    if (Math.abs(state.used() - .95f) > 1e-3 || !state.words().equals("WEEPING")) failure[0] = "the state reads " + state;
+                    com.wormzjl.icheme.world.level.block.EquipmentRepair.repair(world, level, vessel, o -> outcome[0] = o);
+                    answeredInline[0] = outcome[0] != null;
+                })
+                .thenWaitUntil(() -> helper.assertTrue(outcome[0] != null, "Waiting for the repair's answer"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && answeredInline[0]) failure[0] = "the repair answered before the engine's drain";
+                    if (failure[0] == null && outcome[0] != Integrity.Outcome.REPAIRED) failure[0] = "the drum was not repaired: " + outcome[0];
+                    var wall = world.integrity().wall(id);
+                    if (failure[0] == null && (wall == null || wall.loss() != 0)) failure[0] = "the wall is not new: " + wall;
+                    if (failure[0] == null && level.getBlockEntity(node) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell && shell.weeping())
+                        failure[0] = "the repaired drum still weeps";
+                    var state = com.wormzjl.icheme.world.level.block.EquipmentRepair.state(world, level, vessel);
+                    if (failure[0] == null && (state.used() != 0 || !state.words().isEmpty())) failure[0] = "the repaired state reads " + state;
+                    EquipmentTestCleanup.remove(level, node);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null
+                        && world.integrity().wall(id) == null, "Waiting for the drum and its record to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
     /** The valve's connection in its island's graph, or null. */
     private static PassiveNetwork.Pipe valvePipe(FluidWorldAuthority world, long valve) {
         for (var s : world.diagnosticSnapshots()) {

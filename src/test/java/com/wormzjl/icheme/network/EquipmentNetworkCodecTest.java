@@ -69,6 +69,24 @@ class EquipmentNetworkCodecTest {
 
     }
 
+    /** The removal group's Repair and its structure state (batch 2026-11-16-fouling-corrosion, WP4, still icheme-5). */
+    @Test void repairAndStructureStateRoundTrip() {
+        assertEquals("icheme-5", NetworkProtocol.VERSION);
+        var repair = new EquipmentNetwork.Repair(AT, AT.north(5), -778, 12);
+        assertEquals(repair, roundTrip(EquipmentNetwork.Repair.STREAM_CODEC, repair));
+        // RepairAnswer carries a Component, as DeconstructAnswer does: its codec needs the game's bootstrap, so it is not round-tripped here.
+        var ask = new EquipmentNetwork.StructureState(AT, AT.north(5), 4321, 5, -2, 1);
+        assertEquals(ask, roundTrip(EquipmentNetwork.StructureState.STREAM_CODEC, ask));
+        assertEquals(new VesselPlacement(5, -2, 1), ask.placement());
+        assertEquals(new VesselPlacement(VesselPlacement.MAX_FORWARD, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT),
+                new EquipmentNetwork.StructureState(AT, AT, 0, 99, -99, 99).placement(), "the server bounds the line it looks along");
+        assertEquals(1, new EquipmentNetwork.StructureState(AT, AT, 0, -3, 0, 0).placement().forward());
+        var state = new EquipmentNetwork.StructureStateAnswer(AT, AT.north(5), .72f, "LEAKING · FAILED");
+        assertEquals(state, roundTrip(EquipmentNetwork.StructureStateAnswer.STREAM_CODEC, state));
+        var none = new EquipmentNetwork.StructureStateAnswer(AT, AT, -1, "");
+        assertEquals(none, roundTrip(EquipmentNetwork.StructureStateAnswer.STREAM_CODEC, none));
+    }
+
     @Test
     void exchangerSubTypeCrossesWithTheConstructorDraftAndImportedShape() {
         var type=com.wormzjl.icheme.science.equipment.ExchangerType.CROSSFLOW;
