@@ -222,6 +222,10 @@ final class V3PengRobinsonSession {
         double compressibilityFactor(Root phase) { return evaluation(phase).compressibility(); }
         double residualEnthalpyJoulesPerMol(Root phase) { return evaluation(phase).residualEnthalpyJoulesPerMol(); }
         int physicalRootCount(Root phase) { return evaluation(phase).physicalRootCount(); }
+        /** The kernel's phase traits of the last evaluation on {@code phase}, at the state it was evaluated at. */
+        com.wormzjl.icheme.science.thermo.PhaseTraits traits(Root phase, double temperatureKelvin, double pressurePascal) {
+            return com.wormzjl.icheme.science.thermo.PhaseTraits.of(evaluation(phase), temperatureKelvin, pressurePascal);
+        }
         double rootSeparation(Root phase) { return evaluation(phase).rootSeparation(); }
         void clear() { workspace.clear(); }
     }

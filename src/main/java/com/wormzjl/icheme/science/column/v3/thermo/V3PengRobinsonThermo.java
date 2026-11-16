@@ -238,6 +238,13 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
         return workspace.prSession.logFugacityCoefficient(phase, component);
     }
 
+    /** The phase traits of the last {@link #evaluateInto} on {@code phase} in {@code workspace}, at its state. */
+    com.wormzjl.icheme.science.thermo.PhaseTraits phaseTraits(
+            Root phase, double temperatureKelvin, double pressurePascal, V3ThermoWorkspace workspace) {
+        requireWorkspace(workspace);
+        return workspace.prSession.traits(phase, temperatureKelvin, pressurePascal);
+    }
+
     double phaseMolarEnthalpy(
             double temperatureKelvin, double[] normalizedComposition, Root phase, V3ThermoWorkspace workspace) {
         requireWorkspace(workspace);

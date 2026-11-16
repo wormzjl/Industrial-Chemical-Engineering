@@ -64,11 +64,16 @@ class V3FeedFlashEquivalenceTest {
                     try {
                         expected = V3FeedFlashReference.resolve(thermo, temperature, pressure, oldWorkspace);
                     } catch (V3ThermoException failure) {
-                        V3ThermoException actual = assertThrows(V3ThermoException.class,
-                                () -> V3FeedFlash.resolve(thermo, temperature, pressure, newWorkspace));
-                        assertEquals(failure.getMessage(), actual.getMessage());
-                        assertEquals(failure.code(), actual.code());
-                        assertEquals(failure.phase(), actual.phase());
+                        // A refusal of the frozen flash stays the same refusal, or is a feed the one-phase rule
+                        // answers (batch 2026-11-15-supercritical-fluids, D1).
+                        try {
+                            V3FlashResult answered = V3FeedFlash.resolve(thermo, temperature, pressure, newWorkspace);
+                            assertTrue(V3FeedFlashOnePhaseTest.isOnePhaseRule(answered), answered::detail);
+                        } catch (V3ThermoException actual) {
+                            assertEquals(failure.getMessage(), actual.getMessage());
+                            assertEquals(failure.code(), actual.code());
+                            assertEquals(failure.phase(), actual.phase());
+                        }
                         failures++;
                         continue;
                     }
