@@ -9,6 +9,7 @@ Status: Reference. Index: [../INDEX.md](../INDEX.md).
 - [code-guide/README.md](code-guide/README.md)
 - [code-guide/HISTORY.md](code-guide/HISTORY.md): the guide's old snapshot paragraphs and batch sections, kept for reference, not maintained (moved 2026-11-13)
 - [FORMATS.md](FORMATS.md): every saved and wire format with its current value, the constant that declares it, its kind (facts, state, wire) and what a mismatch does; read from the code at `259d22a2c`, 2026-11-13
+- [rules/](rules/): the full agent rules by subject (saves, engine-schedule, physics, measurement, in-game-checks, equipment, documentation, native); `AGENTS.md` keeps the core of each and says when to read the file (2026-11-16, batch `2026-11-16-agents-md-token-usage`)
 - [COLLABORATION.md](COLLABORATION.md): working together on the code base (lanes, numbers, briefs, results that move, hand-over); proposed 2026-11-13, batch `2026-11-13-codebase-review`
 
 ## Code areas
