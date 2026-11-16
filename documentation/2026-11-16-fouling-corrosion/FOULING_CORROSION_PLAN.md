@@ -57,7 +57,7 @@ A wall loses thickness at a rate set by its material and the fluid on it. Design
 
 | Service | Carbon steel | Right material |
 |---|---|---|
-| Crude at 370 °C, 0.6 wt% S | 1.3 mm/y: 2.3 years | Chrome steel 0.16 mm/y; stainless 0.013 |
+| Crude at 370 °C, 0.6 wt% S | 1.3 mm/y: 2.3 years | Chrome steel 0.08 mm/y; stainless 0.013 |
 | Heavy crude at 350 °C, acid number 3 | 1.5 mm/y: 2 years | Stainless 0.03 mm/y |
 | Sour water, H2S 1 bar, 60 °C | 0.3 mm/y: 10 years | Stainless 0.003 mm/y |
 | Wet CO2, 1 bar, 60 °C | 1.4 mm/y | Stainless 0.007 mm/y |
@@ -190,7 +190,7 @@ M10 and M11 are not thinning in a real plant. Hydrogen attack is cracking after 
 
 | Mechanism | Carbon steel | Chrome steel | Stainless steel | Nickel alloy |
 |---|---|---|---|---|
-| M1 Sulfidation | 1 | 0.12 | 0.01 | 0.01 |
+| M1 Sulfidation | 1 | 0.06 | 0.01 | 0.01 |
 | M1 with `p_H2` ≥ 7 bar (H2/H2S) | 1 | 0.6 | 0.01 | 0.01 |
 | M2 Naphthenic acid | 1 | 0.6 | 0.02 | 0.01 |
 | M3 Sour water | 1 | 1 | 0.01 | 0.005 |
@@ -373,6 +373,7 @@ The owner's, 2026-11-16:
 - **O3** Sounds: set A, the weep loop only.
 - **O4** Format numbers reserved on `main` (`ab6298d03`); the delegations approved one by one.
 - D8: repairs of constructed equipment with the constructor; the repair kit kept for in-line pumps and compressors and control valve trims.
+- D11 (owner, 2026-11-16: "Yes, 0.06"): chrome steel's sulfidation factor is 0.06, not 0.12. At 0.12 a crude heater at 365 °C read 0.19 mm/y on chrome steel, over the 0.1 mm/y the Materials tab calls green, so Auto took stainless; at 0.06 chrome steel stays green to about 380 °C at 0.6 wt% sulfur (0.14 at 400 °C).
 - D10 (section 13.1): a column that carries solids fouls its trays and loses wall with the solid share; the numbers are the agent's, open to the owner.
 - Revision 2: a smaller material list (four); columns pass inert particles and stop only for freezing; particulate erosion, control valves first.
 

@@ -101,7 +101,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
   or negative inputs, at most `CorrosionLaw.MAX_RATE` (1e4 mm/y).
 - M1 sulfidation `1.3 exp(−8698 (1/T − 1/643)) (S_e/0.6)^0.4` from 503 K; M2 naphthenic acid; M3 to M7 the wet
   mechanisms, each a partial-pressure term times a temperature term. Material factors multiply M1 to M7 and M9;
-  `p_H2` ≥ 7 bar lifts chrome steel's sulfidation factor from 0.12 to 0.6.
+  `p_H2` ≥ 7 bar lifts chrome steel's sulfidation factor from 0.06 to 0.6.
 - M8 `0.25 · 2^((T − limit)/25)`; M10 `0.5 · 2^((T − T_H)/25)` above `max(T_floor, T_7 − s log10(p/7))`; M11
   `50 p_O2 / p_limit` above `max(0.3, p_150 2^(−(T − 150 °C)/100))`.
 - Erosion `(φ/0.01) (v/10)^2.6` mm/y; a trim `(φ/0.01) (v/30)^2.6` health per corrosion year, `v = sqrt(2Δp/ρ)`; a pump

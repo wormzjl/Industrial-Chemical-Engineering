@@ -88,13 +88,14 @@ public enum Metallurgy {
 
     /**
      * The factor on the carbon steel rate of {@code mechanism} (plan table 6.3). {@code hydrogen}, a hydrogen partial
-     * pressure of at least 7 bar, changes only sulfidation on chrome steel (H2/H2S, Couper–Gorman): 0.12 to 0.6.
+     * pressure of at least 7 bar, changes only sulfidation on chrome steel (H2/H2S, Couper–Gorman): 0.06 to 0.6. Chrome steel's 0.06 (owner,
+     * 2026-11-16) keeps it at or under 0.1 mm/y on hot sulfur oil to about 380 °C at 0.6 wt% sulfur: the crude heater's material.
      * {@link Mechanism#OVERHEATING}, {@link Mechanism#HYDROGEN_ATTACK} and {@link Mechanism#OXYGEN_FIRE} are the
      * material's own laws: factor 1.
      */
     public double factor(Mechanism mechanism, boolean hydrogen) {
         return switch (mechanism) {
-            case SULFIDATION -> this == CHROME_STEEL && hydrogen ? .6 : pick(1, .12, .01, .01);
+            case SULFIDATION -> this == CHROME_STEEL && hydrogen ? .6 : pick(1, .06, .01, .01);
             case NAPHTHENIC_ACID -> pick(1, .6, .02, .01);
             case SOUR_WATER -> pick(1, 1, .01, .005);
             case WET_CO2 -> pick(1, .3, .005, .002);

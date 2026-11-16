@@ -74,7 +74,7 @@ class MetallurgyTest {
     @Test
     void everyFactorOfTheTable() {
         Object[][] rows = {
-                {Mechanism.SULFIDATION, false, 1, .12, .01, .01},
+                {Mechanism.SULFIDATION, false, 1, .06, .01, .01},
                 {Mechanism.SULFIDATION, true, 1, .6, .01, .01},
                 {Mechanism.NAPHTHENIC_ACID, false, 1, .6, .02, .01},
                 {Mechanism.SOUR_WATER, false, 1, 1, .01, .005},

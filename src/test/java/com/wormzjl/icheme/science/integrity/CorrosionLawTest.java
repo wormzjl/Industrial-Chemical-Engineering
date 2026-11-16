@@ -26,7 +26,7 @@ class CorrosionLawTest {
         var carbon = CorrosionLaw.inside(CARBON_STEEL, crude);
         assertEquals(Mechanism.SULFIDATION, carbon.mechanism());
         plan(1.3, carbon.rate(), "crude at 370 °C on carbon steel");
-        plan(.156, CorrosionLaw.inside(CHROME_STEEL, crude).rate(), "on chrome steel (the plan's 3.1 prints 0.16)");
+        plan(.078, CorrosionLaw.inside(CHROME_STEEL, crude).rate(), "on chrome steel (the plan's 3.1 prints 0.08)");
         plan(.013, CorrosionLaw.inside(STAINLESS_STEEL, crude).rate(), "on stainless");
         assertEquals(0, CorrosionLaw.rate(Mechanism.SULFIDATION, oil(229, .6, 0)), "below 503 K");
         assertEquals(0, CorrosionLaw.rate(Mechanism.SULFIDATION, oil(370, 0, 0)), "no sulfur");
