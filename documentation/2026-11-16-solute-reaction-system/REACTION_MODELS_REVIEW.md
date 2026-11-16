@@ -93,6 +93,43 @@ Read at `adb413b4d`: `EnergyReference`, the `properties` datasets, `thermo-kerne
 - **Pressure** (row 15) and **hydrogen in oil** (row 16), above.
 - Not checked: the steam virial (IF97 Region 2's `B`) above Region 2's 1 073 K, at the reformer's 20 to 30 bar.
 
+### 4.2 Hydrogen chloride: is the data enough, and how accurate is it
+
+Read from the local DWSIM 10.2.5 extract (`chemsep1.xml` record 1904, `kij_pr.dat`, `pr_ip.dat`, `pr.ipd`) and checked with a scratch script, `tmp/hcl-check/pr78.mjs` (PR78 with the record's constants against the record's own correlations; no Gradle run).
+
+**The pure compound: enough.** The record holds everything the import tool reads: Tc 324.69 K, Pc 8.31 MPa, acentric factor 0.126, critical volume, molar mass, triple point 158.97 K, ideal-gas heat capacity from 20 to 1 600 K, liquid viscosity (159 to 318 K) and vapour viscosity (200 to 1 000 K), heat of formation −92.31 kJ/mol, entropy 186.8 J/mol K.
+
+| T (K) | Vapour pressure, ChemSep (kPa) | PR78 (kPa) | Deviation | Liquid density deviation | Heat of vaporization deviation |
+|---|---|---|---|---|---|
+| 160 | 14.7 | 14.7 | 0.0 % | −1.9 % | −0.2 % |
+| 188.15 | 103.6 | 100.8 | −2.7 % | −1.4 % | +1.3 % |
+| 220 | 451.6 | 466.6 | +3.3 % | −1.5 % | +2.1 % |
+| 260 | 1 702 | 1 829 | +7.5 % | −3.2 % | +0.8 % |
+| 273.15 | 2 478 | 2 625 | +5.9 % | −4.5 % | −0.3 % |
+| 298.15 | 4 903 | 4 800 | −2.1 % | −8.7 % | −4.3 % |
+
+- PR78 is within 7.5 % in vapour pressure and 4.3 % in heat of vaporization. The liquid density error grows toward the critical point, as it does for every compound of the cubic; the import's volume anchor at Tr = 0.7 corrects it there.
+- The ChemSep vapour pressure correlation is itself not a clean reference: it gives 103.6 kPa at its own normal boiling point and 8.83 MPa at 320 K, above the critical pressure. Above about 300 K the cubic is the more consistent of the two.
+- This matters little: in every place the design puts it, hydrogen chloride is a dilute gas near or above its critical temperature (324.7 K), never a liquid.
+
+**The pairs: no data.** None of the three interaction files holds a pair with hydrogen chloride, and E-PPR78 has no group for it. Every pair is 0. Its ideal solubility in a liquid at 25 °C and 1 atm is a mole fraction of 0.021 (pressure over vapour pressure); measured values in paraffins are of that order (recalled), so 0 is a fair pair. The error falls on how a dry drum splits it between naphtha and gas, perhaps a factor of 1.5, on parts per million.
+
+**The acid in water: accurate where it is simple.**
+
+- "All of it goes into free water" is accurate. Hydrogen chloride over dilute acid follows `p = (m γ)² / K`, `K` about 2e6 mol² kg⁻² atm⁻¹ at 25 °C (recalled: Clegg and Brimblecombe) and about 5e3 at 100 °C. At pH 2.6 that is 4e-12 atm at 25 °C and 2e-9 atm at 100 °C, against 1e-5 atm of hydrogen chloride in the gas.
+- The pH takes the activity coefficient as 1: an error of 0.1 pH at pH 1, less above.
+
+**Not accurate, or lacking:**
+
+| # | Gap | Effect | Proposal |
+|---|---|---|---|
+| 1 | The acid dew point. The cubic condenses water at pure water's dew point. With hydrogen chloride the first acid drop forms higher: 220 °F against 190 °F in the OGJ example (**read**), 17 K | The model sees no acid attack in that band | The column's top zone and its condenser count as wet for M12 up to 15 K above the table's `waterBelow` (the margin refiners keep: **read**). A heat side of the network keeps its state's wet flag: a known miss |
+| 2 | Neutralisation by ammonia. The cubic dissolves ammonia by a Henry pair; in acid it reacts and is taken up whole | Reading only the dissolved ammonia would understate neutralisation; reading all of it without removing it would let the same ammonia act in every vessel | In a wet holdup, ammonia up to the acid chloride present becomes, with it, a tag `ammonium_chloride` on the water (plan 7.4): the same exchange as the absorption |
+| 3 | The hydrolysis rate: two anchors and an assumed 60 s; magnesium and calcium chloride as one lump | A factor of about 2 in the hydrogen chloride made | Accept as a game-level fit; refit if Gray, Eaton and Le 2008 is read |
+| 4 | Salt per assay and its hydrolysable share: the mod holds none; sources give 10 % (OGJ) to 25 % for the share | Scales the whole chain | Authored values per assay, marked estimated |
+| 5 | The corrosion rate by pH: recalled anchors, and field scatter of about a factor of 3 | The life of an overhead wall | Read API RP 581's table before WP5 |
+| 6 | Ammonium chloride that deposits as a salt in dry overhead exchangers | Not modelled | Later, with the tag of row 2 |
+
 ## 5. Not found, and open
 
 - The numeric table of hydrochloric acid corrosion in API RP 581 Part 2 Annex B. The plan's M12 anchors are recalled.

@@ -184,7 +184,8 @@ So a coefficient lags its site's state by at most one cadence, and the solver is
 Only at holdups, and in this batch only for hydrogen chloride (a reaction record names the compound in `makes` or `uses`):
 
 - **Release**: in a vessel without free water, the `acid_chloride` it holds becomes `HydrogenChloride`.
-- **Absorption**: in a vessel with free water, all its `HydrogenChloride`, in every phase, becomes `acid_chloride` on the water.
+- **Absorption**: in a vessel with free water, all its `HydrogenChloride`, in every phase, becomes `acid_chloride` on the water. Accurate: over acid of pH 2.6 its pressure is 4e-12 atm at 25 °C (review 4.2).
+- **Neutralisation**: in a vessel with free water, `Ammonia` up to the acid chloride present becomes, with it, the tag `ammonium_chloride` on the water (dissolved; a twelfth tag). The cubic's Henry pair alone would leave the ammonia in the gas, and reading it without removing it would let the same ammonia neutralise in every vessel.
 
 How it is booked:
 
@@ -254,10 +255,10 @@ What the compound needs of the data and the thermo model:
 
 | Item | Requirement |
 |---|---|
-| Dataset | `chemsep_hydrogen_chloride` through `tools/compound-import` (a `selection-hcl.json`): PR78 constants (Tc 324.7 K, Pc 83.1 bar, acentric factor 0.13: recalled, the import decides), ideal-gas heat capacity fit, viscosity, `thermochemistry`, `freezing` (triple point 159 K, no crystal record) |
+| Dataset | `chemsep_hydrogen_chloride` through `tools/compound-import` (a `selection-hcl.json`), from ChemSep record 1904, which is complete: Tc 324.69 K, Pc 8.31 MPa, acentric factor 0.126, heat capacity 20 to 1 600 K, both viscosities, heat of formation, entropy, triple point 158.97 K (`freezing`, no crystal record). PR78 on it: vapour pressure within 7.5 %, heat of vaporization within 4.3 % (review 4.2) |
 | Formula | Chlorine joins `MaterialCatalog.FORMULA_ELEMENTS` and `Thermochemistry.ELEMENTS`. The heating value is 0 (it burns as an inert) |
 | Hazard | A `hazard` sub-record, so a vent, a flare or a leak of it reaches the air through the pollution system as it stands |
-| Pairs with hydrocarbons | The rule of the refinery compounds: DWSIM `kij_pr.dat`, else the DECHEMA value, else 0; hydrogen 0 by rule |
+| Pairs with hydrocarbons | The rule of the refinery compounds (DWSIM `kij_pr.dat`, else the DECHEMA value, else 0) gives 0 for every pair: none of the three files holds one. A fair value: its solubility in paraffins is near ideal (review 4.2) |
 | Pair with water | A library pair, `k_ij` = 0, with its reason. No `henry_in_water`: with one, `DerivedPairs` would fit a pair to the solubility and the cubic would hold hydrochloric acid beside the tag |
 | Flash | As any compound. At parts per million it needs no special case: the trace cutoff folds trace phases, not trace compounds, and the flush acts below 1e-24 |
 | Column | Not on V3's axis and in no neural seed: the running column and the simulator's column carry it on their accounts and give it whole to the top product, as inert particles go whole to the bottoms |
@@ -313,7 +314,8 @@ In a column the deposit raises the tray fouling that the fouling-corrosion batch
 Changes to `science/integrity`:
 
 - `CorrosionStandard.digest` takes `S` and `A` from the tags `sulfur` and `acid` of the oil it reads, no longer from the static sub-record. With default contents the numbers are those of today.
-- **M12, acid chloride** (`Mechanism.ACID_CHLORIDE`, appended): acts where free water meets chloride acid, as the tag `acid_chloride` on the water or as the compound not yet absorbed (the wet end of a condenser). `m = (acid chloride + hydrogen chloride − ammonia in the water − caustic) / kg of free water`, in mol/kg, not below 1e-7; `pH = −log10 m`.
+- **M12, acid chloride** (`Mechanism.ACID_CHLORIDE`, appended): acts where free water meets chloride acid, as the tag `acid_chloride` on the water or as the compound not yet absorbed (the wet end of a condenser). `m = (acid chloride + hydrogen chloride − ammonia − caustic) / kg of free water`, in mol/kg, not below 1e-7; `pH = −log10 m`. The ammonia is all the node holds, as the neutralisation of 7.4 takes it.
+- The acid dew point: with hydrogen chloride the first acid drop forms above pure water's dew point (17 K in the OGJ example), and the cubic does not know it. A column's top zone and its condenser therefore count as wet for M12 up to 15 K above the table's `waterBelow`. A heat side of the network has only its state's wet flag: a known miss.
 - A heat side reads both its ends: the hotter end for the dry mechanisms, as today, and the colder end for the wet ones. A condenser's acid attack is at its cold end, which the hotter-end digest of the fouling-corrosion batch does not see. Carbon steel: `min(25, 2.5 · 10^(−0.5 (pH − 2.25))) · 2^((min(T, 366 K) − 311 K)/55 K)` mm/y, none above pH 5.5.
 
 | pH | 38 °C | 93 °C |
