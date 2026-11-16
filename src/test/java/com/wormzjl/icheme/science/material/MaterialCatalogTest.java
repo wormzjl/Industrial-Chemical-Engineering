@@ -242,7 +242,7 @@ class MaterialCatalogTest {
         for(var entry:bundled.resources().entrySet())if(entry.getKey().startsWith(ROOT+"properties/")) {
             assertTrue(JsonParser.parseString(entry.getValue()).getAsJsonObject().has("critical_volume"),entry.getKey());datasets++;
         }
-        assertEquals(47,datasets,"26 ChemSep datasets, 6 TJL19 light ends, nitrogen, TJL20 methane, the cubic water and 12 cuts");
+        assertEquals(52,datasets,"31 ChemSep datasets (with the five rare gases), 6 TJL19 light ends, nitrogen, TJL20 methane, the cubic water and 12 cuts");
         var co2Volume=dataset(bundled,id).criticalVolume();
         assertEquals(0.094e-3,co2Volume.volume(),1e-15,"ChemSep's 0.094 m3/kmol");
         assertFalse(co2Volume.estimated());assertEquals("chemsep-8.3-vc-r1",co2Volume.revision());
