@@ -187,7 +187,8 @@ All under `src/test/java/com/wormzjl/icheme/science/column/v3/` unless named; th
 | The still's column | `StillColumn`, `StageThermo` | `BatchStillTest`, `StillHeadTest` ([batch-still.md](batch-still.md)) |
 
 Fixtures: `V3TestInputs`, `V3JacobianOracle` (the FD Jacobian and block extraction), `V3ManufacturedFlash`,
-`V3TjlReferenceCatalog`, `V3Cdu17TiaJuanaPackage`.
+`V3TjlReferenceCatalog`, `V3ZeroPairCrudePackage` (the medium crude with zero pairs, the rank-one kernel fixture).
+Column tests run on the game's medium crude preset (`V3TestInputs.mediumCrudeInput`, `mediumCrudeDry`, `crudeBinary`).
 
 ## Traps
 
