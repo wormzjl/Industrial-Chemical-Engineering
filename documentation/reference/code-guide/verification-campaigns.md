@@ -34,7 +34,7 @@ Four instruments measure the fluid solver beyond the unit tests. **chain-100** r
 
 **Printed lines**: the lane's test step writes `printed.txt` from the JUnit XML and `junction.txt` when the two junction tests ran; `compare.mjs` compares the junction lines' integer counters and `MIXED_GAS_COST`'s `newtonSolves`; any other moved line is read by hand against the baseline lane's `printed.txt`.
 
-**Campaign** (the lane's last step, or alone `lane.sh head campaign`): for each set, `test --tests '*HoldFuzzTest'` under the harness's init script with `-PholdFuzzSeeds=1-1000 -PholdFuzzThreads=8 -PholdFuzzCounters=true`, `-PholdFuzzDefaults` for defaults and `-PholdFuzzCold=true` for the cold harness, `-PholdFuzzOut=<report>`; then `classify.sh` on the report. Each report gives a `SUMMARY` line (with `factor=`, the time factor), `COUNTERS` and `.classes.txt`.
+**Campaign** (the lane's last step, or alone `lane.sh head campaign`): for each set, `test --tests '*HoldFuzzTest'` under the harness's init script with `-PholdFuzzSeeds=<the watch seeds of tools/merge-lane/campaign-seeds.txt> -PholdFuzzThreads=8 -PholdFuzzCounters=true`, `-PholdFuzzDefaults` for defaults and `-PholdFuzzCold=true` for the cold harness, `-PholdFuzzOut=<report>`; then `classify.sh` on the report. Each report gives a `SUMMARY` line (with `factor=`, the time factor), `COUNTERS` and `.classes.txt`.
 
 **Quick check**: `lane.sh <sha> quick` with Gradle, or `bash tools/fluid-solver-simplification/quick-lane.sh <export> <label> [seeds] [dists]` on the javac lane (4 threads, counters on); seed lists take ranges and commas.
 
@@ -51,7 +51,7 @@ Four instruments measure the fluid solver beyond the unit tests. **chain-100** r
 
 ## Laws and constants
 
-- The campaign: seeds 1 to 1000 on 8 workers, never overlapping another campaign of that size; a run on the second Gradle lane at most 4 workers; the quick check 200 seeds in all three sets, at most three forms per task (AGENTS.md).
+- The campaign: the watch seeds (27 since 2026-11-16; all 1000 of each set only when the owner asks) on 8 workers, never overlapping another campaign; a run on the second Gradle lane at most 4 workers; the quick check 200 seeds in all three sets, at most three forms per task (AGENTS.md).
 - The campaign's inputs: `tools/merge-lane/campaign-inputs.txt` ([verification.md](verification.md)).
 
 ## Formats
