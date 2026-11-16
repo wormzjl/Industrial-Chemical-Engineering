@@ -14,7 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-16-fouling-corrosion/](2026-11-16-fouling-corrosion/README.md) | Corrosion of equipment walls by material and fluid, materials of construction, erosion by particles, final blast damage, repair when idle and empty, fouling of heat sides, particles through columns | Planned |
+| [2026-11-16-fouling-corrosion/](2026-11-16-fouling-corrosion/README.md) | Corrosion of equipment walls by material and fluid, materials of construction, erosion by particles, final blast damage, repair when idle and empty, fouling of heat sides, particles through columns | In progress since 2026-11-16 |
 | [2026-11-15-fluid-interfaces/](2026-11-15-fluid-interfaces/README.md) | Orifice plate, automated shutoff valve, liquid hopper, gas intake with the rare gases, placeholder crude oil, JEI for the fluid converter, alarm beacon | Implemented 2026-11-16 (0.33.0) |
 | [2026-11-15-equipment-visual-design/](2026-11-15-equipment-visual-design/README.md) | Better-looking, less bare equipment: review of every kind, then trim, finishes and shading | Implemented 2026-11-16 (0.33.0) |
 | [2026-11-15-pollution-system/](2026-11-15-pollution-system/README.md) | Air pollution in 16 m cubes: toxic, combustible, corrosive, particulate; spread, effects, explosions, meter, monitor, map overlay | Implemented 2026-11-16 |

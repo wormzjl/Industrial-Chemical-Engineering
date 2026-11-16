@@ -1,6 +1,6 @@
 # 2026-11-16 fouling, corrosion and erosion
 
-Status: Planned (2026-11-16). Plan written; no code. Branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0), rebased on `main` at `66a87f9d5` (0.33.0) on 2026-11-16.
+Status: In progress since 2026-11-16. Plan revision 6; WP1 and WP7 started. Branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0), rebased on `main` at `66a87f9d5` (0.33.0) on 2026-11-16.
 
 Purpose: walls that corrode by their material and their fluid (a refinery corrosion matrix, four materials of construction chosen in the constructor and in a simulator tab), erosion by particles (control valve trims, pumps, tubes), failures through the existing breach and machine failure, final blast damage, repair only when idle and empty, corrosive air on equipment, fouling of heat sides (lower films, higher drop, cleaning), and columns that pass inert particles to their bottoms and stop only for freezing.
 
@@ -26,6 +26,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 - 2026-11-16, owner: "Start both" (WP1 and WP7 as two Opus medium sub-threads), then "rebase on latest main first". The branch rebased on `main` `66a87f9d5` (0.33.0, 67 commits ahead of the old base); one conflict, `documentation/INDEX.md`, every row kept. `main` now holds facts schema 27 and `icheme-3` (fluid interfaces) and reserves 28, state format 51 and `icheme-4` (supercritical fluids), so this batch takes facts schema 29 and `icheme-5`; shape fields 13 and sheet file 3 stand. The plan's code facts checked on the new base: `ColumnBlockSolve` line 119 unchanged; `Wear` gained the turbine's wet-exhaust onset by pressure (no clash with `SOLIDS`).
 
+- 2026-11-16, WP7 and WP1 started on the owner's "Start both", each an Opus medium sub-thread with a fresh brief in its own worktree cut from this branch at `5330f457e`: `fc-wp7-columns` (branch slug `fouling-corrosion-wp7-columns`: the simulator column passes inert particles and melts a frozen feed; `Condition.FROZEN` from the solve's product flash) and `fc-wp1-laws` (branch slug `fouling-corrosion-wp1-laws`: `science/integrity`, `Wear.Fault.SOLIDS`, `MaterialCatalog.Corrosion`, the twelve cuts' data). One Gradle lane each, `--max-workers 4`. Neither edits this README or the index; the main thread records their reports.
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.
@@ -36,6 +38,7 @@ None yet.
 
 ## Open items
 
-- The owner's review of the plan; then O4: the format reservation on `main` and the approval of WP1 (sub-thread, Opus medium).
+- WP1 and WP7 running; their reports and diffs to be checked by the main thread.
+- O4: the format reservation on `main` (facts schema 29, shape fields 13, `icheme-5`, sheet file 3), needed before WP2; the owner's word.
 - `wall_weep` candidates (three, synthesised) once the build starts.
 - Whether another live batch holds the hot files named above.
