@@ -51,6 +51,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | `SteamTurbineDesign`, `SteamTurbineTrain` | The one steam turbine kind (`front`, `sections`, `drops`, `DEFAULT_STEAM`, `CONDENSING_EXHAUST`, `DRAFT_STEAM`, `DRAFT_EXHAUST`) and its drawing (stepped barrels, `hood`, `pedestal`, the LP casing) | 404, 578 |
 | `MotorDesign`, `GearboxDesign` | Motor and generator (terminal box = FE port); a parallel-shaft gearbox | 223, 161 |
 | `VacuumPumpDesign`, `EjectorDesign` | Liquid ring and dry screw vacuum pumps (models from `VacuumPump`); a steam ejector | 286, 119 |
+| `PlungerPumpDesign` | A triplex plunger pump (models from `PlungerPump`, size the model's number): a monoblock on its base with its power end, cradle, cover, dampener and riser | 223 |
 | `PrimeMoverDesign` | A combustion engine or a gas turbine package (models from `PrimeMover`), its own exhaust stack and coil | 563 |
 | **Other units** | | |
 | `BatchStillDesign`, `BatchStillOptions` | A batch still (`StillPlan`, `FUEL_BORE`) and its options, a fact of its shape | 475, 107 |

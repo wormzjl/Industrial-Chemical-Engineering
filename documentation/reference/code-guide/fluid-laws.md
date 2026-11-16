@@ -143,7 +143,7 @@ The devices' controls, valve sources and heat laws are written by the runtime's 
 | Rule | Test |
 |---|---|
 | Friction and section aggregation | `HydraulicReferenceQualificationTest`, `HydraulicMatrixQualificationTest`; a passage's channels: `HeatSidesTest.manyChannelsLoseWhatOneLosesAtItsShareOfTheFlow` |
-| Movers, rise limits, the turbine | `FlowControlTest`, `CompressorTest`, `PumpRiseScalingTest`, `MachineMoverTest`, `SteamTurbineConnectionTest`, `SteamEjectorConnectionTest`, `VacuumPumpMoverTest`, `ShaftPlanTest` |
+| Movers, rise limits, the turbine | `FlowControlTest`, `CompressorTest`, `PumpRiseScalingTest`, `MachineMoverTest`, `SteamTurbineConnectionTest`, `SteamEjectorConnectionTest`, `VacuumPumpMoverTest`, `PlungerPumpMoverTest`, `ShaftPlanTest` |
 | Dry suction, compressor solids | `InletPhaseTest`, runtime `DrySuctionTest` |
 | Port draws and heads | `PhasePortTest`, `PhasePortPriorityTest`, `LevelHeadTest`, `VesselGeometryTest`, `ProcessOutletTest` |
 | Open vessels | `OpenTankTest`, runtime `OpenTankRuntimeTest` |

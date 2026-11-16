@@ -41,7 +41,7 @@ import java.util.function.Supplier;
  * <p>
  * Namespace {@code icheme_dense_test} (its own {@code empty} template: NeoForge enables a test by its template's
  * namespace), which the fluid GameTest task runs beside {@code icheme_fluid_test} by default;
- * {@code -PfluidGameTestNamespaces=icheme_dense_test} runs these three alone.
+ * {@code -PfluidGameTestNamespaces=icheme_dense_test} runs these four alone (the fourth, the plunger pump, S8).
  * <p>
  * Each test removes everything it places on every exit, a failure included, as {@link LevelLoopGameTests} does: every
  * step records its exception as the test's failure instead of throwing, every wait records a failure once the test's own
@@ -517,6 +517,139 @@ public final class DenseFluidGameTests {
                     }));
         }
         finish(helper,plant,sequence,failure);
+    }
+    /** Accepted intervals the plunger pump runs before its checks (or until its island certifies steady, if sooner). */
+    static final int PLUNGER_INTERVALS=10;
+    /** The plunger pump's delivered volume against its displacement less its slip: relative. */
+    static final double PLUNGER_VOLUME=5e-3;
+    /**
+     * A triplex plunger pump on dense carbon dioxide (S8 of batch 2026-11-15-supercritical-fluids, S8_PLUNGER_PUMP_REVIEW.md):
+     * a PP-10 casing on a 4-pole motor through a gearbox (the gearbox's ratio is the train's, 1500 to the pump's 300 rpm), fed
+     * from a generator at 8 MPa and the temperature where carbon dioxide stands at reduced density 0.7 in the network's model,
+     * delivering into a void held at 20 MPa. The motor is fed FE every tick (a placed motor's store starts empty).
+     * <p>
+     * Expected: a displacement pump delivers its volume at any density. Over {@link #PLUNGER_INTERVALS} accepted intervals (or
+     * every one until the island certifies), no hold and the ledger closing; in the last, the suction's volume flow (the mass
+     * the generator gives over the suction pipe's density) within {@link #PLUNGER_VOLUME} of the displacement at the train's
+     * speed share less the slip at the pump's rise ({@code 1 - 0.004 rise / 25 MPa}), the suction one fluid at reduced density
+     * 0.6 to 0.8, the rise above 11 MPa.
+     */
+    @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-plunger")
+    public static void aPlungerPumpDeliversItsDisplacementOfDenseCarbonDioxideAgainstTwentyMegapascals(GameTestHelper helper) {
+        var plant=new AssemblyGameTests.Plant(helper,helper.absolutePos(new BlockPos(12,2,12)),new BlockPos(-16,-2,-16),new BlockPos(28,10,28));
+        var world=plant.world;var level=plant.level;String[] failure={null};Ledger[] ledger={null};long[] ids=new long[5];
+        com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel[] motor={null},gear={null};double[] suctionTemperature={0};FluidThermodynamics.State[] suctionState={null};
+        var model=com.wormzjl.icheme.science.machine.PlungerPump.model(2);var law=com.wormzjl.icheme.science.machine.PlungerPump.of(model);
+        var sequence=helper.startSequence();
+        try {
+            plant.hold();
+            // The suction temperature: reduced density 0.7 at 8 MPa on the network's own model.
+            var catalog=MaterialRuntime.active();
+            var thermo=FluidThermodynamics.forNetwork(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog));
+            double[] z=new double[thermo.componentCount()];z[thermo.components().indexOf("CarbonDioxide")]=1;
+            double lo=CO2_CRITICAL_TEMPERATURE+.5,hi=360;
+            for(int i=0;i<100&&hi-lo>1e-9;i++){double mid=(lo+hi)/2;if(thermo.flashTP(mid,8e6,z,()->{}).reducedDensity()>.7)lo=mid;else hi=mid;}
+            suctionTemperature[0]=(lo+hi)/2;suctionState[0]=thermo.flashTP(suctionTemperature[0],8e6,z,()->{});
+            var pd=EquipmentShape.designed(EquipmentShape.Kind.PLUNGER_PUMP,2,1,EquipmentShape.Heading.NORTH,com.wormzjl.icheme.science.equipment.UnitDesign.of(EquipmentShape.Kind.PLUNGER_PUMP).defaultSupport(2,1),com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE);
+            var pump=plant.place(pd,0,0,0);
+            var suction=AssemblyGameTests.Plant.front(pump,Role.SUCTION);var generator=suction.relative(AssemblyGameTests.Plant.out(pump,Role.SUCTION));
+            var discharge=AssemblyGameTests.Plant.front(pump,Role.DISCHARGE);var sink=discharge.relative(AssemblyGameTests.Plant.out(pump,Role.DISCHARGE));
+            plant.pipe(suction);plant.pipe(discharge);
+            block(plant,generator,ModBlocks.FLUID_GENERATOR.get().defaultBlockState());block(plant,sink,ModBlocks.FLUID_VOID.get().defaultBlockState());
+            ids[0]=identity(plant,generator);ids[1]=identity(plant,sink);ids[2]=identity(plant,suction);ids[3]=identity(plant,discharge);
+            var cell=com.wormzjl.icheme.science.equipment.ShapeRasterizer.fluidCell(pump.shape());
+            ids[4]=((com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity)level.getBlockEntity(pump.origin().offset(cell.x(),cell.y(),cell.z()))).fluidIdentity();
+            var co2=pure("CarbonDioxide");
+            TankCharge.run(world,ids[0],new FluidDeviceSpec(1,suctionTemperature[0],8e6,co2));
+            var r=world.registrations().get(ids[1]);world.edit(ids[1],r.revision(),r.device(),new FluidDeviceSpec(1,suctionTemperature[0],2e7,co2));
+            // The train: the gearbox on the pump's driven end, the motor on the gearbox's, rated for the pump at its relief rise.
+            double kilowatts=com.wormzjl.icheme.science.machine.Motor.ratingFor(law.maximumShaftPower())/1000;
+            gear[0]=gearbox(plant,pump,kilowatts);
+            motor[0]=plant.motor(gear[0],kilowatts,4);
+            ledger[0]=new Ledger(ids[2],ids[3],ids[4]);world.observe(ledger[0]::published);
+        } catch(RuntimeException e){failure[0]="build: "+e;}
+        helper.onEachTick(()->{
+            if(failure[0]!=null||motor[0]==null)return;
+            try{energyPort(plant,motor[0]).receiveEnergy(Integer.MAX_VALUE,false);}catch(RuntimeException e){failure[0]="feed: "+e;}
+        });
+        if(failure[0]==null) {
+            // Auto is an explicit selection: a new gearbox starts at fast over slow 4 (run s8-plunger-2 turned the pump at 19.67
+            // times its speed). On Auto the train puts the pump at its 300 rpm with the motor at its own.
+            var gearAt=new com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position(level.dimension().location().toString(),gear[0].origin().getX(),gear[0].origin().getY(),gear[0].origin().getZ());
+            sequence=sequence.thenWaitUntil(until(helper,failure,"the gearbox's registration",()->world.shafts().unitAt(gearAt)!=null?null:"Waiting for the gearbox's registration"))
+                    .thenExecute(step(failure,"the gearbox on Auto",()->{
+                        var unit=world.shafts().unitAt(gearAt);var settings=unit.settings();
+                        world.shafts().queue(new com.wormzjl.icheme.runtime.fluid.ShaftTrains.Configure(unit.id(),new com.wormzjl.icheme.runtime.fluid.ShaftUnit.Settings(settings.running(),settings.mode(),settings.setPoint(),settings.powerLimit(),0)));
+                    }));
+            sequence=sequence.thenWaitUntil(until(helper,failure,"the plunger pump",()->{
+                        var verdict=closes(ledger[0]);if(verdict!=null){failure[0]=verdict;return null;}
+                        var drive=world.view(ids[4]).drive();
+                        boolean running=drive!=null&&drive.status().startsWith("RUNNING")&&drive.share()>.9&&drive.share()<1.1;
+                        // Counted from the first interval the generator gives in: before the motor runs the island certifies at rest and
+                        // publishes nothing new, so a count or a certificate alone passes on the rest intervals (run s8-plunger-1).
+                        int first=-1,size;boolean delivering;
+                        synchronized(ledger[0]) {
+                            var all=ledger[0].intervals;size=all.size();
+                            for(int i=0;i<size;i++)if(flows(all.get(i).boundaries(),ids[0])!=null){first=i;break;}
+                            delivering=size>0&&flows(all.getLast().boundaries(),ids[0])!=null;
+                        }
+                        if(running&&delivering&&(size-1-first>=PLUNGER_INTERVALS||certified(world,ids[4])))return null;
+                        return "Waiting for "+PLUNGER_INTERVALS+" delivering intervals of the running pump: "+(drive==null?"no drive":drive.status()+" share "+drive.share())+", first delivering "+first+" of "+size+", "+ledger[0].summary()+" "+world.view(ids[4]).status();
+                    }))
+                    .thenExecute(step(failure,"the plunger pump's checks",()->{
+                        synchronized(ledger[0]) {
+                            var last=ledger[0].intervals.getLast();var view=world.view(ids[4]);var drive=view.drive();
+                            // Pipe blocks are edges, not nodes: the suction's state is the generator's own (8 MPa at the temperature of
+                            // reduced density 0.7, on the network's model; the one pipe block's drop is a few hundred Pa).
+                            var given=flows(last.boundaries(),ids[0]);var s=suctionState[0];
+                            if(given==null||view.devicePressureChange()==null){failure[0]="No flow from the generator or no rise on the pump's view: "+last.boundaries()+" "+view.status();return;}
+                            double perMole=s.mass()/(sum(s.vaporAmounts())+sum(s.liquidAmounts())+sum(s.aqueousAmounts())),mass=0;
+                            // Every substep books its own transfer (run s8-plunger-4 read the first of three): the interval is their sum.
+                            for(var b:last.boundaries())if(b.nodeId()==ids[0]&&b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE)mass+=Math.abs(sum(b.moles()))*perMole;
+                            double density=s.mass()/s.volume(),volume=mass/last.seconds()/density,rise=view.devicePressureChange();
+                            double expected=law.displacement()*drive.share()*(1-.004*rise/law.reliefRise());
+                            System.out.println("DENSE_FLUID_GAMETEST plunger "+ledger[0].summary()+" suctionT="+suctionTemperature[0]+" suction=["+describe(s)+"] nodes="+last.nodes().keySet()+" density="+density
+                                    +" kg/m3 volume="+volume*3600+" m3/h expected="+expected*3600+" m3/h share="+drive.share()+" rise="+rise+" Pa shaft="+drive.shaftPower()+" W status="+view.status()
+                                    +" substeps "+last.accepted()+"/"+last.rejected()+" "+last.reasons()+" modes "+last.modes());
+                            if(s.oneFluidSlot()<0||!(s.reducedDensity()>=.6&&s.reducedDensity()<=.8))failure[0]="The suction is not one fluid at reduced density 0.6 to 0.8: "+describe(s);
+                            else if(!(rise>11e6))failure[0]="The pump does not rise to the void's 20 MPa: "+rise+" Pa";
+                            else if(!(Math.abs(volume-expected)<=PLUNGER_VOLUME*expected))failure[0]="Delivered "+volume*3600+" m3/h against "+expected*3600+" m3/h displaced less slip";
+                        }
+                    }));
+        }
+        finish(helper,plant,sequence,failure);
+    }
+    /** The FE port of {@code vessel}'s terminal box, from its top face (as {@link ElectricGameTests}). */
+    static net.neoforged.neoforge.energy.IEnergyStorage energyPort(AssemblyGameTests.Plant plant,com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel vessel) {
+        var t=com.wormzjl.icheme.science.equipment.ShapeRasterizer.terminal(vessel.shape());
+        if(t==null)throw new IllegalStateException("No terminal box on the "+vessel.shape().kind());
+        var port=plant.level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,vessel.origin().offset(t.x(),t.y(),t.z()),Direction.UP);
+        if(port==null)throw new IllegalStateException("No FE port on the "+vessel.shape().kind());
+        return port;
+    }
+    /**
+     * A gearbox rated {@code kilowatts} beyond a shaft block on {@code pump}'s driven end, headed so its output faces the pump
+     * (as {@link CreateCouplingGameTests}): the plant's, removed with it. Its input end is left for {@link AssemblyGameTests.Plant#motor}.
+     */
+    static com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel gearbox(AssemblyGameTests.Plant plant,com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel pump,double kilowatts) {
+        com.wormzjl.icheme.science.equipment.ShapeRasterizer.Shaft driven=null;
+        for(var s:com.wormzjl.icheme.science.equipment.ShapeRasterizer.shafts(pump.shape()))if(s.role()==EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT)driven=s;
+        if(driven==null)throw new IllegalStateException("No driven end on the "+pump.shape().kind());
+        var d=Direction.fromDelta(driven.dx(),driven.dy(),driven.dz());
+        var shaft=pump.origin().offset(driven.block().x(),driven.block().y(),driven.block().z());
+        if(!plant.level.getBlockState(shaft).canBeReplaced())throw new IllegalStateException("No room for a shaft at "+shaft.toShortString());
+        var design=com.wormzjl.icheme.science.equipment.UnitDesign.of(EquipmentShape.Kind.GEARBOX);double size=design.snap(kilowatts);int length=design.defaultLength(size);
+        for(var heading:EquipmentShape.Heading.values()) {
+            var shape=EquipmentShape.designed(EquipmentShape.Kind.GEARBOX,size,length,heading,design.defaultSupport(size,length),com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE);
+            for(var e:com.wormzjl.icheme.science.equipment.ShapeRasterizer.shafts(shape)) {
+                if(e.role()!=EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT||Direction.fromDelta(e.dx(),e.dy(),e.dz())!=d.getOpposite())continue;
+                var origin=shaft.subtract(new BlockPos(e.block().x(),e.block().y(),e.block().z()));
+                plant.level.setBlock(shaft,ModBlocks.SHAFT.get().defaultBlockState().setValue(com.wormzjl.icheme.world.level.block.ShaftBlock.AXIS,d.getAxis()),Block.UPDATE_ALL);
+                plant.devices.add(shaft.immutable());
+                return plant.place(shape,origin.getX()-plant.base.getX(),origin.getY()-plant.base.getY(),origin.getZ()-plant.base.getZ());
+            }
+        }
+        throw new IllegalStateException("No gearbox heading faces the pump's driven end "+d);
     }
     static ConservativeTransport.BoundaryTransfer flows(List<ConservativeTransport.BoundaryTransfer> list,long node) {
         for(var b:list)if(b.nodeId()==node&&b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE&&sum(b.moles())!=0)return b;

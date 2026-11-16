@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1, S2, S3, S4, S4b and S5 done; main 0.33.0 merged in 2026-11-16). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0), main merged at `66a87f9d5` (0.33.0).
+Status: **In progress** since 2026-11-15 (S0, S1, S2, S3, S4, S4b, S5 and S8 done; main 0.33.0 merged in 2026-11-16). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0), main merged at `66a87f9d5` (0.33.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -122,6 +122,13 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   without S3's `critical_volume`: added with S3's tool (`0f4230144`). `test` 373 classes (1 failed, that check), column 75,
   equipment 3, hold 10 classes green; after the fix 30 classes green. Digest: line 313 only, the grade token. Finding: the
   burst-pipe release splits by slot. [MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md).
+- 2026-11-16: S8, the plunger pump (sub-thread; owner: "Form A", then "Keep both"). `PlungerPump` on `PositiveDisplacement`
+  (PP-3 to PP-100 m³/h at 300 rpm, relief 25 MPa, η 0.88); fluid facts schema 28, state format 51, corpus `schema-28`;
+  `icheme-4` not needed. Kind `PLUNGER_PUMP` (form A with the main thread's shaft fix and 3 cm longer necks; the nozzles on
+  the column's bore rule); the Pump tile's `CENTRIFUGAL_PUMP` and `PLUNGER` types, Auto's rule, `PLUNGER_RISE`. Probe: on
+  its law from δ 0.3 to 1.6, share 0.99838. Dense GameTest: 9.986 m³/h against 9.981 displaced less slip, no hold. Runs:
+  `test` 121 + 85 classes, equipment 24 + 21 + 3, hold 6 + 9, all S8 failures fixed but the Chinese sizing door
+  (translation commit). [S8_PLUNGER_PUMP_REVIEW.md](S8_PLUNGER_PUMP_REVIEW.md).
 
 ## Documents
 
@@ -148,6 +155,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   simulator, the tests.
 - [S5_PRESENTATION_REVIEW.md](S5_PRESENTATION_REVIEW.md): S5, what the player reads on one dense fluid: the survey,
   the rule and its client evaluation, the pump's head share, the before and after table, the renders, the owner items.
+- [S8_PLUNGER_PUMP_REVIEW.md](S8_PLUNGER_PUMP_REVIEW.md): S8, the plunger pump: the law, the saves, the probe on carbon dioxide, the
+  readers of a liquid machine, the equipment and its polygons, the simulator, the dense GameTest, the runs, the owner items.
 - [MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md): the merge of main 0.33.0: conflicts, the revision tokens of the 33
   records both sides changed, the rare gases' critical volumes, the digest measurement, main's slot readers, the runs.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
@@ -179,6 +188,10 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
 - For the owner (S3 fix, [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md) section 4): the thermodynamic revision repeats the fluid
   identity about three times (once would lift the NBT wall to about 290 compounds); the simulator menu's opening data is
   18,281 characters against a limit near 32,600 bytes, not confirmed (about 110 compounds).
+
+- For the owner (S8, [S8_PLUNGER_PUMP_REVIEW.md](S8_PLUNGER_PUMP_REVIEW.md) section 7): the plunger pump on a gas (no
+  clearance term), Auto's rule, the sound, the bolts as relief, the run door's efficiency, the Model entry's unit (shared
+  with the vacuum pump and prime mover), the dense pump page's head share on a plunger, an in-game check.
 
 - Decided (plan 2b). Open for the owner: the two findings there; S2's density threshold (an option S2's review will give);
   hydrogen's zero pair with a cut (only if hydrotreating at pressure matters).
