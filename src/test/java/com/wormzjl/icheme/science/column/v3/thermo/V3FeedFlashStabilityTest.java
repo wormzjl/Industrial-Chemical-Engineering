@@ -29,8 +29,8 @@ import org.junit.jupiter.api.Test;
  *   <li>{@code stalled}: every twentieth of the 721 real splits successive substitution does not converge, now split.</li>
  * </ul>
  * A split's vapour fraction is the probe's to its six printed decimals, its material balance closes, and its enthalpy is
- * the phases' own on the column's roots. A further case: an engine split into two liquids whose lighter liquid has a
- * metastable vapour root is not taken as a split.
+ * the phases' own on the column's roots. Further cases: an engine split into two liquids whose lighter liquid has a
+ * metastable vapour root is not taken as a split; a wet feed unstable only towards a second liquid is one liquid (rule B).
  */
 class V3FeedFlashStabilityTest {
     private static final String NETWORK = "icheme:tjl20_methane_nitrogen";
@@ -110,6 +110,71 @@ class V3FeedFlashStabilityTest {
             assertEquals(frozen.molarEnthalpyJoulesPerMol(), flash.molarEnthalpyJoulesPerMol(), 0.0);
             return null;
         });
+    }
+
+    /**
+     * Rule B (batch 2026-11-16-supercritical-followups, LANE_FIXES_REVIEW.md): the kind of an instability is read from the
+     * stability test before any restart. The ethanol, water and n-hexane column's distillate, hexane 0.604, ethanol 0.300,
+     * water 0.095 at 320 K and 1 atm, is unstable towards a hexane-rich liquid (the trial at reduced density 3.2, the feed at
+     * 3.2): it would settle into two liquids, no vapour (the ternary heteroazeotrope boils near 329 K). It is one liquid, the
+     * frozen flash's answer to the bit; P3's restart from that liquid trial took 10 % "vapour" with 39 % water, a stationary
+     * point of the one-liquid model where water's vapour pressure is 10.6 kPa. The column's feed, ethanol 40, water 50,
+     * hexane 10 at 345 K, unstable with no vapour-liquid split found, keeps the Wilson endpoint's one liquid (rule c), not
+     * a refusal. The W5 wash, ethanol 10, water 90 at 359.84 K, is unstable towards a vapour (the trial's ethanol 0.43) and
+     * keeps its small split.
+     */
+    @Test
+    void aFeedUnstableOnlyTowardsASecondLiquidIsOneLiquid() {
+        String refinery = "icheme:refinery";
+        // The column's catalog on a wash island with hexane (FluidThermodynamics.on): the network's package with its cubic
+        // water, restricted to the island's compounds and water.
+        MaterialCatalog bundled = MaterialCatalog.bundled().withWater(refinery);
+        List<String> island = new ArrayList<>(bundled.requirePackage(refinery).components().stream()
+                .filter(id -> id.equals("N-hexane") || id.equals("Ethanol")).toList());
+        island.add("Water");
+        MaterialRuntime.with(bundled.restrict(refinery, island), refinery, () -> {
+            V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(refinery);
+            var ids = thermo.componentBasis().componentIds();
+            double[] distillate = new double[ids.size()];
+            distillate[ids.indexOf("N-hexane")] = 0.604308531919573;
+            distillate[ids.indexOf("Ethanol")] = 0.30049540454608265;
+            distillate[ids.indexOf("Water")] = 0.09519606353434426;
+            V3ThermoWorkspace test = thermo.newWorkspace();
+            System.arraycopy(distillate, 0, test.normalizedOverall, 0, distillate.length);
+            var stability = thermo.feedStability(320.0, 101_325.0, test);
+            assertEquals(com.wormzjl.icheme.science.thermo.TangentPlaneStability.Verdict.UNSTABLE, stability.verdict());
+            thermo.evaluateInto(320.0, 101_325.0, stability.trialComposition(), stability.trialRoot(), test);
+            var trial = thermo.phaseTraits(stability.trialRoot(), 320.0, 101_325.0, test);
+            assertTrue(trial.reducedDensity() > 1.0 && !trial.supercriticalIsotherm(), "a liquid trial");
+            assertSameAsFrozen(thermo, 320.0, distillate, "all-liquid Wilson endpoint classification");
+
+            double[] feed = new double[ids.size()];
+            feed[ids.indexOf("N-hexane")] = 0.1;
+            feed[ids.indexOf("Ethanol")] = 0.4;
+            feed[ids.indexOf("Water")] = 0.5;
+            assertSameAsFrozen(thermo, 345.0, feed, "all-liquid Wilson endpoint classification");
+
+            double[] wash = new double[ids.size()];
+            wash[ids.indexOf("Ethanol")] = 0.1;
+            wash[ids.indexOf("Water")] = 0.9;
+            V3FlashResult split = thermo.flashTP(359.84, 101_325.0, wash, thermo.newWorkspace());
+            assertEquals(V3FeedPhase.TWO_PHASE, split.phase(), split.detail());
+            assertEquals(7.6675e-5, split.vaporFraction(), 1.0e-9);
+            assertTrue(split.vaporComposition()[ids.indexOf("Ethanol")] > 0.4, "the vapour is ethanol-rich");
+            return null;
+        });
+    }
+
+    private static void assertSameAsFrozen(V3PengRobinsonThermo thermo, double t, double[] z, String detail) {
+        V3ThermoWorkspace frozenWorkspace = thermo.newWorkspace();
+        System.arraycopy(z, 0, frozenWorkspace.normalizedOverall, 0, z.length);
+        V3FlashResult frozen = V3FeedFlashEquivalenceTest.V3FeedFlashReference.resolve(thermo, t, 101_325.0, frozenWorkspace);
+        V3FlashResult flash = thermo.flashTP(t, 101_325.0, z, thermo.newWorkspace());
+        System.out.printf(Locale.ROOT, "LANE_FIXES one liquid at %.2f K: %s, H %.6f J/mol%n", t, flash.detail(), flash.molarEnthalpyJoulesPerMol());
+        assertEquals(V3FeedPhase.LIQUID, flash.phase(), flash.detail());
+        assertEquals(detail, flash.detail());
+        assertEquals(frozen.detail(), flash.detail());
+        assertEquals(frozen.molarEnthalpyJoulesPerMol(), flash.molarEnthalpyJoulesPerMol(), 0.0);
     }
 
     /**

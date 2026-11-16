@@ -121,7 +121,7 @@ final class FlowsheetAqueousColumnTest {
 
     /**
      * Ethanol 40, water 50 and n-hexane 10 mol/s at 345 K, the condenser at 320 K: hexane and water do not mix. The column solves
-     * the liquid as one (it converges or fails typed); where a liquid would settle the block warns, naming the trays. On the
+     * the liquid as one and converges; where a liquid would settle the block warns, naming the trays. On the
      * running column this feed settles on tray 8 and in the distillate ({@code ColumnWaterTest}).
      */
     @Test void aLiquidThatWouldSettleIsANotice() {
@@ -129,14 +129,12 @@ final class FlowsheetAqueousColumnTest {
         amounts.put("N-hexane", 10.);
         var run = run(rectifier(List.of(), 320), amounts, 345);
         System.out.printf(Locale.ROOT, "W5 sheet ethanol, water, hexane: %s; notes %s; log %s%n", run.status(), run.reports().get("T") == null ? "-" : run.reports().get("T").notes(), run.log());
-        if (run.status() == FlowsheetRun.Status.FAILED) {
-            assertEquals("column.failed", run.log().getFirst().key(), "a typed failure");
-            return;
-        }
+        // Steady with its two warnings (batch 2026-11-16-supercritical-followups, LANE_FIXES_REVIEW.md: the feed flash carries a
+        // liquid that would settle as one liquid): tray 8's liquid and the distillate would settle into two liquids.
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
         var notes = run.reports().get("T").notes();
-        assertTrue(notes.stream().anyMatch(n -> n.key().startsWith("column.two_liquids")), () -> "notes " + notes);
-        notes.stream().filter(n -> n.key().equals("column.two_liquids")).forEach(n -> assertFalse(n.arguments().getFirst().isBlank(), "names the trays"));
+        assertEquals(List.of("column.two_liquids", "column.two_liquids_distillate"), notes.stream().map(n -> n.key()).toList(), () -> "notes " + notes);
+        assertEquals(List.of("8"), notes.getFirst().arguments(), "names the tray");
     }
 
     /** A crude sheet with 1e-6 of ethanol stays off the axis (under the share): its water is steam, and free water leaves. */
