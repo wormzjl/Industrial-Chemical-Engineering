@@ -347,8 +347,11 @@ class ConstructorColumnTest {
                     buttons(ConstructorColumn.choose(category, Equipment.PUMP, 16, t)).keySet().stream().filter(k -> k.startsWith("kind:")).count(), category + "'s kinds");
 
         var drum = ConstructorColumn.design(design(Form.VERTICAL, 2, 6, 3, 3, 0, 0), t);
-        assertEquals(List.of("size", "size-", "size+", "length", "length-", "length+", "support", "support-", "support+", "forward", "forward-", "forward+", "right", "right-",
+        assertEquals(List.of("size", "size-", "size+", "length", "length-", "length+", "support", "support-", "support+", "material:CARBON_STEEL",
+                "material:CHROME_STEEL", "material:STAINLESS_STEEL", "material:NICKEL_ALLOY", "forward", "forward-", "forward+", "right", "right-",
                 "right+", "up", "up-", "up+"), slots(drum));
+        // The material of construction (shape fields 13): the draft's latched; a form without a fluid device shows none.
+        assertTrue(buttons(drum).get("material:CARBON_STEEL").latched() && buttons(drum).get("material:NICKEL_ALLOY").active());
         assertEquals(List.of("paint", "build"), drum.footer().stream().map(Column.Button::key).toList());
         var lying = ConstructorColumn.design(design(Form.CROSSWISE, 2, 6, 3, 3, 0, 0), t);
         assertTrue(buttons(lying).get("axis:crosswise").latched() && buttons(lying).get("axis:lengthwise").active());
