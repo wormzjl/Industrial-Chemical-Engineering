@@ -77,6 +77,21 @@ Later, with the same frame: amine treating and caustic washing (a `dissolved` ta
 | 13 | Reactor volumes | Residence time of units without holdup | Drawn shapes of the reactor kinds | Bed, riser, drum and coil volumes as design numbers of each kind |
 | 14 | Real compounds for the light naphtha | Isomerization | The cut `crude_pc01` (309 to 357 K) | To decide with that unit: split the cut into C5 and C6 compounds at the unit, or treat isomerization as a change of a tag |
 
+| 15 | Data range in pressure | Hydrotreating, hydrocracking (50 to 200 bar) | The `fluid_domain` of the cuts and most compounds ends at 20 bar; hydrogen's and methane's at 300 bar | The kernel continues with a notice. Qualify the cuts to 200 bar: evidence, not a model change |
+| 16 | Hydrogen dissolved in the oil | A trickle-bed law written on the liquid's hydrogen | Every hydrogen pair is zero by rule (owner, 2026-11-04), so the dissolved amount is not a measured one | Write the rate laws on the gas's hydrogen partial pressure |
+
+### 4.1 What the background thermo model must do
+
+Read at `adb413b4d`: `EnergyReference`, the `properties` datasets, `thermo-kernel.md`, `fluid-thermo-port.md`.
+
+- **This batch: nothing.** Tags and their transformations read temperature, pressure, phase amounts, densities and the oil's viscosity. They change no property and are in no identity.
+- **The kernel and the equilibrium engine stay as they are for the reactor units too.** A reactor's products are existing compounds and cuts, flashed as any stream. There is no reactive flash: the unit solves its kinetics or its chemical equilibrium on its own, in the ideal gas, and hands amounts to the engine.
+- **Energy datum.** The network's datum is sensible, zero at 298.15 K (`EnergyReference.sensible`, `formationDataQualified` false), so a stream's enthalpy holds no heat of formation. A reaction's heat is therefore booked by the unit as its own term (row 8, and the plan's section 14). The other form, formation offsets on the datum (`EnergyReference` carries per-compound offsets and a rebase), would restate every world and rest on the cuts' estimated values: not proposed.
+- **Heat capacity range** (row 7): every dataset's fit, the cubic water's too, ends at 900 K and is held beyond. Hydrotreating, hydrocracking, coking and FCC risers (to about 830 K) are inside. The FCC regenerator (about 1 000 K), steam cracking and SMR (1 100 to 1 200 K) are outside. A refit moves the fluid identity, so it is its own data batch.
+- **Entropy** (row 6): a new field on a sub-record that is in no identity, so it restates nothing.
+- **Pressure** (row 15) and **hydrogen in oil** (row 16), above.
+- Not checked: the steam virial (IF97 Region 2's `B`) above Region 2's 1 073 K, at the reformer's 20 to 30 bar.
+
 ## 5. Not found, and open
 
 - The numeric table of hydrochloric acid corrosion in API RP 581 Part 2 Annex B. The plan's M12 anchors are recalled.
