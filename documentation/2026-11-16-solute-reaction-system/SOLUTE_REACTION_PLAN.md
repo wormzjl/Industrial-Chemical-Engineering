@@ -1,4 +1,6 @@
-# Solute and reaction system: design (revision 4)
+# Solute and reaction system: design (revision 5)
+
+Revision 5 (owner, 2026-11-16): the options are decided. O2: one material per column. O3: coke fines become a solid population in a vessel (5.5). O4: two tags, `nickel` and `vanadium`. O8: the plan's game values. And the owner's note "later in game the crude composition will be randomized, consider that": contents become a function of a crude stated by value (5.1, 5.6), the tag pass is judged with tags on every oil island (12), and the later models read the cuts and the tags only (14, review 7.6). Sections 4, 5, 8.5, 11 to 17.
 
 Revision 4 (owner, 2026-11-16: "explore more and justify your selection"): after the model survey (review section 7) four laws of this batch change. Desalting gains a drag correction (8.1); the hydrolysable chloride is magnesium's and 12 % of calcium's (5.2, 8.2); wall fouling is written on Reynolds and Prandtl numbers and wall shear at 40 kJ/mol (8.4); bulk coking waits for the resins to fall below a solubility limit (8.5). M12's slope is corrected (9) and the law's constants are read (7.4).
 
@@ -6,7 +8,7 @@ Revision 3 (owner, 2026-11-16: "Level 1: speciation"): acids and bases in water 
 
 Revision 2 (owner, 2026-11-16: "I mean model the HCl as an components"): hydrogen chloride is a compound of the network package. A tag becomes the compound, and the compound a tag on water, at holdups (sections 4, 5.2, 7.4, 8.2, 8.3, 9, 12, 13, 15, 16, 17).
 
-Batch `2026-11-16-solute-reaction-system`, branch `claude/solute-reaction-system-01ef6c`, cut from `main` at `adb413b4d` (0.34.0). Status: design, no code. It builds on batch `2026-11-16-fouling-corrosion` (`science/integrity`, the walls, the column's wear), which is on `claude/fouling-corrosion-final-lane-f2943c` and not on `main` yet: no work package of this plan starts before that batch merges.
+Batch `2026-11-16-solute-reaction-system`, branch `claude/solute-reaction-system-01ef6c`, cut from `main` at `adb413b4d` (0.34.0). Status: design, no code. It builds on batch `2026-11-16-fouling-corrosion` (`science/integrity`, the walls, the column's wear), which is on `main` since 0.34.3 (`228443411`, 2026-11-16). This branch does not hold that merge yet: the build starts from a merge of `main` into it.
 
 The kinetic models, their sources and the inputs they lack are in [REACTION_MODELS_REVIEW.md](REACTION_MODELS_REVIEW.md). This plan designs the solute system, the transformations that need no reactor, the desalter and the per-part corrosion. The catalytic units get their own design later; section 14 fixes only the frame they will stand in.
 
@@ -28,6 +30,7 @@ During the work (owner, 2026-11-16):
 
 - "solute 'tags' the pseudocomponent and water, and they retain their physical properties"
 - "compounds with different 'tag' can do mixing as they would"
+- "later in game the crude composition will be randomized, consider that" (section 5.6)
 - On the first design's HCl as a tag on water: "I mean model the HCl as an components"
 
 ## 2. What exists today
@@ -69,7 +72,9 @@ None of these changes a stream's density, enthalpy or phase split by a part in 1
 | D6 | A transformation of this batch moves tags, and parts per million of one compound (7.4), so it books no heat of reaction (each is below 1e-4 of its stream's enthalpy change, section 8.6). Heat belongs to the reactor units (section 14). |
 | D7 | Hydrogen chloride is a compound, `HydrogenChloride`, in `icheme:refinery` (owner, revision 2). The compound is its molecular part; its ions in water are the tag `acid_chloride`. |
 | D12 | Acids and bases in water follow one **speciation law** (owner, revision 3): mass action between each volatile's molecular part (a compound, which the cubic sees) and its ions (a tag on the water, which it does not), closed by the charge balance. It is solved in wet holdups at an interval's start and in units on accounts, never inside the step's Newton or the kernel. The split, the neutralisation and the pH are its outputs. Later acids and bases (H2S, CO2, amines) add records, not rules. |
-| D8 | A stock without tag data has its datasets' default contents. Only a stock that differs stores amounts, so a world without salted crude pays nothing and an old save needs no conversion. |
+| D8 | A stock without tag data has its datasets' default contents. Only a stock that differs stores amounts, so an old save needs no conversion and a fluid without contents pays nothing. With randomized crudes every crude stock differs: explicit tags are the usual case, and the costs are judged for it (section 12). |
+| D13 | A crude is stated **by value**: its amounts on the shared cuts and one factor per tag on the cuts' default profile (owner's note on randomized crudes, 5.6). No law, record or saved value names a grade. Contents are a pure function of those numbers. |
+| D14 | Coke fines are a tag while they travel and become a **solid population** in a vessel (owner, O3): the same mass leaves the carrier cut. From there the existing solids machinery settles, carries and filters them (5.5). |
 | D9 | The electric desalter is a horizontal vessel of the fluid network with an electric store. Its law is the settling law every vessel has; the field only makes the drops larger. |
 | D10 | Corrosion is evaluated per part: each product zone of a column's shell and the process side of each of its exchangers has its own wall record. |
 | D11 | A reactor is a unit on accounts with a yield table from one model solve, as a running column is with its split table. Detailed design: the next task. |
@@ -90,10 +95,19 @@ A new material kind, `solutes` (the 16th): `data/<ns>/materials/solutes/<id>.jso
 | `particulate` | Counts as solid share in the erosion and tray fouling laws |
 | `ion` | Optional: `cation` or `anion` (one charge per mole). The tag then counts in the charge balance of the speciation law (7.4) |
 | `hazard` | Optional, as a compound's: the channel and reference for a release to the air |
+| `maximum_per_kg_carrier` | The largest content a cut can hold (kg per kg). A factor or a target that asks for more is cut off there |
+| `solid` | Optional: `material` (a `solids` record), `size_micrometres`, `flag_mass_fraction`. The tag becomes this solid in a vessel (5.5) |
 
-Default contents: a `content` sub-record on a pseudocomponent's dataset, kg of tag per kg of the cut, with its own revision, in no identity. It replaces the `corrosion` sub-record of the fouling-corrosion batch: `sulfur_mass_percent` and `acid_number` become the defaults of the tags `sulfur` and `acid`; `fouling` is replaced by the asphaltene content (section 8.4). The old field names are read as aliases.
+Default contents: a `content` sub-record on a pseudocomponent's dataset, kg of tag per kg of the cut, with its own revision, in no identity. It is the **default profile**: how each content is spread over the boiling range. It replaces the `corrosion` sub-record of the fouling-corrosion batch: `sulfur_mass_percent` and `acid_number` become the defaults of the tags `sulfur` and `acid`; `fouling` is replaced by the asphaltene content (section 8.4). The old field names are read as aliases.
 
-An assay gains an optional `content` block: whole-crude targets (sulfur wt%, nitrogen and metals in mg/kg, asphaltenes and resins wt%, acid number, salt in PTB, the hydrolysable share of the salt). `MaterialCatalog` scales the cuts' default profile by one factor per tag so that the whole crude meets its target. Every assay then has its own sulfur, which closes decision D9 of the fouling-corrosion batch. The salt of an assay tags its heaviest cut (brine and crystals dispersed in the oil); assays stay dry.
+A crude's contents are a function, `science/solute/ContentProfile` (pure, no catalog type):
+
+`content[tag][cut] = min(maximum_per_kg_carrier, factor[tag] × profile[tag][cut])`
+
+- An assay gains an optional `content` block with one of two forms. `factors`: one number per tag (absent: 1). `targets`: whole-crude values (sulfur wt%, nitrogen, nickel and vanadium in mg/kg, asphaltenes and resins wt%, acid number, salt in PTB, the hydrolysable share of the salt); the catalog finds the factor that meets each target on the assay's own cut amounts, and states the value reached where the cap cuts it off.
+- The same function serves a crude that is no datapack record (5.6): it needs the cut amounts and the factors, nothing else. There is no fit per grade in `tools/crude-grades/`; the tool only writes the default profile.
+- Every assay then has its own sulfur, which closes decision D9 of the fouling-corrosion batch.
+- The salt of a crude tags its heaviest cut that holds at least 1 % of the crude's mass (brine and crystals dispersed in the oil); assays stay dry.
 
 ### 5.2 The tags of this batch
 
@@ -102,7 +116,8 @@ An assay gains an optional `content` block: whole-crude targets (sulfur wt%, nit
 | `sulfur` | cuts | bound | kg S | Sulfidation (M1); hydrotreating, FCC, coking |
 | `nitrogen` | cuts | bound | kg N | Hydrotreating, hydrocracking, FCC |
 | `acid` | cuts | bound | kg KOH equivalent | Naphthenic acid corrosion (M2) |
-| `metals` | cuts | dissolved (stay) | kg Ni + V | Hydrotreating catalyst life, FCC |
+| `nickel` | cuts | dissolved (stay) | kg Ni | Hydrotreating catalyst life; FCC: hydrogen and coke (owner, O4: two tags) |
+| `vanadium` | cuts | dissolved (stay) | kg V | Hydrotreating catalyst life; FCC: loss of activity |
 | `asphaltenes` | cuts | dissolved (stay) | kg | Coking (8.4, 8.5), coker and FCC coke yield |
 | `resins` | cuts | dissolved (stay) | kg | Coke yield; asphaltene stability later |
 | `salt` | cuts, water | dissolved (heaviest cut) | kg Cl in stable chloride | Desalting; fouling later |
@@ -110,7 +125,7 @@ An assay gains an optional `content` block: whole-crude targets (sulfur wt%, nit
 | `acid_chloride` | water, cuts | acid gas; anion | kg Cl as HCl | The ions of hydrogen chloride in water (7.4, M12); the hydrolysis product on its way to the next holdup |
 | `ammonium` | water | dissolved (heaviest cut); cation | kg N as NH4 | The ions of ammonia in water (7.4) |
 | `caustic` | water, cuts | dissolved (heaviest cut); cation | kg NaOH | Converts hydrolysable chloride and acid chloride to salt; in excess, a base in the charge balance |
-| `coke_fines` | cuts | dissolved (stay), particulate | kg | Erosion, tray fouling |
+| `coke_fines` | cuts | dissolved (stay), particulate; `solid`: `icheme:coke`, 50 µm | kg | Erosion, tray fouling; a solid population in a vessel (5.5) |
 
 Sulfur in H2S, mercaptans, COS and SO2 stays in their formulas, as today. Ammonia is a compound; where an acid meets it in water, its ions are the tag `ammonium`.
 
@@ -131,6 +146,68 @@ Ordinary solutes are the same thing: a brine, a caustic or amine solution is wat
 - **Column**: product `p` takes `recovery[c][p]` of each (tag, carrier `c`) from the split table. A `dissolved` tag takes the liquid's way: to the bottoms, as inert particles go.
 - **Stranding**: a `dissolved` tag whose carrier has no liquid left in a stock moves to its `stranded` carrier (salt of evaporated water becomes crystals on the heaviest cut). With no liquid at all it stays in a vessel as dry residue until its carrier returns; in a junction it rides the total flow.
 - **Leaving the game's axis**: a Forge fluid conversion out of the network, a vent, a spill and a flare take their tags with them; the ledger books them as left.
+
+### 5.5 Coke fines become a solid in a vessel (owner, O3)
+
+Expected. Coke particles ride the oil through exchangers and pipes. They settle where the oil stands hot and thin, stay suspended in cold, viscous oil, and a filter catches them. A 50 µm particle of coke (1 200 kg/m³) in oil of 800 kg/m³ settles by Stokes' law at 2.0 m/h in oil of 1 mPa s (a hot drum), 0.2 m/h at 10 mPa s and 4 mm/h at 500 mPa s (cold residue).
+
+Design:
+
+- The fines travel as the tag `coke_fines` (D4: nothing happens in a pipe). A column, a still and a converter carry the tag on their accounts to the liquid product.
+- A vessel of the network (not a junction, not a fixed node) whose `coke_fines` exceed `flag_mass_fraction` (1 mg per kg of its liquid) is flagged. At the interval's start, at the site of the speciation solve (7.4), each carrier cut gives up the kilograms its tag states (`moles −= kg / M_cut`), the vessel gains that mass as a population of `icheme:coke` at 50 µm, and the tag falls to 0.
+- The stock's internal energy is kept and the refresh restates T and P, so mass and energy are exact. The temperature moves by less than 0.02 K per kg of fines in a 10 t holdup.
+- Booking: one `SOLUTE` transfer for the cuts' moles that leave the fluid, and the same mass gained on the solids' ledger. `SOLUTE` is a rate kind (7.4), so the exchange alone refuses no certificate.
+- From there the existing machinery acts: `SolidMobility` decides whether an outlet carries them, `SlurryTransport` moves them, a still vessel settles them into a bed, an `InlineFilter` cakes, the recovered-solids item takes them out. An island that holds oil is monitored for solid events already (`SolidMobility.monitored`), so its interval driver does not change.
+- A new `solids` record, `icheme:coke`: density 1 200 kg/m³ (the deposit's), heat capacity 1 300 J/kg K. Game values.
+- Coke never returns to a cut.
+
+What it replaces: in a vessel, bulk coking's deposit share was booked without effect (8.5). All the coke a vessel makes is now fines, and so a bed the player must draw off or filter. A column's bottom keeps its split, for the tray fouling.
+
+Not changed: a wall's deposit (the `Rf` fact) stays an amount without mass, as every tag (D1). At the fouling limit it is 1.1 kg/m²: for 100 m² in 10 process hours at 20 kg/s, 1.5e-4 of the oil that passed.
+
+The rule is the record's `solid` block, not coke's own: catalyst fines and scale later add a block.
+
+### 5.6 Randomized crudes (owner's note)
+
+"later in game the crude composition will be randomized, consider that."
+
+What it means on the mod's data. The grades are already distributions on twelve shared cuts and the light ends (`tools/crude-grades/grades.mjs`: Riazi's distribution from an API gravity, a light end share and a residue share). A random crude is one more distribution on the same cuts, with contents of its own. Assumed here, for the owner to correct (O9): the cuts themselves are not randomized.
+
+What already serves it:
+
+- Contents ride as amounts per (tag, cut) (D1, D2). Two crudes blend exactly, in a tank, a pipe or a column; nothing is keyed by a grade.
+- Every law of section 8 and M12 reads the tags and the stream's own state (viscosity, density, Reynolds and Prandtl numbers). None holds a constant per grade.
+- The corrosion digest reads tags (WP3), not a cut's static numbers.
+
+What changes in this plan:
+
+1. Contents are a function of the crude's numbers (5.1, D13), not a table fitted per grade.
+2. A source states its crude by value: a generator's spec, a Forge fluid entering the network and a sheet's feed hold the cut amounts and the factors. A random crude is drawn once and saved as a fact with the declared revision of the law that drew it. It is never drawn again and never keyed by a hash.
+3. A cap per tag (`maximum_per_kg_carrier`) and the salt's 1 % rule (5.1), because a random distribution can leave a cut almost empty.
+4. Explicit tags are the usual case (D8): the tag pass is judged with tags on every oil island (section 12).
+5. The device page's Contents group (WP9) is how the player learns a crude: it shows what a tank holds, not a grade's name.
+
+The ranges the laws are checked for (typical crudes, recalled; game values for the later batch to draw from):
+
+| Content | Range | The plan's default (medium crude) |
+|---|---|---|
+| Sulfur | 0.1 to 4 wt% | 1.5 |
+| Nitrogen | 0.02 to 0.5 wt% | Set with the profile (WP1) |
+| Nickel, vanadium | 1 to 100, 1 to 400 mg/kg | Set with the profile (WP1) |
+| Asphaltenes | 0.1 to 15 wt% | 3 |
+| Resins | 2 to 25 wt% | 9 |
+| Acid number | 0.05 to 4 mg KOH/g | The fouling-corrosion batch's |
+| Salt | 5 to 300 PTB | 50 |
+| Hydrolysable share of the salt | 5 to 35 % | One sixth |
+
+At the extremes:
+
+- Wall fouling: `p` runs from its floor 0.2 to its cap 3 (8.4), so the time to the fouling limit differs 15 times between the cleanest and the dirtiest crude.
+- Bulk coking: a crude with more asphaltenes than 0.4 of its resins cokes at once above 340 °C (8.5). The draw must keep the ratio below 0.3, or name such a crude unstable on purpose.
+- Acid: the chloride that reaches the overhead scales with salt × hydrolysable share. The worst crude gives 12.6 times the default's (300 PTB × 0.35 against 50 PTB × 1/6): the overhead water's pH is 1.1 lower and M12's rate 2.4 times higher without a desalter. Two desalting stages (97 %) bring it below the default's.
+- A blend adds asphaltenes and resins. Two stable crudes always give a stable blend: the incompatibility of real blends is not modelled.
+
+The reactor units (section 14) must answer to the crude as well. Review 7.6 lists what each selected model reads from the feed.
 
 ## 6. Transport
 
@@ -355,7 +432,7 @@ Mass: the formation term × deposit conductivity (1 W/mK) × density (1 200 kg/m
 Two records, both with `k = 3e-5 s⁻¹ · exp(−25 258 K · (1/T − 1/673.15 K))` (210 kJ/mol, the usual value for residue cracking), window 613 K and above:
 
 - `resins` crack at `2k` (to the oil: the tag only falls).
-- `asphaltenes` above the solubility limit `0.4 × resins` → 60 % `coke_fines`, 40 % deposit, at `k`. Below the limit nothing cokes. The `first_order` law gains an optional `limit` (a factor on another tag) for this.
+- `asphaltenes` above the solubility limit `0.4 × resins` → `coke_fines` at `k`; in a column's bottom 60 % `coke_fines` and 40 % deposit. Below the limit nothing cokes. The `first_order` law gains an optional `limit` (a factor on another tag) for this.
 
 This is Wiehe's phase-separation picture on the two tags the cuts carry: the resins keep the asphaltenes in solution, heat destroys the resins, and coke appears after an induction period (review 7.3). The limit 0.4 and the factor 2 are fits to an induction of tens of minutes at 400 °C (recalled). They stay as game constants (owner, O5).
 
@@ -366,9 +443,9 @@ This is Wiehe's phase-separation picture on the two tags the cuts carry: the res
 | 400 °C | 50 min | 11 min | 10 % |
 | 430 °C | 10 min | 2 min | 42 % |
 
-A residue with more asphaltenes than 0.4 of its resins cokes at once above 340 °C; a usual one passes a column's bottom, where it stays minutes, without coke. The 60 to 40 split is a game rule.
+A residue with more asphaltenes than 0.4 of its resins cokes at once above 340 °C; a usual one passes a column's bottom, where it stays minutes, without coke. The 60 to 40 split of a column's bottom is a game rule. Past the induction, a residue with 10 % asphaltenes held 10 minutes at 400 °C in a vessel makes up to 1 700 mg of coke per kg: a bed of up to 17 kg per 10 t that passed.
 
-In a column the deposit raises the tray fouling that the fouling-corrosion batch's WP8 already keeps (`trayFouling`), by the deposit's share of 2 % of the bottoms. In a vessel the deposit is booked and has no effect yet. `coke_fines` count as solid share in `ErosionLaw` and in the column's tray fouling. They are not a `SolidInventory` population in this batch (option O3).
+In a column the deposit raises the tray fouling that the fouling-corrosion batch's WP8 already keeps (`trayFouling`), by the deposit's share of 2 % of the bottoms. In a vessel there is no deposit share: all its coke is fines, and the fines become a solid population there (owner, O3; section 5.5). `coke_fines` still on their way count as solid share in `ErosionLaw` and in the column's tray fouling, as the population does once it exists.
 
 ### 8.6 Why none of these books heat
 
@@ -421,19 +498,20 @@ Each is computed once per installed table, as the bottoms' is today. A part thro
 
 ## 11. Simulator
 
-A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass tags by their recoveries, heat units apply hydrolysis and surface coking at their sized passage, the desalter its law. The Materials tab's digest reads the tags and M12. A vessel unit applies the speciation law of 7.4 to its outlet streams; the column gives hydrogen chloride to its top product and solves the law on that product's free water. All on the client, as today.
+A sheet stream carries a `TagSet`; a feed states its crude by value (cut amounts and one factor per tag, D13), filled from an assay or typed, so a sheet can hold a crude that no datapack names. Units pass tags by their recoveries, heat units apply hydrolysis and surface coking at their sized passage, the desalter its law. The Materials tab's digest reads the tags and M12. A vessel unit applies the speciation law of 7.4 to its outlet streams; the column gives hydrogen chloride to its top product and solves the law on that product's free water. All on the client, as today.
 
 ## 12. Performance
 
 | Item | Where | Bound |
 |---|---|---|
-| Tag transport | The island's worker, once per interval | Skipped without tags; one factorization without a phase draw; else one per carrier and class that holds a tag (at most 38) |
+| Tag transport | The island's worker, once per interval | The usual case with randomized crudes: every oil island carries tags. One factorization without a phase draw; else one per carrier and class that holds a tag (at most 38). Each is one scalar per node, against the step's Newton with a block per node and several factorizations per step. Skipped without tags |
+| Coke fines to a solid | The island's worker, at an interval's start, flagged vessels only | One bit test per vessel; a flagged vessel: one subtraction per carrier and the refresh's restate, which the interval's start runs for a stock that may convert anyway |
 | Transformation coefficients | Server thread, at the 5 s cadence | 256 sites a pass; a site outside its window costs one comparison |
 | Hydrogen chloride | Islands that carry it | One compound more in their flash (about 1 in 30 for an overhead system) |
 | Speciation | The island's worker, at an interval's start, flagged vessels only | Per vessel: one fugacity evaluation per phase (at most 3), one root in pH (60 bisection steps × 3 passes over at most a handful of records), one TP flash when an amount moved. A vessel is flagged by one bit test; an island without a record's species pays nothing |
 | The step's Newton, its booking, the kernel, the certificates | | No change (`SOLUTE` joins the rate kinds) |
 | Column parts | Once per installed table | One digest per part |
-| Memory | Per stock with tags | 12 tags × 13 carriers doubles |
+| Memory | Per stock with tags | 13 tags × 13 carriers doubles (1.4 kB) |
 
 ## 13. Formats and config
 
@@ -443,7 +521,7 @@ A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass
 | Fluid checkpoint state format | 52 | 53: junction tags, site coefficients |
 | Wire protocol | `icheme-5` | `icheme-6`: views with contents, the desalter's page |
 | Simulator sheet file | 2 (3 reserved, to be released) | The next free number: stream tags |
-| Material data | | Kinds `solutes`, `reactions` and `equilibria`; `content` sub-record; assay `content`. In no identity. The compound `HydrogenChloride` with its dataset, its `henry_in_water` and its pairs, in `icheme:refinery` (its revision bumped; `materials-index.json`) |
+| Material data | | Kinds `solutes`, `reactions` and `equilibria`; `content` sub-record; assay `content` (`factors` or `targets`); the `solids` record `icheme:coke`. In no identity. The compound `HydrogenChloride` with its dataset, its `henry_in_water` and its pairs, in `icheme:refinery` (its revision bumped; `materials-index.json`) |
 | Interval result | | `BoundaryTransfer.Kind.SOLUTE`, appended |
 | Corpus | | `compat/fluid/schema-30` |
 
@@ -460,6 +538,7 @@ For the next design task; decided here only so that this batch fits it.
 - Its heat is booked on its account: by Hess's law from the `thermochemistry` sub-records where every participant is a real compound, by a stated heat per kg converted for lumps (the cuts' estimated formation enthalpies are too rough for a difference).
 - A reactor with real holdup (stirred reactor, coke drum) uses the vessel form of section 7.2; one without holdup the residence time of its bed, riser or coil.
 - Catalyst state (activity, coke, metals) is a fact of the unit.
+- A model reads the feed's cut amounts and tags, never a grade (D13): a randomized crude and a blend must give their own yields. The twelve cuts share one Watson K band, so a crude's character (paraffinic, naphthenic, aromatic) can only be tags: `naphthenes` and `aromatics` per cut (`bound`; paraffins by difference; `olefins` for cracked streams: review section 4, row 4) join the tags in the reactor design, and a random crude draws the first two. A model whose constants were fitted to one feed gets a feed factor on these tags (review 7.6).
 
 The models and what each lacks: [REACTION_MODELS_REVIEW.md](REACTION_MODELS_REVIEW.md), sections 3 and 4.
 
@@ -469,16 +548,17 @@ After `2026-11-16-fouling-corrosion` is on `main`. Five stages, each leaving `ma
 
 | Stage | WP | Content | Lane, hot files |
 |---|---|---|---|
-| A | WP1 | `science/solute`: `TagKind`, `TagSet`, kinds `solutes` and `reactions` in `MaterialCatalog`, the `content` sub-record (aliases of `corrosion`), assay `content` and the fit in `tools/crude-grades/`, the twelve records | thermo: `MaterialCatalog` |
+| A | WP1 | `science/solute`: `TagKind`, `TagSet`, kinds `solutes` and `reactions` in `MaterialCatalog`, the `content` sub-record (aliases of `corrosion`), `ContentProfile` (the pure function of 5.1, with `ContentProfileTest`: a target met, a cap reached, an almost empty cut, two crudes blended), assay `content` (`factors` or `targets`), the default profile written by `tools/crude-grades/`, the thirteen records | thermo: `MaterialCatalog` |
 | A | WP2 | `TagTransport`; `Inventory.tags`; the result and commit wiring; the replay step; generator contents; facts schema 30, state format 53, the corpus image; `TagLedgerTest` | fluid laws, runtime: `FluidFacts`, `FluidCheckpointCodec`, `IslandCoordinator` |
 | A | WP3 | The digest on tags (`CorrosionStandard`); references exact with default contents | thermo |
 | B | WP4 | `science/reaction` (the three laws), `runtime/fluid/Reactions`, `TagPlan`; hydrolysis, caustic, bulk and surface coking; `FoulingLaw`'s oil rows removed | runtime: `FluidWorldAuthority` |
 | B | WP4b | Speciation. `science/solute/Speciation`: a pure function (totals, `F`, free water, temperature → ions, pH), with `SpeciationTest` on the numbers of 7.4 and 8.3. Kind `equilibria` and its two records. Hydrogen chloride: the compound's records, `henry_in_water` and pairs, chlorine in the formula elements, the hazard. The solve at the interval's start (`PassiveIntervalSolver.solve`, `Kind.SOLUTE`, the flags and ions in the command, island growth); the ledger across compounds and tags | thermo, fluid laws: `MaterialCatalog`, `ConservativeTransport` (one constant), `IslandCoordinator` |
+| B | WP4c | Coke fines to a solid (5.5), after WP4b, at its site: the `solid` block, the record `icheme:coke`, the flag and the amounts in the command, the exchange with `SOLUTE`, the ledger across cuts, tags and solids. Tests: mass and energy exact through one exchange; a hot drum settles a bed and a filter cakes; a vessel below the flag keeps its tag. The hold-fuzz campaign gains a coking world; its counters judge the cost | fluid laws: `IslandCoordinator` |
 | B | WP5 | M12 and its factors; a heat side's colder end for the wet mechanisms; `coke_fines` in the solid share | thermo |
 | C | WP6 | The desalter: kind, design, model, registration, law, page, sound | equipment: `EquipmentShape`, `EquipmentStructure` |
 | D | WP7 | Tags through the column's, still's and converter's accounts; the column's parts and their facts; the Operation table | plant: `ColumnOperation`, `ColumnFacts` |
-| E | WP8 | Simulator: stream tags, the desalter unit, the Materials tab per part | flowsheet: `SheetSizing` |
-| E | WP9 | Device pages: a Contents group (sulfur wt%, salt PTB, the water's pH); releases of a tag with a `hazard`; tutorial page | client, runtime presentation |
+| E | WP8 | Simulator: stream tags, a feed's crude by value (cut amounts and factors), the desalter unit, the Materials tab per part | flowsheet: `SheetSizing` |
+| E | WP9 | Device pages: a Contents group (sulfur wt%, nickel and vanadium, asphaltenes, salt PTB, the water's pH), which is how the player reads a crude that has no name; releases of a tag with a `hazard`; tutorial page | client, runtime presentation |
 
 WP2 and WP6's model can run side by side; so can WP4 and WP7 after WP2, and WP8 and WP9. Each work package gets its full brief (files, methods, numbers, test commands, pitfalls) when it starts.
 
@@ -487,21 +567,28 @@ Results that move: none in stage A (default contents give today's digest). Stage
 ## 16. Owner's options
 
 - **O1, HCl: decided** (owner, 2026-11-16, revision 2): a compound. Sections 7.4 and 8.3.
-- **O2, zone material.** One material per column today. A real column clads its top. Option: a second material for the top zone (one shape field).
-- **O3, coke fines.** Designed as a particulate tag. Option: turn them into a `SolidInventory` population at the next vessel, so that filters cake and beds settle. It needs a mass exchange with the heaviest cut in the vessel's refresh.
-- **O4, metals.** One tag (Ni + V). FCC models treat them apart; two tags cost one more row.
+- **O2, zone material: decided** (owner, 2026-11-16): one material per column, no new field. An acid overhead is answered by the desalter, by neutralising, or by a column of nickel alloy.
+- **O3, coke fines: decided** (owner, 2026-11-16): a solid population in a vessel, so that beds settle and filters cake. Section 5.5, WP4c. The mass comes from each carrier cut by its own tag, not from the heaviest cut alone.
+- **O4, metals: decided** (owner, 2026-11-16): two tags, `nickel` and `vanadium`.
 - **O5, the numbers** of sections 8 and 9 are game-level fits to the stated anchors, as the corrosion matrix is. **Decided for the recalled constants** (owner, 2026-11-16: "Keep recalled values"): the five papers of this batch (review 7.5, rows 1 to 5) are not fetched. The hydrolysis rate, M12's anchors, bulk coking's limit and factor, Bromley's `B` and the fouling constants stay at their recalled values, each marked recalled where it is stated. No work package waits for a read.
 - **O6, hydrogen chloride's pair with water: settled by O7.** With the law in place the pair serves the molecular part only and is sized, not fitted to the acid (8.3). The options A to C of revision 2 (pair 0, a pair of −1.0 with a tag limited to 1 mol/kg, the pair alone) are withdrawn. The size (0.1 atm at 25 °C, 10 atm at 100 °C) is the owner's to change: a larger constant gives a truer azeotrope at 50 mmHg (25.2 % at 1 and 30 atm) and holds less arriving gas (81 %).
 - **O7, acids and bases in water: decided** (owner, 2026-11-16: "Level 1: speciation"). One speciation law at the exchange sites: sections 7.4, 8.3 and 9. Not chosen: rules per substance (revision 2), and electrolyte thermodynamics in the kernel, which stays the answer if acid gas must one day flash correctly out of rich amine in any network equipment (review 4.5).
-- **O8, three numbers the survey could not source** (review 7.3), each a game value until the owner says otherwise:
-  - The coker's coke factor: 1.2 to 1.7 of the Conradson carbon by drum pressure and recycle ratio (ours), or the textbook's fixed 1.6.
-  - A sediment limit on residue hydrocracking conversion (60 to 80 % in real ebullated beds, recalled): a limit with game constants, or none.
-  - One activation energy per isomerization catalyst family: the paper gives none.
+- **O8, three numbers the survey could not source: decided** (owner, 2026-11-16: the plan's game values; review 7.3), each marked a game value in the reactor design:
+  - The coker's coke factor: 1.2 to 1.7 of the Conradson carbon by drum pressure and recycle ratio. Not the textbook's fixed 1.6.
+  - A sediment limit on residue hydrocracking conversion, at about 70 % (60 to 80 % in real ebullated beds, recalled), with game constants.
+  - One activation energy per isomerization catalyst family.
+- **O9, what a random crude varies** (the owner's note; section 5.6). Assumed in this plan, for the owner to correct before the randomization is designed:
+  - The twelve shared cuts and the light ends stay. A random crude draws its amounts on them. If the cuts themselves were drawn, every identity of the package would move with each crude: not designed here.
+  - Contents are one factor per tag on one profile over the boiling range. A crude cannot have, say, its sulfur in the naphtha only.
+  - A crude's character (paraffinic, naphthenic, aromatic) arrives with the reactor design as type tags (section 14). Until then crudes differ in boiling range and contents, not in character.
 
 ## 17. Risks
 
 - The tag pass rebuilds transport from `PipeTransfer`. An interval that booked a transfer the history does not hold (a release, a melt) must be covered boundary by boundary; `TagLedgerTest` runs on the hold-fuzz worlds to find them.
 - Default contents (D8) must be expanded at every place two stocks meet: a missed place loses tags silently. One helper, `TagSet.of(inventory, defaults)`, and no other read.
+- Coke as a solid (5.5) puts solids into ordinary oil service. A hot vessel then holds a bed, and beds and cakes are located events of the solid driver: more of them means more searched steps and more chances of a hold in the classes that involve solids (still pipes, closures). WP4c measures it by the campaign's counters on a coking world. Whether a vessel with a growing bed keeps a steady certificate is read there too; if it does not, the flag's threshold is the lever.
+- One material per column (O2): the player cannot clad a top. The only answers to an acid overhead are upstream (desalter, caustic, ammonia) or a whole column of nickel alloy.
+- Randomized crudes (5.6): the tag pass is paid on every oil island, where this plan first counted on islands without tags. Its bound is unchanged, its use is not; the campaign's counters on a salted crude are the measure. A drawn crude outside the table's ranges, or with asphaltenes above 0.4 of its resins, meets laws at their clamps.
 - A column product's wetness is read from `waterBelow` only; a tray below the dew point inside the top zone is not seen.
 - The desalter's numbers rest on typical viscosities; the mod's own viscosity model for the heavy cuts decides the real table, and the drop size is then fitted once.
 - M12's anchors are recalled, not read (section 9); the owner keeps them (O5), so the rates are game values, not API RP 581's.
