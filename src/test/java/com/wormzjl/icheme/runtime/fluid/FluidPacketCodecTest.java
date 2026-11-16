@@ -328,7 +328,8 @@ class FluidPacketCodecTest {
                 new FluidView.Port("SHELL_OUTLET",310.65,118_000.0,9.8,n,new double[]{.0098,0,.02}),new FluidView.Port("TUBE_INLET",null,null,0,new double[3][count],new double[3]));
         var lines=new FluidView.Lines("UNMETERED",0,List.of(new FluidView.Part("shell_inlet_tee","OK","",Long.MIN_VALUE,293.15,null),
                 new FluidView.Part("shell_bypass_valve","OK","",Long.MIN_VALUE,null,7.4),new FluidView.Part("shell_outlet_tee","MISSING","terminal",BlockPos.asLong(1,64,-3),null,null)));
-        var heat=new FluidView.Heat("EXCHANGER","SHELL",true,303.15,-433_000,null,null,null,null,null,.42).with("bypass",.42,"NONE",ports,lines);
+        // Batch 2026-11-16-fouling-corrosion: the deposit (WP5) and the unit's UA and clean UA (D16) cross with the view.
+        var heat=new FluidView.Heat("EXCHANGER","SHELL",true,303.15,-433_000,null,null,null,null,null,.42).with("bypass",.42,"NONE",ports,lines).withFouling(3e-4).withConductance(41_250.5,58_000.25);
         var view=new FluidView(9,4,1200,1300,"FULL",null,0,List.of()).withPipeInfo(FluidView.PipeInfo.empty(count)).withHeat(heat);
         var data=new FluidNetwork.MenuData(TopologyCompiler.Kind.HEAT_SIDE,view,base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
         var copy=FluidNetwork.MenuData.of(data.staticData(0),FluidNetwork.decodeLive(new Gson().toJson(live(data)))).view().heat();
@@ -336,6 +337,10 @@ class FluidPacketCodecTest {
         assertEquals(3,copy.ports().size());assertEquals(310.65,copy.port("SHELL_OUTLET").temperature());assertNull(copy.port("TUBE_INLET").temperature());
         assertArrayEquals(n[0],copy.port("SHELL_INLET").phaseMoles()[0]);assertArrayEquals(new double[]{.0098,0,.02},copy.port("SHELL_INLET").phaseVolumes());
         assertEquals(lines,copy.lines());assertEquals(7.4,copy.lines().part("shell_bypass_valve").massFlow());
+        assertEquals(3e-4,copy.fouling());assertEquals(41_250.5,copy.ua());assertEquals(58_000.25,copy.uaClean());
+        var unknown=new FluidView.Heat("EXCHANGER","SHELL",true,303.15,-433_000,null,null,null,null,null,.42);
+        assertNull(unknown.ua());assertNull(unknown.uaClean());assertNull(unknown.withFouling(1e-4).ua(),"the deposit alone sets no UA");
+        assertThrows(IllegalArgumentException.class,()->unknown.withConductance(-1.0,1.0));assertThrows(IllegalArgumentException.class,()->unknown.withConductance(1.0,Double.NaN));
         // A side of fluid-15's shape (no actuator, ports or lines) reads as acting on nothing.
         var old=new FluidView.Heat("AIR_COOLER","PROCESS",false,330,-1e5,1.0,1e4,null,null,null,null);
         assertEquals("none",old.actuator());assertEquals(List.of(),old.ports());assertNull(old.lines());

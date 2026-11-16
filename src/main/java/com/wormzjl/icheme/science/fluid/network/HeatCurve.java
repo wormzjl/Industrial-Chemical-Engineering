@@ -144,14 +144,28 @@ public final class HeatCurve {
      * {@code outer} (an air cooler's, {@link AirCooled.Air#films}) the three are the films inside the tubes and the wall
      * sees each through the outer side ({@link #wallLiquid}): a liquid film's resistance
      * ({@link HeatCurve#liquidResistance(double,double,double)}) then lies inside the tubes, before the air. Null for every
-     * other side.
+     * other side. {@code deposit} is the fouling deposit (m²K/W) the three already hold in series ({@link #fouled}), 0 for
+     * clean films, so {@link #clean} gives them back without it (decision D16 of batch 2026-11-16-fouling-corrosion: the
+     * unit's clean UA).
      */
-    public record Films(double liquid,double twoPhase,double gas,@org.jetbrains.annotations.Nullable Outer outer) {
+    public record Films(double liquid,double twoPhase,double gas,@org.jetbrains.annotations.Nullable Outer outer,double deposit) {
         /** The reference films: the liquid film is the reference liquid's, water at 20 °C (D15; every other liquid's falls
          * from it by {@link HeatCurve#liquidResistance(double,double,double)}), the boiling or condensing film and the gas film. */
         public static final Films DEFAULT=new Films(5000,5000,100);
         public Films(double liquid,double twoPhase,double gas){this(liquid,twoPhase,gas,null);}
-        public Films{if(!(liquid>0)||!(twoPhase>0)||!(gas>0)||!Double.isFinite(liquid+twoPhase+gas))throw new IllegalArgumentException("Invalid films");}
+        public Films(double liquid,double twoPhase,double gas,@org.jetbrains.annotations.Nullable Outer outer){this(liquid,twoPhase,gas,outer,0);}
+        public Films{if(!(liquid>0)||!(twoPhase>0)||!(gas>0)||!Double.isFinite(liquid+twoPhase+gas)||!(deposit>=0)||!Double.isFinite(deposit)
+                ||!(liquid*deposit<1)||!(twoPhase*deposit<1)||!(gas*deposit<1))throw new IllegalArgumentException("Invalid films");}
+        /** These films with {@code value} as their outer side, the deposit kept. */
+        public Films withOuter(@org.jetbrains.annotations.Nullable Outer value){return new Films(liquid,twoPhase,gas,value,deposit);}
+        /**
+         * These films without their {@link #deposit}: each {@code h/(1 − h rf)}, the outer side kept. Itself, the same
+         * instance, for clean films. No flash: a curve takes them with {@link HeatCurve#withFilms}.
+         */
+        public Films clean() {
+            if(deposit==0)return this;
+            return new Films(liquid/(1-liquid*deposit),twoPhase/(1-twoPhase*deposit),gas/(1-gas*deposit),outer,0);
+        }
         /**
          * An air cooler's outer side per m² of bare tube (W4): its bare tube per m² of face {@code barePerFace}, the air's
          * film on the fins {@code air} (W/K per m² of face) and its capacity rate {@code rate} (W/K per m² of face). A data
@@ -208,12 +222,12 @@ public final class HeatCurve {
          * These films behind a fouling deposit of resistance {@code rf} (m²K/W) in series (batch 2026-11-16-fouling-corrosion,
          * plan section 3.2): each {@code h/(1 + h rf)}, inside the {@link #outer} side. Itself, the same instance, at {@code rf}
          * 0, so a clean side stays bit for bit what it was. Series resistances add in any order: a liquid film behind a
-         * deposit is {@code 1/(1/liquid + rf + resistance)}.
+         * deposit is {@code 1/(1/liquid + rf + resistance)}. The films record {@code rf} in their {@link #deposit}.
          */
         public Films fouled(double rf) {
             if(rf==0)return this;
             if(!(rf>0)||!Double.isFinite(rf))throw new IllegalArgumentException("Invalid fouling resistance "+rf);
-            return new Films(liquid/(1+liquid*rf),twoPhase/(1+twoPhase*rf),gas/(1+gas*rf),outer);
+            return new Films(liquid/(1+liquid*rf),twoPhase/(1+twoPhase*rf),gas/(1+gas*rf),outer,deposit+rf);
         }
     }
 

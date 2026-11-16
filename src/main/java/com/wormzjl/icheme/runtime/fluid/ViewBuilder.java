@@ -278,9 +278,18 @@ final class ViewBuilder {
         // The heat GUI (HEAT_GUI_PLAN.md section 1): the actuator, the unit's ports and its lines.
         if(heat!=null&&view.heat()!=null) {
             com.wormzjl.icheme.science.fluid.network.HeatLaw law=ownPipe==null?null:ownPipe.heat();
-            view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,authority.heatSource(islands)));
-            // A heat side's fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): its Rf and the liquid film it leaves.
+            var source=authority.heatSource(islands);
+            view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,source));
+            // A heat side's fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): its Rf.
             if(authority.integrity.kindOf(id)==Integrity.Kind.HEAT_SIDE)view=view.withHeat(view.heat().withFouling(authority.integrity.fouling(id)));
+            // The unit's UA (decision D16 of the same batch) as its side's last plan read it; a kettle's pool page, which plans
+            // none of its own, reads its tube side's from that side's island. Cached readings only: nothing is computed here.
+            var conductance=conductance(law);
+            if(heat.pool()&&heat.partner()!=0) {
+                var tubes=source.island(heat.partner());long tube=PhysicalFluidTopology.sideIdentity(heat.partner());
+                if(tubes!=null)for(var p:tubes.graph().pipes())if(p.id()==tube)conductance=conductance(p.heat());
+            }
+            if(conductance!=null)view=view.withHeat(view.heat().withConductance(conductance.ua(),conductance.clean()));
         }
         // A batch still's pot (batch 2026-11-09-batch-distiller, W3): its status and alarms on the status line, an electric one's power.
         if(registration.device().stillPot()) {
@@ -363,5 +372,10 @@ final class ViewBuilder {
     private String nodeLabel(long id) {
         var registration=authority.topology.active().get(id);if(registration==null)return "Junction "+id;
         var p=registration.device().position();return p.x()+", "+p.y()+", "+p.z();
+    }
+    /** The unit's UA a heat law carries as planned (D16): an exchanger side's or an air cooler's; null for any other law. */
+    private static com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Conductance conductance(com.wormzjl.icheme.science.fluid.network.HeatLaw law) {
+        return law instanceof com.wormzjl.icheme.science.fluid.network.HeatSide side?side.conductance()
+                :law instanceof com.wormzjl.icheme.science.fluid.network.AirCooled cooled?cooled.conductance():null;
     }
 }

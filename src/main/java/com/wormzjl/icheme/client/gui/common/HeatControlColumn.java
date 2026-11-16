@@ -249,13 +249,16 @@ public final class HeatControlColumn {
     }
 
     /**
-     * The Deposit group (WP5): the side's fouling resistance, m²K/kW, and the share of a clean liquid film left behind it,
-     * LED meters; then, for an editor, Clean, which removes the deposit from both sides while nothing flows through the unit.
+     * The Deposit group (WP5): the side's fouling resistance, m²K/kW, and the unit's UA left behind the deposits on both
+     * sides, its UA over its clean UA in % (decision D16; the empty reading where either is not known), LED meters; then, for
+     * an editor, Clean, which removes the deposit from both sides while nothing flows through the unit.
      */
     static Column.Group deposit(Input in, Texts t) {
         var rows = new ArrayList<Column.Row>();
         rows.add(new Column.Reading("fouling:rf", t.get("fouling_rf"), Format.number(in.heat().fouling() * 1000), "m²K/kW", t.get("fouling_rf.hint")));
-        rows.add(new Column.Reading("fouling:film", t.get("fouling_film"), Format.number(in.heat().filmLeft() * 100), "%", t.get("fouling_film.hint")));
+        var heat = in.heat();
+        String left = heat.ua() != null && heat.uaClean() != null ? Format.number(100 * heat.ua() / heat.uaClean()) : "—";
+        rows.add(new Column.Reading("fouling:ua_left", t.get("ua_left"), left, "%", t.get("ua_left.hint")));
         if (in.canEdit()) rows.add(new Column.Buttons(List.of(new Column.Button("clean", t.get("clean"), true, t.get("clean.hint")))));
         return new Column.Group(t.get("heat_group.deposit"), t.get("heat_group.deposit.hint"), rows);
     }

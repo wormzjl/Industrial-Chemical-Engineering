@@ -127,6 +127,61 @@ public final class ExchangerRelay {
         double temperature(){return curve.temperatureAt(inlet);}
         /** The same stream through {@code side}'s cells (another bypass). */
         Stream through(HeatSide side){return new Stream(curve,inlet,massFlow,side,forward);}
+        /** The same stream on its side's films without their deposit ({@link HeatCurve.Films#clean}, no flash); itself on clean films. */
+        Stream clean(){var films=law.films();return films.deposit()==0?this:new Stream(curve.withFilms(films.clean()),inlet,massFlow,law,forward);}
+    }
+    /**
+     * A unit's overall conductance as one side planned its slice (decision D16 of batch 2026-11-16-fouling-corrosion): its
+     * {@code ua}, W/K, both sides' films and deposits in series over the whole surface, and its {@code clean} UA, W/K, the
+     * same without the deposits. A reading carried with the planned side ({@link HeatSide#conductance}), not an input to
+     * its equations.
+     */
+    public record Conductance(double ua,double clean) {
+        public Conductance {if(!(ua>0)||!(clean>0)||!Double.isFinite(ua+clean))throw new IllegalArgumentException("Invalid conductance");}
+        /** A planned reading within this share of the last one stands, so a steady plant keeps its graph. */
+        public static final double DEADBAND=1e-4;
+        /** Whether {@code a} and {@code b} read the same within {@link #DEADBAND} (both null alike). */
+        public static boolean same(@Nullable Conductance a,@Nullable Conductance b) {
+            if(a==null||b==null)return a==b;
+            return Math.abs(a.ua-b.ua)<=DEADBAND*Math.max(a.ua,b.ua)&&Math.abs(a.clean-b.clean)<=DEADBAND*Math.max(a.clean,b.clean);
+        }
+    }
+    /**
+     * The exchanger's UA as a side plans it (D16): over the wall's cells, {@code Σ A_k / (1/h_a,k + 1/h_b,k)}, each film the
+     * one that stream's march meets in cell k, its curve's film at the cell's mean specific enthalpy ({@link #cellFilms});
+     * the wall holds no heat and has no resistance of its own. The clean UA is the same sum on both curves re-filmed without
+     * their deposits. Symmetric in the two streams. Null where either draws nothing; no flash.
+     */
+    public static @Nullable Conductance conductance(Stream a,Stream b,double[] wall) {
+        if(a.massFlow==0||b.massFlow==0)return null;
+        return new Conductance(sum(cellFilms(a,wall),cellFilms(b,wall),a.cell()),sum(cellFilms(a.clean(),wall),cellFilms(b.clean(),wall),a.cell()));
+    }
+    /** A kettle's UA (D16): its tubes' films against the pool's {@code bath} film, cell by cell; the pool has no deposit. Null where the tubes draw nothing. */
+    public static @Nullable Conductance conductance(Stream tube,Bath bath,double[] wall) {
+        if(tube.massFlow==0)return null;
+        double[] pool=new double[wall.length];Arrays.fill(pool,bath.film());
+        return new Conductance(sum(cellFilms(tube,wall),pool,tube.cell()),sum(cellFilms(tube.clean(),wall),pool,tube.cell()));
+    }
+    private static double sum(double[] a,double[] b,double cell) {
+        double ua=0;for(int k=0;k<a.length;k++)ua+=cell/(1/a[k]+1/b[k]);
+        return ua;
+    }
+    /**
+     * The film {@code s} meets in each cell of {@code wall} (in the wall's order), W/m²K: marched through the cells as its
+     * heat is ({@link #outlet}), each cell's film its curve's at the mean of the specific enthalpies it enters and leaves
+     * the cell with. A stream whose flow all passes the bypass meets every cell at its inlet's film: the bypass changes
+     * the flow through the cells, not the surface.
+     */
+    static double[] cellFilms(Stream s,double[] wall) {
+        int n=wall.length;double[] film=new double[n];double through=s.through();
+        if(!(through>0)){Arrays.fill(film,s.curve.filmAt(s.inlet));return film;}
+        double cell=s.cell();double[] at=wall.clone();
+        var routing=s.law.routing();
+        routing.visit(s.curve,s.inlet,through,s.law.area(),at,routing==HeatRouting.SERIES?s.ascending():s.massFlow>=0,null,(k,h,mass)-> {
+            film[k]=s.curve.filmAt((h+s.curve.march(h,mass,cell,at[k]))/2);
+            return at[k];
+        });
+        return film;
     }
     /** A solved wall, in the planning side's forward order, the sweeps it took and whether it reached the tolerance. */
     public record Wall(double[] temperatures,int sweeps,boolean converged) {}
@@ -290,13 +345,15 @@ public final class ExchangerRelay {
      * planned meets the target at the other side as read. With the other side not moving, the bypass stands. The give-back
      * is the side's share of {@code read}'s transit due, an enthalpy shift on its whole flow, scaled down so that its outlet
      * at the slice start stays between the two inlet temperatures (the rest stays in transit); none without flow or without
-     * a read of the other side.
+     * a read of the other side. The planned side carries the unit's UA ({@link #conductance}) on its planned wall and bypass,
+     * at the whole surface whatever the sit-out; none where the other side is not read or counts as stopped.
      */
     public static HeatSide plan(HeatSide own,Stream stream,@Nullable Stream other,Read read,double seconds) {
-        if(other==null&&read.ceiling()>0)return column(own,stream,read,seconds);
+        if(other==null&&read.ceiling()>0)return column(own,stream,read,seconds).withConductance(null);
         boolean moving=other!=null&&!read.stopped()&&other.through()>0;
         var planned=controlled(own,stream,moving?(at,last)->wall(at,other,last).temperatures():null,moving?other.temperature():0,read);
         double[] wall=planned.wall();double bypass=planned.bypass(),mass=Math.abs(stream.massFlow());var limit=planned.limit();var at=stream.through(planned);
+        planned=planned.withConductance(other==null||read.stopped()?null:conductance(at,other,wall));
         if(other==null||mass==0||read.transitDue()==0)return planned;
         double share=share(capacityRate(at,wall),seconds,moving?capacityRate(other,wall):0,read.partnerSeconds());
         if(share==0)return planned;
@@ -304,7 +361,7 @@ public final class ExchangerRelay {
         double mixed=stream.inlet+planned.heat(stream.curve,stream.inlet,stream.massFlow)/mass;
         double bound=stream.curve.enthalpyAt(other.temperature()),lo=Math.min(stream.inlet,bound),hi=Math.max(stream.inlet,bound);
         double allowed=Math.clamp(mixed+shift,lo,hi),scale=Math.clamp((allowed-mixed)/shift,0,1);
-        return own.withInputs(wall,bypass,scale*shift,planned.active(),limit);
+        return planned.withInputs(wall,bypass,scale*shift,planned.active(),limit);
     }
     /**
      * A side whose other side is a running column's condenser (C6b, plan section 10): no cells move (the column is no stream),
@@ -326,11 +383,13 @@ public final class ExchangerRelay {
     /**
      * A kettle's tube side planned for a slice (W7, plan section 8): as {@link #plan} against a pool at {@code bath} (null
      * where none is known: the pool holds nothing), the wall from {@link #bathWall}. It takes none of the heat in transit: the
-     * pool's capacity is unbounded, so the pool takes it all ({@link #planPool}).
+     * pool's capacity is unbounded, so the pool takes it all ({@link #planPool}). It carries the kettle's UA against the
+     * pool ({@link #conductance(Stream,Bath,double[])}), none where the pool is not read or counts as stopped.
      */
     public static HeatSide plan(HeatSide own,Stream stream,@Nullable Bath bath,Read read) {
         boolean moving=bath!=null&&!read.stopped();
-        return controlled(own,stream,moving?(at,last)->bathWall(at,bath):null,moving?bath.temperature():0,read);
+        var planned=controlled(own,stream,moving?(at,last)->bathWall(at,bath):null,moving?bath.temperature():0,read);
+        return planned.withConductance(moving?conductance(stream.through(planned),bath,planned.wall()):null);
     }
     /**
      * {@code own}'s wall, bypass and active share for a slice: with {@code wallAt} (null where the other side does not move,

@@ -67,7 +67,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `science/equipment/HeatSides.heatSide(..., fouling)`, `HeatUnit.heatSide(double)` | The fouled law of a side: an exchanger's, a kettle's tubes', a still's water side's films; an air cooler's `AirCooled.Air.process`; a convection coil's `1/U' = 1/U + Rf`; a radiant or exhaust coil's heat reads no film (passage only) |
 | `runtime/fluid/PhysicalRegistry.fouling`, `PhysicalFluidTopology.compile(..., fouling)` | The levels the compile reads, from the ledger's facts (`FoulingLaw.level`; none with `fouling.enabled` off); a fouled side's pipe carries the fouled law and the narrowed passage |
 | `Integrity.flushAndRestate`, `Host.restate`, `FluidWorldAuthority.restate` | When a side's level moves (cadence, cleaning, `set`): the facts to the ledger, then the side's registration again, unchanged, at revision + 1, which recompiles its island |
-| `FluidWorldAuthority.queueUnitClean`, `network/FluidNetwork.CleanPayload`, `HeatControlColumn.deposit` | The heat page's Deposit group (fouling, film left) and Clean: the side and its partner heat side queued; the answer a chat line (`message.icheme.heat.clean.*`); `FluidView.Heat.fouling`, `filmLeft`; `Integrity.fouled` says `FOULED` from 0.0005 m²K/W |
+| `FluidWorldAuthority.queueUnitClean`, `network/FluidNetwork.CleanPayload`, `HeatControlColumn.deposit` | The heat page's Deposit group (fouling, UA left: the unit's UA over its clean UA, D16) and Clean: the side and its partner heat side queued; the answer a chat line (`message.icheme.heat.clean.*`); `FluidView.Heat.fouling`, `ua`, `uaClean`; `Integrity.fouled` says `FOULED` from 0.0005 m²K/W |
 
 ## Flow
 

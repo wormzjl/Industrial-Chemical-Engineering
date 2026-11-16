@@ -70,8 +70,10 @@ class FluidCheckpointCodecTest {
      * idle at the vessel's temperature). */
     @Test void aHeatSideRoundTrips() {
         var charge=model.initialNitrogenCharge(1,298.15,101325,()->{});
-        var side=new HeatSide(57,new HeatCurve.Films(430,487,85),new double[]{298.15,300.5},.25,-12.5,0,1,
-                new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,320,280,.75),HeatControl.Limit.HIGHEST);
+        // D16 of the same batch: the side's films record their deposit, and the side carries the unit's UA as last planned.
+        var side=new HeatSide(57,new HeatCurve.Films(430,487,85).fouled(3e-4),new double[]{298.15,300.5},.25,-12.5,0,1,
+                new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,320,280,.75),HeatControl.Limit.HIGHEST)
+                .withConductance(new com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Conductance(12_345.5,23_456.25));
         // State format 52 (batch 2026-11-16-fouling-corrosion, WP5): the cooler's tubes behind a deposit, so its process films
         // are not the default ones and must come back as saved.
         var cooled=new AirCooled(90,com.wormzjl.icheme.science.equipment.HeatSides.AIR.fouled(.0012),.4,new HeatControl(HeatControl.Target.DUTY,5e5,0,1),HeatControl.Limit.LOWEST);
@@ -85,8 +87,12 @@ class FluidCheckpointCodecTest {
         var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state))),key->key.on(model));
         var loaded=FluidCheckpointCodec.decode(image,key->key.on(model));var pipes=loaded.islands().getFirst().snapshot().graph().pipes();
         assertEquals(side,pipes.getFirst().heat());assertNull(pipes.get(1).heat());
+        assertEquals(side.conductance(),((HeatSide)pipes.getFirst().heat()).conductance(),"the UA as last planned");
+        assertEquals(3e-4,((HeatSide)pipes.getFirst().heat()).films().deposit(),"the deposit the films hold");
         assertEquals(full.graph().pipes().getLast().heat(),pipes.getLast().heat());
         assertEquals(HeatCurve.Films.DEFAULT.fouled(.0012),((AirCooled)pipes.getLast().heat()).air().process(),"the deposit's films, as saved");
+        assertEquals(.0012,((AirCooled)pipes.getLast().heat()).air().process().deposit());
+        assertNull(((AirCooled)pipes.getLast().heat()).conductance(),"a step with no flow plans no UA");
         assertEquals(.4,((AirCooled)pipes.getLast().heat()).draught(),"no flow, the louvers and fans stand");
         assertEquals(174,pipes.getFirst().sections().getFirst().channels());
         var planned=full.graph().reservoirs().getLast().inventory().pool();

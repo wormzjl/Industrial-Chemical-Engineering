@@ -117,7 +117,10 @@ import java.util.function.Function;
  * <p>51 (batch 2026-11-15-supercritical-fluids, S8): control tag 9 is a plunger pump casing on its law (its displacement,
  * relief rise and rated speed); without it a plunger pump was written as tag 5 and read back as a centrifugal pump.</p>
  * <p>52 (batch 2026-11-16-fouling-corrosion, WP5): an air cooler's side
- * (heat law tag 3) carries its tubes' process films after its air's natural draught, which a fouling deposit lowers.</p>
+ * (heat law tag 3) carries its tubes' process films after its air's natural draught, which a fouling deposit lowers. D16 of
+ * the same batch: a heat side's films (tag 1) and an air cooler's process films (tag 3) are followed by the deposit they
+ * hold, and each law ends with the unit's UA as last planned (a flag, then the UA and the clean UA, W/K), so a certified
+ * island's heat page still reads it after a load.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
@@ -478,18 +481,25 @@ public final class FluidCheckpointCodec {
             switch(p.heat()){
                 case null->w.u8(0);
                 case com.wormzjl.icheme.science.fluid.network.HeatSide heat->{var films=heat.films();var wall=heat.wall();w.u8(1);
-                    w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());
+                    w.f64(heat.area());w.f64(films.liquid());w.f64(films.twoPhase());w.f64(films.gas());w.f64(films.deposit());
                     w.varint(wall.length);for(double t:wall)w.f64(t);w.f64(heat.bypass());w.f64(heat.giveBack());w.i64(heat.partner());w.f64(heat.active());
-                    control(w,heat.control());w.u8(heat.limit().ordinal());w.text(heat.routing().name());}
+                    control(w,heat.control());w.u8(heat.limit().ordinal());w.text(heat.routing().name());conductance(w,heat.conductance());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();w.u8(3);w.f64(cooled.area());
                     w.f64(air.temperature());w.f64(air.barePerFace());w.f64(air.film());w.f64(air.capacity());w.f64(air.natural());
-                    var process=air.process();w.f64(process.liquid());w.f64(process.twoPhase());w.f64(process.gas());
-                    w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
+                    var process=air.process();w.f64(process.liquid());w.f64(process.twoPhase());w.f64(process.gas());w.f64(process.deposit());
+                    w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());conductance(w,cooled.conductance());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.duty());w.f64(coil.firing());w.i64(coil.partner());w.f64(coil.limit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{w.u8(4);w.f64(coil.conductance());w.i64(coil.radiant());w.f64(coil.flue());}
                 case com.wormzjl.icheme.science.fluid.network.ExhaustCoil coil->{w.u8(5);w.f64(coil.gasInlet());w.f64(coil.flue());}
             }
         }
+    }
+    /** A heat law's planned UA (D16): a flag, then the UA and the clean UA, W/K. */
+    private static void conductance(Writer w,com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Conductance value) {
+        w.bool(value!=null);if(value!=null){w.f64(value.ua());w.f64(value.clean());}
+    }
+    private static com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Conductance conductance(Reader r) {
+        return r.bool()?new com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Conductance(r.f64(),r.f64()):null;
     }
     private static void control(Writer w,com.wormzjl.icheme.science.fluid.network.HeatControl control) {
         w.bool(control!=null);if(control==null)return;
@@ -545,16 +555,16 @@ public final class FluidCheckpointCodec {
         if(tag==5)return new com.wormzjl.icheme.science.fluid.network.ExhaustCoil(r.f64(),r.f64());
         if(tag==3) {
             double area=r.f64(),temperature=r.f64(),bare=r.f64(),film=r.f64(),capacity=r.f64(),natural=r.f64();
-            var process=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
+            var process=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64(),null,r.f64());
             var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(temperature,bare,film,capacity,natural,process);double draught=r.f64();
-            var control=control(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,draught,control,limit(r));
+            var control=control(r);var why=limit(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,draught,control,why,1,conductance(r));
         }
         if(tag!=1)throw r.invalid("unknown heat law "+tag);
-        double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
+        double area=r.f64();var films=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64(),null,r.f64());
         var wall=new double[r.varint(MAXIMUM_WALL_CELLS)];for(int k=0;k<wall.length;k++)wall[k]=r.f64();
         double bypass=r.f64(),giveBack=r.f64();long partner=r.i64();double active=r.f64();var control=control(r);
         var why=limit(r);var routing=com.wormzjl.icheme.science.fluid.network.HeatRouting.valueOf(r.text());
-        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,partner,active,control,why,routing);
+        return new com.wormzjl.icheme.science.fluid.network.HeatSide(area,films,wall,bypass,giveBack,partner,active,control,why,routing,conductance(r));
     }
     /** Tag 5: a machine on its curve, its law (liquid flag, rated flow, head and efficiency, a pump's rated speed), speed,
      * enabled flag and (format 35, W3) set flow and set discharge pressure. */
