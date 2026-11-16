@@ -60,11 +60,11 @@ snapshot.
 | [`NativeColumnSolver`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/NativeColumnSolver.java) | The Rust library through JNI: `bandedSolveEnabled`, `bandedSolve`, `expectedSelfTest`, `ABI`, `FORMULATION`, `UNAVAILABLE` | 305 |
 | **Thermo (`v3/thermo`)** | | |
 | [`V3ThermoModel`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3ThermoModel.java), [`V3ThermoDerivatives`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3ThermoDerivatives.java) | The hydrocarbon property boundary (fugacity, enthalpy, TP flash; the phase argument `PengRobinsonKernel.Root`); its optional derivatives | 22, 29 |
-| [`V3PengRobinsonThermo`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3PengRobinsonThermo.java) | The PR78 façade on a registered package: `fromRegisteredPackage`, `flashTP`, `columnIdentity` | 270 |
-| `V3PengRobinsonSession` (pp) | One package's allocation-free PR78 arithmetic on the shared kernel (`kernelFor`): the derived pairs (`V3PropertyPackage.derivedPairs`), else the authored matrix | 228 |
+| [`V3PengRobinsonThermo`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3PengRobinsonThermo.java) | The PR78 façade on a registered package: `fromRegisteredPackage`, `flashTP`, `columnIdentity` | 277 |
+| `V3PengRobinsonSession` (pp) | One package's allocation-free PR78 arithmetic on the shared kernel (`kernelFor`): the derived pairs (`V3PropertyPackage.derivedPairs`), else the authored matrix | 232 |
 | [`V3PropertyPackage`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3PropertyPackage.java), `V3CatalogPropertyPackage` (pp), [`V3PropertyComponent`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3PropertyComponent.java) | The package selected before a solve; the catalog adapter (`require`, `identity`, `crudeFeed`; refuses a non-`pr78`, a crystal and a spine package); one hydrocarbon's SI data | 34, 87, 60 |
 | [`V3CrudeFeed`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3CrudeFeed.java) | A normalised assay vector on a registered package | 55 |
-| `V3FeedFlash`, `V3TruncatedFlash` (pp, nested `Support`), [`V3FeedPhase`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3FeedPhase.java), [`V3FlashResult`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3FlashResult.java), [`V3FlashTruncationEvidence`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3FlashTruncationEvidence.java) | The rigorous TP flash and its outcome; the reference-checked truncated flash and its evidence | 156, 405, 8, 113, 91 |
+| `V3FeedFlash`, `V3TruncatedFlash` (pp, nested `Support`), [`V3FeedPhase`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3FeedPhase.java), [`V3FlashResult`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3FlashResult.java), [`V3FlashTruncationEvidence`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3FlashTruncationEvidence.java) | The rigorous TP flash and its outcome; the reference-checked truncated flash and its evidence | 234, 405, 8, 113, 91 |
 | [`V3FugacityResult`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3FugacityResult.java), [`V3FugacityDerivatives`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3FugacityDerivatives.java) | One phase's result and its first derivatives on the public axis | 60, 111 |
 | [`V3ThermoWorkspace`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3ThermoWorkspace.java), [`V3ThermoException`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3ThermoException.java) | Caller-owned scratch; the typed property failure | 56, 34 |
 | [`V3WaterProperties`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3WaterProperties.java) | The column's water on the water module (`WagnerPruss`, `Iapws97Region1`, `SteamIdealGas`, `SteamVirial`, `WaterDatum`): saturation, the steam as the network's second-virial gas, the liquid on IF97 Region 1 and the datum (`liquidEnthalpyOffset`), `saturationPressurePascal`, `wagnerPruss`, `steamContinued`, `withSteamContinuationAdvisory` | 276 |
@@ -84,7 +84,10 @@ One rung, inside `V3AttemptLoop.solveSingleProblem` ([column-v3.md](column-v3.md
 
 1. `V3ColumnProblemResolver.resolve(input, branch[, profile])` → `V3ColumnProblem` (with its ledger proved).
 2. Feed flash (`V3FeedFlash`, or the truncated flash at a positive cutoff), kept untruncated per calculation in
-   `V3SolveScratch`.
+   `V3SolveScratch`. A feed whose K-values collapse to the trivial solution (largest `|ln K|` falling at every
+   iteration, and the Rachford-Rice root lost, or `|ln K|` at most 1e-5 when the iterations run out) is one phase:
+   liquid where the reduced density is at least 1 on one root, the root of lower Gibbs energy on two; any other loss
+   of the root or of convergence stays `FLASH_NONCONVERGENCE`.
 3. `prepareAttempt`: `V3FloorLift.liftFloorSupport`, then `V3TruncationSupport` and `V3WetTraySet` for this attempt.
 4. `V3SimultaneousColumnSolver.solve`: per iteration `V3MeshResidualEvaluator` (residual), `V3BlockJacobianAssembler.assembleLocal`
    (or the FD Jacobian), `V3BandedPivotedSolver.solve` (Java, or `NativeColumnSolver.bandedSolve` at the ceiling
