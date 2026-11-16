@@ -1,4 +1,6 @@
-# Solute and reaction system: design (revision 2)
+# Solute and reaction system: design (revision 3)
+
+Revision 3 (owner, 2026-11-16: "Level 1: speciation"): acids and bases in water follow one speciation law, solved at holdups and in units on accounts, outside the kernel. It replaces revision 2's absorption, limit, neutralisation rule and pH formula (sections 4, 5, 7.4, 8.2, 8.3, 9, 11, 12, 13, 15, 16, 17).
 
 Revision 2 (owner, 2026-11-16: "I mean model the HCl as an components"): hydrogen chloride is a compound of the network package. A tag becomes the compound, and the compound a tag on water, at holdups (sections 4, 5.2, 7.4, 8.2, 8.3, 9, 12, 13, 15, 16, 17).
 
@@ -63,7 +65,8 @@ None of these changes a stream's density, enthalpy or phase split by a part in 1
 | D4 | Tags move in a pass of their own after each solved interval, from the pipes' recorded transfers. The step's Newton, its booking and the certificates are not changed. Nothing happens in a pipe. |
 | D5 | A transformation is a data record: participants, a rate law, a condition window, the equipment classes it acts in. It is evaluated at the walls' 5 s cadence on the last committed state and applied by the tag pass. One cadence of lag. |
 | D6 | A transformation of this batch moves tags, and parts per million of one compound (7.4), so it books no heat of reaction (each is below 1e-4 of its stream's enthalpy change, section 8.6). Heat belongs to the reactor units (section 14). |
-| D7 | Hydrogen chloride is a compound, `HydrogenChloride`, in `icheme:refinery` (owner, revision 2). In a holdup with free water it becomes the tag `acid_chloride` on that water; in a holdup without, the tag becomes the compound. No electrolyte term. Whether the cubic gets a fitted pair with water, so that the compound goes to the water between two exchanges, is option O6. |
+| D7 | Hydrogen chloride is a compound, `HydrogenChloride`, in `icheme:refinery` (owner, revision 2). The compound is its molecular part; its ions in water are the tag `acid_chloride`. |
+| D12 | Acids and bases in water follow one **speciation law** (owner, revision 3): mass action between each volatile's molecular part (a compound, which the cubic sees) and its ions (a tag on the water, which it does not), closed by the charge balance. It is solved in wet holdups at an interval's start and in units on accounts, never inside the step's Newton or the kernel. The split, the neutralisation and the pH are its outputs. Later acids and bases (H2S, CO2, amines) add records, not rules. |
 | D8 | A stock without tag data has its datasets' default contents. Only a stock that differs stores amounts, so a world without salted crude pays nothing and an old save needs no conversion. |
 | D9 | The electric desalter is a horizontal vessel of the fluid network with an electric store. Its law is the settling law every vessel has; the field only makes the drops larger. |
 | D10 | Corrosion is evaluated per part: each product zone of a column's shell and the process side of each of its exchangers has its own wall record. |
@@ -83,6 +86,7 @@ A new material kind, `solutes` (the 16th): `data/<ns>/materials/solutes/<id>.jso
 | `stranded` | Where a `dissolved` amount goes when its carrier's liquid is gone: `heaviest_cut`, `water`, or `stay` |
 | `molar_mass_kg_per_mol` | For the stoichiometry of a transformation |
 | `particulate` | Counts as solid share in the erosion and tray fouling laws |
+| `ion` | Optional: `cation` or `anion` (one charge per mole). The tag then counts in the charge balance of the speciation law (7.4) |
 | `hazard` | Optional, as a compound's: the channel and reference for a release to the air |
 
 Default contents: a `content` sub-record on a pseudocomponent's dataset, kg of tag per kg of the cut, with its own revision, in no identity. It replaces the `corrosion` sub-record of the fouling-corrosion batch: `sulfur_mass_percent` and `acid_number` become the defaults of the tags `sulfur` and `acid`; `fouling` is replaced by the asphaltene content (section 8.4). The old field names are read as aliases.
@@ -101,11 +105,12 @@ An assay gains an optional `content` block: whole-crude targets (sulfur wt%, nit
 | `resins` | cuts | dissolved (stay) | kg | Coke yield; asphaltene stability later |
 | `salt` | cuts, water | dissolved (heaviest cut) | kg Cl in stable chloride | Desalting; fouling later |
 | `hydrolysable_chloride` | cuts, water | dissolved (heaviest cut) | kg Cl in Mg and Ca chloride | Hydrolysis (8.2) |
-| `acid_chloride` | water, cuts | acid gas | kg Cl as HCl | Hydrochloric acid in water (M12); the hydrolysis product on its way to the next holdup (7.4) |
-| `caustic` | water, cuts | dissolved (heaviest cut) | kg NaOH | Converts hydrolysable chloride; neutralises acid |
+| `acid_chloride` | water, cuts | acid gas; anion | kg Cl as HCl | The ions of hydrogen chloride in water (7.4, M12); the hydrolysis product on its way to the next holdup |
+| `ammonium` | water | dissolved (heaviest cut); cation | kg N as NH4 | The ions of ammonia in water (7.4) |
+| `caustic` | water, cuts | dissolved (heaviest cut); cation | kg NaOH | Converts hydrolysable chloride and acid chloride to salt; in excess, a base in the charge balance |
 | `coke_fines` | cuts | dissolved (stay), particulate | kg | Erosion, tray fouling |
 
-Sulfur in H2S, mercaptans, COS and SO2 stays in their formulas, as today. Ammonia is a compound: its dissolved part neutralises acid chloride.
+Sulfur in H2S, mercaptans, COS and SO2 stays in their formulas, as today. Ammonia is a compound; where an acid meets it in water, its ions are the tag `ammonium`.
 
 Ordinary solutes are the same thing: a brine, a caustic or amine solution is water with a `dissolved` tag. The water keeps water's density and boiling point at any content (the owner's rule); a solubility limit is not in this batch.
 
@@ -179,27 +184,66 @@ A passage: `X = 1 − exp(−k τ)` of what passes.
 
 So a coefficient lags its site's state by at most one cadence, and the solver is not coupled.
 
-### 7.4 A tag that becomes a compound, and back
+### 7.4 Acids and bases in water: the speciation law
 
-Only at holdups, and in this batch only for hydrogen chloride (a reaction record names the compound in `makes` or `uses`):
+Each volatile acid or base has two forms. Its **molecular part** is the compound: the cubic sees it, with its pair, in every phase. Its **ions** exist only in free water and are a tag on that water: no pressure, no flash. One law splits a wet holdup's amount between the two (review 4.5 and 4.6).
 
-- **Release**: in a vessel without free water, the `acid_chloride` it holds becomes `HydrogenChloride`.
-- **Absorption**: in a vessel with free water, all its `HydrogenChloride`, in every phase, becomes `acid_chloride` on the water. Accurate: over acid of pH 2.6 its pressure is 4e-12 atm at 25 °C (review 4.2).
-- **Neutralisation**: in a vessel with free water, `Ammonia` up to the acid chloride present becomes, with it, the tag `ammonium_chloride` on the water (dissolved; a twelfth tag). The cubic's Henry pair alone would leave the ammonia in the gas, and reading it without removing it would let the same ammonia neutralise in every vessel.
+Record: a new material kind, `equilibria`.
+
+| Field | Meaning |
+|---|---|
+| `id`, `revision`, `source` | As every record; in no identity |
+| `volatile`, `ion` | The compound and its ion tag |
+| `type` | `acid` (the ion is an anion) or `base` (a cation) |
+| `constant` | `ln K = a + b/T`. Acid: `K = γ² h m / f`. Base: `K = m / (h f)`. `h` is the hydrogen ion and `m` the ion, in mol per kg of free water; `f` is the compound's fugacity |
+| `strong` | The holdup is solved whenever the volatile or its ion is present |
+| `activity` | Optional: Bromley's `B` for the `γ` of a strong acid. Absent: `γ` = 1 |
+| `enthalpy` | `none`, or `from_constant` (`−R b` per mole ionised), booked where it is a major heat: the amine units |
+
+The records of this batch:
+
+| Volatile | Ion | `K` at 25 °C | Slope `b` | Check |
+|---|---|---|---|---|
+| `HydrogenChloride` | `acid_chloride` | 2.0e6 mol² kg⁻² atm⁻¹; strong; `B` = 0.1433 | 9 000 K | Returns 4.0e-12, 3.2e-9, 3.3e-7 and 1.85e-4 atm over 0.003, 0.1, 1 and 6 mol/kg acid (real 4.0e-12, 3.2e-9, 3.3e-7, 1.9e-4). Constants recalled (Clegg and Brimblecombe; Bromley 1973) |
+| `Ammonia` | `ammonium` | 1.05e11 atm⁻¹ (solubility 59 mol kg⁻¹ atm⁻¹ over the ammonium ion's 5.6e-10) | 10 350 K | Recalled; to be read |
+
+Water's own product: 1e-14 at 25 °C, slope −6 710 K.
+
+**The solve**, for one holdup with `W` kg of free water:
+
+1. Totals: `N_k` = the compound's moles in all its phases + its ions.
+2. The compound's fugacity per mole, from the kernel at the committed state: `F_k = P / Σ_p (n_p / φ_k,p)` over the phases present (`n_p` the phase's moles, `φ_k,p` the compound's fugacity coefficient in it; at infinite dilution if the vessel holds none). Then `f_k = F_k · (N_k − ions_k)`.
+3. Ions as a function of `h`. Acid: `ions = N · a/(1 + a)`, `a = K F W / (γ² h)`. Base: `ions = N · b/(1 + b)`, `b = K h W F`.
+4. The charge balance, one unknown: `h − Kw/h + (Σ cations − Σ anions)/W = 0`, over the ions of step 3 and the excess `caustic`. Its left side rises with `h`, so it has one root: bisection on pH from −2 to 15 (`DeterministicMath`). `γ` is taken at the ionic strength of the pass before; three passes.
+5. Each compound is set to `N_k − ions_k` and each ion tag to `ions_k`. If a molecular share moved by more than 1 % of `N_k`, steps 2 to 4 run once more.
+
+**When.** Only in a holdup with free water that holds a `strong` volatile or its ion, excess `caustic`, or at least one acid and one base of the records. A single weak acid or base in water is left to its pair, which already holds its own weak ionisation. So no world of today is solved and no reference moves until a record for H2S or CO2 is added; the sour water batch states those.
+
+**Without free water** every ion of a volatile returns to its compound (the law at `W` → 0): a vessel boiled dry gives its hydrogen chloride and ammonia back as gases.
+
+What it returns at 25 °C, all ammonia dissolved:
+
+| In the water, mol/kg | pH |
+|---|---|
+| Hydrogen chloride 0.00274 (100 ppm) | 2.56 |
+| with ammonia 0.00137 | 2.86 |
+| with ammonia 0.00274 | 5.90 |
+| with ammonia 0.00548 | 9.24 |
+| with caustic 0.00274, no ammonia | 7.00 |
 
 How it is booked:
 
-1. `Reactions` plans, per vessel, the moles to release (the tag it held at the last commit) or the order to absorb. The island's command carries the plan.
-2. `PassiveIntervalSolver.solve` applies it once, at the interval's start, where the crystals' conversions run: the vessel's amounts change and the vessel is restated at its temperature and pressure (one TP flash, as `flushTraces` restates a node). The moles and the energy difference are a `BoundaryTransfer` of a new kind, `SOLUTE`.
-3. The tag pass reads the interval's `SOLUTE` transfers and books the same chlorine on the tag side. Chlorine closes exactly across compound and tags (`TagLedgerTest`).
+1. `Reactions` flags the holdups to solve (a bit per island and record). The island's command carries, per flagged vessel, the ions it held at the last commit.
+2. `PassiveIntervalSolver.solve` runs the solve once, at the interval's start, where the crystals' conversions run: the compounds' amounts change and the vessel is restated at its temperature and pressure (one TP flash, as `flushTraces` restates a node). The moles and the energy difference are a `BoundaryTransfer` of a new kind, `SOLUTE`.
+3. The tag pass reads the interval's `SOLUTE` transfers and books the same moles on the ion tags. Chlorine and nitrogen close exactly across compounds and tags (`TagLedgerTest`).
 
-- Absorption takes what the vessel holds at the interval's start; what arrives within the interval is taken at the next one. Until then the flash decides where it sits: this is why the pair with water matters (option O6).
-- One rule in both directions: in a wet vessel the tag holds the acid up to 1 mol per kg of free water (pH 0, where M12 is already at its cap) and the rest is the compound. Absorption stops there; where water boils off and the tag exceeds it, the excess becomes the compound again. A tag has no mass, so without the limit a vessel fed hydrogen chloride on purpose would swallow it without end, and acid could not be boiled to its azeotrope.
-- A unit on accounts does both on its accounts, with no solver part. A column gives all the `acid_chloride` and `HydrogenChloride` of its feed to its top product, as the compound (section 8.3).
+- Within an interval the split is frozen; what arrives is split at the next start. Until then the flash decides where an arriving gas sits, and what leaves a boiling vessel comes from the molecular part it held at the start. Both ask for a pair that keeps a fair molecular share in the water (8.3).
+- A unit on accounts solves the same law on its accounts, with no solver part: a column on the free water of its top product, to which it gives all the hydrogen chloride of its feed (8.3); later an absorber and a regenerator on each stage.
+- For an amine the bound gas is 7 to 10 % of the solution's mass, too much for a tag without mass: a record's `ion` may then name a compound. That is the amine batch's decision (review 4.5).
 - An island that receives the compound and does not list it grows its list, as it does for a column outlet (`IslandSets`).
 - A junction, a pipe and a heat side exchange nothing. Between a heater and the next holdup the hydrolysis product travels as the tag.
 
-This is the one place where the interval changes: one conversion at its start, one enum constant in `ConservativeTransport`, and `SOLUTE` among the kinds a certificate replays as a rate (`IslandCertificate.rate`). The step's Newton and its booking do not change.
+This is the one place where the interval changes: one solve at its start for the flagged vessels, one enum constant in `ConservativeTransport`, and `SOLUTE` among the kinds a certificate replays as a rate (`IslandCertificate.rate`). The step's Newton, its booking and the kernel do not change.
 
 ## 8. The transformations of this batch
 
@@ -244,9 +288,9 @@ Not modelled: the mix valve's pressure drop, demulsifier, water carried over in 
 | 340 °C | 3.8e-2 | 26 % | 90 % | 100 % |
 | 370 °C | 5.6e-2 | 36 % | 97 % | 100 % |
 
-The product is the tag `acid_chloride`, on the stream's water (steam or liquid) if it has any, else on its lightest cut; the next holdup makes it the compound (7.4). The water the hydrolysis uses is not booked (below 1e-5 of the stream).
+The product is the tag `acid_chloride`, on the stream's water (steam or liquid) if it has any, else on its lightest cut; the next holdup splits it by the law of 7.4 (a dry one makes all of it the compound). The water the hydrolysis uses is not booked (below 1e-5 of the stream).
 
-`caustic` (`transfer`, any site with oil): `hydrolysable_chloride` + `caustic` → `salt`, at once where both are present, 1.13 kg NaOH per kg Cl. This is the refinery's caustic injection after the desalter.
+`caustic` (`transfer`, any site with oil): `hydrolysable_chloride` + `caustic` → `salt`, at once where both are present, 1.13 kg NaOH per kg Cl. This is the refinery's caustic injection after the desalter. In water, `acid_chloride` + `caustic` → `salt` in the same way, so the charge balance of 7.4 only ever sees the excess of one of them.
 
 ### 8.3 Hydrogen chloride: the compound and the acid
 
@@ -260,13 +304,24 @@ What the compound needs of the data and the thermo model:
 | Formula | Chlorine joins `MaterialCatalog.FORMULA_ELEMENTS` and `Thermochemistry.ELEMENTS`. The heating value is 0 (it burns as an inert) |
 | Hazard | A `hazard` sub-record, so a vent, a flare or a leak of it reaches the air through the pollution system as it stands |
 | Pairs with hydrocarbons | The rule of the refinery compounds (DWSIM `kij_pr.dat`, else the DECHEMA value, else 0) gives 0 for every pair: none of the three files holds one. A fair value: its solubility in paraffins is near ideal (review 4.2) |
-| Pair with water | Open, option O6. Revision 2 stated `k_ij` = 0; at 0 the cubic keeps 99.7 % of the compound out of the water and a flowing drum loses it to its gas between two absorptions (review 4.3). Proposed: a library pair, one constant, fitted on the kernel to the azeotrope at 1 atm (20.2 % by mass, 381.7 K; `k_ij` about −1.0). A fit to the dilute acid (−1.23) lets acid boil to a strength that does not exist (review 4.4) |
+| Pair with water | For the molecular part only; the law holds the acid's own chemistry. A `henry_in_water` record of 0.1 atm at 25 °C and 10 atm at 100 °C, from which `DerivedPairs` fits its pair (`k_ij` about −0.68 and −0.54 on the stand-in). Sized, not measured: large enough that the water holds 97 % of a gas arriving within an interval and that a boiling vessel has molecular acid to give off (9 to 14 % of the acid at the azeotrope), small enough that the azeotrope stays the law's (review 4.6). At `k_ij` = 0 a flowing drum loses the gas between two solves; at −1.0 the azeotrope moves to 38 % |
+| The law | The `equilibria` record of 7.4 |
 | Flash | As any compound. At parts per million it needs no special case: the trace cutoff folds trace phases, not trace compounds, and the flush acts below 1e-24 |
 | Column | Not on V3's axis and in no neural seed: the running column and the simulator's column carry it on their accounts and give it whole to the top product, as inert particles go whole to the bottoms |
 | Identity | A compound added to a package moves no identity of a view without it: no world is restated |
 | Kernel, engine | No change: no electrolyte model, no new phase |
 
-With the fitted pair the flash itself puts the compound into the water wherever water is: in a wet stream, a junction, and a vessel between two absorptions. It leaves a wet vessel only with the water, and the next holdup's absorption turns it into the tag. Dilute acid, to 1 mol/kg, is the tag: it does not boil off, as the real acid does not (its volatility is below 1 % of water's). Stronger acid is the compound, and the pair decides how it boils: it levels at 25.6 % by mass against the real 20.2 % (1 atm) to 23.4 % (50 mmHg), and gives hydrogen chloride off above that (review 4.4). Heat and vacuum therefore do not strip dilute acid water, in the model as in a plant; a vessel boiled dry releases all of it.
+What the law and the pair give together (review 4.6, on the stand-in):
+
+| Case | Model | Real |
+|---|---|---|
+| Refinery water, 100 ppm: share as ions | 100 % | 100 % |
+| Boiling 1 mol/kg acid at 760 mmHg: it levels at | 20.6 % by mass | 20.2 % |
+| The same at 50 mmHg | 27.8 % | 23.4 % |
+| Hydrogen chloride lost when 80 % of the water is gone, 760 and 50 mmHg | 9 %, 2 % | Small |
+| Boiling temperature at the azeotrope, 760 mmHg | 371.5 K | 381.7 K |
+
+Heat and vacuum do not strip dilute acid water, in the model as in a plant; acid stronger than the azeotrope gives hydrogen chloride off; a vessel boiled dry releases all of it. The boiling temperature is low because the ions, a tag, do not raise the water's boiling point (the owner's rule for tags).
 
 ### 8.4 Surface coking (`threshold_deposit`, a heat side that carries oil)
 
@@ -315,7 +370,7 @@ In a column the deposit raises the tray fouling that the fouling-corrosion batch
 Changes to `science/integrity`:
 
 - `CorrosionStandard.digest` takes `S` and `A` from the tags `sulfur` and `acid` of the oil it reads, no longer from the static sub-record. With default contents the numbers are those of today.
-- **M12, acid chloride** (`Mechanism.ACID_CHLORIDE`, appended): acts where free water meets chloride acid, as the tag `acid_chloride` on the water or as the compound not yet absorbed (the wet end of a condenser). `m = (acid chloride + hydrogen chloride − ammonia − caustic) / kg of free water`, in mol/kg, not below 1e-7; `pH = −log10 m`. The ammonia is all the node holds, as the neutralisation of 7.4 takes it.
+- **M12, acid chloride** (`Mechanism.ACID_CHLORIDE`, appended): acts where free water holds chloride acid. Its pH is the speciation law's (7.4). In a holdup the ions are already split, so the charge balance alone gives it: `h − Kw/h = (acid_chloride − ammonium − caustic) / kg of free water`, in mol, `pH = −log10 h`. At a heat side's wet end and in a column's top zone no solve has run; there the law's acid side is used: all the hydrogen chloride counts as ions, and the ammonia as ions up to the acid. That is exact below pH 7, and M12 does not act above pH 5.5.
 - The acid dew point: refiners find the first acid drop above pure water's dew point (17 K in the OGJ example). Hydrogen chloride and water alone give about 0.5 K (review 4.3); salts and cold surfaces make the rest, and the cubic knows neither. A column's top zone and its condenser therefore count as wet for M12 up to 15 K above the table's `waterBelow`. A heat side of the network has only its state's wet flag: a known miss.
 - A heat side reads both its ends: the hotter end for the dry mechanisms, as today, and the colder end for the wet ones. A condenser's acid attack is at its cold end, which the hotter-end digest of the fouling-corrosion batch does not see. Carbon steel: `min(25, 2.5 · 10^(−0.5 (pH − 2.25))) · 2^((min(T, 366 K) − 311 K)/55 K)` mm/y, none above pH 5.5.
 
@@ -352,7 +407,7 @@ Each is computed once per installed table, as the bottoms' is today. A part thro
 
 ## 11. Simulator
 
-A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass tags by their recoveries, heat units apply hydrolysis and surface coking at their sized passage, the desalter its law. The Materials tab's digest reads the tags and M12. A vessel unit applies the release and the absorption of 7.4 to its outlet streams; the column gives hydrogen chloride to its top product. All on the client, as today.
+A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass tags by their recoveries, heat units apply hydrolysis and surface coking at their sized passage, the desalter its law. The Materials tab's digest reads the tags and M12. A vessel unit applies the speciation law of 7.4 to its outlet streams; the column gives hydrogen chloride to its top product and solves the law on that product's free water. All on the client, as today.
 
 ## 12. Performance
 
@@ -360,10 +415,11 @@ A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass
 |---|---|---|
 | Tag transport | The island's worker, once per interval | Skipped without tags; one factorization without a phase draw; else one per carrier and class that holds a tag (at most 38) |
 | Transformation coefficients | Server thread, at the 5 s cadence | 256 sites a pass; a site outside its window costs one comparison |
-| Hydrogen chloride | Islands that carry it | One compound more in their flash (about 1 in 30 for an overhead system); one TP flash per exchanging vessel and interval |
-| The step's Newton, its booking, the certificates | | No change |
+| Hydrogen chloride | Islands that carry it | One compound more in their flash (about 1 in 30 for an overhead system) |
+| Speciation | The island's worker, at an interval's start, flagged vessels only | Per vessel: one fugacity evaluation per phase (at most 3), one root in pH (60 bisection steps × 3 passes over at most a handful of records), one TP flash when an amount moved. A vessel is flagged by one bit test; an island without a record's species pays nothing |
+| The step's Newton, its booking, the kernel, the certificates | | No change (`SOLUTE` joins the rate kinds) |
 | Column parts | Once per installed table | One digest per part |
-| Memory | Per stock with tags | 11 tags × 13 carriers doubles |
+| Memory | Per stock with tags | 12 tags × 13 carriers doubles |
 
 ## 13. Formats and config
 
@@ -373,7 +429,7 @@ A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass
 | Fluid checkpoint state format | 52 | 53: junction tags, site coefficients |
 | Wire protocol | `icheme-5` | `icheme-6`: views with contents, the desalter's page |
 | Simulator sheet file | 2 (3 reserved, to be released) | The next free number: stream tags |
-| Material data | | Kinds `solutes` and `reactions`; `content` sub-record; assay `content`. In no identity. The compound `HydrogenChloride` with its dataset and pairs, in `icheme:refinery` (its revision bumped; `materials-index.json`) |
+| Material data | | Kinds `solutes`, `reactions` and `equilibria`; `content` sub-record; assay `content`. In no identity. The compound `HydrogenChloride` with its dataset, its `henry_in_water` and its pairs, in `icheme:refinery` (its revision bumped; `materials-index.json`) |
 | Interval result | | `BoundaryTransfer.Kind.SOLUTE`, appended |
 | Corpus | | `compat/fluid/schema-30` |
 
@@ -399,11 +455,11 @@ After `2026-11-16-fouling-corrosion` is on `main`. Five stages, each leaving `ma
 
 | Stage | WP | Content | Lane, hot files |
 |---|---|---|---|
-| A | WP1 | `science/solute`: `TagKind`, `TagSet`, kinds `solutes` and `reactions` in `MaterialCatalog`, the `content` sub-record (aliases of `corrosion`), assay `content` and the fit in `tools/crude-grades/`, the eleven records | thermo: `MaterialCatalog` |
+| A | WP1 | `science/solute`: `TagKind`, `TagSet`, kinds `solutes` and `reactions` in `MaterialCatalog`, the `content` sub-record (aliases of `corrosion`), assay `content` and the fit in `tools/crude-grades/`, the twelve records | thermo: `MaterialCatalog` |
 | A | WP2 | `TagTransport`; `Inventory.tags`; the result and commit wiring; the replay step; generator contents; facts schema 30, state format 53, the corpus image; `TagLedgerTest` | fluid laws, runtime: `FluidFacts`, `FluidCheckpointCodec`, `IslandCoordinator` |
 | A | WP3 | The digest on tags (`CorrosionStandard`); references exact with default contents | thermo |
 | B | WP4 | `science/reaction` (the three laws), `runtime/fluid/Reactions`, `TagPlan`; hydrolysis, caustic, bulk and surface coking; `FoulingLaw`'s oil rows removed | runtime: `FluidWorldAuthority` |
-| B | WP4b | Hydrogen chloride: the compound's records and pairs, chlorine in the formula elements, the hazard; the exchange of 7.4 (`PassiveIntervalSolver.solve`, `Kind.SOLUTE`, the plan in the command, island growth); the ledger across compound and tag | thermo, fluid laws: `MaterialCatalog`, `ConservativeTransport` (one constant), `IslandCoordinator` |
+| B | WP4b | Speciation. `science/solute/Speciation`: a pure function (totals, `F`, free water, temperature → ions, pH), with `SpeciationTest` on the numbers of 7.4 and 8.3. Kind `equilibria` and its two records. Hydrogen chloride: the compound's records, `henry_in_water` and pairs, chlorine in the formula elements, the hazard. The solve at the interval's start (`PassiveIntervalSolver.solve`, `Kind.SOLUTE`, the flags and ions in the command, island growth); the ledger across compounds and tags | thermo, fluid laws: `MaterialCatalog`, `ConservativeTransport` (one constant), `IslandCoordinator` |
 | B | WP5 | M12 and its factors; a heat side's colder end for the wet mechanisms; `coke_fines` in the solid share | thermo |
 | C | WP6 | The desalter: kind, design, model, registration, law, page, sound | equipment: `EquipmentShape`, `EquipmentStructure` |
 | D | WP7 | Tags through the column's, still's and converter's accounts; the column's parts and their facts; the Operation table | plant: `ColumnOperation`, `ColumnFacts` |
@@ -421,14 +477,8 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - **O3, coke fines.** Designed as a particulate tag. Option: turn them into a `SolidInventory` population at the next vessel, so that filters cake and beds settle. It needs a mass exchange with the heaviest cut in the vessel's refresh.
 - **O4, metals.** One tag (Ni + V). FCC models treat them apart; two tags cost one more row.
 - **O5, the numbers** of sections 8 and 9 are game-level fits to the stated anchors, as the corrosion matrix is.
-- **O6, hydrogen chloride's pair with water** (review 4.3). No electrolyte model in any option.
-  - **A, `k_ij` = 0** (revision 2). The flash puts 0.27 % of it in a drum's water; the absorption catches only what the vessel holds every 20 s of process time; most leaves with the off-gas. Not as intended.
-  - **B, a fitted pair and the absorption** (proposed). `k_ij` about −1.0, fitted to the azeotrope: the flash puts 99.98 % in a drum's water everywhere, and the absorption still turns it into the tag on water, up to 1 mol/kg. Heat and vacuum do not strip dilute acid; strong acid boils to 25.6 % (real 20.2 to 23.4 %) and gives hydrogen chloride off above it. Known errors: no shift of the azeotrope with pressure, too much hydrogen chloride lost while the acid concentrates. Risk: a pair this negative is new to the solver; the build measures it on the 200-seed quick check.
-  - **C, the fitted pair alone.** No absorption: the acid stays a compound in the water and M12 reads it there. Deletes the absorption and half of `SOLUTE`; keeps the release and the neutralisation. It departs from "aqueous phase solute", and one constant is then wrong at one end: fitted to the azeotrope, dilute acid is 15 times too volatile; fitted to dilute acid, the azeotrope is lost.
-- **O7, the acids and bases in water: rules, a speciation law, or an electrolyte kernel** (review 4.5; owner: "not limited to HCl, later there will be H2S amine absorption").
-  - **Level 0, rules per substance:** sections 7.4 and 9 as written, with O6. Enough for refinery water. Every later acid or base adds rules, and no pair can make an amine's loading curve.
-  - **Level 1, one speciation law at the exchange sites** (proposed). Section 7.4 becomes general: a material kind of equilibria (`K(T)` by mass action, a Henry constant, the bound form a tag or a compound), solved per wet holdup at the interval's start and per stage in a unit on accounts. The limit of 1 mol/kg, the neutralisation by ammonia and M12's pH become its outputs. This batch builds it for hydrogen chloride, ammonia and caustic; amines and sour water add records and their units. No kernel change.
-  - **Level 2, electrolyte thermodynamics in the kernel:** needed only if acid gas must flash correctly out of rich amine or sour water in any network equipment, or strong acid and caustic must be right as bulk liquids. A kernel batch of its own.
+- **O6, hydrogen chloride's pair with water: settled by O7.** With the law in place the pair serves the molecular part only and is sized, not fitted to the acid (8.3). The options A to C of revision 2 (pair 0, a pair of −1.0 with a tag limited to 1 mol/kg, the pair alone) are withdrawn. The size (0.1 atm at 25 °C, 10 atm at 100 °C) is the owner's to change: a larger constant gives a truer azeotrope at 50 mmHg (25.2 % at 1 and 30 atm) and holds less arriving gas (81 %).
+- **O7, acids and bases in water: decided** (owner, 2026-11-16: "Level 1: speciation"). One speciation law at the exchange sites: sections 7.4, 8.3 and 9. Not chosen: rules per substance (revision 2), and electrolyte thermodynamics in the kernel, which stays the answer if acid gas must one day flash correctly out of rich amine in any network equipment (review 4.5).
 
 ## 17. Risks
 
@@ -438,5 +488,12 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - The desalter's numbers rest on typical viscosities; the mod's own viscosity model for the heavy cuts decides the real table, and the drop size is then fitted once.
 - M12's anchors are recalled, not read (section 9).
 - The exchange of 7.4 and the certificates: `IslandCertificate` reads a transfer of material at a vessel as a flush, which refuses the certificate, unless its kind is a rate a steady island repeats (`VENT`, `SPILL`, `ATMOSPHERE`: `IslandCertificate.rate`). `SOLUTE` must join those kinds, or a steady overhead drum would solve every slice; a replay then scales the exchange linearly with the span, as it scales the others. Whether `REPLAY_REVISION` moves with it is decided in WP4b.
+- The speciation's limits, all stated in review 4.5 and 4.6:
+  - The split is frozen within an interval. A boil-off faster than the molecular share (9 to 14 % of the acid at the azeotrope) per interval strips less than it should until the next solve; a gas arriving in a drum is held by the pair only (97 %).
+  - Ions have no mass and do not change the water's properties. Right at parts per million; at the azeotrope the liquid's mass is 20 % short and it boils 10 K low. Strong acid as a bulk liquid is not this batch's aim.
+  - `F` is taken as constant during a solve; the second pass of step 5 covers strong acid.
+  - A `henry_in_water` makes hydrogen chloride a gas for `DerivedPairs`: its pairs with non-polar compounds then go to the E-PPR78 branch, which has no group for it. WP4b checks that the branch gives 0 and does not refuse; else the water pair is stated as a library pair with the two fitted values.
+  - The pair (about −0.68 to −0.54) is more negative than any pair the solver has met. The build measures it on the 200-seed quick check with worlds that hold the compound.
+  - The constants of ammonia and the fitted constants for amines and sour water are not read yet.
 - Hydrogen chloride between a heater and the next holdup is a tag, so a gas composition read on that line does not show it.
 - A column whose top product is led to no vessel with free water never absorbs its hydrogen chloride; it stays a gas component to wherever the gas goes. That is the physics.

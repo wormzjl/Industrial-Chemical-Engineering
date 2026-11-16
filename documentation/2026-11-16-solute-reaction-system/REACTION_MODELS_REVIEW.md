@@ -237,6 +237,31 @@ Owner's question, 2026-11-16. Not computed with the kernel; the numbers below ar
 
 **Not known.** Ideal mass action misses measured amine loadings by about a factor of 10 at 4 mol/kg of ions (**recalled** data against my estimate), which is why the constants must be the fitted ones; they are not read yet. Kent–Eisenberg is weak below a loading of 0.05 and for H2S with CO2 together (**recalled**).
 
+### 4.6 Level 1 chosen: the law checked, and the pair sized under it
+
+Owner, 2026-11-16: "Level 1: speciation". Sections 4.3 and 4.4's proposals (a pair fitted to the acid, a tag limited to 1 mol/kg) are superseded; their measurements stand. Computed with `tmp/hcl-check/speciation.mjs` (the stand-in cubic; the ions unseen by it; the split solved continuously, which the engine does once per interval).
+
+**The law for hydrogen chloride**, `f = γ² h m / K`, `K` = 2.0e6 mol² kg⁻² atm⁻¹ at 25 °C with a slope of 9 000 K, `γ` by Bromley with `B` = 0.1433 (all **recalled**): 4.0e-12, 3.2e-9, 3.3e-7 and 1.85e-4 atm over 0.003, 0.1, 1 and 6 mol/kg, against 4.0e-12, 3.2e-9, 3.3e-7 and 1.9e-4. Without the activity term the acid boils to 64 % and more: the term is needed, and one number carries it.
+
+**The pair's part.** The law fixes the acid's pressure; the pair only decides how much molecular acid the water holds. Boiling 1 mol/kg acid away, by the pair's Henry constant at 25 and 100 °C:
+
+| Henry constant, atm | `k_ij` at 25, 100 °C | Levels at, 760 mmHg (real 20.2 %) | At 50 mmHg (real 23.4 %) | Molecular share there | A 40 °C drum holds of an arriving gas |
+|---|---|---|---|---|---|
+| 0.03, 3 | −0.76, −0.66 | 23.7 % | 31.2 % | 22 %, 26 % | 99.0 % |
+| **0.1, 10** | −0.68, −0.54 | 20.6 % | 27.8 % | 9 %, 14 % | 96.8 % |
+| 0.31, 9.1 | −0.61, −0.55 | 20.7 % | 26.3 % | 9 %, 7 % | 93.2 % |
+| 1, 30 | −0.53, −0.44 | 19.4 % | 25.2 % | 3 %, 2.5 % | 80.6 % |
+| 10, 100 | −0.38, −0.33 | 19.0 % | 24.7 % | 0.9 %, 0.3 % | 35.5 % |
+| Pair −1.0 (4.4) | −1.0 | 38.3 % | 41.1 % | 40 %, 47 % | 99.98 % |
+| Pair 0 | 0 | 18.9 % | 24.6 % | 0 % | 0.27 % |
+
+- With little molecular acid the azeotrope is the law's own: 18.9 % and 24.6 %, with the right shift with pressure.
+- The molecular share is also what a boiling vessel can give off between two solves, and what holds an arriving gas. Both want it larger; the azeotrope wants it smaller.
+- Chosen: 0.1 and 10 atm. Hydrogen chloride lost when 80 % of the water is gone: 9 % at 760 mmHg, 2 % at 50 mmHg.
+- Every row boils at 371.5 K at the 760 mmHg azeotrope, against 381.7 K: the ions do not raise the boiling point.
+
+**pH** by the charge balance, 25 °C: hydrogen chloride 0.00274 mol/kg gives 2.56; with half, equal and double the ammonia 2.86, 5.90 and 9.24; with equal caustic 7.00.
+
 ## 5. Not found, and open
 
 - The numeric table of hydrochloric acid corrosion in API RP 581 Part 2 Annex B. The plan's M12 anchors are recalled.
