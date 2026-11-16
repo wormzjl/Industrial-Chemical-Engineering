@@ -112,10 +112,11 @@ cycle's own ledger update, beside the totals (plan section 13.1, decision D10; n
    table, `Run.corroded`) + solids part (`min(5, 0.5 φ/0.01)` × the erosion factor). Booked as `rate × dt / year` for
    each cycle that ran. Stages by `WallState`: `THIN_WALL`, `WEEPING` (notices); through, `LEAKING` (TRIP, derived
    from the saved loss at every cycle while corrosion or erosion is on): the inlets close and no solve is asked.
-4. Repair (the constructor) and Clean (the Operation tab's key, `AssemblyNetwork.Action.CLEAN`) are queued on
+4. Repair (the constructor) and Clean (the Operation page's footer key, `AssemblyNetwork.Action.CLEAN`) are queued on
    `ColumnOperation` (`queueRepair`, `queueClean`, `apply` at the tick drain): `NOT_IDLE` while the unit runs, else
    wall 0 (`REPAIRED`) or fouling 0 (`CLEANED`), or `NOTHING_TO_REPAIR`. A stopped unit keeps its record, so the facts
-   survive a Stop. The view (`OperationView.Wear`) carries the wear; `OperationColumn.integrity` draws it.
+   survive a Stop. The view (`OperationView.Wear`) carries the wear; `OperationColumn.wear` draws it as a table on the
+   glass (layout B, owner 2026-11-16), and `OperationColumn.footerButtons` places Clean on the footer.
 
 Tests: `ColumnWearTest` (the numbers), `ColumnCycleTest` (capacity 1 exact, 0.8 floods at 80 %), `ColumnRunTest`
 (solids foul and limit the feed; corrosion alone without solids; LEAKING, repair and clean refused running, accepted

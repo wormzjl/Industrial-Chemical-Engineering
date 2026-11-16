@@ -23,7 +23,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | **Screens** | | |
 | `EquipmentConstructorScreen` | `screens/`: the door at the left (`ConstructorColumn`, a `KitDoor`), the world and the ghost beside it; pages CHOOSE, DESIGN, TEMPLATES, IMPORTS, CONNECTIONS, NOZZLES, PAINT; `listImports`, `listed`, `answered`, `land`; sends the draft on `removed` when changed and with Build | 1123 |
 | `VesselScreen` | `screens/`: a column's or unit's datasheet on a door, title strip with the structure's name (an entry for a player who may name it), Size group and motion switch (`DialogColumns.vessel`); static `sheet(vessel)` builds the glass's `DialogColumns.Sheet`, a fluid device's material line (`DialogColumns.material`) among its notes | 334 |
-| `AssemblyScreen` | `screens/inventory/`: a column's assembly screen on `AssemblyColumn` and `OperationColumn`: the block drawing and parts list, Check parts, Open unit, Datasheet; the name entry (`nameBox`, `saveName`); the Operation page (`operationView`, `entry`, `fits`, `glassView`) | 675 |
+| `AssemblyScreen` | `screens/inventory/`: a column's assembly screen on `AssemblyColumn` and `OperationColumn`: the block drawing and parts list, Check parts, Open unit, Datasheet; the name entry (`nameBox`, `saveName`); the Operation page (`operationView`, `entry`, `fits`, `glassView`) | 685 |
 | `ColumnTemplates` | `screens/inventory/`: the client's templates: `listed`, `streams`, `saveColumn`, `saveStream`, `deleteColumn`, `load` (the constructor's Templates page), `choices` | 157 |
 | `V3EditorDraft` | `screens/inventory/`: keyed text over a `V3ColumnInput` with exact values (`assemble`, `unchanged`), `loadColumn`, `loadColumnAtDesignFeed`; nested `ColumnInputDraft`, `ColumnScalarDraft`, `SideDrawDraft`, `SteamFeedDraft`, `PumparoundDraft` | 426 |
 | `V3CompositionDraft` | `screens/inventory/`: binds a `RelativeComposition` to the source `V3ColumnInput` | 30 |
@@ -34,7 +34,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | `ConstructorColumn` | The constructor's door, `PANEL` wide: the pages' rows (`choose`, `design` (with `material`, the Material selector), `templates`, `imports`, `connections`, `nozzles`, `paint`), each `Page` with its footer; `listed` (an Import line), `label`, `title` (cut to `TITLE`), `withRemoval` (the Deconstruction group) | 701 |
 | `AssemblyColumn` | The assembly door: Structure and Operation tabs, the status once, Check with Check parts and its summary, Selected with Open unit; `footerButtons`; the glass split between the block and the parts list (`split`, `DRAWING_W`, `DRAWING_H`) | 291 |
 | `AssemblyDiagram` | A column assembly's parts (one per blueprint slot) and its ports in a fixed order (slot, role, ordinal, partner), which the laying tool's marks and port colours read | 182 |
-| `OperationColumn` | The Operation page and the DCS column page: `HEIGHT`, `Units`, `Input`; `rows`, `fields`, `values`, `parse`, `applies`, `footerButtons`, `status`; the glass's `tables` (`ports`, `duties`, `solve`, `conditions`, `absolutes`), `glass`, `height` | 465 |
+| `OperationColumn` | The Operation page and the DCS column page: `HEIGHT`, `Units`, `Input`; `rows`, `fields`, `values`, `parse`, `applies`, `footerButtons` (Close, Clean where the column has a unit, Apply), `status`; the glass's `tables` (`ports`, `duties`, `solve`, `wear`, `conditions`, `absolutes`), `glass`, `height` | 493 |
 | `CalculatorColumn` | The column door (the simulator's): `Page` (COLUMN, FEED, RESULTS, EQUIPMENT), `View`, `Metric`; `column`, `feed`, `results`, `equipment` (condenser kind and counts, kettle, coolers, `pumpDuties`, `PumpDuty`), `status`, `footer`, `door`, the frame (`width`, `height`, `split`), the drawing (`pitch`, `drawingHeight`, `drawing`, `Hit`) | 1191 |
 
 `AssemblyBlock` (the built column's drawing, `client/gui/flowsheet/`) is in [process-simulator.md](process-simulator.md) and [assembly-service.md](assembly-service.md); `ColumnDiagram` and `TitleStrip` in [client-kit.md](client-kit.md).
@@ -51,7 +51,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 
 **Using a cell** is decided on the server: a column (or a unit its report holds) opens the assembly screen; a structure with a fluid device opens its fluid screen with the Datasheet page; any other unit gets its datasheet (`AssemblyNetwork.datasheet`, opened by `EquipmentClient.openVessel` as `VesselScreen`).
 
-**Assembly Operation page**: on a complete column whose view carries an operation, the door lays out `OperationColumn.rows`; set points are entries kept until Apply; a command is sent once and shown as queued until the answer; the glass holds the port, duty, solve, conditions and set-feed tables in the client's units; without an operation the tab shows a note.
+**Assembly Operation page**: on a complete column whose view carries an operation, the door lays out `OperationColumn.rows`; set points are entries kept until Apply; a command is sent once and shown as queued until the answer; the glass holds the port, duty, solve, integrity (the column's wear, layout B), conditions and set-feed tables in the client's units; the footer reads Close, Clean (while the column stands) and Apply; without an operation the tab shows a note.
 
 ## Contracts
 

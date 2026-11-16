@@ -36,7 +36,7 @@ final class OperationPrototypes {
         return List.of(new GuiPrototypes.Prototype("operation-1920x1080", 624, 344, (d, s) -> door(d, crude(1, 2, 2))),
                 new GuiPrototypes.Prototype("operation-narrow-largest", 496, 368, (d, s) -> door(d, crude(2, 4, 4)), true),
                 new GuiPrototypes.Prototype("operation-flooding", 624, 344, (d, s) -> door(d, flooding()), true),
-                new GuiPrototypes.Prototype("operation-integrity-stopped", 624, 344, (d, s) -> door(d, stopped()), true));
+                new GuiPrototypes.Prototype("operation-integrity-stopped", 624, 344, (d, s) -> door(d, stopped())));
     }
 
     /** A crude column with {@code steam} inlets, {@code draws} and {@code pumparounds}, at 86 % of its 120 kmol/h feed. */
@@ -68,7 +68,8 @@ final class OperationPrototypes {
 
     /**
      * The crude column stopped after a run on a feed with solids (WP8 of batch 2026-11-16-fouling-corrosion): its trays fouled
-     * to 0.8 (68 % of their capacity left), its chrome steel wall weeping; Clean acts, the door scrolled to its end.
+     * to 0.8 (68 % of their capacity left), its chrome steel wall weeping; the integrity on the glass, Clean acting on the
+     * footer (layout B, 2026-11-16), unscrolled.
      */
     static OperationView stopped() {
         var base = crude(1, 2, 2);
@@ -139,10 +140,10 @@ final class OperationPrototypes {
         }
         d.c.unclip();
         scroll.drawBar(d.c, d.skin);
-        var footer = AssemblyColumn.footer(d.w, d.h);
-        var keys = OperationColumn.footerButtons(OperationColumn.applies(in, java.util.Map.of()), t);
+        var keys = OperationColumn.footerButtons(in, OperationColumn.applies(in, java.util.Map.of()), t);
+        var footer = AssemblyColumn.footer(d.w, d.h, keys.size());
         for (int i = 0; i < keys.size(); i++)
-            d.skin.button(d.c, footer.get(i), keys.get(i).text(), keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
+            d.skin.button(d.c, footer.get(i), keys.get(i).text(), !keys.get(i).active() ? Skin.Press.OFF : keys.get(i).key().equals("apply") ? Skin.Press.PRIMARY : Skin.Press.REST, false);
         if (!d.end && d.skin == PanelSkin.LIGHT)
             System.out.printf(java.util.Locale.ROOT, "%-24s %d by %d: door column %d px wide, %d px tall in a %d px view; tables %d px on a %d px glass; %d keys%n", "operation",
                     d.w, d.h, area.w(), tall, area.h(), OperationColumn.height(view, UNITS, t), box.h(), ConstructorColumn.buttons(rows).size());

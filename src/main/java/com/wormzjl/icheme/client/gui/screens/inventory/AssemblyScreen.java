@@ -250,13 +250,14 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
         var tabs = AssemblyColumn.tabs(operation(), complete(), AssemblyScreen::lang);
         var tabSlots = AssemblyColumn.tabSlots(imageWidth);
         for (int i = 0; i < tabs.size(); i++) push(tabs.get(i), tabSlots.get(i));
-        var footer = AssemblyColumn.footer(imageWidth, imageHeight, operationView() == null && names() ? 3 : 2);
         nameEntry.forget();
         var namePlace = strip().name();
         if (names() && namePlace != null) nameBox(namePlace);
         var operating = operationView();
-        var buttons = operating != null ? OperationColumn.footerButtons(OperationColumn.applies(operationInput(operating), drafts), AssemblyScreen::lang)
+        var buttons = operating != null ? footerButtons(operating)
                 : names() ? AssemblyColumn.footerButtons(nameEntry.renames(), AssemblyScreen::lang) : AssemblyColumn.footerButtons(AssemblyScreen::lang);
+        // The Operation page's footer holds as many keys as it shows (Clean where the column has a unit); the structure page's, Close and Datasheet, and the name's Apply where it names.
+        var footer = AssemblyColumn.footer(imageWidth, imageHeight, operating != null ? buttons.size() : names() ? 3 : 2);
         apply = null;
         for (int i = 0; i < buttons.size(); i++) {
             var button = SkinButton.of(buttons.get(i), footer.get(i).moved(leftPos, topPos), this::act, AssemblyScreen::skin);
@@ -332,8 +333,16 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
                 if (row instanceof Column.Group g) for (var r : g.rows()) out.add(r instanceof Column.Field f ? "field " + f.key() + " " + f.label() + " " + f.unit()
                         : r instanceof Column.Reading m ? "meter " + m.key() + " " + m.label() + " " + m.unit() : r.getClass().getSimpleName());
             for (var b : ConstructorColumn.buttons(OperationColumn.rows(operationInput(operating), AssemblyScreen::lang))) out.add(b.key() + " " + b.active() + " " + b.latched());
+            // The footer's keys (Clean comes and goes with the unit, acts while the column stands); Apply's state is left out.
+            for (var b : footerButtons(operating)) if (!b.key().equals("apply")) out.add("footer " + b.key() + " " + b.active());
         }
         return out;
+    }
+
+    /** The Operation page's footer keys for {@code operating}. */
+    private List<Column.Button> footerButtons(OperationView operating) {
+        var in = operationInput(operating);
+        return OperationColumn.footerButtons(in, OperationColumn.applies(in, drafts), AssemblyScreen::lang);
     }
 
     /** Rebuilds the widgets where they would show or stand otherwise. */
