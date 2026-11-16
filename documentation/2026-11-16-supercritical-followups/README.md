@@ -1,6 +1,6 @@
 # Supercritical follow-ups
 
-Status: **In progress** since 2026-11-16 (P1 and P3 merged into the batch branch; P4 done on its branch; P2 not started). Branch `claude/supercritical-fluid-support-d0ffa4`, base `dfbdc583c` (main 0.34.0).
+Status: **In progress** since 2026-11-16 (P1, P3 and P4 merged into the batch branch: P4 merged; P2 started without the wire field). Branch `claude/supercritical-fluid-support-d0ffa4`, base `dfbdc583c` (main 0.34.0).
 
 Purpose: the open owner items of [2026-11-15-supercritical-fluids](../2026-11-15-supercritical-fluids/README.md), on the
 owner's "fix them": the plunger pump's clearance loss and work, one dense fluid in the level, sight glass, release,
@@ -40,7 +40,7 @@ line service and device pages, the column's feed flash by a stability test, the 
 
 ## Open items
 
-- The owner approved the four threads ("Approve all", 2026-11-16). Open: the reservation of protocol `icheme-4` on `main` before P2's code.
+- The owner approved the four threads ("Approve all", 2026-11-16). The owner answered "Not now" to the reservation of protocol `icheme-4` on `main`, then "Yes, run P2" without the wire field: item 6 (the client's catalog on a datapack server) stays open.
 - Kept, open to the owner's veto: Auto's rule (item 2); "Dense" in the aqueous slot (item 13).
 - P3, for the owner: two hydrocarbon liquids are answered as one liquid at the Wilson endpoint (about 1.1 kJ/mol); the cold
   Tia Juana crude's heavy-cut second liquid (derived pairs) is its own item.

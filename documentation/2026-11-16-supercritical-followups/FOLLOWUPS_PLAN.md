@@ -135,7 +135,13 @@ Files: `runtime/fluid/FluidView.java`, `ViewBuilder.java`, `Displays.java`, `Flu
 `science/fluid/network/**`, `MoverUnit.java`, `PumpSizing.java`, `science/column/**`, sounds. Before any GUI work read
 `.claude/skills/gui-creation/SKILL.md`. No dev client: judge by gates and the software renders.
 
-1. **The wire field (item 6).** `FluidView.State` gains one double, `dense`: `w` of the server's own state where
+**Owner, 2026-11-16: "Not now" to the `icheme-4` reservation on `main`, then "Yes, run P2" without the wire field.**
+So point 1 below is NOT built: no payload, no `NetworkProtocol` change, no `FORMATS.md` row; the client keeps its own
+evaluation (`DenseLabel.model`, `DenseLabel.row(model, axis, …)`), and item 6 stays open. Point 8 (the colour) reads
+`w` from that client evaluation where it gives the reduced density (same limit as the label on a datapack server); if
+it cannot, leave the colour and say so. Points 2 to 7 and 9 compute on the server or need no new field.
+
+1. **The wire field (item 6): not built, see above.** `FluidView.State` gains one double, `dense`: `w` of the server's own state where
    `state.dense()`, else NaN. It is written wherever a `FluidView.State` goes to a client; the protocol becomes
    `icheme-4` (the main thread reserves the number on `main` before your first code commit; wait for its word). The
    device screen reads the label from it: "Dense" where `dense > 0`. Then delete what it replaces: the client's model
@@ -236,6 +242,6 @@ pass; `P4_SOUND_REVIEW.md` with the recipe and the levels; the owner hears it in
 ## 7. Order, threads, merge
 
 - Wave 1: P1 and P3 in parallel (disjoint files), each a sub-thread in its own worktree, Opus high.
-- Wave 2: P2 (Opus high) and P4 (Opus medium), after the `icheme-4` reservation.
+- Wave 2: P4 (Opus medium), started on its own; P2 (Opus high) without the wire field (owner, section 4).
 - The main thread merges the package branches into the batch branch, checks each diff, then asks the owner for merge
   preparation, one final lane and the version (a patch or minor bump, the owner's choice).
