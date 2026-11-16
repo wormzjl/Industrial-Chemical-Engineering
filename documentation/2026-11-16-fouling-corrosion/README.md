@@ -22,6 +22,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 - 2026-11-16, owner: "repairs needs to be performed with the constructor". Plan revision 6 (D8): a Repair key in the constructor's group of the structure in front, beside Deconstruct, queues the structure's repair (idle and empty, no item); the repair kit is refused on constructed equipment and stays for in-line pumps and compressors and for control valve trims.
 
+- 2026-11-16, owner: "Keep the kit": the repair kit stays for in-line pumps and compressors and for control valve trims.
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.

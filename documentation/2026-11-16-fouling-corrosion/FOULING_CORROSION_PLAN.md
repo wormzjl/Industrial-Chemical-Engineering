@@ -285,7 +285,7 @@ A vessel breached before this batch (schema 26, no `wrecked`) reads as not wreck
 
 Then: wall loss 0, health 1, breach closed, a failed heat side opened. Otherwise the reply names what is missing (`NOT IDLE`, `NOT EMPTY`, `WRECKED`, `NOTHING TO REPAIR`). Repair costs no item, as building costs none (O2); a later survival-supplies batch may charge it.
 
-The repair kit:
+The repair kit (owner, 2026-11-16: "Keep the kit"):
 
 - On a cell of constructed equipment it is refused and kept: "Repair this with the Equipment Constructor." This ends today's rules: a kit on a pump or compressor casing, on a steam turbine, or on a breached vessel.
 - It stays the repair of what the constructor does not build: an in-line pump or compressor and a control valve's trim, both pipe blocks. It is accepted only while no flow passes the device.
@@ -352,7 +352,7 @@ The owner's, 2026-11-16:
 - **O2** Alloy price: the cost index only; no items in this batch.
 - **O3** Sounds: set A, the weep loop only.
 - **O4** Format numbers on `main` (section 17) and the build's delegations (section 18): not yet.
-- D8: repairs of constructed equipment with the constructor.
+- D8: repairs of constructed equipment with the constructor; the repair kit kept for in-line pumps and compressors and control valve trims.
 - Revision 2: a smaller material list (four); columns pass inert particles and stop only for freezing; particulate erosion, control valves first.
 
 ## 16. Sounds
