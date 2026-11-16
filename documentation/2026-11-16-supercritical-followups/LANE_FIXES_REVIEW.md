@@ -54,8 +54,8 @@ stop (option B of three, measured first).
 9. **Runs** (section 5): `test` 92 classes, 917 tests; `holdGates` 10, 69; `columnGates` 45, 265, 1 failure (the new case's
    test catalog), then that class 3 tests, 0; `equipmentGates` 20, 186; 0 failures on the final code. Printed lines against
    the lane: only the W5 hexane sheet (back to 0.34.0), the new case's two lines, and SAMPLE_BODY's packed size, which moves
-   by wall-clock seconds stored in the run (23,186 / 23,187 / 23,185), not by the flash. The other 44 column-gate classes'
-   printed lines were not kept (run 2 replaced the folder).
+   by wall-clock seconds stored in the run (23,186 / 23,187 / 23,185), not by the flash. The other 44 column-gate classes,
+   rerun once on the owner's word (run 3: 262 tests, 0 failures), print as the lane and 0.34.0 line for line.
 
 ## 1. Rule B on the four grids
 
@@ -154,6 +154,7 @@ files, not classes, so the selection cannot name it: added by hand. Every run al
 | 1 | `columnGates` | 45 | 265 | 1 | the new case: its test catalog lacked the network's cubic water (`restrict` without `withWater`) |
 | 1 | `equipmentGates` | 20 | 186 | 0 | `UnitTextTest` among them |
 | 2 | `columnGates` | 1 | 3 | 0 | `V3FeedFlashStabilityTest` after the test fix |
+| 3 | `columnGates` | 44 | 262 | 0 | the other 44 selected classes once more, on the owner's word, to read their printed lines (run 2 had replaced run 1's results) |
 
 Gradle also ran three compiles (`testClasses`); the probes and the trace ran on the built classes, without Gradle. No whole
 task, no GameTest, no chain-100, no campaign.
@@ -172,6 +173,7 @@ against the lane at `9b1dd2bd6` and the 0.34.0 baseline. Every line that differs
 The plunger lines (`PlungerPumpMoverTest`, `FlowsheetUnitsTest` `PLUNGER_SHEET`) equal the lane's. Against the baseline
 only the announced moves differ (P1's plunger lines, the three wash values of section 3, the oracle's CO2 line).
 
-**Not compared:** the 44 other `columnGates` classes of run 1. They passed, but run 2 (one filtered class in the same task)
-replaced `build/test-results/columnGates/`, so their printed lines were not kept. Their flash answers are covered by the
-grids (dense and coarse: equal to the lane's to the bit) but the column solves' printed lines are not read here.
+The 44 other `columnGates` classes: run 2 (one filtered class in the same task) replaced run 1's
+`build/test-results/columnGates/`, so they ran once more (run 3, on the owner's word; another batch's Gradle run shared the
+machine as the second lane). Their 16 printing classes equal the lane's and the 0.34.0 baseline's line for line, times and
+object hashes masked.

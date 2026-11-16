@@ -44,8 +44,9 @@ line service and device pages, the column's feed flash by a stability test, the 
   `TWO_LIQUIDS` refusal is gone. Grids: dense and coarse equal to form D to the bit, the 207-state dry scan equal to the
   lane, the 570-state wet grid 0 frozen answers refused and 0 frozen splits one phase. The hexane column and the W5 sheet
   back to 0.34.0 (STEADY, two warnings); the three wash moves are the feed's small vapour fraction (β 7.67e-5); the packed
-  size moves with stored wall-clock seconds. Runs: 167 classes, 1,437 tests and one rerun class, 0 failures on the final
-  code. [LANE_FIXES_REVIEW.md](LANE_FIXES_REVIEW.md).
+  size moves with stored wall-clock seconds. Runs: 167 classes, 1,437 tests, one rerun class, and the 44 column-gate classes
+  once more on the owner's word to read their printed lines (262 tests, equal to the lane's), 0 failures on the final code.
+  [LANE_FIXES_REVIEW.md](LANE_FIXES_REVIEW.md).
 
 ## Documents
 
@@ -72,7 +73,7 @@ line service and device pages, the column's feed flash by a stability test, the 
 - Lane fixes: at the Wilson endpoint a failed restart keeps the endpoint's liquid (the hexane column's feed at 345 K and
   1 atm, while the same feed at 100 kPa splits β 0.336), and Wilson's K put some wet feeds whose own root is a vapour at the
   liquid endpoint; a wet feed towards a vapour that substitution does not converge stays refused off the endpoint (the
-  engine takes no water). The 44 other column-gate classes' printed lines of the fix run were not kept.
+  engine takes no water).
 - P2: a non-dense liquid that flashes on release (liquid propane) is still heard as a liquid spill (an owner option).
 - An in-game check of the plunger pump (constructor, model, sound) and of the dense readings, offered at the end.
 - Kept, open to the owner's veto: Auto's rule (item 2); "Dense" in the aqueous slot (item 13).
