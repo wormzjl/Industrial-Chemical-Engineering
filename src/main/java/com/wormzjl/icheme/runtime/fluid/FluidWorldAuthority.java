@@ -998,6 +998,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         @Override public boolean close(long id){return corrodedThrough(id);}
         @Override public boolean open(long id){return repair(id);}
         @Override public void release(long id){releaseContents(id);}
+        @Override public boolean restate(long id){return FluidWorldAuthority.this.restate(id);}
         @Override public double corrosiveAir(PhysicalFluidTopology.Position at) {
             if(!IChemE.pollutionEnabled())return 0;
             var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
@@ -1118,6 +1119,17 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Queues the cleaning of the trays of the column at {@code master} under the same rule (WP8): its fouling to 0. */
     public void queueColumnClean(PhysicalFluidTopology.Position master,java.util.function.Consumer<Integrity.Outcome> reply){owned();var u=column(master);if(u==null)reply.accept(Integrity.Outcome.NOTHING_TO_REPAIR);else columns.queueClean(u.id(),reply);}
     /**
+     * Queues the cleaning of heat side {@code id}'s unit (WP5, the heat page's Clean key): the side and its partner where that
+     * is a heat side of constructed equipment too ({@link Integrity#kind}; a kettle's shell is a vessel). A device that is no
+     * such heat side answers {@link Integrity.Outcome#NOTHING_TO_REPAIR} through the same queue.
+     */
+    public void queueUnitClean(long id,java.util.function.Consumer<Integrity.Outcome> reply){
+        owned();var r=registrations().get(id);var sides=new ArrayList<Long>();
+        if(Integrity.kind(r)==Integrity.Kind.HEAT_SIDE){sides.add(id);long partner=r.device().heat().partner();
+            if(partner!=0&&Integrity.kind(registrations().get(partner))==Integrity.Kind.HEAT_SIDE)sides.add(partner);}
+        integrity.queueClean(sides,reply);
+    }
+    /**
      * Whether a blast can breach registration {@code r}: a vessel (kind {@code RESERVOIR}) built closed, with no heat unit
      * (a still's pot, whose vent goes to its head, and a kettle's shell keep their walls) and held by no running column.
      */
@@ -1183,6 +1195,18 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * construction, its shape's): one queued ledger event sets it on every listed device whose spec names another, and
      * returns it; null when none does. It changes nothing the solver reads.
      */
+    /**
+     * Queues device {@code id}'s registration again, unchanged, at its next revision (batch 2026-11-16-fouling-corrosion, WP5):
+     * its island compiles again on the engine's schedule, reading what the compile takes from outside the registration (a
+     * heat side's deposit level from the walls' facts), as an installed flowmeter's tap is compiled. False when the device is
+     * not registered or the world is closed.
+     */
+    boolean restate(long id) {
+        owned();if(closed)return false;
+        var r=registrations().get(id);if(r==null)return false;
+        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device(),r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity());
+        return true;
+    }
     public WorldTopologyLedger.Event material(Collection<Long> ids,com.wormzjl.icheme.science.integrity.Metallurgy material) {
         owned();Objects.requireNonNull(material);var edits=new ArrayList<WorldTopologyLedger.Edit>();
         for(long id:new LinkedHashSet<>(ids)){var r=registrations().get(id);if(r==null||r.spec().metallurgy()==material)continue;
@@ -2098,6 +2122,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             runtime.topology(dimension(name),events,affected,replacements,model,committed,online,additions,removals,releasedFilters,commit);
         }
         public boolean acceptsRecovery(UUID player){var online=server.getPlayerList().getPlayer(player);return online!=null&&online.getInventory().getFreeSlot()>=0;}
+        @Override public boolean fouling(){return IChemE.integritySettings().fouling();}
         @Override public Set<String> portCompounds(long port){
             var column=columns==null?Set.<String>of():columns.compounds(port);var still=stills==null?Set.<String>of():stills.compounds(port);
             var converter=converters==null?Set.<String>of():converters.compounds(port);

@@ -218,15 +218,27 @@ public final class HeatSides {
         return heatSide(unit,side,area,share,target,partner,control,ExchangerType.STANDARD);
     }
     public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control,ExchangerType type) {
+        return heatSide(unit,side,area,share,target,partner,control,type,0);
+    }
+    /**
+     * The same, behind a fouling deposit of {@code fouling} m²K/W on the side's process wall (batch 2026-11-16-fouling-corrosion,
+     * plan section 3.2): in series with its films ({@link HeatCurve.Films#fouled}), an exchanger's, a kettle's tubes', a still's
+     * water side's and an air cooler's tube side's; on a convection coil, in series with its overall coefficient,
+     * {@code 1/U' = 1/U + Rf}. A radiant coil's heat is its burners' and an exhaust coil's its pinch's: their films move no
+     * heat, so the deposit acts on their passage alone. At 0 the laws are those of a clean side, bit for bit.
+     */
+    public static @Nullable HeatLaw heatSide(Unit unit,Side side,double area,double share,double target,long partner,@Nullable HeatControl control,ExchangerType type,double fouling) {
+        var films=HeatCurve.Films.DEFAULT.fouled(fouling);
         return switch(unit) {
             case KETTLE,EXCHANGER->{if(partner==0||unit==Unit.KETTLE&&side!=Side.TUBE)yield null;var wall=new double[unit==Unit.EXCHANGER?type.cells():EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
-                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE,type.routing(side));}
-            case AIR_COOLER->new AirCooled(area,AIR,AIR.draught(share),control,HeatControl.Limit.NONE);
+                yield new HeatSide(area,films,wall,share,0,partner,1,control,HeatControl.Limit.NONE,type.routing(side));}
+            case AIR_COOLER->{var air=AIR.fouled(fouling);yield new AirCooled(area,air,air.draught(share),control,HeatControl.Limit.NONE);}
             // A still's condenser water side (batch 2026-11-09-batch-distiller, W3) takes the duty its still owes it (the column
             // condenser's read, ExchangerRelay.Read.column): an exchanger's side against its pot; the pot has no passage.
             case STILL->{if(partner==0||side!=Side.WATER)yield null;var wall=new double[EXCHANGER_CELLS];java.util.Arrays.fill(wall,AIR_TEMPERATURE);
-                yield new HeatSide(area,HeatCurve.Films.DEFAULT,wall,share,0,partner,1,control,HeatControl.Limit.NONE,ExchangerType.STANDARD.routing(side));}
-            case FIRED_HEATER->side==Side.RADIANT?new FiredCoil(target,coilDuty(side,area,share),1,partner):side==Side.CONVECTION?new ConvectionCoil(CONVECTION_U*area,partner,0):null;
+                yield new HeatSide(area,films,wall,share,0,partner,1,control,HeatControl.Limit.NONE,ExchangerType.STANDARD.routing(side));}
+            case FIRED_HEATER->side==Side.RADIANT?new FiredCoil(target,coilDuty(side,area,share),1,partner)
+                    :side==Side.CONVECTION?new ConvectionCoil(fouling==0?CONVECTION_U*area:area/(1/CONVECTION_U+fouling),partner,0):null;
             // A gas turbine's steam coil (batch 2026-11-10-prime-movers): its gas is its slice input, cold until the turbine fires.
             case PRIME_MOVER->side==Side.EXHAUST?com.wormzjl.icheme.science.fluid.network.ExhaustCoil.COLD:null;
             default->null;
@@ -241,6 +253,8 @@ public final class HeatSides {
      * still, 0.63, 0.65 and 0.29.
      */
     public static HeatCurve.Films airFilms(double fans){return AIR.films(AIR.draught(fans));}
+    /** The same behind a deposit of {@code fouling} m²K/W inside the tubes (batch 2026-11-16-fouling-corrosion, WP5): the clean bank's at 0. */
+    public static HeatCurve.Films airFilms(double fans,double fouling){var air=AIR.fouled(fouling);return air.films(air.draught(fans));}
     /** An air cooler's fans, each on its own motor (batch 2026-11-03-rotating-machinery W5, reading A70): its bays' fans as drawn; 0 for another kind. */
     public static int fans(EquipmentShape shape) {
         if(shape.kind()!=EquipmentShape.Kind.AIR_COOLER)return 0;

@@ -13,6 +13,7 @@ import com.wormzjl.icheme.science.integrity.CorrosionLaw;
 import com.wormzjl.icheme.science.integrity.CorrosionStandard;
 import com.wormzjl.icheme.science.integrity.CorrosionStandards;
 import com.wormzjl.icheme.science.integrity.ErosionLaw;
+import com.wormzjl.icheme.science.integrity.FoulingLaw;
 import com.wormzjl.icheme.science.integrity.Mechanism;
 import com.wormzjl.icheme.science.integrity.Metallurgy;
 import com.wormzjl.icheme.science.integrity.WallState;
@@ -188,7 +189,7 @@ public final class SheetMetallurgy {
         if (run.status() != FlowsheetRun.Status.STEADY) return Rows.NONE;
         // A passage's ends read as the roles they play, as the run and the sizing read them: a valve's in and out.
         var sheet = Wiring.roles(drawn);
-        var standard = CorrosionStandards.of(thermo.catalog(), thermo.packageId(), thermo.axis(), thermo.model().molecularWeights()).apply(thermo.axis());
+        var standard = standard(thermo);
         var rows = new LinkedHashMap<String, Row>();
         for (var unit : sheet.units()) {
             thermo.checkpoint().run();
@@ -216,6 +217,23 @@ public final class SheetMetallurgy {
             rows.put(unit.id(), new Row(unit.id(), unit.type(), hottest, ratings(streams, HEAT_SIDES.contains(unit.type())), null));
         }
         return new Rows(rows);
+    }
+
+    /** The corrosion standard of {@code thermo}'s compound list, or null where it cannot be built. */
+    public static @Nullable CorrosionStandard standard(FlowThermo thermo) {
+        return CorrosionStandards.of(thermo.catalog(), thermo.packageId(), thermo.axis(), thermo.model().molecularWeights()).apply(thermo.axis());
+    }
+
+    /**
+     * The design fouling deposit of a heat side whose stream enters as {@code in} and leaves as {@code out}, m²K/W (batch
+     * 2026-11-16-fouling-corrosion, WP5, plan section 12): the deposit the walls grow towards on it,
+     * {@link FoulingLaw#asymptote} of the hotter end's digest and solid share, as the walls read a side by the hotter end of
+     * its passage. 0 for a clean service (gas, steam, a light clean liquid), and where no standard can be built.
+     */
+    public static double designFouling(@Nullable CorrosionStandard standard, FlowStream in, @Nullable FlowStream out) {
+        var end = out == null || out.empty() || out.state() == null || in.state() != null && !in.empty() && in.temperature() >= out.temperature() ? in : out;
+        if (standard == null || end.empty() || end.state() == null || standard.size() != end.state().componentCount()) return 0;
+        return FoulingLaw.asymptote(digest(standard, end.state()), solidShare(end.state()));
     }
 
     /** {@code state}'s digest: its oil liquid and aqueous liquid as the walls read them (WP2). */

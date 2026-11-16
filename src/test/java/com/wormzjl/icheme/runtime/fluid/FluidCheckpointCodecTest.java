@@ -72,7 +72,9 @@ class FluidCheckpointCodecTest {
         var charge=model.initialNitrogenCharge(1,298.15,101325,()->{});
         var side=new HeatSide(57,new HeatCurve.Films(430,487,85),new double[]{298.15,300.5},.25,-12.5,0,1,
                 new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,320,280,.75),HeatControl.Limit.HIGHEST);
-        var cooled=new AirCooled(90,com.wormzjl.icheme.science.equipment.HeatSides.AIR,.4,new HeatControl(HeatControl.Target.DUTY,5e5,0,1),HeatControl.Limit.LOWEST);
+        // State format 52 (batch 2026-11-16-fouling-corrosion, WP5): the cooler's tubes behind a deposit, so its process films
+        // are not the default ones and must come back as saved.
+        var cooled=new AirCooled(90,com.wormzjl.icheme.science.equipment.HeatSides.AIR.fouled(.0012),.4,new HeatControl(HeatControl.Target.DUTY,5e5,0,1),HeatControl.Limit.LOWEST);
         var pool=new Pool(PhysicalFluidTopology.sideIdentity(21),PhysicalFluidTopology.sideIdentity(20),56,.15,.5,new double[]{340,338,336,334,332,330,328,326},12.5,.5);
         var heated=new PassiveNetwork.Reservoir(4,0,charge,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Reservoir(4,0,charge).inventory().withPool(pool));
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,charge),new PassiveNetwork.Reservoir(2,0,charge),new PassiveNetwork.Reservoir(3,0,charge),heated),
@@ -83,7 +85,9 @@ class FluidCheckpointCodecTest {
         var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state))),key->key.on(model));
         var loaded=FluidCheckpointCodec.decode(image,key->key.on(model));var pipes=loaded.islands().getFirst().snapshot().graph().pipes();
         assertEquals(side,pipes.getFirst().heat());assertNull(pipes.get(1).heat());
-        assertEquals(full.graph().pipes().getLast().heat(),pipes.getLast().heat());assertEquals(.4,((AirCooled)pipes.getLast().heat()).draught(),"no flow, the louvers and fans stand");
+        assertEquals(full.graph().pipes().getLast().heat(),pipes.getLast().heat());
+        assertEquals(HeatCurve.Films.DEFAULT.fouled(.0012),((AirCooled)pipes.getLast().heat()).air().process(),"the deposit's films, as saved");
+        assertEquals(.4,((AirCooled)pipes.getLast().heat()).draught(),"no flow, the louvers and fans stand");
         assertEquals(174,pipes.getFirst().sections().getFirst().channels());
         var planned=full.graph().reservoirs().getLast().inventory().pool();
         assertEquals(pool.shape(),planned.shape());assertEquals(0,planned.active(),"no read of its tubes: the pool moves no heat");

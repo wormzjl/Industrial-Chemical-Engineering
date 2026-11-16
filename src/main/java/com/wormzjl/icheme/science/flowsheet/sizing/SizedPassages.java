@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.flowsheet.unit.CoolerUnit;
 import com.wormzjl.icheme.science.flowsheet.unit.FiredHeaterUnit;
 import com.wormzjl.icheme.science.fluid.network.PipeResistance;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
+import com.wormzjl.icheme.science.integrity.FoulingLaw;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -142,7 +143,17 @@ public final class SizedPassages {
 
     /** What {@code carried} loses through {@code size}'s tubes, bar, its shells in parallel: the sizer's at design flow, the run's at its own. */
     static double tube(ExchangerSizing.Size size, LineSizing.Carried carried) {
-        return carried.drop(size.type().tubePassage(size.shell(), size.tubes()), size.shells());
+        return tube(size, carried, 0);
+    }
+
+    /** The same through tubes fouled by a deposit of {@code rf} m²K/W (WP5): each narrowed by twice its thickness, as the world's passage is. */
+    static double tube(ExchangerSizing.Size size, LineSizing.Carried carried, double rf) {
+        return carried.drop(fouled(size.type().tubePassage(size.shell(), size.tubes()), rf), size.shells());
+    }
+
+    /** {@code passage} narrowed by a deposit of {@code rf} m²K/W ({@link FoulingLaw#thickness}); itself at 0. */
+    private static PipeResistance.Geometry fouled(PipeResistance.Geometry passage, double rf) {
+        return rf == 0 ? passage : passage.narrowed(FoulingLaw.thickness(rf));
     }
 
     /** What {@code in} loses through {@code size}'s shells at {@code flow} times its rate, Pa. */
@@ -152,7 +163,12 @@ public final class SizedPassages {
 
     /** What {@code carried} loses through {@code size}'s shells, bar. */
     static double shell(ExchangerSizing.Size size, LineSizing.Carried carried) {
-        return carried.drop(size.type().shellPassage(size.shell(), size.tubes()), size.shells());
+        return shell(size, carried, 0);
+    }
+
+    /** The same through a shell fouled by a deposit of {@code rf} m²K/W (WP5). */
+    static double shell(ExchangerSizing.Size size, LineSizing.Carried carried, double rf) {
+        return carried.drop(fouled(size.type().shellPassage(size.shell(), size.tubes()), rf), size.shells());
     }
 
     /** What the stream loses through {@code size}'s banks in parallel between {@code in} and {@code out} at {@code flow} times its rate, Pa: at its mean temperature. */
@@ -164,7 +180,12 @@ public final class SizedPassages {
 
     /** What {@code mean}, the stream at its mean temperature, loses through {@code size}'s banks in parallel, bar. */
     static double bank(AirCoolerSizing.Size size, LineSizing.Carried mean) {
-        return mean.drop(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), size.banks());
+        return bank(size, mean, 0);
+    }
+
+    /** The same through tubes fouled by a deposit of {@code rf} m²K/W (WP5). */
+    static double bank(AirCoolerSizing.Size size, LineSizing.Carried mean, double rf) {
+        return mean.drop(fouled(HeatSides.airCoolerPassage(size.width(), size.length(), size.bank()), rf), size.banks());
     }
 
     /**

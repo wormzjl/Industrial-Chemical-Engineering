@@ -92,7 +92,9 @@ public record HeatUnit(HeatSides.Unit unit,HeatSides.Side side,double area,long 
     /** Whether the side is a fired heater's coil, whose burners and set point the player sets for both coils at once. */
     public boolean burners(){return unit==HeatSides.Unit.FIRED_HEATER;}
     /** The heat law this side moves heat through ({@link HeatSides#heatSide}; an exchanger's against its partner's connection), or null where it has none. */
-    public @Nullable HeatLaw heatSide(){return HeatSides.heatSide(unit,side,area,control.share(),control.target(),partner==0?0:PhysicalFluidTopology.sideIdentity(partner),controller(),exchangerType);}
+    public @Nullable HeatLaw heatSide(){return heatSide(0);}
+    /** The same behind a fouling deposit of {@code fouling} m²K/W (batch 2026-11-16-fouling-corrosion, WP5; {@link HeatSides#heatSide}): the clean side's law at 0. */
+    public @Nullable HeatLaw heatSide(double fouling){return HeatSides.heatSide(unit,side,area,control.share(),control.target(),partner==0?0:PhysicalFluidTopology.sideIdentity(partner),controller(),exchangerType,fouling);}
     /**
      * The side's built-in controller as its heat law reads it (W4, plan section 6), or null for none: an exchanger side's or
      * an air cooler's control with a target or a low limit. Its effort is the air cooler's fans, or an exchanger side's

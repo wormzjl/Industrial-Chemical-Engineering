@@ -485,7 +485,7 @@ The owner accepted all ten as written on 2026-11-03.
 | Simplification | Effect | Risk |
 |---|---|---|
 | World films for every U | E-101 needs 444 m². At U 400 W/m²K, inside the note's 150 to 1200, a real one needs about 1100 m² | Units look small to an engineer. They match the world, so a built plant does what the sheet says |
-| No fouling allowance | None in the world | Same |
+| No fouling allowance | None in the world | Same. **Closed** (batch 2026-11-16-fouling-corrosion, WP5): the world fouls a heat side, and each side is now sized behind its service's design deposit (`SheetMetallurgy.designFouling`) |
 | Static head only from nozzle heights | Others count 0 | Safe side for NPSH |
 | A pump's head from its sheet rise | P-102's 51 m ignores its 21 m of static gain | Oversizes the datasheet only |
 | One Line length | The Pressure view and Vacuum vapour's drop | A long line can set its own |
@@ -500,7 +500,7 @@ The owner accepted all ten as written on 2026-11-03.
 - **Weir load**: 140 m³/h per m on the sample against 89 [KIST]. The world's tray is single-pass at any diameter, where a real 8 m tray has several passes. No size fixes it without a far larger column, and the V3 law already prices it as liquid head.
 - **Heater mass flux**: 949 kg/s·m² against 1220 to 1710 [FH-DECK]. It follows from 8 MW a pass, so no size changes it. A pass of about 12 MW would reach it: a model question, not a sizing one.
 - **Nozzle ρv² [TEMA], tube vibration, fan coverage, face speed**: the world has no law that reads them; the bay fixes the last two.
-- **Exchanger and air cooler speeds**: fouling and erosion have no law in the world, the film does not read speed, and the drops bound speed from above.
+- **Exchanger and air cooler speeds**: fouling and erosion have no law in the world, the film does not read speed, and the drops bound speed from above. **Closed for fouling** (batch 2026-11-16-fouling-corrosion, WP5): the surface and the drops are rated at the design deposit; the deposit's growth reads no speed, and the walls' erosion is rated on the Materials tab.
 - **Mach, noise, flare and relief lines**: the world has no choke law (owner decision: 100 m/s cap) and no relief.
 - **Durand's slurry speed** [DUR]: streams do carry solids, and section 3.3's Must reads the world's own `SolidMobility`, so a second speed has no law behind it.
 - **Coking, flue gas, stack**: no combustion model.

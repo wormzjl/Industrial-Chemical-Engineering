@@ -25,6 +25,8 @@ public final class FoulingLaw {
     public static final double CAP = .002;
     /** The deposit step the graph sees, m²K/W: at most 20 steps between cleanings. */
     public static final double STEP = 1e-4;
+    /** The deposit from which a side's status line says {@code FOULED}, m²K/W (plan section 12): its liquid film down to a third. */
+    public static final double FOULED = .001;
     /** The deposit's thermal conductivity, W/mK: its thickness is {@code Rf k_d}. */
     public static final double DEPOSIT_CONDUCTIVITY = 1;
     /** The water rows, m²K/W, and the temperature, K, above which the warm one holds. */

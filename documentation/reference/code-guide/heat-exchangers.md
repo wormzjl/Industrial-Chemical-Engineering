@@ -148,6 +148,11 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
   below 0.5, liquid from 1.5, `Films.at(x, w)`) and the vapour coordinate `1 − w`, so a dense fluid's film follows its
   density across its slot line. An inserted knot takes the weight only between points of one continuous fluid (the same
   slot, or both dense); on a plateau it keeps the two-phase film.
+- **Fouling** (batch 2026-11-16-fouling-corrosion, WP5; [integrity.md](integrity.md)): a side's deposit `Rf` stands in
+  series with each film, `Films.fouled(Rf)` = `h/(1 + h Rf)`, and narrows its passage by `2 Rf k_d`
+  (`Geometry.narrowed`); an air cooler's tubes carry it in `Air.process`, a convection coil in `1/U' = 1/U + Rf`. The
+  compile gives a side its deposit in whole steps of 1e-4 m²K/W (`HeatSides.heatSide(..., fouling)`); at 0 every law is
+  the clean one, bit for bit. A radiant and an exhaust coil read no film, so their deposit acts on the passage alone.
 - **Sampling** (`HeatCurve.sample`): 16 divisions, a phase change bisected to `BOUNDARY_KELVIN`, segments refined while
   the midpoint lies more than 0.2 K off the chord, at most 512 knots.
 - **The march** (`HeatCurve.march`): dh/dA = −h_film(h)(T(h) − T_wall)/ṁ integrated exactly on each segment (a

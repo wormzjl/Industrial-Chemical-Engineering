@@ -209,11 +209,12 @@ final class ViewBuilder {
         for(var mapping:mappings){Integer p=ix.pipes.get(mapping.pipeId());if(p==null)continue;var pipe=snapshot.graph().pipes().get(p);if(pipe.blockedDirections()!=0&&pipe.filter()==null)status=FluidWorldAuthority.solidClosure(mapping.pipeId(),closures)+" / "+status;}
         // A vessel a blast or corrosion breached (batch 2026-11-15-pollution-system, WP6b) stands open until the Equipment
         // Constructor repairs it; a heat side so failed stands closed (batch 2026-11-16-fouling-corrosion, WP2). The wall's own
-        // words (THIN WALL, WEEPING, LEAKING, WRECKED) come first.
+        // words (THIN WALL, WEEPING, LEAKING, WRECKED, and a heat side's FOULED, WP5) come first.
         String wall=authority.integrity.status(id);
         boolean heatSide=registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE;
         if(registration.spec().breached()&&!heatSide)status="BREACHED: open to the air, repair with the Equipment Constructor / "+status;
         else if(registration.spec().breached()&&wall.isEmpty())status="LEAKING: tube leak / "+status;
+        if(authority.integrity.fouled(id))status="FOULED / "+status;
         if(!wall.isEmpty())status=wall+" / "+status;
         if(authority.registry.diagnostic(id)!=null)status=authority.registry.diagnostic(id)+" / "+status;
         var active=authority.topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
@@ -278,6 +279,8 @@ final class ViewBuilder {
         if(heat!=null&&view.heat()!=null) {
             com.wormzjl.icheme.science.fluid.network.HeatLaw law=ownPipe==null?null:ownPipe.heat();
             view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,authority.heatSource(islands)));
+            // A heat side's fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): its Rf and the liquid film it leaves.
+            if(authority.integrity.kindOf(id)==Integrity.Kind.HEAT_SIDE)view=view.withHeat(view.heat().withFouling(authority.integrity.fouling(id)));
         }
         // A batch still's pot (batch 2026-11-09-batch-distiller, W3): its status and alarms on the status line, an electric one's power.
         if(registration.device().stillPot()) {

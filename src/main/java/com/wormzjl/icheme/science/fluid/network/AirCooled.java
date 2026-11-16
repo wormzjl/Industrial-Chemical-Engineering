@@ -23,13 +23,19 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
     /**
      * The air of an air cooler's bank, per m² of its bundle face: at {@code temperature} K, over {@code barePerFace} m² of
      * bare tube; at full fans the air's film on the fins ({@code film}, W/K) and its heat capacity rate ({@code capacity},
-     * W/K); natural draught moves the share {@code natural} of full air.
+     * W/K); natural draught moves the share {@code natural} of full air. {@code process} are the films inside the tubes
+     * ({@link HeatCurve.Films#DEFAULT} for a clean bundle; batch 2026-11-16-fouling-corrosion: behind its deposit,
+     * {@link #fouled}).
      */
-    public record Air(double temperature,double barePerFace,double film,double capacity,double natural) {
+    public record Air(double temperature,double barePerFace,double film,double capacity,double natural,HeatCurve.Films process) {
+        public Air(double temperature,double barePerFace,double film,double capacity,double natural){this(temperature,barePerFace,film,capacity,natural,HeatCurve.Films.DEFAULT);}
         public Air {
+            Objects.requireNonNull(process);
             if(!(temperature>0)||!(barePerFace>0)||!(film>0)||!(capacity>0)||!(natural>0&&natural<1)||!Double.isFinite(temperature+barePerFace+film+capacity))
                 throw new IllegalArgumentException("Invalid air side");
         }
+        /** This air against tubes fouled by a deposit of {@code rf} m²K/W inside ({@link HeatCurve.Films#fouled}); itself at 0. */
+        public Air fouled(double rf){var films=process.fouled(rf);return films==process?this:new Air(temperature,barePerFace,film,capacity,natural,films);}
         /** The air with the louvers open and the fans at {@code fans} of full speed, a share of full air: natural draught at 0. */
         public double draught(double fans) {
             if(!(fans>=0&&fans<=1))throw new IllegalArgumentException("Invalid fan share "+fans);
@@ -38,14 +44,13 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
         /**
          * The films on the bare tube, per phase, with {@code draught} of full air through the bank (plan section 4): the
          * stream sees the air through UA_eff = C (1 − e^(−UA/C)) per m² of face, with UA the process film
-         * ({@link HeatCurve.Films#DEFAULT}) on the bare tube in series with the air's film on the fins, and C the air's
+         * ({@link #process}) on the bare tube in series with the air's film on the fins, and C the air's
          * capacity rate; the air's film and capacity scale with its flow. Shut louvers leave the films' limit at no air,
          * which is zero: they are kept just above it, as a curve's films are positive, and move no heat a march can see.
          */
         public HeatCurve.Films films(double draught) {
             if(!(draught>=0&&draught<=1))throw new IllegalArgumentException("Invalid air share "+draught);
             double share=Math.max(draught,SHUT),air=film*share,rate=capacity*share;
-            var process=HeatCurve.Films.DEFAULT;
             return new HeatCurve.Films(effective(process.liquid(),air,rate),effective(process.twoPhase(),air,rate),effective(process.gas(),air,rate));
         }
         private double effective(double process,double air,double rate) {
