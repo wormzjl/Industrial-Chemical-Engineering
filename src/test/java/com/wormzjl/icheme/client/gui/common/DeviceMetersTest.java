@@ -102,7 +102,7 @@ class DeviceMetersTest {
         assertEquals(-1, vessel.phases().dense());
         assertTrue(vessel.withDense(2).level().dense(), "No interface");
         assertEquals(2, vessel.withDense(2).phases().dense());
-        var pump = new FluidView.Pump(null, null, .896, 1, null, null);
+        var pump = new FluidView.Pump(null, null, .896, 1, new FluidView.Curve(100 / 3600.0, 80, .70, 2950), null);
         var view = new FluidView(3, 1, 0, 0, "STEADY: flowing", gas, 5.0, List.of(), 2e5, 1, List.of(), null, null, List.of(), null, null, null, null, null, pump, null, null, null, null);
         var m = new DeviceMeters(new DeviceMeters.Data(Kind.PUMP, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MASS,
                 TemperatureUnit.CELSIUS, PressureUnit.BAR, FlowRateUnit.PER_MINUTE, false, T);
@@ -110,6 +110,12 @@ class DeviceMetersTest {
         double head = com.wormzjl.icheme.science.machine.GasEntrainment.headShare(.896, 7.405e6);
         assertEquals(.596, head, .001);
         assertEquals(new DeviceColumn.Suction("—", "—", DeviceMeters.value(100 * head), "100.0", "—", true), m.withDense(2).suction());
+        // A pump with no centrifugal curve (a plunger pump, a set-flow pump) loses no head on one dense fluid: no reading (S8).
+        var plunger = new FluidView.Pump(null, null, .896, 1, null, null);
+        var other = new DeviceMeters(new DeviceMeters.Data(Kind.PUMP, new FluidView(3, 1, 0, 0, "STEADY: flowing", gas, 5.0, List.of(), 2e5, 1, List.of(), null, null, List.of(), null, null, null, null, null, plunger, null, null, null, null),
+                AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MASS, TemperatureUnit.CELSIUS, PressureUnit.BAR, FlowRateUnit.PER_MINUTE, false, T);
+        assertEquals(new DeviceColumn.Suction("—", "—", "89.6", "100.0", "—"), other.suction(), "two-phase or unknown: the gas share, as before");
+        assertEquals(new DeviceColumn.Suction("—", "—", "—", "100.0", "—"), other.withDense(2).suction());
     }
 
     @Test

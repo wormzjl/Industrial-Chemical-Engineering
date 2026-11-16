@@ -277,10 +277,13 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
     public DeviceColumn.Suction suction(){
         var p=data.view().pump();if(p==null)return null;
         // One dense fluid (S5): its share is a density's, not gas. The meter reads the head share the pump keeps on it,
-        // M(α, p) on the server's α at the suction pressure the page reads (the pump node's state).
+        // M(α, p) on the server's α at the suction pressure the page reads (the pump node's state). That law is a centrifugal
+        // curve's (the view's curve): a plunger pump keeps its whole flow and a set-flow pump has no curve, so on one dense
+        // fluid theirs reads nothing (S8).
         var state=data.view().state();
-        boolean head=dense>=0&&p.gasShare()!=null&&state!=null&&state.pressure()>0;
-        String gas=p.gasShare()==null?"—":value(100*(head?com.wormzjl.icheme.science.machine.GasEntrainment.headShare(p.gasShare(),state.pressure()):p.gasShare()));
+        boolean curve=p.curve()!=null;
+        boolean head=dense>=0&&curve&&p.gasShare()!=null&&state!=null&&state.pressure()>0;
+        String gas=p.gasShare()==null||dense>=0&&!curve?"—":value(100*(head?com.wormzjl.icheme.science.machine.GasEntrainment.headShare(p.gasShare(),state.pressure()):p.gasShare()));
         return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),gas,value(100*p.health()),p.lifePlaySeconds()==null?"—":value(p.lifePlaySeconds()/60),head);
     }
     private String boxed(Double v){return v==null?"—":value(v);}
