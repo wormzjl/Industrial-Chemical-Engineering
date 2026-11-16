@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.machine;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
 import java.util.List;
 
 /**
@@ -94,12 +95,12 @@ public record PlungerPump(double displacement, double reliefRise, double ratedSp
     /** {@code ln((p + ΔP)/p)} on the floored pressures, without cancellation at a small rise. */
     private static double logRatio(double rise, double pressure) {
         double p = Math.max(LEAST_PRESSURE, pressure);
-        return Math.log1p(Math.max(rise, LEAST_PRESSURE - p) / p);
+        return DeterministicMath.log1p(Math.max(rise, LEAST_PRESSURE - p) / p);
     }
 
     /** {@code r − 1}, the density ratio across the isentrope less one: {@code expm1(ln((p + ΔP)/p)/n)}. */
     static double compression(double rise, double pressure, double k) {
-        return Math.expm1(logRatio(rise, pressure) / exponent(k));
+        return DeterministicMath.expm1(logRatio(rise, pressure) / exponent(k));
     }
 
     /** {@code η_v}'s clearance part, {@code 1 − c (r − 1)}: the share of the displacement the plungers draw at {@code rise}. */
@@ -114,7 +115,7 @@ public record PlungerPump(double displacement, double reliefRise, double ratedSp
      */
     public static double isentropicWork(double rise, double pressure, double k) {
         double p = Math.max(LEAST_PRESSURE, pressure), a = 1 - 1 / exponent(k);
-        return p / a * Math.expm1(a * logRatio(rise, pressure));
+        return p / a * DeterministicMath.expm1(a * logRatio(rise, pressure));
     }
 
     /** The suction volume flow, m³/s, the law delivers at {@code rise} (Pa): the share of the displacement less the clearance
