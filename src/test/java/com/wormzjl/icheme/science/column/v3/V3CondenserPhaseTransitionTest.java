@@ -17,7 +17,6 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3CondenserPhaseTransitionTest {
     @Test
     void successfulPhaseCorrectionRestoresLaterNumericalRecoveryWithoutForgettingAttemptedBranches() {
@@ -182,8 +181,8 @@ class V3CondenserPhaseTransitionTest {
     @ParameterizedTest
     @ValueSource(doubles = {0.0, 1.0e-6})
     void coldHighThroughputOnePointOneBarTransitionsAtTheRequestedGrid(double cutoff) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         for (int component = 0; component < flows.length; component++) flows[component] *= 2610.7 * 1000.0 / 3600.0;
         V3ColumnInput input = V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, crude.packageId(), crude.assayId(),
@@ -204,7 +203,10 @@ class V3CondenserPhaseTransitionTest {
         assertTrue(success.result().convergenceEvidence().satisfiesGates());
         assertTrue(success.result().acceptanceAudit().checks().stream()
                 .anyMatch(check -> check.family().equals("CONDENSER_PHASE") && check.passed()));
-        assertTrue(success.diagnostics().events().stream().anyMatch(event -> event.startsWith("condenser phase transition:")));
+        // The medium crude's methane and ethane: with the trace cutoff the first rung already starts on the two-phase
+        // condenser and no transition is needed; untruncated, the smaller grids start liquid-only and transition.
+        if (cutoff == 0.0)
+            assertTrue(success.diagnostics().events().stream().anyMatch(event -> event.startsWith("condenser phase transition:")));
         assertFalse(success.diagnostics().solvePath().contains("material-closed-fallback"));
         assertFalse(success.diagnostics().solvePath().contains("coarse-fd-recovery"));
         assertFalse(success.diagnostics().solvePath().endsWith("liquid-only-condenser"));

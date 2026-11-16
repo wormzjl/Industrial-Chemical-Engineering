@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Test;
  * Newton iteration count and recomputed boundary duties are printed so the extra continuation cost of the wet
  * lane stays visible.</p>
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3PumparoundSteamCalculatorTest {
     private static final long BUDGET_NANOS = 300_000_000_000L;
     /** 1200 kmol/h of superheated sump steam; 271.75 kPa(a) at the sump saturates water near 403 K. */
@@ -28,7 +28,7 @@ class V3PumparoundSteamCalculatorTest {
     private static final double SUMP_STEAM_TEMPERATURE_KELVIN = 533.15;
     private static final int STAGE_COUNT = 30;
     private static final double DEFAULT_REBOILER_DUTY_WATTS = 8_000_000.0;
-    private static final String CDU17 = "icheme:cdu17_tjl_acs2018";
+    private static final String CRUDE = V3TestInputs.MEDIUM_CRUDE_PACKAGE;
     private static final String TJL19 = "icheme:tjl19_dwsim";
 
     /** The heat-free wet reference is the baseline of three cases; one cold solve serves all of them. */
@@ -55,7 +55,7 @@ class V3PumparoundSteamCalculatorTest {
 
     @Test
     void sumpSteamWithOneUniformPumparoundConverges() {
-        Run cooled = run("wet-uniform-5-MW", wetInput(CDU17, DEFAULT_REBOILER_DUTY_WATTS,
+        Run cooled = run("wet-uniform-5-MW", wetInput(CRUDE, DEFAULT_REBOILER_DUTY_WATTS,
                 List.of(new V3PumparoundSpec(8, 12, -5.0e6, V3PumparoundSpec.Split.UNIFORM)), List.of()));
 
         V3ColumnOutcome.Success success = cooled.success();
@@ -71,13 +71,16 @@ class V3PumparoundSteamCalculatorTest {
         System.out.printf(Locale.ROOT,
                 "  wet pumparound: Q_cond0=%.4g MW, Q_cond=%.4g MW, removed %.4g MW of the authored 5 MW%n",
                 baseCondenser / 1.0e6, ledger.condenserWatts() / 1.0e6, removed / 1.0e6);
-        assertTrue(removed > 0.0 && removed < 5.0e6,
-                () -> "the condenser duty must fall by part of the authored 5 MW; measured " + removed + " W");
+        // The ledger closes, so the condenser loses the authored 5 MW plus the change of the products' enthalpy. On the
+        // medium crude's partial condenser that change is a gain: measured 5.039 MW removed (the products carry 39 kW
+        // more, in the condenser gas); a liquid-only condenser's colder products keep it below 5 MW.
+        assertTrue(removed > 0.6 * 5.0e6 && removed < 1.05 * 5.0e6,
+                () -> "the condenser duty must fall by about the authored 5 MW; measured " + removed + " W");
     }
 
     @Test
     void sumpSteamCarriesTheColumnWithZeroReboilerDutyAndAPumparound() {
-        Run cooled = run("wet-zero-reboiler-5-MW", wetInput(CDU17, 0.0,
+        Run cooled = run("wet-zero-reboiler-5-MW", wetInput(CRUDE, 0.0,
                 List.of(new V3PumparoundSpec(8, 12, -5.0e6, V3PumparoundSpec.Split.UNIFORM)), List.of()));
 
         V3ColumnOutcome.Success success = cooled.success();
@@ -90,9 +93,9 @@ class V3PumparoundSteamCalculatorTest {
 
     @Test
     void sumpSteamWithThreePumparoundsAndThreeSideDrawsExercisesTheWholeRungOrder() {
-        List<V3SideDrawSpec> draws = com.wormzjl.icheme.science.material.Cdu17TestCatalog.pilotInput().sideDraws();
+        List<V3SideDrawSpec> draws = V3TestInputs.mediumCrudeDry().sideDraws();
         Run cooled = run("wet-three-pumparounds-three-draws",
-                wetInput(CDU17, DEFAULT_REBOILER_DUTY_WATTS, threePumparounds(), draws));
+                wetInput(CRUDE, DEFAULT_REBOILER_DUTY_WATTS, threePumparounds(), draws));
 
         V3ColumnOutcome.Success success = cooled.success();
         assertEquals(3, draws.size());
@@ -127,7 +130,7 @@ class V3PumparoundSteamCalculatorTest {
         // banded LU gave it full weight and turned singular. Local-throughput scaling plus the relative flow
         // floor removes both halves of that mismatch; see V3TraceFloorSupportTest for the pinned state.
         Run probe = run("tjl19-wet-three-pumparounds-three-draws", wetInput(TJL19, DEFAULT_REBOILER_DUTY_WATTS,
-                threePumparounds(), com.wormzjl.icheme.science.material.Cdu17TestCatalog.pilotInput().sideDraws()));
+                threePumparounds(), V3TestInputs.mediumCrudeDry().sideDraws()));
 
         V3ColumnOutcome.Success success = probe.success();
         assertTrue(success.diagnostics().solvePath().contains("/draws-3"), success.diagnostics()::solvePath);
@@ -141,7 +144,7 @@ class V3PumparoundSteamCalculatorTest {
     @Test
     void wetCoolingAboveTheWetBaseCondenserDutyIsATypedPathDependentStop() {
         double wetCondenser = Math.abs(wetBaseline().success().result().dutyLedger().orElseThrow().condenserWatts());
-        Run rejected = run("wet-over-condenser-bound", wetInput(CDU17, DEFAULT_REBOILER_DUTY_WATTS,
+        Run rejected = run("wet-over-condenser-bound", wetInput(CRUDE, DEFAULT_REBOILER_DUTY_WATTS,
                 List.of(new V3PumparoundSpec(8, 12, -1.02 * wetCondenser, V3PumparoundSpec.Split.UNIFORM)),
                 List.of()));
 
@@ -168,7 +171,7 @@ class V3PumparoundSteamCalculatorTest {
 
     private static synchronized Run wetBaseline() {
         if (wetBaseline == null) {
-            wetBaseline = run("wet-baseline", wetInput(CDU17, DEFAULT_REBOILER_DUTY_WATTS, List.of(), List.of()));
+            wetBaseline = run("wet-baseline", wetInput(CRUDE, DEFAULT_REBOILER_DUTY_WATTS, List.of(), List.of()));
         }
         return wetBaseline;
     }
@@ -261,7 +264,8 @@ class V3PumparoundSteamCalculatorTest {
             String packageId, double reboilerDutyWatts, List<V3PumparoundSpec> pumparounds,
             List<V3SideDrawSpec> sideDraws) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
-        V3CrudeFeed crude = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(packageId));
+        V3CrudeFeed crude = thermo.crudeFeed(TJL19.equals(packageId)
+                ? com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.LITERATURE_ASSAY_ID : V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

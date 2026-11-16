@@ -22,7 +22,6 @@ import org.junit.jupiter.api.Test;
  * neural-seeded pipeline on the identical input. This pins the split: state-dependent gates publish a hinted
  * {@code NONCONVERGENCE}, request-only gates keep the typed infeasibility.</p>
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3PathDependentInfeasibilityTest {
     private static final long BUDGET_NANOS = 180_000_000_000L;
 
@@ -92,8 +91,8 @@ class V3PathDependentInfeasibilityTest {
 
     /** The same v1-scale TJL CDU case the pumparound suite uses, so the bound is exercised where it is tuned. */
     private static V3ColumnInput v1ScaleInput(List<V3PumparoundSpec> pumparounds) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

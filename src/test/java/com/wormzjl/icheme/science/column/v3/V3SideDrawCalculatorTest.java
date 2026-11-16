@@ -7,7 +7,6 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3SideDrawCalculatorTest {
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.CsvSource({"150000,0", "100000,0", "250000,0", "100000,0.000001"})
@@ -176,10 +175,10 @@ class V3SideDrawCalculatorTest {
      */
     @Test
     void legalNearFeedDrawNeverBecomesInvalidInputWhenTheDrawBlindSeedIsAvailable() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
         double[] feed = new double[thermo.componentBasis().componentCount()];
-        feed[6] = 50;
-        feed[13] = 50;
+        feed[V3TestInputs.index(thermo, V3TestInputs.BINARY_LIGHT)] = 50;
+        feed[V3TestInputs.index(thermo, V3TestInputs.BINARY_HEAVY)] = 50;
         V3ColumnInput input = new V3ColumnInput(1, thermo.packageId(), "test:near-feed-draw",
                 thermo.componentBasis(), feed, 550, 2, 1, 250_000, 750, List.of(
                 new V3ColumnSpecification.CondenserOutletTemperature(300),
@@ -205,8 +204,8 @@ class V3SideDrawCalculatorTest {
     }
 
     static V3ColumnInput canonicalInput(double pressure) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] feed = crude.moleFractions();
         for (int i = 0; i < feed.length; i++) feed[i] *= 2610.7 / 3.6;
         return new V3ColumnInput(1, crude.packageId(), crude.assayId(), crude.componentBasis(), feed,
