@@ -1,6 +1,6 @@
 # Fouling, corrosion and erosion system: plan (revision 6)
 
-Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0). Status: plan, no code.
+Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0), rebased on `main` at `66a87f9d5` (0.33.0) on 2026-11-16 (the owner's word). Status: plan, no code.
 
 Revision 6 (owner, 2026-11-16: "repairs needs to be performed with the constructor"): constructed equipment is repaired by a Repair key in the Equipment Constructor, not by the repair kit (sections 9, 10, 14, 17, 18).
 
@@ -274,7 +274,7 @@ A compressor and a dry screw already refuse solids (`InletPhase.decide`).
 
 `Breaches.breach` additionally marks every device of the structure `wrecked` (a fact). A wrecked device keeps the effect it has today (vessel open, machine failed; a heat side closed as in section 7), refuses the constructor's Repair (`WRECKED: deconstruct and rebuild`) and is removed only by the constructor's deconstruction.
 
-A vessel breached before this batch (schema 26, no `wrecked`) reads as not wrecked: it stays repairable. That is the behaviour before the field existed.
+A vessel breached before this batch (no `wrecked` field) reads as not wrecked: it stays repairable. That is the behaviour before the field existed.
 
 ## 10. Repair and cleaning: idle and empty
 
@@ -370,16 +370,16 @@ The owner's, 2026-11-16:
 
 | Format | Now | This batch |
 |---|---|---|
-| Fluid facts schema | 26 | 27: per device `wallLoss`, `fouling`, `wrecked` in `MachineFacts`, each written only when not at its default; a control valve's trim health in the health map that exists |
-| Column facts | in schema 26 | no new field: `FROZEN` is a condition, state, set again by the next solve |
+| Fluid facts schema | 27; 28 reserved by `2026-11-15-supercritical-fluids` | 29: per device `wallLoss`, `fouling`, `wrecked` in `MachineFacts`, each written only when not at its default; a control valve's trim health in the health map that exists |
+| Column facts | in the fluid facts | no new field: `FROZEN` is a condition, state, set again by the next solve |
 | Equipment shape fields | 12 | 13: `material` |
-| Wire protocol | `icheme-2` | `icheme-3`: views carry integrity and trim; the constructor payload carries the material; `Repair` and its answer beside `Deconstruct` |
+| Wire protocol | `icheme-3`; `icheme-4` reserved by `2026-11-15-supercritical-fluids` | `icheme-5`: views carry integrity and trim; the constructor payload carries the material; `Repair` and its answer beside `Deconstruct` |
 | Simulator sheet file | 2 | 3 |
 | Material data | | `corrosion` sub-record with its own revision, in no identity |
 
 Reservation (COLLABORATION.md section 3): a documentation-only commit on `main` adding the rows "reserved by 2026-11-16-fouling-corrosion" to `FORMATS.md`. It needs the owner's word.
 
-Corpus images: `compat/fluid/` for schema 27, `compat/equipment/shapes-13.snbt`.
+Corpus images: `compat/fluid/` for schema 29, `compat/equipment/shapes-13.snbt`.
 
 Config: `corrosion.enabled`, `corrosion.yearProcessHours` (20), `corrosion.external`, `erosion.enabled`, `fouling.enabled`, `fouling.asymptoteProcessHours` (10). With a switch off its rate is 0 and nothing fails from it; blast wrecking stays under `pollution.equipmentBreach`; a pump's `SOLIDS` fault and a valve's trim follow `machines.wear.enabled` too.
 
@@ -390,7 +390,7 @@ About 4 500 lines of production code: four stages, each leaving `main` working (
 | Stage | WP | Content | Lane, hot files | After |
 |---|---|---|---|---|
 | A | WP1 | `science/integrity/` (new, pure): `Metallurgy`, `CorrosionDigest`, `CorrosionLaw`, `ErosionLaw`, `FoulingLaw`, `WallState`; `Wear.Fault.SOLIDS`; `MaterialCatalog.Corrosion` and the data; tests | thermo, machines: `MaterialCatalog` | |
-| A | WP2 | `runtime/fluid/Integrity` beside `MachineHealth`: booking at the cadence, failures, `wrecked`, the repair and clean events, corrosive air, the valves' trim and the pumps' `SOLIDS` fault in `MachineHealth`, facts schema 27, `/icheme integrity`, corpus, GameTests | runtime, machines: `FluidFacts`, `FluidWorldAuthority`, `ShaftTrains`; `Breaches`, `RepairKitItem` | WP1 |
+| A | WP2 | `runtime/fluid/Integrity` beside `MachineHealth`: booking at the cadence, failures, `wrecked`, the repair and clean events, corrosive air, the valves' trim and the pumps' `SOLIDS` fault in `MachineHealth`, facts schema 29, `/icheme integrity`, corpus, GameTests | runtime, machines: `FluidFacts`, `FluidWorldAuthority`, `ShaftTrains`; `Breaches`, `RepairKitItem` | WP1 |
 | A | WP3 | Shape fields 13, `ShapeRepair`, the constructor's dropdown and Repair key (`EquipmentNetwork.Repair`, target selection as `EquipmentDeconstruction.target`), the datasheet, the registration that hands a device its material | equipment, client: `EquipmentShape`, `EquipmentStructure` | WP1; beside WP2 |
 | A | WP4 | Integrity group and Trim meter on the device pages, status words, drip particles, the weep loop | client; runtime presentation | WP2, WP3 |
 | B | WP5 | Fouling: `Films.fouled`, the passage diameter, the level steps, cleaning, the heat page, sizing on design `Rf` | fluid laws, flowsheet: `SheetSizing` | stage A |

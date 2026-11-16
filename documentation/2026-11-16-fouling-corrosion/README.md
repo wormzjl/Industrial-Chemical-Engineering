@@ -1,6 +1,6 @@
 # 2026-11-16 fouling, corrosion and erosion
 
-Status: Planned (2026-11-16). Plan written; no code. Branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0).
+Status: Planned (2026-11-16). Plan written; no code. Branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0), rebased on `main` at `66a87f9d5` (0.33.0) on 2026-11-16.
 
 Purpose: walls that corrode by their material and their fluid (a refinery corrosion matrix, four materials of construction chosen in the constructor and in a simulator tab), erosion by particles (control valve trims, pumps, tubes), failures through the existing breach and machine failure, final blast damage, repair only when idle and empty, corrosive air on equipment, fouling of heat sides (lower films, higher drop, cleaning), and columns that pass inert particles to their bottoms and stop only for freezing.
 
@@ -23,6 +23,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 - 2026-11-16, owner: "repairs needs to be performed with the constructor". Plan revision 6 (D8): a Repair key in the constructor's group of the structure in front, beside Deconstruct, queues the structure's repair (idle and empty, no item); the repair kit is refused on constructed equipment and stays for in-line pumps and compressors and for control valve trims.
 
 - 2026-11-16, owner: "Keep the kit": the repair kit stays for in-line pumps and compressors and for control valve trims.
+
+- 2026-11-16, owner: "Start both" (WP1 and WP7 as two Opus medium sub-threads), then "rebase on latest main first". The branch rebased on `main` `66a87f9d5` (0.33.0, 67 commits ahead of the old base); one conflict, `documentation/INDEX.md`, every row kept. `main` now holds facts schema 27 and `icheme-3` (fluid interfaces) and reserves 28, state format 51 and `icheme-4` (supercritical fluids), so this batch takes facts schema 29 and `icheme-5`; shape fields 13 and sheet file 3 stand. The plan's code facts checked on the new base: `ColumnBlockSolve` line 119 unchanged; `Wear` gained the turbine's wet-exhaust onset by pressure (no clash with `SOLIDS`).
 
 ## Documents
 
