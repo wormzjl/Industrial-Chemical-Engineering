@@ -1164,6 +1164,17 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public WorldTopologyLedger.Event edit(long id,long expectedRevision,PhysicalFluidTopology.Device device,FluidDeviceSpec spec){owned();return placement.edit(id,expectedRevision,device,spec);}
     /**
+     * Devices {@code ids} are built of {@code material} (batch 2026-11-16-fouling-corrosion: a structure's material of
+     * construction, its shape's): one queued ledger event sets it on every listed device whose spec names another, and
+     * returns it; null when none does. It changes nothing the solver reads.
+     */
+    public WorldTopologyLedger.Event material(Collection<Long> ids,com.wormzjl.icheme.science.integrity.Metallurgy material) {
+        owned();Objects.requireNonNull(material);var edits=new ArrayList<WorldTopologyLedger.Edit>();
+        for(long id:new LinkedHashSet<>(ids)){var r=registrations().get(id);if(r==null||r.spec().metallurgy()==material)continue;
+            edits.add(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device(),r.spec().withMetallurgy(material),Math.addExact(r.revision(),1))));}
+        return edits.isEmpty()?null:submit(edits,topology.nextIdentity());
+    }
+    /**
      * Fits a closed vessel's gas blanketing valve, its gas inlet {@code port} (role {@code BLANKET}), or removes it
      * ({@code port} null), as one queued ledger event (batch 2026-11-11-gas-blanketing). A fitted valve starts at
      * {@link FluidDeviceSpec#DEFAULT_BLANKET}; a removed one leaves no set pressure. False for a device that takes no valve: one

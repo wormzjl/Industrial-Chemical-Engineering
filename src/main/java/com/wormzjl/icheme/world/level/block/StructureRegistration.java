@@ -42,6 +42,20 @@ final class StructureRegistration {
      * design volume, and its liquid height for the static head {@code g·m·H/V}. It is placed empty, as a tank is.
      */
     static void register(ServerLevel level, Vessel vessel) {
+        place(level, vessel);
+        material(level, vessel);
+    }
+
+    /**
+     * Every device the structure holds at its nodes is built of its shape's material (batch 2026-11-16-fouling-corrosion):
+     * one queued event after a registration, a restored binding or a refresh; none when they already are.
+     */
+    private static void material(ServerLevel level, Vessel vessel) {
+        if (!vessel.shape().fluidDevice()) return;
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> world.material(EquipmentStructure.heldAtNodes(world, level, vessel), vessel.shape().material()));
+    }
+
+    private static void place(ServerLevel level, Vessel vessel) {
         if (vessel.shape().kind() == EquipmentShape.Kind.BATCH_STILL) {
             registerStill(level, vessel, 0);
             return;
@@ -129,6 +143,11 @@ final class StructureRegistration {
      * normal construction or the existing layout refresh handles them. No blocks are changed and nothing solves.
      */
     static boolean restoreFluidBinding(ServerLevel level,Vessel vessel) {
+        boolean done=restoreBinding(level,vessel);
+        if(done)material(level,vessel);
+        return done;
+    }
+    private static boolean restoreBinding(ServerLevel level,Vessel vessel) {
         // A motor, generator or gearbox's shaft unit (W3); queued again on every load, a no-op when nothing changed.
         if(!vessel.shape().fluidDevice()){ShaftParts.structure(level,vessel.origin(),vessel.shape(),0);return true;}
         var world=FluidWorldAuthority.find(level.getServer()).orElse(null);if(world==null)return false;
@@ -303,7 +322,7 @@ final class StructureRegistration {
         var moved = device.withPlacement(Positions.of(level, node), ports(level, vessel)).withHeat(device.heat().withArea(sides.getFirst().area()));
         var spec = record.spec();
         // A breach (WP6b) is a fact the refresh keeps.
-        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry(), null).withBreached(spec.breached());
+        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry(), null).withBreached(spec.breached()).withMetallurgy(shape.material());
         if (!moved.equals(device) || !respec.equals(spec)) world.edit(device.id(), record.revision(), moved, respec);
         for (var other : nodes)
             if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();
@@ -591,6 +610,11 @@ final class StructureRegistration {
      * network or a gauge knows of it changes but where it stands. {@code oldNode} held the identity.
      */
     static void reregister(ServerLevel level, Vessel vessel, @Nullable BlockPos oldNode, List<Long> heldIds) {
+        refresh(level, vessel, oldNode, heldIds);
+        material(level, vessel);
+    }
+
+    private static void refresh(ServerLevel level, Vessel vessel, @Nullable BlockPos oldNode, List<Long> heldIds) {
         if (vessel.shape().kind() == EquipmentShape.Kind.BATCH_STILL) {
             FluidWorldAuthority.find(level.getServer()).ifPresent(world -> restoreStill(level, vessel, world, heldIds));
             return;
@@ -628,7 +652,7 @@ final class StructureRegistration {
         var relief = fittedRelief(level, vessel, record);
         if (relief != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(relief.port()); }
         world.edit(device.id(), record.revision(), device.withPlacement(Positions.of(level, node), nozzles),
-                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket(), relief == null ? 0 : spec.relief(), null).withBreached(spec.breached()));
+                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket(), relief == null ? 0 : spec.relief(), null).withBreached(spec.breached()).withMetallurgy(vessel.shape().material()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
         ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());

@@ -130,6 +130,34 @@ public final class IntegrityGameTests {
                 .thenSucceed();
     }
 
+    /** A structure's material of construction is its devices': a stainless drum's vessel names it and takes its allowance. */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "integrity_material")
+    public static void aStainlessDrumsVesselIsStainless(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
+        var shape = EquipmentShape.drum(3, 3, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0).withMaterial(Metallurgy.STAINLESS_STEEL);
+        var origin = helper.absolutePos(new BlockPos(4, 1, 4));
+        var node = cell(origin, ShapeRasterizer.fluidCell(shape));
+        EquipmentStructure.place(level, origin, shape, Paint.DEFAULT, Integer.MAX_VALUE);
+        long id = world.at(position(level, node)).orElseThrow().device().id();
+        String[] failure = {null};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(world.capture().world().events().isEmpty() && world.integrity().wall(id) != null, "Waiting for the drum and its wall"))
+                .thenExecute(() -> {
+                    var material = world.registrations().get(id).spec().metallurgy();
+                    if (material != Metallurgy.STAINLESS_STEEL) failure[0] = "the drum's vessel is of " + material;
+                    var wall = world.integrity().wall(id);
+                    if (failure[0] == null && wall.allowance() != Metallurgy.STAINLESS_STEEL.allowance()) failure[0] = "the wall's allowance is " + wall.allowance();
+                    EquipmentTestCleanup.remove(level, node);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(world.at(position(level, node)).isEmpty() && world.structure(position(level, origin)) == null,
+                        "Waiting for the drum to leave"))
+                .thenExecute(() -> {
+                    if (failure[0] != null) helper.fail(failure[0]);
+                })
+                .thenSucceed();
+    }
+
     /** The valve's connection in its island's graph, or null. */
     private static PassiveNetwork.Pipe valvePipe(FluidWorldAuthority world, long valve) {
         for (var s : world.diagnosticSnapshots()) {
