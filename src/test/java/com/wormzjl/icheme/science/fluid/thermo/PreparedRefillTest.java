@@ -14,11 +14,16 @@ import org.junit.jupiter.api.Test;
 class PreparedRefillTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
 
-    /** A gas of the first two compounds and a liquid of two heavier ones (water left out), {@code scale} mol each. */
+    /** The rare gases (argon to xenon) that sit between ethanol and water at the world list's end (refinery-tier1-r5). */
+    private static final int RARE_GASES=5;
+    /**
+     * A gas of the first compounds and a liquid of the heavier ones before the rare gases (ethanol, carbon dioxide, ethyl
+     * mercaptan; water left out), {@code scale} mol each.
+     */
     private double[][] slots(int light,int heavy,double scale) {
         int n=model.componentCount();double[] gas=new double[n],oil=new double[n];
         for(int c=0;c<light;c++)gas[c]=scale*(c+1);
-        for(int c=0;c<heavy;c++)oil[n-2-c]=scale*(c+2);
+        for(int c=0;c<heavy;c++)oil[n-2-RARE_GASES-c]=scale*(c+2);
         return new double[][]{gas,oil,new double[n]};
     }
     private static boolean[] mask(double[][] slots) {
