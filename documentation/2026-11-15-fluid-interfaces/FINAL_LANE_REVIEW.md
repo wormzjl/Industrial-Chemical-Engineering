@@ -170,3 +170,81 @@ peak about 61 to 66 %).
 | 2 | The level loop GameTests did not pace the unthrottled server: one decision could fall while a slice was in flight and hold the output (section above). | Done: the owner chose "A: pace the test"; the three level loop tests pass. |
 | 3 | The campaign's wall-deadline seeds (bundled 12 and 59) move between lanes with the machine's load. Both lanes shared the machine with another Gradle run. | None: the replay rule handles them. |
 | 4 | `tools/heat-gui-renders/GuiPrototypes.java` does not compile on this branch (an old import of `science.column.operation`; ALARM_BEACON_BUILD.md). | A tools fix after the merge. |
+
+## Second run, on the joined tree (main at 0.32.0)
+
+**Why it ran.** `main` moved to 0.32.0 (`f305ac6b0`, the pollution system batch) while the first lane ran. The
+orchestrator merged it into `claude/fluid-interfaces-batch` as `953635400`, on top of the pacing commit `ad12a263c`.
+The code changed after the first lane, so the owner said "Run the lane". `lane.sh head` ran once, every step it
+selects, on `953635400` (a fast-forward of `claude/fluid-interfaces-lane`). The shell did not die this time.
+
+**Baseline.** The pollution batch's lane at 0.32.0, run on `a2ea53029`: `main`'s newest lane with every step. A copy is
+in `tmp/merge-lane/base-pollution-0.32.0/`. The first lane's output was moved aside to `tmp/merge-lane/head-first/`
+first. Counters only, no times.
+
+### Results
+
+- **test:** 3,777 tests, 0 failures, 0 errors. The selection took 389 of 494 `test` classes, all 10 `holdGates`, 63
+  of 87 `columnGates` and 28 of 31 `equipmentGates`. The `test` filters passed 8,000 characters, so `test` ran whole.
+  594 load sets saved.
+- **regression:** chain-100 exact, every deviation 0.
+- **gametest:** "All 110 required tests passed" (the 0.32.0 lane: 106). The level loop result lines:
+
+| test (blanket, direct) | low | high | heldDecisions |
+|---|---|---|---|
+| vented (false, false) | 24.50 % | 62.47 % | 0 |
+| blanketed, two cycles (true, false) | 25.20 % | 72.85 % | 1 |
+| blanketed from empty (true, true) | 46.61 % | 62.46 % | 0 |
+
+  The blanketed two-cycle drum had one held decision this run, and the paced server kept its peak at 72.85 % (bound
+  1 % to 99 %, band 50 ± 10 % on each half: passed). The first lane's unpaced overflow does not recur.
+- **Junction lines:** 33 of 33 identical, floats included; counters identical on 33 of 33.
+- **`MIXED_GAS_COST`:** 313 Newton solves before and after. Allocated 125.0 to 137.1 MB (52 mole entries, as in the
+  first run).
+- **Campaign** (factor 4, 1000 seeds, 8 threads):
+
+| run | clean, base → head | new holds | fixed holds | class moved | refused |
+|---|---|---|---|---|---|
+| cold random | 991 → 992 | none | 118 F | 0 | 0 |
+| bundled random | 992 → 995 | none | 12 F, 59 F, 707 F | 0 | 0 |
+| bundled defaults | 1000 → 1000 | none | none | 0 | 0 |
+
+  No new hold, so no replay. Head holds: cold E5 ×6 (65, 101, 629, 752, 803, 919), F 6, 431; bundled E6 241, E9 145,
+  431, F 579, 941.
+- **Campaign Newton counters** (fixed seeds run further, so the sums are not like for like): cold solves 319,886 to
+  326,331, iterations 1,962,414 to 2,023,231; bundled solves 133,055 to 134,419, iterations 663,586 to 673,097;
+  defaults 27,002 and 65,433, identical.
+- **References:** no asserted reference moved. Every ledger and conservation assertion passed.
+- **The two batches together:** `EquipmentInfoCoverageTest` 6/6, `TutorialTextTest` 6/6, `LanguageFilesTest` 2/2,
+  `UnitTextTest` 1/1 on the joined lang files (4,657 keys each); `FlowsheetPaletteCoverageTest` 5/5, `HelpCoverageTest`,
+  `GuideCoverageTest`, `PhysicalRegistryTest`, `FxSoundsTest`, `SensorReadingTest`, `ControlSystemTest` 23/23,
+  `MonitorSignalsTest` 4/4, `AlarmLawTest`, `AlarmSettingsTest`, `VesselBreachTest` and every pollution test passed.
+  `FluidFactsCompatTest` reads the joined schema-27 image (a breached vessel and the ambient generator spec) and all
+  older images. No test puts a pollution monitor's ANALYSER inputs and an alarm beacon on one data bus (finding 5).
+- **Machine:** the lane printed `WARNING: 1 test or client JVMs running` five times (test, gametest and campaign
+  steps). No other Gradle run was started from either session; the cause is not known.
+- **Logs:** `tools/merge-lane/logs/fluid-interfaces-final-lane-2-logs-2026-11-16.tar.gz` in the main checkout
+  (git-ignored).
+- **Status:** clean. Nothing failed; nothing was changed or re-recorded.
+
+### Printed lines that differ, and why
+
+With times, timestamps, seconds, object hash codes and worktree paths left out (`printed-diff.js`), 8,858 lines are
+identical and 167 differ. Four classes print only in the head lane (`GasIntakeTest`, `SteamTurbineSectionsTest`,
+`SteamTurbineTest`, `RareGasPropertiesTest`). Against the first lane, only `FluidFactsCompatTest`, the log noise
+below, reorderings and one allocation counter differ.
+
+| Lines | Reason |
+|---|---|
+| Component counts, kernel outputs, checkpoint sizes, step bytes, WP7c, `VirtualJunctionHoldupTest` digests, the air coolers of `CrudeUnitSampleTest` and `ColumnSolveTest`, `MachineHealthTest` N4, `ConvertersTest` hopper lines | The first run's families (table above): 52 compounds, the larger air cooler bay, the LP onset, new lines. Same values as the first lane. |
+| `CrudeUnitSampleTest$SizeAllSampleTest` order, `DerivedPairsTest` order | Lines print in another order; the sorted sets equal the first lane's. |
+| `FluidFactsCompatTest`: 264 to 285 lines | The round-trip world holds more islands and vessels (16 to 19, 13 to 15); the energy deltas booked are identical (−2,554,382.311 J with 1.5 mol retired; −2,897,239.454 J). The joined schema-27 image prints its vessel lines. |
+| `AccessoryStoreCompatTest`: 5 to 461 lines | log4j "Error writing to RandomAccessFile logs/debug.log" stack traces: parallel forks share the log file. Every base line is in the head lane. |
+| `UpLookingLuParityTest` 582 to 579 bytes; `PassiveStepSolverTest` two tanks 135,724 to 146,894 bytes a step | Allocation counters (52 compounds); the factorization counts are identical. Against the first lane, `PassiveStepSolverTest` two tanks moved 147,011 to 146,894 bytes, the one value that moved with the pollution merge, a counter only. |
+| `ColumnWaterTest` W5 | The port arrays have 52 entries instead of 47; the printed values are identical. |
+
+### Finding
+
+| # | Finding | Proposal |
+|---|---|---|
+| 5 | No test or GameTest puts a pollution monitor's ANALYSER inputs and an alarm beacon on one data bus; each is tested alone. | A GameTest after the merge: a monitor's reading over its limit raises a beacon on the same bus. |
