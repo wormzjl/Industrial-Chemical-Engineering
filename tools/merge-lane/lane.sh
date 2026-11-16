@@ -10,6 +10,8 @@
 # the classes that passed to the load map, which the next lane selects from. A test class with no load set runs.
 # Logs and reports go to tmp/merge-lane/<side>/, or $LANE_OUT/<side> (relative to the worktree root); $LANE_RUN is a
 # fresh GameTest run id.
+# $LANE_SINCE=<commit> is the selection base of a second lane in a batch: the tests, chain-100, the GameTests and the
+# campaign are chosen by what changed since that commit (the earlier lane's), not since main.
 set -u
 WT=$(git rev-parse --show-toplevel)
 side=${1:?usage: lane.sh <base|head> [--all] [steps]}; shift
@@ -24,7 +26,12 @@ SEL=$OUT/selection.txt
 # Test JVMs side by side: forks per test task, and Gradle workers (all forks together) at most the 8 cores.
 FORKS=${LANE_FORKS:-4}; WORKERS=${LANE_WORKERS:-8}
 cd "$WT" || exit 2
+SINCE=${LANE_SINCE:-}
+if [ -n "$SINCE" ]; then git merge-base --is-ancestor "$SINCE" HEAD 2>/dev/null || { echo "LANE_SINCE=$SINCE is not a commit before HEAD"; exit 2; }; fi
+# Every lane run selects afresh: a selection file left by an earlier run is never reused (give a base with $LANE_SINCE).
 rm -f "$SEL"
+# As build.gradle finds cargo: on the PATH or in ~/.cargo/bin. Without it nativeSmoke cannot build the library.
+have_cargo(){ command -v cargo > /dev/null 2>&1 || [ -f "$HOME/.cargo/bin/cargo.exe" ] || [ -f "$HOME/.cargo/bin/cargo" ]; }
 export JAVA_OPTS=-Xshare:off
 busy(){ powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { \$_.CommandLine -match 'Gradle Test Executor|GradleWorkerMain.*Test|net.neoforged.devlaunch|runClient|runMcpClient' } | Measure-Object | Select-Object -ExpandProperty Count"; }
 gradle(){ local log=$1; shift; local n; n=$(busy | tr -d '\r'); [ "${n:-0}" = 0 ] || echo "WARNING: $n test or client JVMs running at $(date '+%H:%M:%S')";
@@ -34,16 +41,17 @@ fuzz(){ local label=$1 harness=$2 dists=$3 extra=$4
     gradle "$OUT/$label-$dist.gradle.txt" --no-configuration-cache --init-script "$harness/hold-fuzz.init.gradle" test --tests '*HoldFuzzTest' \
       -PholdFuzzSeeds=1-1000 -PholdFuzzThreads=8 -PholdFuzzCounters=true -PholdFuzzDefaults=$d -PholdFuzzOut="$OUT/$label-$dist-report.txt" $extra
     bash "$CLASSIFY" "$OUT/$label-$dist-report.txt" > /dev/null; echo "== $label $dist"; grep -E '^SUMMARY' "$OUT/$label-$dist-report.txt"; done; }
-# Whether anything the campaign loads changed since main (tools/merge-lane/campaign-inputs.txt).
+# Whether anything the campaign loads changed since main, or since $LANE_SINCE (tools/merge-lane/campaign-inputs.txt).
 campaign_due(){ $force && return 0
-  local files; files=$(git diff --name-only "$(git merge-base HEAD main)" HEAD | tr -d '\r')
+  local files; files=$(git diff --name-only "${SINCE:-$(git merge-base HEAD main)}" HEAD | tr -d '\r')
   [ -n "$files" ] && printf '%s\n' "$files" | grep -q -E -f <(tr -d '\r' < "$LANE/campaign-inputs.txt"); }
-# The selection, once per lane: what each test task runs and whether chain-100 and the GameTests are due.
+# The selection, once per lane run (the steps of one run share it): what each test task runs and whether chain-100 and
+# the GameTests are due.
 select_tests(){ [ -s "$SEL" ] && return 0
-  if $force; then printf '%s\n' 'TASK test ALL' 'TASK holdGates ALL' 'TASK columnGates ALL' 'TASK equipmentGates ALL' \
+  if $force; then printf '%s\n' 'TASK test ALL' 'TASK holdGates ALL' 'TASK columnGates ALL' 'TASK equipmentGates ALL' 'TASK nativeSmoke ALL' \
       'STEP regression due --all' 'STEP gametest due --all' > "$SEL"; return 0; fi
   gradle "$OUT/classes.gradle.txt" testClasses compileFluidGameTestJava || { echo "compile failed: $OUT/classes.gradle.txt"; exit 2; }
-  node "$LANE/affected.mjs" select > "$SEL" || { echo "selection failed"; exit 2; }
+  node "$LANE/affected.mjs" select ${SINCE:+--since "$SINCE"} > "$SEL" || { echo "selection failed"; exit 2; }
   grep -E '^(FULL|TASK|STEP|NOTE)' "$SEL" | cut -c1-160; }
 step_due(){ select_tests > /dev/null; grep -q "^STEP $1 due" "$SEL"; }
 record(){ rm -rf "$OUT/loads-$1"; echo "--init-script $LANE/record.init.gradle -PlaneRecord=$REL/loads-$1"; }
@@ -52,18 +60,19 @@ for s in $steps; do
   echo "== $side $s start $(date '+%H:%M:%S') at $(git rev-parse --short HEAD)"
   case $s in
     test) select_tests; args=(); ran=()
-          for t in test holdGates columnGates equipmentGates; do
-            line=$(grep "^TASK $t " "$SEL"); kind=$(echo "$line" | cut -d' ' -f3); filters=$(echo "$line" | cut -d' ' -f4-)
-            case $kind in NONE) continue;; ALL) args+=("$t");;
-              *) args+=("$t"); [ ${#filters} -gt 8000 ] && { echo "   $t: filters too long, the task runs whole"; ran+=("$t"); continue; }
-                 for f in $filters; do args+=(--tests "$f"); done;; esac
-            ran+=("$t")
+          # Each task's filters are read from the selection file by record.init.gradle (-PlaneSelection): a command line
+          # of --tests filters is cut off at about 8,000 characters on Windows.
+          for t in test holdGates columnGates equipmentGates nativeSmoke; do
+            kind=$(grep "^TASK $t " "$SEL" | tr -d '\r' | cut -d' ' -f3)
+            case $kind in NONE|'') continue;; esac
+            if [ $t = nativeSmoke ] && ! have_cargo; then echo "   nativeSmoke: no cargo found, the native tests do not run"; continue; fi
+            args+=("$t"); ran+=("$t")
           done
           rm -rf "$OUT/results"; mkdir -p "$OUT/results"
           if [ ${#ran[@]} = 0 ]; then echo "== test skipped: no test class loads anything that changed"; continue; fi
-          gradle "$OUT/gates.gradle.txt" "${args[@]}" --continue -PtestForks=$FORKS --max-workers=$WORKERS $(record test)
+          gradle "$OUT/gates.gradle.txt" "${args[@]}" --continue -PtestForks=$FORKS --max-workers=$WORKERS -PlaneSelection=$REL/selection.txt $(record test)
           for t in "${ran[@]}"; do cp build/test-results/$t/*.xml "$OUT/results/"; done
-          grep -E '^> Task :(test|holdGates|columnGates|equipmentGates)( |$)' "$OUT/gates.gradle.txt"
+          grep -E '^> Task :(test|holdGates|columnGates|equipmentGates|nativeSmoke)( |$)' "$OUT/gates.gradle.txt"
           grep -hoE '<testsuite [^>]*>' "$OUT"/results/*.xml | grep -oE '(tests|failures|errors|skipped)="[0-9]+"' | awk -F'"' '{s[$1]+=$2} END{for(k in s) printf "%s%d ", k, s[k]; print ""}'
           bash "$PRINTED" "$OUT/results" "$OUT/printed.txt"; grep -E '^(LiquidJunctionTransientTest|MixedGasJunctionTransientTest) ' "$OUT/printed.txt" > "$OUT/junction.txt"
           [ -s "$OUT/junction.txt" ] && wc -l < "$OUT/junction.txt" || { rm -f "$OUT/junction.txt"; echo "   junction tests not selected: the baseline's lines stand"; }

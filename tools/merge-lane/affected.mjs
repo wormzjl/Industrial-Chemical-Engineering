@@ -83,16 +83,21 @@ const nodeOf = name => { // a loaded or referenced class name -> its source file
   return null;
 };
 
-// Test classes and the task that runs each (build.gradle: test, holdGates, columnGates, equipmentGates, fluidSolverRegression).
+// Test classes and the task that runs each (build.gradle: test, holdGates, columnGates, equipmentGates, nativeSmoke,
+// fluidSolverRegression).
 const gradle = fs.readFileSync(path.join(root, 'build.gradle'), 'utf8');
 const slow = new Set([...((gradle.match(/def slowGateClasses = \[([\s\S]*?)\]\.collect/) || [, ''])[1]).matchAll(/'([\w.]+)'/g)]
   .map(m => 'com.wormzjl.icheme.' + m[1]));
 if (!slow.size) { console.error('slowGateClasses not found in build.gradle'); process.exit(2); }
+// The native tests are in the column package, but columnGates excludes them and nativeSmoke runs them.
+const native = new Set([...((gradle.match(/def nativeTestClasses = \[([\s\S]*?)\]/) || [, ''])[1]).matchAll(/'([\w.]+)'/g)].map(m => m[1]));
+if (!native.size) { console.error('nativeTestClasses not found in build.gradle'); process.exit(2); }
 const JUNIT = /^Lorg\/junit\/jupiter\/api\/(Test|TestFactory|RepeatedTest|TestTemplate);$|^Lorg\/junit\/jupiter\/params\/ParameterizedTest;$/;
 const hasTests = c => { for (let k = c; k; k = classes.get(k.superName)) if (k.utf.some(u => JUNIT.test(u))) return true; return false; };
 const taskOf = fqn => {
   const r = fqn.slice('com.wormzjl.icheme.'.length);
   if (r.startsWith('fluid.benchmark.')) return r === 'fluid.benchmark.FluidSolverRegressionTest' ? 'fluidSolverRegression' : null;
+  if (native.has(fqn)) return 'nativeSmoke';
   if (r.startsWith('science.column.v3.')) return 'columnGates';
   if (r.startsWith('science.equipment.')) return 'equipmentGates';
   return slow.has(fqn) ? 'holdGates' : 'test';
@@ -291,7 +296,7 @@ if (explainName) {
   console.error(fqn ? `${fqn}: ${why.get(fqn) ?? 'not affected'}` : `${explainName}: no such test class`);
 }
 
-for (const task of ['test', 'holdGates', 'columnGates', 'equipmentGates', 'fluidSolverRegression']) {
+for (const task of ['test', 'holdGates', 'columnGates', 'equipmentGates', 'nativeSmoke', 'fluidSolverRegression']) {
   const picked = chosen.get(task) ?? [], all = [...tests].filter(([, t]) => t.task === task).map(([k]) => k);
   if (!picked.length) { emit(`TASK ${task} NONE 0/${all.length}`); continue; }
   if (picked.length === all.length) { emit(`TASK ${task} ALL ${all.length}/${all.length}`); continue; }
@@ -312,7 +317,8 @@ for (const task of ['test', 'holdGates', 'columnGates', 'equipmentGates', 'fluid
 const regression = (chosen.get('fluidSolverRegression') ?? []).length;
 emit(`STEP regression ${regression ? 'due' : 'skip'} ${regression ? why.get('com.wormzjl.icheme.fluid.benchmark.FluidSolverRegressionTest') : 'FluidSolverRegressionTest loads nothing that changed'}`);
 const gametest = fromBase.full[0] ?? fromBase.gametest;
-emit(`STEP gametest ${gametest ? 'due' : 'skip'} ${gametest ?? 'only client code, tests or game assets changed since main'}`);
-emit(`NOTE since main (${base.slice(0, 10)}): ${fromBase.files} files changed; ${unrecorded} test classes have no load set; map ${path.relative(root, mapFile).startsWith('..') ? mapFile : path.relative(root, mapFile)}`);
+const baseName = replay ?? 'main';
+emit(`STEP gametest ${gametest ? 'due' : 'skip'} ${gametest ?? `only client code, tests or game assets changed since ${baseName}`}`);
+emit(`NOTE since ${baseName} (${base.slice(0, 10)}): ${fromBase.files} files changed; ${unrecorded} test classes have no load set; map ${path.relative(root, mapFile).startsWith('..') ? mapFile : path.relative(root, mapFile)}`);
 for (const [fqn, r] of why) if (r.startsWith('no load set') === false) emit(`WHY ${fqn.slice(19)} ${r}`);
 console.log(out.join('\n'));
