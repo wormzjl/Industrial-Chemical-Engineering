@@ -129,6 +129,10 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   its law from δ 0.3 to 1.6, share 0.99838. Dense GameTest: 9.986 m³/h against 9.981 displaced less slip, no hold. Runs:
   `test` 121 + 85 classes, equipment 24 + 21 + 3, hold 6 + 9, all S8 failures fixed but the Chinese sizing door
   (translation commit). [S8_PLUNGER_PUMP_REVIEW.md](S8_PLUNGER_PUMP_REVIEW.md).
+- 2026-11-16: the main thread checked the merge of main 0.33.0 and S8 (the diffs, the stored results, the placed form
+  against the scratch). Form A changed for three equipment gates (owner: "Keep both"); the pump page's head share only
+  on a centrifugal curve (`9195b5161`); main's reservation commit `ab6298d03` merged. Decisions in the plan's section
+  2b, points 19 to 21.
 
 ## Documents
 

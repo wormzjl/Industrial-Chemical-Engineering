@@ -242,7 +242,7 @@ corpus image written and read back), `FormatsTableTest`, `PlungerPumpMoverTest`,
    while the steppers keep stepping the model.
 7. **`InlineMovers.ratedShaftPower`** gives 0 for a plunger, because its rise at its rated flow is ≤ 0. Only in-line
    movers use it, and a plunger pump is never in-line. Noted.
-8. **The pump page's gas meter on a dense fluid.** The client's dense label reads the head share, `M(α, p)`, a
-   centrifugal pump's quantity. A plunger keeps its whole flow, so the meter understates it. The page has no law field.
-   A follow-up could send the law's kind.
+8. **The pump page's gas meter on a dense fluid.** Closed by the main thread after this stage (`9195b5161`): the head
+   share, `M(α, p)`, is read only for a pump whose view carries a centrifugal curve; a plunger or a set-flow pump on
+   one dense fluid reads "—". No wire field was needed.
 9. **An in-game check** of the constructor, the model and its sound can be offered. Nothing else needs one.

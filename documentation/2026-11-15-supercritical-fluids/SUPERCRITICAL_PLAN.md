@@ -197,6 +197,19 @@ Decisions after S2b's stop conditions (2026-11-15):
    per compound, so carbon dioxide, nitrogen, methane, ethane, propane, ethylene and hydrogen go to the air whole, and
    a dense hexane or toluene (hot) spills as the liquid it becomes at ambient. The amounts are right; only the burst
    block's word and the two reported masses say "liquid" for it. No change; an owner item.
+20. **S8, the plunger pump, built and checked** ([S8_PLUNGER_PUMP_REVIEW.md](S8_PLUNGER_PUMP_REVIEW.md)). Form A
+   failed three equipment gates as first drawn; the main thread changed the form, and no gate is exempted. On PP-3 and
+   PP-10 the coupling face is one block further back and PP-10's discharge riser one block nearer the block (a shaft
+   block stands two cells clear of a pipe block). The pump's nozzles take the largest pipe whose neck stands clear,
+   never less than the design pipe, as a column's do. Owner, 2026-11-16, asked "Keep the nozzle rule and the longer
+   guard on the two small pumps?": "Keep both". The necks are 3 cm longer so that each carries its flow arrows (481 of
+   485 nozzles). Checked by the main thread: the diff of the saves (each writer's plunger case stands before the generic
+   one), the law, the placed form against the scratch, the stored results, a clean status. One change after it, the
+   main thread's: the pump page's head share is the centrifugal curve's, so a plunger or a set-flow pump on one dense
+   fluid reads none (the thread's owner item 8, closed).
+21. **Main moved once more** (`ab6298d03`: the fouling and corrosion batch reserved facts schema 29, shape fields 13,
+   sheet file 3 and `icheme-5`; documents only). Merged into the branch by the main thread. `icheme-4`, reserved for
+   S8, was not needed and its row is gone; main's row goes with this batch's merge.
 
 ## 3. Stages
 
