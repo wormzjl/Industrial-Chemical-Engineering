@@ -328,10 +328,11 @@ class IntegrityTest {
         assertEquals(0, rig.integrity.fouling(SIDE), "the first cadence only reads the flow");
         rig.cadence(20 * 3600);
         double rf = rig.integrity.fouling(SIDE);
-        // An hour of flowing water at 25 °C: 1 - e^(-1/100) of the asymptote at the default 100 h (D12): 3.48e-6 m²K/W, where
-        // the old 10 h gave 1 - e^(-1/10), 3.33e-5.
-        assertEquals(FoulingLaw.step(0, FoulingLaw.WATER, 3600, 100), rf, 1e-12);
-        assertTrue(rf > 0 && rf < FoulingLaw.WATER);
+        // An hour of flowing water at 25 °C: 1 - e^(-1/100) of the asymptote at the default 100 h (D12): 1.74e-6 m²K/W towards
+        // the halved end value 0.000175 (D14; 3.48e-6 towards the anchor 0.00035 before), where the old 10 h gave 1 - e^(-1/10), 3.33e-5.
+        double end = FoulingLaw.PLACEHOLDER_SHARE * FoulingLaw.WATER;
+        assertEquals(FoulingLaw.step(0, end, 3600, 100), rf, 1e-12);
+        assertTrue(rf > 0 && rf < end);
         assertEquals(rf, rig.ledger.integrity().get(SIDE).fouling(), 1e-18);
         // A side no flow passes keeps its deposit.
         var still = plant(1, nitrogen(101325), 0, 0, false);
@@ -449,7 +450,7 @@ class IntegrityTest {
         var rig = plant();
         assertEquals(Integrity.Outcome.NOTHING_TO_REPAIR, rig.clean(SIDE));
         rig.integrity.set(SIDE, 0, .0005, false);
-        assertEquals(5, rig.integrity.foulingLevel(SIDE));
+        assertEquals(10, rig.integrity.foulingLevel(SIDE), "10 steps of 5e-5 (5 of 1e-4 before D14)");
         assertEquals(Integrity.Outcome.CLEANED, rig.clean(SIDE));
         assertEquals(0, rig.integrity.fouling(SIDE));
         assertNull(rig.ledger.integrity().get(SIDE));
@@ -460,8 +461,9 @@ class IntegrityTest {
     }
 
     /**
-     * WP5 (plan section 12): the graph sees a deposit only in whole steps of 0.0001 m²K/W. Flowing water at 25 °C grows towards
-     * 0.00035 with a 10 h time constant: under the first step for three process hours, over it in the fourth (1.15e-4), so one
+     * WP5 (plan section 12): the graph sees a deposit only in whole steps of 0.00005 m²K/W (D14; 0.0001 before). Flowing water at
+     * 25 °C grows towards 0.000175 (D14; 0.00035 before) with a 10 h time constant: under the first step for three process hours
+     * (4.54e-5), over it in the fourth (5.77e-5; 1.15e-4 against the old step before D14), so one
      * restate is queued then, after the facts reached the ledger; none in the hour after, still at that step. The rig runs the old
      * 10 h time constant explicitly: at the default 100 h (D12) the first step comes only after 34 process hours.
      */
@@ -487,11 +489,11 @@ class IntegrityTest {
         rig.integrity.set(SIDE, 0, .0005, false);
         assertEquals(List.of(SIDE, SIDE), rig.host.restated);
         rig.integrity.set(SIDE, 0, .00052, false);
-        assertEquals(2, rig.integrity.restates(), "a deposit inside the same step changes nothing the solver reads");
+        assertEquals(2, rig.integrity.restates(), "a deposit inside the same step (level 10) changes nothing the solver reads");
         var idle = plant();
         idle.integrity.set(SIDE, 0, .0005, false);
         assertEquals(Integrity.Outcome.CLEANED, idle.clean(SIDE));
-        assertEquals(List.of(SIDE, SIDE), idle.host.restated, "set to 5, cleaned to 0");
+        assertEquals(List.of(SIDE, SIDE), idle.host.restated, "set to 10 (5 before D14), cleaned to 0");
         assertEquals(0, idle.host.ledgerAtRestate.getLast());
     }
 
@@ -502,7 +504,7 @@ class IntegrityTest {
         // A load builds the walls from the ledger's facts; the restored graph was compiled from the same facts.
         var host = new Host();
         var restored = rig.reload(host);
-        assertEquals(5, restored.foulingLevel(SIDE));
+        assertEquals(10, restored.foulingLevel(SIDE), "5 before D14");
         rig.epoch[0] += MachineHealth.CADENCE;
         restored.cadence();
         assertEquals(List.of(), host.restated);

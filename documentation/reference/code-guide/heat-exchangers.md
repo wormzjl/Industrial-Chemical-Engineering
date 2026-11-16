@@ -159,7 +159,7 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
 - **Fouling** (batch 2026-11-16-fouling-corrosion, WP5; [integrity.md](integrity.md)): a side's deposit `Rf` stands in
   series with each film, `Films.fouled(Rf)` = `h/(1 + h Rf)`, and narrows its passage by `2 Rf k_d`
   (`Geometry.narrowed`); an air cooler's tubes carry it in `Air.process`, a convection coil in `1/U' = 1/U + Rf`. The
-  compile gives a side its deposit in whole steps of 1e-4 m²K/W (`HeatSides.heatSide(..., fouling)`); at 0 every law is
+  compile gives a side its deposit in whole steps of 5e-5 m²K/W (`HeatSides.heatSide(..., fouling)`); at 0 every law is
   the clean one, bit for bit. A radiant and an exhaust coil read no film, so their deposit acts on the passage alone.
 - **Sampling** (`HeatCurve.sample`): 16 divisions, a phase change bisected to `BOUNDARY_KELVIN`, segments refined while
   the midpoint lies more than 0.2 K off the chord, at most 512 knots.

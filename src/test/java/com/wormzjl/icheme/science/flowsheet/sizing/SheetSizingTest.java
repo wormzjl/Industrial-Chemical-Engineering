@@ -134,7 +134,7 @@ final class SheetSizingTest {
 
     /**
      * WP5 (plan section 12): each side is rated dirty at its service's design deposit. Crude cooled by water: the water side's
-     * 0.00035 m²K/W (TEMA tower water under 50 °C) and the crude's own, in series with the films, so the surface grows by
+     * 0.000175 m²K/W (half the TEMA tower water under 50 °C, D14; 0.00035 before) and the crude's own, in series with the films, so the surface grows by
      * {@code ΣRf ∫dQ/ΔT}, about {@code 1 + U ΣRf} with U = 1000 W/m²K for two liquid films of 2000; the drops read the narrowed
      * passages. Nitrogen heated by steam is a clean service: deposits 0, the surface the clean rating's, bit for bit.
      */
@@ -155,8 +155,8 @@ final class SheetSizingTest {
             assertTrue(low < 320, "the water stays a tower water under 50 °C: " + low);
             var dirty = load(false, waterIn, waterOut, crudeIn, crudeOut);
             assertTrue(Double.isFinite(dirty.needed()));
-            assertEquals(com.wormzjl.icheme.science.integrity.FoulingLaw.WATER, dirty.tubeFouling(), 1e-15);
-            assertTrue(dirty.shellFouling() > 0 && dirty.shellFouling() <= .0018, "crude: " + dirty.shellFouling());
+            assertEquals(com.wormzjl.icheme.science.integrity.FoulingLaw.PLACEHOLDER_SHARE * com.wormzjl.icheme.science.integrity.FoulingLaw.WATER, dirty.tubeFouling(), 1e-15, "0.000175, half the anchor 0.00035 (D14)");
+            assertTrue(dirty.shellFouling() > 0 && dirty.shellFouling() <= .0009, "crude, at most half the residue's 0.0018 (D14): " + dirty.shellFouling());
             var hot = ExchangerRating.side(THERMO, crudeIn, waterIn.temperature(), crudeIn.temperature()).at(flow);
             var cold = ExchangerRating.side(THERMO, waterIn, waterIn.temperature(), crudeIn.temperature()).at(flow);
             double duty = dirty.duty();
