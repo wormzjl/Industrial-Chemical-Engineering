@@ -158,8 +158,22 @@ public record Door(String title, List<Column.Button> tabs, int tab, String statu
 
     /** The phases of a stream as the shipped pages draw them, by mole; the share of one dense fluid reads "Dense" (S5). */
     public static Column.Group phases(String title, StreamProps.Phases p, com.wormzjl.icheme.client.gui.common.HeatControlColumn.Texts t) {
-        return group(title, new Column.Split(List.of(share(t.get(phaseKey(p, 0, "organic")), p.organic(), 0xFFD0A85A), share(t.get(phaseKey(p, 1, "aqueous")), p.aqueous(), 0xFF3377FF),
-                share(t.get(phaseKey(p, 2, "gas")), p.gas(), 0xFFF0F0F0), share(t.get("flowsheet.phase.solid"), p.solid(), 0xFF72828C)), null));
+        return group(title, new Column.Split(List.of(share(t.get(phaseKey(p, 0, "organic")), p.organic(), colour(p, 0)), share(t.get(phaseKey(p, 1, "aqueous")), p.aqueous(), colour(p, 1)),
+                share(t.get(phaseKey(p, 2, "gas")), p.gas(), colour(p, 2)), share(t.get("flowsheet.phase.solid"), p.solid(), 0xFF72828C)), null));
+    }
+
+    /** The phases' colours: organic, aqueous, gas. */
+    private static final int[] PHASE_COLOURS = {0xFFD0A85A, 0xFF3377FF, 0xFFF0F0F0};
+
+    /**
+     * Share {@code row}'s colour: its phase's, and for the share of one dense fluid the gas's blended to the liquid's that holds it
+     * from reduced density 1 by its liquid-like weight (P2 of batch 2026-11-16-supercritical-followups, item 12): one colour on
+     * both sides of the slot rule, the gas's at 0.5.
+     */
+    private static int colour(StreamProps.Phases p, int row) {
+        if (row != p.dense() || !(p.weight() >= 0)) return PHASE_COLOURS[row];
+        int liquid = row < 2 ? row : p.water() ? 1 : 0;
+        return com.wormzjl.icheme.client.gui.common.DenseLabel.blend(PHASE_COLOURS[2], PHASE_COLOURS[liquid], p.weight());
     }
 
     /** The key of share {@code row}'s name: {@code flowsheet.phase.dense} where it holds one dense fluid, else its phase's. */

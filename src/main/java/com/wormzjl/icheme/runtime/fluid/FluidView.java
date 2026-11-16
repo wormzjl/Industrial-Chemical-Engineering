@@ -263,7 +263,11 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         }
         /** The liquid's height over the bottom, m: its condensed volume (both liquids and the solids) over the footprint
          * {@code capacity / levelHeight}. */
-        public double level(State state){return state==null?0:geometry.heightAt(state.phaseVolumes()[0]+state.phaseVolumes()[1]+state.solids().volume());}
+        public double level(State state){return level(state,Double.NaN);}
+        /** The level of {@code state} whose one dense fluid has liquid-like weight {@code dense} (NaN for none): the height of
+         * {@link DenseReadings#levelVolume}, which the server's level readers pass ({@code FluidWorldAuthority.denseWeight}). An
+         * open vessel stands at the air's pressure and never holds a dense fluid: its display and roof read {@link #level(State)}. */
+        public double level(State state,double dense){return state==null?0:geometry.heightAt(DenseReadings.levelVolume(state,dense));}
     }
     /**
      * One connection of a tank, as its page lists it (plan 4.3 under decision D11): the port the connection's end at the

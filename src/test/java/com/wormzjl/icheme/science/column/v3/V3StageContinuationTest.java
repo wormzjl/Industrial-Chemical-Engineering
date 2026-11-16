@@ -13,7 +13,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /** Qualifies deterministic internal stage continuation without using a persisted or cross-request warm state. */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3StageContinuationTest {
     private static final long TARGET_BUDGET_NANOS = 15_000_000_000L;
     private static final long FIFTEEN_STAGE_BUDGET_NANOS = 30_000_000_000L;
@@ -22,8 +22,8 @@ class V3StageContinuationTest {
 
     @Test
     void acceptedFourStageRealCrudeProfileCanSeedAFreshEightStageCorrection() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged acceptedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
@@ -52,8 +52,8 @@ class V3StageContinuationTest {
 
     @Test
     void certifiedEightStageRealCrudeProfileCanSeedAFreshFifteenStageCorrection() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged convergedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,
@@ -80,8 +80,8 @@ class V3StageContinuationTest {
 
     @Test
     void certifiedFifteenStageRealCrudeProfileCanSeedAFreshThirtyStageCorrection() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         V3ColumnProblem fourStage = V3ColumnProblemResolver.resolve(input(crude, 4, 3), V3CondenserPhaseBranch.TWO_PHASE);
         V3SimultaneousColumnSolver.Attempt.Converged convergedFourStage = assertInstanceOf(
                 V3SimultaneousColumnSolver.Attempt.Converged.class, solve(thermo, fourStage,

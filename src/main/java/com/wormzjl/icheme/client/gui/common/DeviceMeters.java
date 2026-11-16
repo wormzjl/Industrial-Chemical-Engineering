@@ -28,28 +28,45 @@ import static com.wormzjl.icheme.client.gui.common.kit.Format.number;
  * @param dense the row of the shown contents that holds one dense fluid ({@link #denseRow}; -1 for none): its phase reads
  *              "Dense fluid", a tank's level line "No interface", a pump's gas meter its head share (S5 of batch
  *              2026-11-15-supercritical-fluids)
+ * @param denseWeight that fluid's liquid-like weight ({@link DenseLabel.Reading#weight}; NaN for none or unknown): the "Dense"
+ *              share's colour (P2 of batch 2026-11-16-supercritical-followups)
  */
 public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBasis phaseBasis,TemperatureUnit temperatureUnit,PressureUnit pressureUnit,
-        FlowRateUnit flowRateUnit,boolean mass,HeatControlColumn.Texts texts,int dense) {
+        FlowRateUnit flowRateUnit,boolean mass,HeatControlColumn.Texts texts,int dense,double denseWeight) {
     /** The meters of contents that read no dense fluid ({@link #dense} -1). */
     public DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBasis phaseBasis,TemperatureUnit temperatureUnit,PressureUnit pressureUnit,
-            FlowRateUnit flowRateUnit,boolean mass,HeatControlColumn.Texts texts){this(data,port,phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,texts,-1);}
-    /** These meters with the shown contents' dense row {@code row} ({@link DenseLabel#row}; -1 for none). */
-    public DeviceMeters withDense(int row){return new DeviceMeters(data,port,phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,texts,row);}
+            FlowRateUnit flowRateUnit,boolean mass,HeatControlColumn.Texts texts){this(data,port,phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,texts,-1,Double.NaN);}
+    /** These meters with the shown contents' dense row {@code row} ({@link DenseLabel#row}; -1 for none), its weight unknown: the share keeps its row's colour. */
+    public DeviceMeters withDense(int row){return new DeviceMeters(data,port,phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,texts,row,Double.NaN);}
+    /** These meters with what the client's evaluation read of the shown contents ({@link #dense(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics)}). */
+    public DeviceMeters withDense(DenseLabel.Reading reading){return new DeviceMeters(data,port,phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,texts,reading.row(),reading.weight());}
     /**
      * The row of the shown contents that holds one dense fluid above reduced density 0.5 on {@code model} (S5 of batch
      * 2026-11-15-supercritical-fluids, {@link DenseLabel#row(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics, List, double, double, double[], double[][])}):
      * the contents' temperature and pressure, phase volumes and amounts. One cubic root: the screen evaluates it once per
      * published view and stream, and keeps it.
      */
-    public int denseRow(@Nullable com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model){
+    public int denseRow(@Nullable com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model){return dense(model).row();}
+    /** The dense row of the shown contents and its liquid-like weight ({@link DenseLabel.Reading}): the same one cubic root as {@link #denseRow}. */
+    public DenseLabel.Reading dense(@Nullable com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model){
         var view=data.view();var port=selectedPort();var info=view.pipeInfo();var state=view.state();
         double t,p;double[] volumes;
         if(port!=null){t=port.temperature()==null?Double.NaN:port.temperature();p=port.pressure()==null?Double.NaN:port.pressure();volumes=port.phaseVolumes();}
         else if(info!=null){var line=info.reading();t=line==null?Double.NaN:line.temperature();p=line==null?Double.NaN:line.pressure();volumes=info.contents().phaseVolumes();}
         else if(state!=null){t=state.temperature();p=state.pressure();volumes=state.phaseVolumes();}
-        else return -1;
-        return DenseLabel.row(model,data.components(),t,p,volumes,amounts());
+        else return DenseLabel.Reading.NONE;
+        return DenseLabel.read(model,data.components(),t,p,volumes,amounts());
+    }
+    /**
+     * The "Dense" share's colour (P2, item 12): the vapour's {@link DeviceColumn#PHASE_COLOURS} blended to the liquid's by
+     * {@link #denseWeight}, the liquid being the one its slot holds it in from reduced density 1 (the aqueous one for a fluid at
+     * least half water, the slot rule's label, else the oil); 0 (its row's own colour) where the weight is unknown.
+     */
+    int denseColour(){
+        if(dense<0||!(denseWeight>=0))return 0;
+        double[] row=amounts()[dense];int water=data.components().indexOf("Water");double total=0;for(double a:row)total+=Math.max(0,a);
+        int liquid=dense<2?dense:water>=0&&total>0&&row[water]>=.5*total?1:0;
+        return DenseLabel.blend(DeviceColumn.PHASE_COLOURS[2],DeviceColumn.PHASE_COLOURS[liquid],denseWeight);
     }
     /**
      * What the meters read of the menu's data (the screen copies it from its menu): the device's kind and view, the component axis
@@ -255,7 +272,7 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         var solids=port!=null?SolidInventory.EMPTY:info!=null?info.contents().solids():state!=null?state.solids():SolidInventory.EMPTY;
         String hint=tr(generator()?"phase_ratio.generator_hint":tank()?"phase_ratio.tank_hint":"phase_ratio.hint");
         if(phaseBasis==PhaseRatioBasis.MOLAR)hint+="\n"+tr("phase_ratio.mole_hint");
-        return new DeviceColumn.Phases(phaseBasis.key(),phaseBasis.amounts(volumes,amounts(),solids,data.components(),data.molecularWeights()),phaseBasis.excludesCustomSolids(solids),hint,aqueousWater(),dense);
+        return new DeviceColumn.Phases(phaseBasis.key(),phaseBasis.amounts(volumes,amounts(),solids,data.components(),data.molecularWeights()),phaseBasis.excludesCustomSolids(solids),hint,aqueousWater(),dense,denseColour());
     }
     public double[][] amounts(){
         var view=data.view();
@@ -286,7 +303,11 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         boolean curve=p.curve()!=null;
         boolean head=dense>=0&&curve&&p.gasShare()!=null&&state!=null&&state.pressure()>0;
         String gas=p.gasShare()==null||dense>=0&&!curve?"—":value(100*(head?com.wormzjl.icheme.science.machine.GasEntrainment.headShare(p.gasShare(),state.pressure()):p.gasShare()));
-        return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),gas,value(100*p.health()),p.lifePlaySeconds()==null?"—":value(p.lifePlaySeconds()/60),head);
+        // A two-phase supply (P2 of batch 2026-11-16-supercritical-followups, item 10): the same law's head share beside the
+        // gas, on the server's α at the page's suction pressure; a centrifugal curve's only.
+        boolean twoPhase=dense<0&&curve&&p.gasShare()!=null&&p.gasShare()>0&&p.gasShare()<1&&state!=null&&state.pressure()>0;
+        String share=twoPhase?value(100*com.wormzjl.icheme.science.machine.GasEntrainment.headShare(p.gasShare(),state.pressure())):null;
+        return new DeviceColumn.Suction(boxed(p.npshAvailable()),boxed(p.npshRequired()),gas,value(100*p.health()),p.lifePlaySeconds()==null?"—":value(p.lifePlaySeconds()/60),head,share);
     }
     private String boxed(Double v){return v==null?"—":value(v);}
     /**

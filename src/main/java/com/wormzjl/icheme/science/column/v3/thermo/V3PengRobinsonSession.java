@@ -4,6 +4,8 @@ import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
+import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import java.util.List;
 import java.util.Objects;
 
@@ -17,11 +19,45 @@ final class V3PengRobinsonSession {
     private final V3PropertyPackage propertyPackage;
     private final PengRobinsonKernel kernel;
     private final V3ComponentBasis componentBasis;
+    /** The equilibrium engine's stability test on this kernel, with its trial for water where the list holds it. */
+    private final TangentPlaneStability stability;
+    /** The same test with the engine's larger budget, for a feed the first test leaves unresolved. */
+    private final TangentPlaneStability widerStability;
 
     private V3PengRobinsonSession(V3PropertyPackage propertyPackage) {
         this.propertyPackage = Objects.requireNonNull(propertyPackage, "propertyPackage");
         this.kernel = kernelFor(propertyPackage);
         this.componentBasis = propertyPackage.componentBasis();
+        int water = componentBasis.componentIds().indexOf("Water");
+        TangentPlaneStability.Settings settings = TangentPlaneStability.Settings.DEFAULT;
+        this.stability = new TangentPlaneStability(kernel, settings, water);
+        this.widerStability = new TangentPlaneStability(kernel, new TangentPlaneStability.Settings(settings.instabilityTolerance(),
+                settings.convergenceTolerance(), settings.newtonSwitch(), settings.maximumSuccessiveSubstitutions(),
+                settings.accelerationCycle(), settings.maximumIterations() * FluidTpEquilibrium.UNRESOLVED_STABILITY_BUDGET_FACTOR,
+                settings.trivialDistance(), settings.pureComponentTrialLimit(), settings.exhaustive()), water);
+    }
+
+    /**
+     * The tangent-plane stability of the normalised feed {@code z} on this kernel, as the equilibrium engine tests it: an
+     * unresolved test is repeated once with {@link FluidTpEquilibrium#UNRESOLVED_STABILITY_BUDGET_FACTOR} times the budget.
+     */
+    TangentPlaneStability.Result stability(double temperatureKelvin, double pressurePascal, double[] z, Session session) {
+        try {
+            TangentPlaneStability.Result result = stability.test(temperatureKelvin, pressurePascal, z, session.stabilityWorkspace());
+            if (result.verdict() != TangentPlaneStability.Verdict.UNRESOLVED) return result;
+            return widerStability.test(temperatureKelvin, pressurePascal, z, session.stabilityWorkspace());
+        } catch (IllegalArgumentException exception) {
+            throw new V3ThermoException(V3ThermoException.Code.DOMAIN, null,
+                    "V3 feed stability test input is outside the property domain", exception);
+        } catch (IllegalStateException exception) {
+            throw new V3ThermoException(V3ThermoException.Code.EOS_ROOT_FAILURE, null,
+                    "V3 feed stability test could not select a physical phase root", exception);
+        }
+    }
+
+    /** The package's feed engine ({@link V3PropertyPackage#feedEngine}), or null. */
+    V3FeedEngine feedEngine() {
+        return propertyPackage.feedEngine();
     }
 
     /**
@@ -185,6 +221,9 @@ final class V3PengRobinsonSession {
         private PengRobinsonKernel.Derivatives liquidDerivatives;
         private PengRobinsonKernel.Derivatives vaporDerivatives;
         private final PengRobinsonKernel kernel;
+        /** Allocated on first use, as the derivatives are: most flashes run no stability test. */
+        private TangentPlaneStability.Workspace stabilityWorkspace;
+        private FluidTpEquilibrium.Workspace engineWorkspace;
 
         private Session(PengRobinsonKernel kernel) {
             this.kernel = kernel;
@@ -209,6 +248,17 @@ final class V3PengRobinsonSession {
 
         PengRobinsonKernel.Derivatives derivativesOf(Root phase) {
             return derivatives(phase);
+        }
+
+        private TangentPlaneStability.Workspace stabilityWorkspace() {
+            if (stabilityWorkspace == null) stabilityWorkspace = new TangentPlaneStability(kernel, TangentPlaneStability.Settings.DEFAULT).newWorkspace();
+            return stabilityWorkspace;
+        }
+
+        /** The scratch of {@code engine}; one session serves one model, so one engine. */
+        FluidTpEquilibrium.Workspace engineWorkspace(V3FeedEngine engine) {
+            if (engineWorkspace == null) engineWorkspace = engine.newWorkspace();
+            return engineWorkspace;
         }
 
         double logFugacityCoefficient(Root phase, int component) {

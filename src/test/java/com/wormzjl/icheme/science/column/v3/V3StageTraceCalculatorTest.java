@@ -7,7 +7,6 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3StageTraceCalculatorTest {
     @Test
     void zeroCutoffPreservesLegacyDigestStreamsAuditAndDiagnosticsExactly() {
@@ -113,8 +112,8 @@ class V3StageTraceCalculatorTest {
     }
 
     static V3ColumnInput crudeInput(double condenserTemperature) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         for (int component = 0; component < flows.length; component++) flows[component] *= 2_610.7 * 1_000.0 / 3_600.0;
         return V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, crude.packageId(), crude.assayId(), crude.componentBasis(),
@@ -124,6 +123,6 @@ class V3StageTraceCalculatorTest {
     }
 
     private static V3ColumnInput binaryInput() {
-        return V3TestInputs.cdu17Binary("test:registered-pr-binary");
+        return V3TestInputs.crudeBinary("test:registered-pr-binary");
     }
 }

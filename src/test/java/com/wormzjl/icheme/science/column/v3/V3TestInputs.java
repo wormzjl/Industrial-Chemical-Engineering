@@ -12,7 +12,57 @@ public final class V3TestInputs {
     /** The registered TJL19 DWSIM package of the literature CDU preset. */
     public static final String LITERATURE_PACKAGE = "icheme:tjl19_dwsim";
 
+    /** The package of the game's medium crude preset ({@code medium_crude}). */
+    public static final String MEDIUM_CRUDE_PACKAGE = "icheme:tjl20_methane";
+    /** The assay of the game's medium crude preset. */
+    public static final String MEDIUM_CRUDE_ASSAY = "icheme:medium_crude";
+
     private V3TestInputs() {}
+
+    /**
+     * The game's default column preset {@code medium_crude} on the current catalog (the bundled one where the current
+     * catalog lacks it): 40 stages, feed stage 37, 250 kPa, draws on trays 10, 18 and 28 each under its pumparound, steam at
+     * stage 41, condenser 332.15 K, reflux ratio 4.17.
+     */
+    public static V3ColumnInput mediumCrudeInput() {
+        var catalog = mediumCrudeCatalog();
+        return V3ColumnPresets.input(catalog.presets().column("medium_crude"), catalog);
+    }
+
+    /**
+     * A dry three-draw crude column fed with the medium crude: 29 stages, feed stage 24, 150 kPa top, 750 Pa per tray,
+     * condenser 400 K, reflux ratio 2, reboiler 8 MW, draws on trays 13, 17 and 22 (92.3, 131.85 and 32.96 kmol/h), the
+     * crude at 2,610.7 kmol/h and 638.15 K. No steam and no pumparounds.
+     */
+    public static V3ColumnInput mediumCrudeDry() {
+        V3PengRobinsonThermo thermo = mediumCrudeThermo();
+        var crude = thermo.crudeFeed(MEDIUM_CRUDE_ASSAY);
+        double[] feed = crude.moleFractions();
+        for (int i = 0; i < feed.length; i++) feed[i] *= 2610.7 / 3.6;
+        return new V3ColumnInput(1, thermo.packageId(), crude.assayId(), crude.componentBasis(), feed, 638.15, 29, 24, 150000, 750,
+                List.of(new V3ColumnSpecification.CondenserOutletTemperature(400), new V3ColumnSpecification.OrganicRefluxRatio(2),
+                        new V3ColumnSpecification.ReboilerDuty(8e6)),
+                List.of(new V3SideDrawSpec(13, 92.3 / 3.6), new V3SideDrawSpec(17, 131.85 / 3.6), new V3SideDrawSpec(22, 32.96 / 3.6)));
+    }
+
+    /** The registered thermodynamics of the medium crude's package, on the current catalog (else the bundled one). */
+    public static V3PengRobinsonThermo mediumCrudeThermo() {
+        var catalog = mediumCrudeCatalog();
+        return com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, MEDIUM_CRUDE_PACKAGE,
+                () -> V3PengRobinsonThermo.fromRegisteredPackage(MEDIUM_CRUDE_PACKAGE));
+    }
+
+    /** The index of component {@code id} on {@code thermo}'s basis. */
+    public static int index(V3PengRobinsonThermo thermo, String id) {
+        int i = thermo.componentBasis().componentIds().indexOf(id);
+        if (i < 0) throw new IllegalArgumentException(id + " is not on " + thermo.packageId());
+        return i;
+    }
+
+    private static com.wormzjl.icheme.science.material.MaterialCatalog mediumCrudeCatalog() {
+        var catalog = com.wormzjl.icheme.science.material.MaterialRuntime.current();
+        return catalog.presets().columns().containsKey("medium_crude") ? catalog : com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
+    }
 
     /**
      * Original methane-free reference: the Ledezma-Martinez (2019) no-preflash atmospheric column (preset
@@ -101,25 +151,37 @@ public final class V3TestInputs {
                 V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
     }
 
+    /** The light cut of the binary: {@code crude_pc02}, normal boiling point 383.5 K. */
+    public static final String BINARY_LIGHT = "crude_pc02";
+    /** The heavy cut of the binary: {@code crude_pc06}, normal boiling point 577.9 K. */
+    public static final String BINARY_HEAVY = "crude_pc06";
     /**
-     * The registered cdu17 PC03/PC10 binary (50 mol/s each) at 550 K: two interior trays, feed on tray 1,
-     * 250 kPa top, 750 Pa per tray, a 300 K condenser, reflux ratio 2 and no reboiler duty.
+     * The binary's reboiler duty, 0.2 MW. Without it the bottom stage boils nothing and the tray below the feed holds a liquid
+     * with no vapour to separate, which the audit's interior phase identity rejects on this package (it passed on the removed
+     * zero-pair test package). With it the binary and every one-factor edit of the cold-start matrix converge.
      */
-    public static V3ColumnInput cdu17Binary(String assayId) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+    public static final double BINARY_REBOILER_DUTY_WATTS = 2.0e5;
+
+    /**
+     * The registered {@link #BINARY_LIGHT}/{@link #BINARY_HEAVY} binary of the medium crude's package (50 mol/s each) at
+     * 550 K: two interior trays, feed on tray 1, 250 kPa top, 750 Pa per tray, a 300 K condenser, reflux ratio 2 and
+     * {@link #BINARY_REBOILER_DUTY_WATTS}.
+     */
+    public static V3ColumnInput crudeBinary(String assayId) {
+        V3PengRobinsonThermo thermo = mediumCrudeThermo();
         double[] feed = new double[thermo.componentBasis().componentCount()];
-        feed[6] = 50.0; // PC03
-        feed[13] = 50.0; // PC10
+        feed[index(thermo, BINARY_LIGHT)] = 50.0;
+        feed[index(thermo, BINARY_HEAVY)] = 50.0;
         return dry(V3ColumnInput.SCHEMA_VERSION, thermo.packageId(), assayId, thermo.componentBasis(),
                 feed, 550.0, 2, 1, 250_000.0, 750.0, List.of(
                         new V3ColumnSpecification.CondenserOutletTemperature(300.0),
                         new V3ColumnSpecification.OrganicRefluxRatio(2.0),
-                        new V3ColumnSpecification.ReboilerDuty(0.0)));
+                        new V3ColumnSpecification.ReboilerDuty(BINARY_REBOILER_DUTY_WATTS)));
     }
 
     /** A live-boilup binary whose interior phases pass the independent identity check. */
-    public static V3ColumnInput cdu17BoilingBinary(String assayId) {
-        var original = cdu17Binary(assayId);
+    public static V3ColumnInput crudeBoilingBinary(String assayId) {
+        var original = crudeBinary(assayId);
         return dry(original.schemaVersion(), original.packageId(), assayId, original.componentBasis(),
                 original.feedComponentMolarFlowsMolPerSecond(), 600, 2, 1, 250000, 750, List.of(
                         new V3ColumnSpecification.CondenserOutletTemperature(300),

@@ -38,14 +38,14 @@ import org.junit.jupiter.api.Test;
  * sum of the partial molar enthalpies 1.8e-15 of the molar enthalpy. The three identities are two to three
  * orders tighter than the finite-difference comparisons because nothing is differenced in them.</p>
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3PengRobinsonDerivativesTest {
     private static final double TEMPERATURE_STEP_KELVIN = 1.0e-3;
     private static final double MOLE_STEP = 1.0e-6;
     private static final double TOLERANCE = 1.0e-6;
 
     @ParameterizedTest
-    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:cdu17_tjl_acs2018"})
+    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:tjl20_methane"})
     void logFugacityTemperatureDerivativesMatchCentralDifferencesOnTheSameRoot(String packageId) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
         int compared = 0;
@@ -71,7 +71,7 @@ class V3PengRobinsonDerivativesTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:cdu17_tjl_acs2018"})
+    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:tjl20_methane"})
     void logFugacityCompositionDerivativesMatchCentralDifferences(String packageId) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
         int compared = 0;
@@ -103,7 +103,7 @@ class V3PengRobinsonDerivativesTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:cdu17_tjl_acs2018"})
+    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:tjl20_methane"})
     void phaseHeatCapacityAndPartialMolarEnthalpiesMatchCentralDifferences(String packageId) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
         int compared = 0;
@@ -146,7 +146,7 @@ class V3PengRobinsonDerivativesTest {
      * are computed from the former and the molar enthalpy from the latter.</p>
      */
     @ParameterizedTest
-    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:cdu17_tjl_acs2018"})
+    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:tjl20_methane"})
     void derivativeBundleSatisfiesSymmetryGibbsDuhemAndTheEulerEnthalpySum(String packageId) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
         int checked = 0;
@@ -197,12 +197,11 @@ class V3PengRobinsonDerivativesTest {
      */
     @Test
     void rankOneMixingDerivativesMatchTheGeneralQuadraticPath() {
-        PengRobinsonKernel rankOne = V3PengRobinsonSession.kernelFor(V3Cdu17TiaJuanaPackage.INSTANCE);
+        PengRobinsonKernel rankOne = V3PengRobinsonSession.kernelFor(V3ZeroPairCrudePackage.INSTANCE);
         PengRobinsonKernel general = V3PengRobinsonSession.kernelFor(new BarelyInteractingPackage());
         assertTrue(rankOne.usesRankOneMixing());
         assertFalse(general.usesRankOneMixing());
-        double[] composition = V3Cdu17TiaJuanaPackage.INSTANCE
-                .crudeFeed(V3Cdu17TiaJuanaPackage.ASSAY_ID).moleFractions();
+        double[] composition = V3ZeroPairCrudePackage.INSTANCE.mediumCrude();
         int count = composition.length;
         for (PengRobinsonKernel.Root root : PengRobinsonKernel.Root.values()) {
             PengRobinsonKernel.Derivatives first = rankOne.newDerivatives();
@@ -231,10 +230,10 @@ class V3PengRobinsonDerivativesTest {
     /** Values and derivatives share the numerical box; data-range edges are continuations. */
     @Test
     void derivativesRefuseTheSameStatesTheValuesRefuse() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_PACKAGE);
         double[] composition = new double[thermo.componentBasis().componentCount()];
-        composition[3] = 0.5;
-        composition[9] = 0.5;
+        composition[com.wormzjl.icheme.science.column.v3.V3TestInputs.index(thermo, "N-butane")] = 0.5;
+        composition[com.wormzjl.icheme.science.column.v3.V3TestInputs.index(thermo, "crude_pc06")] = 0.5;
         for (double[] outside : new double[][] {{6001.0, 250_000.0}, {500.0, 1.1e9}, {500.0, 0.5}}) {
             assertThrows(V3ThermoException.class, () -> thermo.fugacity(
                     outside[0], outside[1], composition, Root.LIQUID, thermo.newWorkspace()));
@@ -245,7 +244,7 @@ class V3PengRobinsonDerivativesTest {
 
     /** The value evaluation the derivative bundle carries is the very one {@link V3ThermoModel#fugacity} returns. */
     @ParameterizedTest
-    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:cdu17_tjl_acs2018"})
+    @ValueSource(strings = {"icheme:tjl19_dwsim", "icheme:tjl20_methane"})
     void derivativeBundleCarriesTheSameValuesTheFugacityPathPublishes(String packageId) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
         for (State state : states(thermo)) {
@@ -282,7 +281,8 @@ class V3PengRobinsonDerivativesTest {
             for (int i = 0; i < count; i++) fractions[i] /= total;
             states.add(new State(point[0], point[1], fractions));
         }
-        double[] feed = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(thermo.packageId())).moleFractions();
+        double[] feed = thermo.crudeFeed("icheme:tjl19_dwsim".equals(thermo.packageId()) ? com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.LITERATURE_ASSAY_ID
+                : com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_ASSAY).moleFractions();
         states.add(new State(420.0, 250_000.0, feed));
         states.add(new State(560.0, 250_000.0, feed));
         return states;
@@ -361,13 +361,14 @@ class V3PengRobinsonDerivativesTest {
     }
 
     /**
-     * The CDU17 package with one symmetric interaction pair set to the smallest positive double.
+     * The zero-pair medium crude ({@link V3ZeroPairCrudePackage}) with one symmetric interaction pair set to the smallest
+     * positive double.
      *
      * <p>{@code 1 - Double.MIN_VALUE} is exactly one, so every mixture quantity is the one the zero matrix
      * gives; only the kernel's choice of mixing path changes.</p>
      */
     private static final class BarelyInteractingPackage implements V3PropertyPackage {
-        private final V3PropertyPackage delegate = V3Cdu17TiaJuanaPackage.INSTANCE;
+        private final V3PropertyPackage delegate = V3ZeroPairCrudePackage.INSTANCE;
 
         @Override public String packageId() { return delegate.packageId(); }
         @Override public String datasetRevision() { return delegate.datasetRevision(); }

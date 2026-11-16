@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.column.v3.thermo;
 
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
+import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
 import com.wormzjl.icheme.science.thermo.TraceTruncationPolicy;
 import com.wormzjl.icheme.science.column.v3.V3ComponentBasis;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
@@ -236,6 +237,37 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
     double logFugacityCoefficient(Root phase, int component, V3ThermoWorkspace workspace) {
         requireWorkspace(workspace);
         return workspace.prSession.logFugacityCoefficient(phase, component);
+    }
+
+    /** The equilibrium engine's stability test of the workspace's normalised feed on the column's kernel. */
+    TangentPlaneStability.Result feedStability(double temperatureKelvin, double pressurePascal, V3ThermoWorkspace workspace) {
+        requireWorkspace(workspace);
+        return session.stability(temperatureKelvin, pressurePascal, workspace.normalizedOverall, workspace.prSession);
+    }
+
+    /**
+     * The equilibrium engine's split of the workspace's normalised feed ({@link V3FeedEngine#split}) into the workspace's
+     * liquid and vapour compositions.
+     *
+     * @return the split, or null where the package has no engine or the engine answers no split
+     */
+    V3FeedEngine.Split engineSplit(double temperatureKelvin, double pressurePascal, V3ThermoWorkspace workspace) {
+        requireWorkspace(workspace);
+        V3FeedEngine engine;
+        try {
+            engine = session.feedEngine();
+        } catch (IllegalArgumentException unavailable) {
+            return null;
+        }
+        if (engine == null) return null;
+        return engine.split(temperatureKelvin, pressurePascal, workspace.normalizedOverall, workspace.liquidComposition,
+                workspace.vaporComposition, workspace.prSession.engineWorkspace(engine));
+    }
+
+    /** The compressibility factor of the last {@link #evaluateInto} on {@code phase} in {@code workspace}. */
+    double compressibilityFactor(Root phase, V3ThermoWorkspace workspace) {
+        requireWorkspace(workspace);
+        return workspace.prSession.compressibilityFactor(phase);
     }
 
     /** The phase traits of the last {@link #evaluateInto} on {@code phase} in {@code workspace}, at its state. */

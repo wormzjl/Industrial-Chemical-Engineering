@@ -341,17 +341,10 @@ public final class SizingGlass {
                 String picked = unit(state, sized);
                 if (picked != null) requirements(c, x, sized, picked, box);
                 y += requirementHeight(x, sized, picked, m, width);
-                var limits = picked == null ? List.<Item>of() : limitItems(x, sized.units().get(picked).rating());
-                String[] limitHead = limitHead(x, x.text("sizing.every_limit", picked == null ? "" : name(x, picked)));
-                var lower = Table.of(m, width, limitHead, limits);
-                // What the picked item shows beside its limits, and the sheet's fans, wrapped under its table (C2, U1).
-                var said = new ArrayList<String>();
-                for (var text : beside(x, sized, picked)) said.addAll(m.wrap(text, width));
-                int below = (picked == null ? 0 : (limits.size() + 1) * lower.height() + 8) + said.size() * ROW + (said.isEmpty() ? 0 : 6);
-                int top = Math.max(box.y() + box.h() / 2, box.bottom() - below);
-                split(c, x, box, state, unitHead(x), unitItems(x, state, sized), y, top);
-                int end = picked == null ? top + 6 : lower.draw(c, box, limitHead, limits, 0, top + 6, box.bottom()) + 4;
-                for (var text : said) {
+                var lower = Limits.of(x, state, sized, m, box);
+                split(c, x, box, state, unitHead(x), unitItems(x, state, sized), y, lower.top());
+                int end = picked == null ? lower.top() + 6 : lower.table().draw(c, box, lower.head(), lower.items(), 0, lower.top() + 6, box.bottom()) + 4;
+                for (var text : lower.said()) {
                     if (end + ROW > box.bottom()) break;
                     c.text(text, box.x() + 4, end, Palette.TEXT);
                     end += ROW;
@@ -359,12 +352,9 @@ public final class SizingGlass {
             }
             case LINES -> {
                 String picked = line(state, sized);
-                var limits = picked == null ? List.<Item>of() : limitItems(x, sized.lines().get(picked).rating());
-                String[] limitHead = limitHead(x, x.text("sizing.every_limit", picked == null ? "" : name(x, picked)));
-                var lower = Table.of(m, width, limitHead, limits);
-                int below = picked == null ? 0 : (limits.size() + 1) * lower.height() + 8;
-                split(c, x, box, state, lineHead(x, x.units()), lineItems(x, state, sized), y, Math.max(box.y() + box.h() / 2, box.bottom() - below));
-                if (picked != null) lower.draw(c, box, limitHead, limits, 0, Math.max(box.y() + box.h() / 2, box.bottom() - below) + 6, box.bottom());
+                var lower = Limits.of(x, state, sized, m, box);
+                split(c, x, box, state, lineHead(x, x.units()), lineItems(x, state, sized), y, lower.top());
+                if (picked != null) lower.table().draw(c, box, lower.head(), lower.items(), 0, lower.top() + 6, box.bottom());
             }
             case PRESSURE -> {
                 var paths = pathItems(x, state, sized);
@@ -393,6 +383,59 @@ public final class SizingGlass {
             }
         }
         c.unclip();
+    }
+
+    /**
+     * The picked item's limits table under the item table on the Units and the Lines view: its head, rows and the limit of each
+     * row, its layout, the y of the line over it ({@code top}; the table starts 6 px under it) and, on the Units view, the lines
+     * said under it. The draw and the hover ({@link #hover}) place it from here, so a hover reads the row it is over.
+     */
+    private record Limits(String[] head, List<Item> items, List<Limit> limits, Table table, int top, List<String> said) {
+        static Limits of(SheetContext x, State state, SheetSizing.Sized sized, Measure m, Rect box) {
+            int width = box.w() - 8;
+            boolean units = state.view == View.UNITS;
+            String picked = units ? unit(state, sized) : line(state, sized);
+            var rating = picked == null ? null : units ? sized.units().get(picked).rating() : sized.lines().get(picked).rating();
+            var items = rating == null ? List.<Item>of() : limitItems(x, rating);
+            var limits = rating == null ? List.<Limit>of() : rating.readings().stream().map(Reading::limit).toList();
+            String[] head = limitHead(x, x.text("sizing.every_limit", picked == null ? "" : name(x, picked)));
+            var table = Table.of(m, width, head, items);
+            // What the picked item shows beside its limits, and the sheet's fans, wrapped under its table (C2, U1).
+            var said = new ArrayList<String>();
+            if (units) for (var text : beside(x, sized, picked)) said.addAll(m.wrap(text, width));
+            int below = (picked == null ? 0 : (items.size() + 1) * table.height() + 8) + said.size() * ROW + (said.isEmpty() ? 0 : 6);
+            return new Limits(head, items, limits, table, Math.max(box.y() + box.h() / 2, box.bottom() - below), said);
+        }
+
+        /** The limit of the row under {@code py}, or null: the rows as {@link Table#draw} lays them, from {@code top + 6}. */
+        @Nullable Limit at(double py, Rect box) {
+            int first = top + 6 + table.height();
+            int row = (int) Math.floor((py - (first - 2)) / table.height());
+            return row >= 0 && row < limits.size() && first + row * table.height() + table.height() <= box.bottom() ? limits.get(row) : null;
+        }
+    }
+
+    /**
+     * The advice a limit's row gives in its hover (P2 of batch 2026-11-16-supercritical-followups, item 11), or null for a row
+     * with none: what to do where the reading misses the limit, a sentence that does not fit on the glass.
+     */
+    static @Nullable String advice(SheetContext x, Limit limit) {
+        return switch (limit) {
+            case PUMP_DENSITY -> x.text("sizing.advice.pump_density");
+            default -> null;
+        };
+    }
+
+    /**
+     * The hover over a point of the glass: on the Units and the Lines view, the advice of the limits row under it ({@link #advice},
+     * its name first), else null. Read off the layout the glass draws; it computes nothing.
+     */
+    public static @Nullable String hover(SheetContext x, State state, Measure m, Rect box, double px, double py) {
+        var sized = sized(x);
+        if (sized == null || !box.contains(px, py) || state.view != View.UNITS && state.view != View.LINES) return null;
+        var limit = Limits.of(x, state, sized, m, box).at(py, box);
+        String advice = limit == null ? null : advice(x, limit);
+        return advice == null ? null : limitName(x, limit) + "\n" + advice;
     }
 
     /**

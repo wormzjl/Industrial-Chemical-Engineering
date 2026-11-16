@@ -10,9 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 /** Callback failures are caller failures, even when their type also describes a recoverable flash failure. */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3FlashCheckpointTest {
-    private static final String PACKAGE_ID = "icheme:cdu17_tjl_acs2018";
+    private static final String PACKAGE_ID = com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_PACKAGE;
     private static final TraceTruncationPolicy POLICY = TraceTruncationPolicy.of(1.0e-6);
 
     @Test
@@ -65,8 +64,9 @@ class V3FlashCheckpointTest {
 
     private static double[] binaryFeed(V3PengRobinsonThermo thermo) {
         double[] feed = new double[thermo.componentBasis().componentCount()];
-        feed[1] = 0.5; // Ethane.
-        feed[15] = 0.5; // PC12; phase omission is qualified by the reference flash, not its identity.
+        feed[com.wormzjl.icheme.science.column.v3.V3TestInputs.index(thermo, "Ethane")] = 0.5;
+        // The heaviest cut; phase omission is qualified by the reference flash, not its identity.
+        feed[com.wormzjl.icheme.science.column.v3.V3TestInputs.index(thermo, "crude_pc12")] = 0.5;
         return feed;
     }
 }

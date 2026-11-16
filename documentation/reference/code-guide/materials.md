@@ -236,8 +236,8 @@ staleness, the sheet file. Numbers: [FORMATS.md](../FORMATS.md).
 | Viscosity, liquid mixing, appearance | `ViscosityCorrelation`, `LiquidMixtureCorrection`, `FluidAppearance` | `ViscosityTest`, `LiquidMixtureCorrectionTest`, `MixtureViscosityTest`, `FluidAppearanceTest` |
 | Reload and publication | `MaterialReloadListener`, `MaterialRuntime` | `MaterialCatalogTest.runningContextKeepsBothPrAndWaterAcrossPublicationAndRestoresAfterFailure`; GameTest `MaterialReloadGameTests` (`materialReloadIsAtomic`, `columnPresetsLoadWithRevisionChecks`) |
 
-Helpers: `MaterialTestBasis`, `Cdu17TestCatalog`, `SubRecords`, and the catalog extensions `Cdu17FixtureExtension`,
-`TjlReferenceExtension`, `TiaJuanaExtension` on `CatalogScopedExtension`. `verifyMaterialIndex` (a build check before
+Helpers: `MaterialTestBasis`, `SubRecords`, and the catalog extensions `TjlReferenceExtension`, `TiaJuanaExtension` on
+`CatalogScopedExtension`. Tests of a crude without a literature reference use the bundled medium crude preset. `verifyMaterialIndex` (a build check before
 `processResources`) fails a bundled file missing from `materials-index.json`.
 
 ## Traps

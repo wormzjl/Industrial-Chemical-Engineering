@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import com.wormzjl.icheme.science.column.v3.thermo.V3CrudeFeed;
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3Sotelo2019SideDrawCaseTest {
     @Test
     void sourceAnalogPreservesPublishedGeometryAndFlowFractions() {
@@ -97,8 +96,8 @@ class V3Sotelo2019SideDrawCaseTest {
             if (!Double.isFinite(drawScale) || drawScale <= 0.0) {
                 throw new IllegalArgumentException("Sotelo side-draw scale must be finite and positive");
             }
-            V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-            V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+            V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+            V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
             double[] feed = crude.moleFractions();
             for (int component = 0; component < feed.length; component++) {
                 feed[component] *= MODEL_FEED_KMOL_PER_HOUR / 3.6;

@@ -14,6 +14,7 @@ The same route as `tools/pump-compressor-controls/make_loops.py`, which made the
 - Pump cavitation (W10c, decision D35): "gravel in the pump", a train of about 140 sharp random clicks a second (short bright bursts around 4 kHz and 1.2 kHz, heavy-tailed in strength) over a faint broadband hiss, rounded by a soft limit (tanh at 2.2 times its RMS) so the snaps do not clip. Each click wraps round the loop's end. In game its volume is `I_c(σ)` (`Wear.intensity`) times the casing's gain.
 - Pump gas churn (W10c, D35): low irregular surges, a noise band about 110 Hz (50 to 200 Hz, with a little at 60 Hz) under a smooth random envelope swelling one to four times a second. In game its volume is `GasEntrainment.churn(α/α_T)` times the casing's gain.
 - Steam turbine: steam hiss through nozzles and blading (broad, about 3 kHz, with a lower band about 800 Hz), a blade-passing tone at 2,400 Hz with harmonics, a low rotor rumble at 50 and 150 Hz, a slow two-per-second steam surge.
+- Plunger pump (`plunger_candidates.py`, batch 2026-11-16-supercritical-followups P4): a triplex at its rated 300 rpm, 48 kHz, 4 s (20 crank turns). Clean modal valve knocks (30 seatings a second, the discharge valves harder, each valve its own modes), soft crosshead clacks, the delivery ripple at 15 Hz and its harmonics, a faint 575 Hz gear mesh with sidebands, a low crank and gearbox rumble and a faint valve wash, the noise floor 13 dB under the pulses. Three candidates (A valve_knock, B crank_heavy, C clean); A is `plunger_pump_running.ogg`. The script rolls each loop so its seam falls between knocks.
 
 Each casing loop keeps the 2026-10-23 loop's RMS (pump 0.0926, compressor 0.1109); the drivers take the pump's. In game the volume law `UnitDesign.soundGain(shape, speed)` sets the loudness and `UnitDesign.soundPitch(speed)` the pitch.
 
@@ -29,10 +30,11 @@ Then copy the `.ogg` files into `src/main/resources/assets/icheme/sounds/`. The 
 
 ## Entry points
 
-`make_loops.py <output folder>`.
+`make_loops.py <output folder>`; `plunger_candidates.py <output folder>`.
 
 ## History
 
+- 2026-11-16 (P4, the owner hears it later): `plunger_pump_running.ogg` = candidate A (44,992 bytes, 192,000 frames at 48 kHz, RMS 0.0918, peak 0.397, seam step 0.0011 against a mean step of 0.0043, floor 13.4 dB under the pulses, no bin above 100 Hz over 1 % of the power). Candidates in the main checkout's `research/2026-11-16-supercritical-followups/sounds/`.
 - 2026-11-04 (owner: "Rotation machine sound should also scale with their rpm"): the pitch law reads the loops' reference speeds, `UnitDesign.PUMP_LOOP_RPM` 2950 rpm for `pump_running` (its 300 Hz vane pass, 2950 rpm x 6 vanes; the pump's crackle and churn share it) and `UnitDesign.MOTOR_LOOP_RPM` 1500 rpm for `motor_running` and the generator (250 Hz fan blade pass, 25 Hz x 10 blades). `compressor_running` and `turbine_running` state no speed and sound at their machine's rated speed. Pitch = n/n_loop, 0.5 to 2.
 - 2026-11-10: `pump_cavitation.ogg` in the mod is now `tools/process-sounds/valve_candidates.py`'s L2 (owner); this tool's loop is no longer used. Do not copy it back.
 - 2026-11-04 (W10c): `pump_cavitation.ogg` (22,261 bytes, RMS 0.101, peak 0.47, seam step 0.054 against a mean step of 0.092) and `pump_gas.ogg` (7,864 bytes, RMS 0.093, peak 0.57, seam step 0.0007 against 0.0021); the other four loops re-render with the same numbers and were not copied (Ogg stream serials differ per run).

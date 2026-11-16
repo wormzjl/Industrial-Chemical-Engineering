@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test;
  * The frozen-flow energy/temperature predictor: its tridiagonal system on a hand-built column, and its effect
  * on the first heat rung of the source three-cooler arrangement.
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3EnergyShiftPredictorTest {
     private static final long BUDGET_NANOS = 180_000_000_000L;
     private static final Pattern FIRST_RUNG =
@@ -171,10 +170,10 @@ class V3EnergyShiftPredictorTest {
         return jacobian;
     }
 
-    /** The source arrangement on the 30-tray CDU17 column at the source operating point, without side draws. */
+    /** The source arrangement on the 30-tray medium crude column at the source operating point, without side draws. */
     private static V3ColumnInput threeCoolerNoDrawInput() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

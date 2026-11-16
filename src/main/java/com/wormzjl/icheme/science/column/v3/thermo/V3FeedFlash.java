@@ -3,33 +3,56 @@ package com.wormzjl.icheme.science.column.v3.thermo;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
 import com.wormzjl.icheme.science.thermo.PhaseTraits;
+import com.wormzjl.icheme.science.thermo.TangentPlaneStability;
+import com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium;
 import java.util.Locale;
 
 /**
  * Bounded rigorous dry-hydrocarbon TP flash with normal all-liquid, two-phase, and all-vapor outcomes.
  *
- * <p>A feed with no two-phase solution at its state is one fluid (batch 2026-11-15-supercritical-fluids, D1). Where
- * successive substitution collapses the K-values toward the trivial solution, the feed is answered as one phase
- * ({@link #onePhase}). A collapse is the largest {@code |ln K|} of the feed's components falling at every iteration. The
- * flash answers it where the Rachford-Rice root leaves (0, 1) during the collapse, or where the iterations run out with
- * {@code |ln K|} at most {@link #TRIVIAL_LOG_K}. This reads the flash's own iterates; it is not a stability test. On the
- * review's grid (COLUMN_FEED_REVIEW.md: 10,602 states of six mixtures) no feed that the equilibrium engine splits meets
- * it: every refused real split runs out of iterations with {@code |ln K|} at 0.1 or above.</p>
+ * <p>A feed is one phase exactly where it is stable against a second phase (batch 2026-11-16-supercritical-followups,
+ * P3, form F3). The flash brackets two phases with Wilson's K and iterates by successive substitution on the PR78
+ * K-values. Where it does not reach an answer it asks the equilibrium engine's tangent-plane stability test
+ * ({@link TangentPlaneStability} on the column's own kernel):</p>
+ * <ul>
+ *   <li>at the Wilson endpoint (no two-phase bracket): a stable feed is the endpoint's phase, as before;</li>
+ *   <li>where the Rachford-Rice root is lost or the iterations run out: a stable feed is one phase ({@link #onePhase}),
+ *       its label by the network's slot rule;</li>
+ *   <li>an unstable feed is first read for the kind of its instability (rule B, {@link #towardsVapour}): where neither the
+ *       test's stationary phase nor the feed, each on its root, is the column's vapour, the feed would only form a second
+ *       liquid. The column is a vapour-liquid stage model: it carries that feed as one liquid (the endpoint's answer, or
+ *       {@link #onePhase} with {@link #SECOND_LIQUID}), and the trays' notes report a liquid that would settle (owner
+ *       rule). No restart and no engine call: from a liquid trial, successive substitution can reach a vapour-liquid
+ *       stationary point of the one-liquid model that is no equilibrium (an ethanol, water and hexane distillate at 320 K
+ *       and 1 atm took 10 % "vapour" with 39 % water, LANE_FIXES_REVIEW.md);</li>
+ *   <li>an unstable feed towards a vapour iterates (or iterates once more) from the stationary phase, and where that
+ *       gives no split takes the equilibrium engine's own ({@link V3FeedEngine}), its enthalpies on the column's roots.</li>
+ * </ul>
+ * <p>The column takes an unstable feed's split only where its lighter phase is the column's vapour (rule D,
+ * {@link #lighterPhaseIsVapour} for the column's own split, the engine's own state of its lighter phase for the engine's,
+ * {@link V3FeedEngine.Split}): a vapour by the slot rule, or a fluid above its own critical temperature. A split into two
+ * liquids after all is one liquid. At the Wilson endpoint, wherever no vapour-liquid split is found, the endpoint's answer
+ * stands (one liquid, a known limit: a cold crude whose heaviest cut separates as a second liquid). Only a feed unstable
+ * towards a vapour that neither the flash nor the engine splits, off the endpoint, stays a typed refusal. So every feed
+ * the frozen flash answered is answered.</p>
+ * <p>On the review's grids (P3_COLUMN_FEED_REVIEW.md: 10,602 states of six mixtures) no feed the engine splits into a
+ * vapour and a liquid is answered as one phase and no answer of the frozen flash moves outside the 181 real splits it
+ * called one phase at the Wilson endpoint. Where the column's iteration converges, its split and the engine's agree to
+ * 1e-10 in {@code ln K}.</p>
  */
 final class V3FeedFlash {
     private static final int MAXIMUM_ITERATIONS = 64;
     private static final int RACHFORD_RICE_ITERATIONS = 100;
     private static final double LOG_K_TOLERANCE = 1.0e-10;
     private static final double PHASE_ENDPOINT_TOLERANCE = 1.0e-12;
-    /**
-     * The largest {@code |ln K|} of a collapse that ran out of iterations and is still answered as one phase: the square
-     * root of {@link #LOG_K_TOLERANCE}. It is four decades below the smallest {@code |ln K|} of a stalled real split on the
-     * review's grid (0.1). Phases whose K-values are within it differ by at most 1e-5 in {@code ln(y/x)}: one fluid at the
-     * column's resolution.
-     */
-    private static final double TRIVIAL_LOG_K = 1.0e-5;
-    /** The start of every detail of a one-phase answer by the collapse rule. */
+    /** A stationary phase within this {@code sum (ln W_i - ln z_i)^2} of the feed seeds nothing: the engine's own bound. */
+    private static final double TRIVIAL_SEED = FluidTpEquilibrium.Settings.DEFAULT.trivialDistance();
+    /** The start of every detail of a one-phase answer of a stable feed. */
     static final String ONE_PHASE = "one phase, no two-phase split";
+    /** The detail of the equilibrium engine's split. */
+    static final String ENGINE_SPLIT = "two-phase split of the equilibrium engine";
+    /** The end of the detail of a feed unstable only towards a second liquid, which the column carries as one. */
+    static final String SECOND_LIQUID = "; unstable only towards a second liquid, carried as one liquid";
 
     private V3FeedFlash() {}
 
@@ -45,37 +68,146 @@ final class V3FeedFlash {
             throw new V3ThermoException(V3ThermoException.Code.FLASH_NONCONVERGENCE, null,
                     "V3 feed flash could not establish a finite Rachford-Rice phase bracket");
         }
-        if (atLiquidEndpoint <= PHASE_ENDPOINT_TOLERANCE) {
-            model.evaluateInto(temperatureKelvin, pressurePascal, workspace.normalizedOverall, Root.LIQUID, workspace);
-            return V3FlashResult.liquid(0, workspace.normalizedOverall,
-                    model.phaseMolarEnthalpy(temperatureKelvin, workspace.normalizedOverall, Root.LIQUID, workspace),
-                    "all-liquid Wilson endpoint classification");
-        }
-        if (atVaporEndpoint >= -PHASE_ENDPOINT_TOLERANCE) {
-            model.evaluateInto(temperatureKelvin, pressurePascal, workspace.normalizedOverall, Root.VAPOR, workspace);
-            return V3FlashResult.vapor(0, workspace.normalizedOverall,
-                    model.phaseMolarEnthalpy(temperatureKelvin, workspace.normalizedOverall, Root.VAPOR, workspace),
-                    "all-vapor Wilson endpoint classification");
+        boolean liquidEndpoint = atLiquidEndpoint <= PHASE_ENDPOINT_TOLERANCE;
+        boolean endpoint = liquidEndpoint || atVaporEndpoint >= -PHASE_ENDPOINT_TOLERANCE;
+        double[][] endpointScratch = null;
+        TangentPlaneStability.Result stability = null;
+        if (endpoint) {
+            // Wilson's K put the feed outside its two-phase bracket: one phase unless the stability test proves a second.
+            stability = model.feedStability(temperatureKelvin, pressurePascal, workspace);
+            // Stable, or unstable only towards a second liquid (rule B): the endpoint's one phase, as it always was.
+            if (stability.verdict() != TangentPlaneStability.Verdict.UNSTABLE
+                    || !towardsVapour(model, temperatureKelvin, pressurePascal, stability, workspace)) {
+                return endpointAnswer(model, temperatureKelvin, pressurePascal, workspace, liquidEndpoint);
+            }
+            // Kept so that a feed with no vapour-liquid split leaves the workspace as the endpoint answer always did.
+            endpointScratch = new double[][] {workspace.logK.clone(), workspace.nextLogK.clone(),
+                    workspace.liquidComposition.clone(), workspace.vaporComposition.clone()};
+            seedFromStationaryPhase(model, temperatureKelvin, pressurePascal, stability, workspace);
         }
 
         // These values are fixed during each root solve. Allocate scratch once per two-phase flash;
         // the other workspace arrays remain available to the reference/truncation protocol.
         double[] k = new double[componentCount];
         double[] kMinusOne = new double[componentCount];
-        // The collapse is only read while the iteration runs: a flash answered before is unchanged to the bit.
-        double previousSpread = Double.POSITIVE_INFINITY;
-        boolean collapsing = true;
+        Failure failure = new Failure();
+        V3FlashResult split = iterate(model, temperatureKelvin, pressurePascal, workspace, k, kMinusOne, failure);
+        if (!endpoint) {
+            // The iteration from Wilson's K: its answer stands, as it always did.
+            if (split != null) return split;
+            stability = model.feedStability(temperatureKelvin, pressurePascal, workspace);
+            if (stability.verdict() == TangentPlaneStability.Verdict.STABLE) {
+                return onePhase(model, temperatureKelvin, pressurePascal, workspace, failure.iteration, "");
+            }
+            if (stability.verdict() == TangentPlaneStability.Verdict.UNRESOLVED) {
+                throw new V3ThermoException(V3ThermoException.Code.FLASH_NONCONVERGENCE, null,
+                        failure.message + "; its stability test is unresolved");
+            }
+            // Unstable only towards a second liquid (rule B): one liquid, no restart, no engine.
+            if (!towardsVapour(model, temperatureKelvin, pressurePascal, stability, workspace)) {
+                return onePhase(model, temperatureKelvin, pressurePascal, workspace, failure.iteration, SECOND_LIQUID);
+            }
+            // Unstable towards a vapour: once more from the stability test's stationary phase.
+            split = seedFromStationaryPhase(model, temperatureKelvin, pressurePascal, stability, workspace)
+                    ? iterate(model, temperatureKelvin, pressurePascal, workspace, k, kMinusOne, failure) : null;
+        }
+        // An unstable feed: only a vapour-liquid split counts, the column's own or, where substitution does not reach
+        // one, the equilibrium engine's. A split into two liquids is one liquid for the column (rule D).
+        if (split != null && split.phase() != V3FeedPhase.TWO_PHASE) split = null;
+        boolean twoLiquids = false;
+        if (split != null) {
+            // The column's own converged split: its K-values come from the vapour root, so that root decides.
+            if (lighterPhaseIsVapour(model, temperatureKelvin, pressurePascal, split, workspace)) return split;
+            twoLiquids = true;
+        } else {
+            // The engine's split: its own lighter phase decides (V3FeedEngine.Split), and only a vapour-liquid split is
+            // given enthalpies, the lighter phase on the vapour root.
+            V3FeedEngine.Split engine = model.engineSplit(temperatureKelvin, pressurePascal, workspace);
+            if (engine != null && engine.lighterShare() > 0.0 && engine.lighterShare() < 1.0) {
+                if (engine.lighterIsVapour()) {
+                    return engineSplit(model, temperatureKelvin, pressurePascal, workspace, engine.lighterShare(), failure.iteration);
+                }
+                twoLiquids = true;
+            }
+        }
+        if (endpoint) {
+            // No vapour-liquid split: the endpoint's answer stands, as it always did, the workspace as it left it.
+            System.arraycopy(endpointScratch[0], 0, workspace.logK, 0, componentCount);
+            System.arraycopy(endpointScratch[1], 0, workspace.nextLogK, 0, componentCount);
+            System.arraycopy(endpointScratch[2], 0, workspace.liquidComposition, 0, componentCount);
+            System.arraycopy(endpointScratch[3], 0, workspace.vaporComposition, 0, componentCount);
+            return endpointAnswer(model, temperatureKelvin, pressurePascal, workspace, liquidEndpoint);
+        }
+        // A split into two liquids after all: one liquid, the trays' notes report a liquid that would settle (owner rule).
+        if (twoLiquids) {
+            return onePhase(model, temperatureKelvin, pressurePascal, workspace, failure.iteration, SECOND_LIQUID);
+        }
+        throw new V3ThermoException(V3ThermoException.Code.FLASH_NONCONVERGENCE, null, failure.message
+                + "; the feed is unstable towards a vapour and neither the flash nor the equilibrium engine gives a split");
+    }
+
+    /**
+     * Whether the stability test proved the feed unstable towards a vapour: its stationary phase on its root or the feed on
+     * its own root is the column's vapour by rule D (reduced density below 1, or on a supercritical isotherm of its own
+     * composition). Otherwise both are liquids and the feed would only form a second liquid. A known limit: where the test
+     * stops at a liquid trial while a vapour could also form (a three-phase state), the feed is read as two liquids.
+     */
+    private static boolean towardsVapour(V3PengRobinsonThermo model, double temperatureKelvin, double pressurePascal,
+                                         TangentPlaneStability.Result stability, V3ThermoWorkspace workspace) {
+        model.evaluateInto(temperatureKelvin, pressurePascal, stability.trialComposition(), stability.trialRoot(), workspace);
+        if (isVapour(model.phaseTraits(stability.trialRoot(), temperatureKelvin, pressurePascal, workspace))) return true;
+        model.evaluateInto(temperatureKelvin, pressurePascal, workspace.normalizedOverall, stability.feedRoot(), workspace);
+        return isVapour(model.phaseTraits(stability.feedRoot(), temperatureKelvin, pressurePascal, workspace));
+    }
+
+    /** Rule D: the column's vapour is below reduced density 1 or on a supercritical isotherm of its own composition. */
+    private static boolean isVapour(PhaseTraits traits) {
+        return traits.reducedDensity() < 1.0 || traits.supercriticalIsotherm();
+    }
+
+    /** The Wilson endpoint's one phase: the feed on the endpoint's root. */
+    private static V3FlashResult endpointAnswer(V3PengRobinsonThermo model, double temperatureKelvin, double pressurePascal,
+                                                V3ThermoWorkspace workspace, boolean liquidEndpoint) {
+        Root root = liquidEndpoint ? Root.LIQUID : Root.VAPOR;
+        model.evaluateInto(temperatureKelvin, pressurePascal, workspace.normalizedOverall, root, workspace);
+        double enthalpy = model.phaseMolarEnthalpy(temperatureKelvin, workspace.normalizedOverall, root, workspace);
+        return liquidEndpoint
+                ? V3FlashResult.liquid(0, workspace.normalizedOverall, enthalpy, "all-liquid Wilson endpoint classification")
+                : V3FlashResult.vapor(0, workspace.normalizedOverall, enthalpy, "all-vapor Wilson endpoint classification");
+    }
+
+    /**
+     * Whether the column's own converged split has its lighter phase as the column's vapour (its K-values come from the
+     * vapour root, which therefore decides), the phase that goes up from the feed tray: a vapour by the
+     * network's slot rule (reduced density below 1), or a fluid on a supercritical isotherm of its own composition, which
+     * has no liquid identity ({@link PhaseTraits#supercriticalIsotherm()}). Otherwise both phases are subcritical liquids:
+     * two liquids, which the two-phase stage model does not carry.
+     */
+    private static boolean lighterPhaseIsVapour(V3PengRobinsonThermo model, double temperatureKelvin, double pressurePascal,
+                                                V3FlashResult split, V3ThermoWorkspace workspace) {
+        model.evaluateInto(temperatureKelvin, pressurePascal, split.vaporComposition(), Root.VAPOR, workspace);
+        return isVapour(model.phaseTraits(Root.VAPOR, temperatureKelvin, pressurePascal, workspace));
+    }
+
+    /** Where successive substitution left off without an answer. */
+    private static final class Failure {
+        int iteration;
+        String message;
+    }
+
+    /**
+     * Successive substitution from the workspace's {@code ln K}: the converged split or endpoint, or null with
+     * {@code failure} naming where it left off (the Rachford-Rice root lost, or the iterations run out).
+     */
+    private static V3FlashResult iterate(V3PengRobinsonThermo model, double temperatureKelvin, double pressurePascal,
+                                         V3ThermoWorkspace workspace, double[] k, double[] kMinusOne, Failure failure) {
+        int componentCount = workspace.componentCount();
         for (int iteration = 1; iteration <= MAXIMUM_ITERATIONS; iteration++) {
-            double spread = logKSpread(workspace.normalizedOverall, workspace.logK);
-            if (!(spread < previousSpread)) collapsing = false;
-            previousSpread = spread;
             double vaporFraction = rachfordRiceRoot(workspace.normalizedOverall, workspace.logK, k, kMinusOne);
             if (!Double.isFinite(vaporFraction) || vaporFraction <= 0.0 || vaporFraction >= 1.0) {
-                if (Double.isFinite(vaporFraction) && collapsing) {
-                    return onePhase(model, temperatureKelvin, pressurePascal, workspace, iteration);
-                }
-                throw new V3ThermoException(V3ThermoException.Code.FLASH_NONCONVERGENCE, null,
-                        "V3 feed flash lost its two-phase Rachford-Rice root");
+                failure.iteration = iteration;
+                failure.message = "V3 feed flash lost its two-phase Rachford-Rice root";
+                return null;
             }
             populatePhaseCompositions(workspace.normalizedOverall, workspace.logK, vaporFraction,
                     workspace.liquidComposition, workspace.vaporComposition);
@@ -107,22 +239,71 @@ final class V3FeedFlash {
             }
             System.arraycopy(workspace.nextLogK, 0, workspace.logK, 0, componentCount);
         }
-        if (collapsing && logKSpread(workspace.normalizedOverall, workspace.logK) <= TRIVIAL_LOG_K) {
-            return onePhase(model, temperatureKelvin, pressurePascal, workspace, MAXIMUM_ITERATIONS);
+        failure.iteration = MAXIMUM_ITERATIONS;
+        failure.message = "V3 feed flash did not converge within " + MAXIMUM_ITERATIONS + " iterations";
+        return null;
+    }
+
+    /**
+     * Seeds {@code ln K} from the stability test's stationary phase {@code W}, the lighter of it and the feed the vapour:
+     * {@code ln K_i = +-(ln W_i - ln z_i)}, as the equilibrium engine seeds its split ({@code TwoPhaseFlash}). A stationary
+     * point within {@link #TRIVIAL_SEED} of the feed (instability proven by the feed's own curvature) seeds nothing:
+     * Wilson's K stay.
+     *
+     * @return whether the seed was taken
+     */
+    private static boolean seedFromStationaryPhase(V3PengRobinsonThermo model, double temperatureKelvin, double pressurePascal,
+                                                   TangentPlaneStability.Result stability, V3ThermoWorkspace workspace) {
+        double[] trial = stability.trialComposition();
+        double[] overall = workspace.normalizedOverall;
+        model.evaluateInto(temperatureKelvin, pressurePascal, trial, stability.trialRoot(), workspace);
+        double trialCompressibility = model.compressibilityFactor(stability.trialRoot(), workspace);
+        model.evaluateInto(temperatureKelvin, pressurePascal, overall, stability.feedRoot(), workspace);
+        boolean trialIsVapour = trialCompressibility > model.compressibilityFactor(stability.feedRoot(), workspace);
+        double distance = 0.0;
+        for (int component = 0; component < overall.length; component++) {
+            if (overall[component] == 0.0) continue;
+            double ratio = DeterministicMath.log(trial[component]) - DeterministicMath.log(overall[component]);
+            distance += ratio * ratio;
         }
-        throw new V3ThermoException(V3ThermoException.Code.FLASH_NONCONVERGENCE, null,
-                "V3 feed flash did not converge within " + MAXIMUM_ITERATIONS + " iterations");
+        if (!(distance >= TRIVIAL_SEED)) return false;
+        for (int component = 0; component < overall.length; component++) {
+            if (overall[component] == 0.0) continue;
+            double ratio = DeterministicMath.log(trial[component]) - DeterministicMath.log(overall[component]);
+            workspace.logK[component] = trialIsVapour ? ratio : -ratio;
+        }
+        return true;
+    }
+
+    /**
+     * The equilibrium engine's split, already in the workspace's liquid and vapour compositions, with the enthalpies on the
+     * column's own roots (the liquid on the liquid root, the vapour on the vapour root, as the column's own split).
+     */
+    private static V3FlashResult engineSplit(V3PengRobinsonThermo model, double temperatureKelvin, double pressurePascal,
+                                             V3ThermoWorkspace workspace, double vaporFraction, int iterations) {
+        double[] liquid = workspace.liquidComposition;
+        double[] vapor = workspace.vaporComposition;
+        model.evaluateInto(temperatureKelvin, pressurePascal, liquid, Root.LIQUID, workspace);
+        model.evaluateInto(temperatureKelvin, pressurePascal, vapor, Root.VAPOR, workspace);
+        for (int component = 0; component < liquid.length; component++) {
+            workspace.logK[component] = liquid[component] > 0.0 && vapor[component] > 0.0
+                    ? DeterministicMath.log(vapor[component]) - DeterministicMath.log(liquid[component]) : 0.0;
+            workspace.nextLogK[component] = workspace.logK[component];
+        }
+        double enthalpy = (1.0 - vaporFraction) * model.phaseMolarEnthalpy(temperatureKelvin, liquid, Root.LIQUID, workspace)
+                + vaporFraction * model.phaseMolarEnthalpy(temperatureKelvin, vapor, Root.VAPOR, workspace);
+        return V3FlashResult.twoPhase(iterations, vaporFraction, liquid, vapor, enthalpy, ENGINE_SPLIT);
     }
 
     /**
      * The feed as one phase: the overall composition on its own root. With one physical root its label is the
      * network's slot rule (owner decision O2 A): liquid where the reduced density {@code v_c / v} is at least 1
      * ({@link PhaseTraits#reducedDensity()}), vapour below. With both roots, the root of lower Gibbs energy,
-     * {@code sum z_i ln phi_i} at the same temperature, pressure and composition.
+     * {@code sum z_i ln phi_i} at the same temperature, pressure and composition. {@code note} ends the detail.
      */
     private static V3FlashResult onePhase(
             V3PengRobinsonThermo model, double temperatureKelvin, double pressurePascal, V3ThermoWorkspace workspace,
-            int iterations) {
+            int iterations, String note) {
         double[] overall = workspace.normalizedOverall;
         model.evaluateInto(temperatureKelvin, pressurePascal, overall, Root.LIQUID, workspace);
         model.evaluateInto(temperatureKelvin, pressurePascal, overall, Root.VAPOR, workspace);
@@ -147,18 +328,10 @@ final class V3FeedFlash {
             detail = ONE_PHASE + (traits.supercriticalIsotherm() ? " above" : " below") + " the mixture's pseudo-critical temperature: "
                     + (root == Root.LIQUID ? "liquid" : "vapour") + String.format(Locale.ROOT, " by reduced density %.3f", reducedDensity);
         }
+        detail += note;
         double enthalpy = model.phaseMolarEnthalpy(temperatureKelvin, overall, root, workspace);
         return root == Root.LIQUID ? V3FlashResult.liquid(iterations, overall, enthalpy, detail)
                 : V3FlashResult.vapor(iterations, overall, enthalpy, detail);
-    }
-
-    /** The largest {@code |ln K|} over the feed's components: zero at the trivial solution. */
-    private static double logKSpread(double[] composition, double[] logK) {
-        double spread = 0.0;
-        for (int component = 0; component < composition.length; component++) {
-            if (composition[component] != 0.0) spread = Math.max(spread, Math.abs(logK[component]));
-        }
-        return spread;
     }
 
     private static double rachfordRiceRoot(double[] composition, double[] logK, double[] k, double[] kMinusOne) {

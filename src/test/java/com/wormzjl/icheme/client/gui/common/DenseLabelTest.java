@@ -111,6 +111,36 @@ class DenseLabelTest {
         assertEquals("Head share", reading.label());
         var gas = DeviceColumn.suction(new DeviceColumn.Suction("—", "—", "0.4", "100.0", "—"), texts);
         assertEquals("Gas", ((Column.Reading) ((Column.Group) gas.getFirst()).rows().get(2)).label());
+        // A two-phase supply (P2 of batch 2026-11-16-supercritical-followups, item 10): the head share beside the gas.
+        var both = (Column.Group) DeviceColumn.suction(new DeviceColumn.Suction("—", "—", "8.0", "100.0", "—", false, "71.2"), texts).getFirst();
+        assertEquals(List.of("Gas", "Head share"), both.rows().subList(2, 4).stream().map(r -> ((Column.Reading) r).label()).toList());
+        assertEquals("71.2", ((Column.Reading) both.rows().get(3)).value());
+        assertEquals(3, ((Column.Group) gas.getFirst()).rows().size(), "no head share without one");
         assertTrue(texts.missing.isEmpty(), "every line in English: " + texts.missing);
+    }
+
+    /**
+     * P2 of batch 2026-11-16-supercritical-followups, item 12: the client's evaluation gives the dense row's liquid-like weight
+     * from the same root's reduced density, equal to the server's on the model's state; the "Dense" share's colour blends the
+     * vapour's to the liquid's by it, so it is the liquid slot's colour from reduced density 1 and close to the vapour's at 0.5.
+     */
+    @Test void theClientReadsTheWeightTheServerReads() {
+        double[] co2 = pure("CarbonDioxide");
+        for (double delta : new double[]{.6, .8, 1.0005, 1.6}) {
+            var s = at(310, pressureAt(310, co2, delta), co2);
+            var read = DenseLabel.read(MODEL, MODEL.components(), s.temperature(), s.pressure(), volumes(s), moles(s));
+            assertEquals(client(s), read.row());
+            assertEquals(FluidThermodynamics.pumpLiquidLikeWeight(s), read.weight(), 1e-12, "the weight at " + delta);
+            assertEquals(FluidThermodynamics.pumpLiquidLikeWeight(s), DenseLabel.weight(s), 0, "the model state's weight at " + delta);
+        }
+        assertEquals(.104, DenseLabel.weight(.6), 1e-12);
+        assertEquals(.648, DenseLabel.weight(.8), 1e-12);
+        assertEquals(DenseLabel.Reading.NONE, DenseLabel.read(MODEL, MODEL.components(), 300, 1e5, new double[]{0, 0, 1}, moles(at(300, 1e5, pure("Nitrogen")))));
+        int vapour = DeviceColumn.PHASE_COLOURS[2], oil = DeviceColumn.PHASE_COLOURS[0];
+        assertEquals(vapour, DenseLabel.blend(vapour, oil, 0));
+        assertEquals(oil, DenseLabel.blend(vapour, oil, 1));
+        assertEquals(vapour, DenseLabel.blend(vapour, oil, Double.NaN));
+        int half = DenseLabel.blend(0xFF000000, 0xFFC8C8C8, .5);
+        assertEquals(0xFF646464, half);
     }
 }

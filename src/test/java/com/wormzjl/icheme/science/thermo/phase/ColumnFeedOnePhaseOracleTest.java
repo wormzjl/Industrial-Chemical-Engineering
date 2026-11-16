@@ -19,8 +19,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The column's feed flash against the equilibrium engine on the same PR78 kernel and pairs (batch
- * 2026-11-15-supercritical-fluids, D1, COLUMN_FEED_REVIEW.md). Every feed the flash answers by its one-phase rule is one
- * phase by the engine; its label is the network's slot rule on the engine's own phase traits (liquid where the reduced
+ * 2026-11-15-supercritical-fluids, D1, COLUMN_FEED_REVIEW.md). Every feed the flash answers as one phase is one phase by
+ * the engine (batch 2026-11-16-supercritical-followups, P3: the Wilson endpoint's answers too). Of a stable feed answered
+ * by the one-phase rule, the label is the network's slot rule on the engine's own phase traits (liquid where the reduced
  * density is at least 1); its residual enthalpy is the engine's less the engine's volume translation {@code P c}
  * ({@link TranslatedCubic}: the engine's {@code h^R + P c}), to rounding. The ideal-gas parts differ by the two
  * packages' fits (the column's degree-five Cp fit, the engine's {@code CoefficientIdealGas}); they are not compared.
@@ -42,8 +43,9 @@ class ColumnFeedOnePhaseOracleTest {
                 count(catalog, CARBON_DIOXIDE, Map.of("CarbonDioxide", 0.9, "Methane", 0.1)),
                 count(catalog, NETWORK, Map.of("Methane", 0.90, "Ethane", 0.06, "Propane", 0.03, "Nitrogen", 0.01)),
                 count(catalog, NETWORK, Map.of("Methane", 0.9, "crude_pc03", 0.1))};
-        // The review's grid: 13, 1, 13 and 0 refusals of the frozen flash are one-phase feeds the rule now answers.
-        assertEquals(List.of(13, 1, 13, 0), List.of(answered[0], answered[1], answered[2], answered[3]));
+        // The review's grid: 13, 2, 13 and 0 refusals of the frozen flash are one-phase feeds the stability test now
+        // answers (the second CO2 feed, a subcritical vapour at 250 K and 2 MPa, since batch 2026-11-16-supercritical-followups, P3).
+        assertEquals(List.of(13, 2, 13, 0), List.of(answered[0], answered[1], answered[2], answered[3]));
     }
 
     private static int count(MaterialCatalog catalog, String packageId, Map<String, Double> parts) {
@@ -76,10 +78,12 @@ class ColumnFeedOnePhaseOracleTest {
                     } catch (V3ThermoException refusal) {
                         continue;
                     }
-                    if (!flash.detail().startsWith("one phase, no two-phase split")) continue;
+                    if (flash.phase() == V3FeedPhase.TWO_PHASE) continue;
                     var result = engine.tp(EquilibriumRequest.tp(t, p, basis, zs, PhaseCompetition.FLUID_ONLY), workspace);
                     assertTrue(result.converged(), at + ": " + result);
+                    // Every one-phase answer, the Wilson endpoint's too (batch 2026-11-16-supercritical-followups, P3).
                     assertEquals(1, result.phases().size(), at + ": the engine splits a feed the column answers as one phase");
+                    if (!flash.detail().startsWith("one phase, no two-phase split")) continue;
                     var phase = result.phases().get(0);
                     boolean liquid = phase.traits().physicalRootCount() > 1 ? phase.kind() == PhaseKind.LIQUID
                             : phase.traits().reducedDensity() >= 1.0;

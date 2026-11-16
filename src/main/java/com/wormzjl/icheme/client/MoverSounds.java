@@ -103,13 +103,20 @@ public final class MoverSounds {
             float gain=shell!=null?UnitDesign.soundGain(shell.shape(),speed):UnitDesign.leastGain(speed);
             float pitch=shell!=null?UnitDesign.soundPitch(shell.shape(),speed):state.rpm()>0?UnitDesign.soundPitch(speed*state.rpm(),UnitDesign.PUMP_LOOP_RPM):1;
             var p=target.position();double x=p.getX()+.5,y=p.getY()+.5,z=p.getZ()+.5;
-            // A casing's running loop; an in-line pump has none (it never had one), only its layers. A plunger pump
-            // (batch 2026-11-15-supercritical-fluids, S8) takes the reciprocating compressor's pulsing loop at its own pitch.
-            var kind=shell==null?null:shell.shape().kind();
-            if(shell!=null)into.add(new SoundBudget.Emitter(state.compressor()&&kind!=com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.LIQUID_RING_PUMP||kind==com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.PLUNGER_PUMP?"compressor_running":"pump_running",p.asLong(),x,y,z,SoundBudget.level(gain),pitch));
+            // A casing's running loop; an in-line pump has none (it never had one), only its layers.
+            if(shell!=null)into.add(new SoundBudget.Emitter(casingLoop(shell.shape().kind(),state.compressor()),p.asLong(),x,y,z,SoundBudget.level(gain),pitch));
             if(state.crackle()>0)into.add(new SoundBudget.Emitter("pump_cavitation",p.asLong(),x,y,z,SoundBudget.level(gain*state.crackle()/255.0),pitch));
             if(state.churn()>0)into.add(new SoundBudget.Emitter("pump_gas",p.asLong(),x,y,z,SoundBudget.level(gain*state.churn()/255.0),pitch));
         }
+    }
+    /**
+     * The running loop of a casing of {@code kind}: the plunger pump its own triplex loop ({@code plunger_pump_running},
+     * batch 2026-11-16-supercritical-followups P4; authored at its rated 300 rpm, so its pitch, the speed share, plays it
+     * true), a compressing mover the compressor's (a liquid-ring pump is a pump), any other the pump's.
+     */
+    static String casingLoop(EquipmentShape.Kind kind,boolean compressor) {
+        if(kind==EquipmentShape.Kind.PLUNGER_PUMP)return "plunger_pump_running";
+        return compressor&&kind!=EquipmentShape.Kind.LIQUID_RING_PUMP?"compressor_running":"pump_running";
     }
     /**
      * A mover's speed share, published with its state from its shaft train's driver (W3; 1 for a set-flow mover). Its

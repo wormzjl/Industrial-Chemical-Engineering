@@ -42,6 +42,19 @@ public final class SizedPassages {
         var laws = new HashMap<String, Passages.Law>();
         String id = unit.id();
         switch (unit.type()) {
+            case "pump" -> {
+                // No passage: whether it is a plunger pump, which its run reads (P1 of batch 2026-11-16-supercritical-followups); any
+                // other pump runs as a centrifugal one, on no passage, as before.
+                return pumpType(facts, id) != UnitType.PLUNGER ? Passages.TYPED : new Passages() {
+                    @Override public @Nullable Law passage(String name) {
+                        return null;
+                    }
+
+                    @Override public UnitType pumpType() {
+                        return UnitType.PLUNGER;
+                    }
+                };
+            }
             case "exchanger", "kettle" -> {
                 if (exchanger(facts.unit(id).size(), unit.type().equals("kettle")) instanceof ExchangerSizing.Size size) {
                     laws.put("tube_drop", (in, out) -> tube(size, in, 1, thermo));
@@ -89,10 +102,20 @@ public final class SizedPassages {
         };
     }
 
+    /** A Pump tile's type as {@code facts} hold it: the player's, else its kept size's (as {@code SheetSizing} reads it); null for
+     * neither, where its run takes a centrifugal pump's, as every pump's was before the plunger pump. */
+    static @Nullable UnitType pumpType(SizingFacts facts, String id) {
+        var entry = facts.unit(id);
+        return entry.type() != null ? entry.type() : SizingFacts.UnitFacts.typeOf(entry.size());
+    }
+
     /** What {@link #of} reads of {@code facts} for {@code unit}: a change in it moves the unit's run. */
     public static List<Object> reads(SizingFacts facts, Flowsheet.Unit unit) {
         String id = unit.id();
         return switch (unit.type()) {
+            // Its run reads only whether it is a plunger pump: a pump with no type runs as a centrifugal one, so a first centrifugal
+            // size moves no run.
+            case "pump" -> List.of(pumpType(facts, id) == UnitType.PLUNGER);
             case "exchanger", "kettle", "cooler", "fired_heater" -> Arrays.asList(facts.unit(id).size());
             case "column" -> {
                 var door = ColumnDoor.of(unit.params());

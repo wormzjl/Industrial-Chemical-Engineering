@@ -15,6 +15,8 @@ Status words:
 | Batch | Purpose | Status |
 |---|---|---|
 | [2026-11-16-fouling-corrosion/](2026-11-16-fouling-corrosion/README.md) | Corrosion of equipment walls by material and fluid, materials of construction, erosion by particles, final blast damage, repair when idle and empty, fouling of heat sides, particles through columns | In progress since 2026-11-16 |
+| [2026-11-16-cdu17-fixture-removal/](2026-11-16-cdu17-fixture-removal/README.md) | The test-only cdu17 package goes; its tests move to the medium crude preset | Implemented 2026-11-16 (0.34.2) |
+| [2026-11-16-supercritical-followups/](2026-11-16-supercritical-followups/README.md) | The supercritical batch's open items: plunger clearance, dense readings, the column feed flash, the plunger sound | Implemented 2026-11-16 (0.34.1) |
 | [2026-11-15-supercritical-fluids/](2026-11-15-supercritical-fluids/README.md) | Dense and supercritical fluids in the network, machines, heat units, simulator and the column's feed; the plunger pump | Implemented 2026-11-16 (0.34.0) |
 | [2026-11-15-fluid-interfaces/](2026-11-15-fluid-interfaces/README.md) | Orifice plate, automated shutoff valve, liquid hopper, gas intake with the rare gases, placeholder crude oil, JEI for the fluid converter, alarm beacon | Implemented 2026-11-16 (0.33.0) |
 | [2026-11-15-equipment-visual-design/](2026-11-15-equipment-visual-design/README.md) | Better-looking, less bare equipment: review of every kind, then trim, finishes and shading | Implemented 2026-11-16 (0.33.0) |

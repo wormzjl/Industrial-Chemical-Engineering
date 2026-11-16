@@ -111,6 +111,8 @@ public final class ModBlocks {
     private static final DeferredRegister<SoundEvent> SOUNDS=DeferredRegister.create(Registries.SOUND_EVENT,IChemE.MOD_ID);
     public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_RUNNING=loop("pump_running");
     public static final DeferredHolder<SoundEvent,SoundEvent> COMPRESSOR_RUNNING=loop("compressor_running");
+    /** The triplex plunger pump's own loop (batch 2026-11-16-supercritical-followups, P4), authored at its rated 300 rpm. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> PLUNGER_PUMP_RUNNING=loop("plunger_pump_running");
     /** A pump's cavitation crackle and gas churn (W10c, decision D35), played over its casing loop. */
     public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_CAVITATION=loop("pump_cavitation");
     public static final DeferredHolder<SoundEvent,SoundEvent> PUMP_GAS=loop("pump_gas");

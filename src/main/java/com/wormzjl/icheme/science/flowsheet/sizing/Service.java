@@ -76,9 +76,15 @@ public enum Service {
         if (chosen != null) return chosen;
         var state = stream.state();
         if (state == null || stream.empty()) return null;
-        double vapour = vapourShare(state, thermo.model());
-        if (vapour > Limit.SERVICE_VAPOUR.value()) return vapour(state, thermo.model());
-        if (vapour > Limit.SERVICE_TWO_PHASE.value()) return TWO_PHASE;
+        // One dense fluid above reduced density 0.5 (the rule that names it "Dense fluid": DenseLabel.dense) is sized as a
+        // liquid line in either slot: dense-phase lines run at liquid speeds (P2 of batch 2026-11-16-supercritical-followups,
+        // item 9). The class then changes where the word does, at 0.5, not at the slot rule's 1.
+        boolean dense = dense(state);
+        if (!dense) {
+            double vapour = vapourShare(state, thermo.model());
+            if (vapour > Limit.SERVICE_VAPOUR.value()) return vapour(state, thermo.model());
+            if (vapour > Limit.SERVICE_TWO_PHASE.value()) return TWO_PHASE;
+        }
         if (ends.leavesTray()) return DRAW;
         if (ends.feedsPump()) {
             // One dense fluid has no bubble pressure and, at its own temperature, no edge (S4b): a cold suction.
@@ -94,8 +100,17 @@ public enum Service {
         return 100 * model.vaporMass(state) / (state.mass() - state.solidMoments().mass());
     }
 
-    /** Whether a state's liquid is water. */
+    /**
+     * Whether {@code state} is one dense fluid above reduced density 0.5: {@code State.dense()} with a liquid-like weight above 0,
+     * the rule of the screens' "Dense fluid" ({@code client.gui.common.DenseLabel.dense}, which the science package does not import).
+     */
+    static boolean dense(FluidThermodynamics.State state) {
+        return state.dense() && FluidThermodynamics.liquidLikeWeight(state) > 0;
+    }
+
+    /** Whether a state's liquid is water; one dense fluid's by its own water share, in whichever slot it sits. */
     static boolean water(FluidThermodynamics.State state) {
+        if (dense(state)) return 100 * state.waterFraction(state.oneFluidSlot()) > Limit.SERVICE_WATER.value();
         double liquid = Arrays.stream(state.liquidAmountsView()).sum() + Arrays.stream(state.aqueousAmountsView()).sum();
         return 100 * state.liquidWater() / liquid > Limit.SERVICE_WATER.value();
     }

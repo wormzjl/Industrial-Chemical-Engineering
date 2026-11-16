@@ -81,7 +81,9 @@ public final class Sensor {
         return List.of();
     }
     public static Reading read(Installed sensor,FluidView view,FluidWorldAuthority.InstrumentReading pipe){return read(sensor,view,pipe,null);}
-    public static Reading read(Installed sensor,FluidView view,FluidWorldAuthority.InstrumentReading pipe,Reading previous){
+    public static Reading read(Installed sensor,FluidView view,FluidWorldAuthority.InstrumentReading pipe,Reading previous){return read(sensor,view,pipe,previous,Double.NaN);}
+    /** A sensor's reading of {@code view}; a body level counts one dense fluid by its liquid-like weight {@code dense} (NaN for none: {@link com.wormzjl.icheme.runtime.fluid.DenseReadings#levelVolume}). */
+    public static Reading read(Installed sensor,FluidView view,FluidWorldAuthority.InstrumentReading pipe,Reading previous,double dense){
         long tick=view.committedTick();double value=0,second=0,span=0;var quality=Instrument.Availability.UNAVAILABLE;
         if(sensor.kind()==Kind.PRESSURE&&sensor.key().mount().equals("valve_sensor")&&view.state()!=null){
             value=view.state().pressure();quality=Instrument.Availability.AVAILABLE;
@@ -103,7 +105,7 @@ public final class Sensor {
                 case LEVEL->{
                     var g=tank.geometry();boolean boot=sensor.key().mount().equals("level_boot");
                     span=boot?g.bootDepth():g.height();
-                    if(state!=null){double v=boot?state.phaseVolumes()[1]+state.solids().volume()*state.phaseVolumes()[1]/Math.max(1e-300,state.phaseVolumes()[0]+state.phaseVolumes()[1]):state.phaseVolumes()[0]+state.phaseVolumes()[1]+state.solids().volume();value=v==0?0:g.heightAt(v)+(boot?g.bootDepth():0);}
+                    if(state!=null){double v=boot?state.phaseVolumes()[1]+state.solids().volume()*state.phaseVolumes()[1]/Math.max(1e-300,state.phaseVolumes()[0]+state.phaseVolumes()[1]):com.wormzjl.icheme.runtime.fluid.DenseReadings.levelVolume(state,dense);value=v==0?0:g.heightAt(v)+(boot?g.bootDepth():0);}
                     second=span>0?100*value/span:0;quality=Instrument.Availability.AVAILABLE;
                 }
                 default->{}

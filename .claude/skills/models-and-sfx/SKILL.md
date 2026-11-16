@@ -154,7 +154,7 @@ batches. The owner judges models on rendered drawings and judges sounds by ear, 
 
 - `tools/process-sounds/`: the process loops (`make_loops.py`) and the candidate scripts (`valve_candidates.py`,
   `ejector_candidates.py`, `valve_turn_synth.py`, `valve_turn_cc0.py`, `prime_candidates.py`).
-- `tools/machine-sounds/`: the machine loops (pump, compressor, motor, turbine).
+- `tools/machine-sounds/`: the machine loops (pump, compressor, motor, turbine, and the plunger pump's candidates in `plunger_candidates.py`).
 - Run them with the authoring Python, isolated:
   `C:/Users/wormz/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe -I <script> <output folder>`.
   The scripts add `tools/pump-compressor-controls/python-deps` (numpy, soundfile, which also reads MP3) to their path.

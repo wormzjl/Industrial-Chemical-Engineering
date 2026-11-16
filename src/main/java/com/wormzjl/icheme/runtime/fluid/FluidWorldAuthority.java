@@ -1045,17 +1045,20 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * solves or materialises, a held island answers as stored): a vessel's or a junction's inventory, split by its state's
      * phases per compound; a line block, the line's holdup over the block's volume, in the phase split of what the line
      * moved over its last interval (no slip; a line that moved nothing over it releases nothing). The gas goes whole and the
-     * liquid by its volatile share ({@link Releases#contents}). A generator, a void or a port holds no stock. Nothing is
+     * liquid by its volatile share ({@link Releases#contents}). One dense fluid (P2 of batch 2026-11-16-supercritical-followups)
+     * splits by its liquid-like weight instead of its slot ({@link DenseReadings#split}), and the volatile share of its
+     * liquid-like part counts as the gas heard. A generator, a void or a port holds no stock. Nothing is
      * booked here: the removal books a vessel's contents as removed, as before. Returns the masses, or {@link Releases.Spilled#NONE}.
      */
     public Releases.Spilled releaseContents(long id) {
         owned();if(closed||releases==null)return Releases.Spilled.NONE;
         var r=registrations().get(id);Long owner=r==null?null:registry.owner(id);if(owner==null)return Releases.Spilled.NONE;
-        var snapshot=storedIsland(owner);int n=model.componentCount();double[] gas=new double[n],liquid=new double[n];boolean node=false;
+        var snapshot=storedIsland(owner);int n=model.componentCount();double[] gas=new double[n],liquid=new double[n],dense=new double[n];boolean node=false;
         for(var reservoir:snapshot.graph().reservoirs()) {
             if(reservoir.id()!=id)continue;node=true;if(reservoir.fixed())return Releases.Spilled.NONE;
-            var moles=reservoir.inventory().moles();var s=reservoir.state();double[] v=s.vaporAmountsView(),l=s.liquidAmountsView(),a=s.aqueousAmountsView();
-            for(int c=0;c<Math.min(n,moles.length);c++){double all=v[c]+l[c]+a[c],held=Math.max(0,moles[c]),share=all>0?Math.clamp(v[c]/all,0,1):1;gas[c]=held*share;liquid[c]=held-gas[c];}
+            // By its state's phases; one dense fluid (P2 of batch 2026-11-16-supercritical-followups, item 16) by its liquid-like
+            // weight, whatever slot holds it (DenseReadings.release).
+            DenseReadings.release(reservoir.inventory().moles(),reservoir.state(),gas,liquid,dense);
             break;
         }
         if(!node) {
@@ -1067,16 +1070,21 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 if(moved==null)continue;
                 double passed=0;for(var stream:List.of(moved.forward(),moved.reverse()))for(double q:stream.phaseVolumes())passed+=q;
                 if(!(passed>0))continue;double scale=volume/passed;
-                for(var stream:List.of(moved.forward(),moved.reverse())){var p=stream.phaseMoles();
-                    for(int c=0;c<Math.min(n,p[2].length);c++){gas[c]+=p[2][c]*scale;liquid[c]+=(p[0][c]+p[1][c])*scale;}}
+                // Each side of the moved stream takes the state of the node it left (forward from the first end, reverse from
+                // the second): one dense fluid pools its three rows and splits them by that node's weight (item 16).
+                PassiveNetwork.Pipe pipe=null;for(var p:snapshot.graph().pipes())if(p.id()==view.pipeId()){pipe=p;break;}
+                var streams=List.of(moved.forward(),moved.reverse());
+                for(int side=0;side<2;side++)DenseReadings.moved(streams.get(side).phaseMoles(),scale,pipe==null?Double.NaN:DenseReadings.weight(snapshot.graph(),side==0?pipe.first():pipe.second()),gas,liquid,dense);
                 break;
             }
         }
-        var weights=model.molecularWeights();double gasMass=0,liquidMass=0;
-        for(int c=0;c<Math.min(n,weights.length);c++){gasMass+=gas[c]*weights[c];liquidMass+=liquid[c]*weights[c];}
-        if(!(gasMass+liquidMass>0))return Releases.Spilled.NONE;
+        // A dense fluid's liquid-like part reaches the air by its volatile share, as any spill's does; what reaches the air is
+        // what the burst is heard as (dense carbon dioxide flashes whole: gas; a dense heavy cut stays on the ground: liquid).
+        // Every other liquid is heard as before (DenseReadings.heard).
+        var spilled=DenseReadings.heard(gas,liquid,releases.volatileMoles(dense),model.molecularWeights());
+        if(!(spilled.gasKilograms()+spilled.liquidKilograms()>0))return Releases.Spilled.NONE;
         releases.contents(r.device().position(),gas,liquid);
-        return new Releases.Spilled(gasMass,liquidMass);
+        return spilled;
     }
     /** The pumps' health (W10b): a repair kit queues its event here. */
     public MachineHealth health(){owned();return health;}
@@ -1927,6 +1935,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The status clause of a held registration beside a device's network: its position, as {@link #heldClause} writes it. */
     public static final String HELD_DEVICE="HELD DEVICE: ";
     public FluidView view(long id){owned();return views.view(id,new HashMap<>());}
+    /**
+     * The liquid-like weight of what device {@code id} shows, on the server's own state ({@link DenseReadings}, P2 of batch
+     * 2026-11-16-supercritical-followups): NaN unless it is one dense fluid. Read with {@link #view} by a level's readers
+     * ({@link DenseReadings#levelVolume}) and the sight glass; the view carries no such field (no wire change). No solve.
+     */
+    public double denseWeight(long id){owned();return views.denseWeight(id);}
     /**
      * Machine {@code control}'s status line {@code status} with its health word {@code word} ({@link MachineHealth#status}), for
      * every machine that wears ({@link MachineHealth#worn}: a liquid mover, a dry screw, owner V6 B, code base review M-02, a

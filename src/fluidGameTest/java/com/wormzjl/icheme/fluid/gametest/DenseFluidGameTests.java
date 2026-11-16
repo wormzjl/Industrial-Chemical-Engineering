@@ -520,7 +520,7 @@ public final class DenseFluidGameTests {
     }
     /** Accepted intervals the plunger pump runs before its checks (or until its island certifies steady, if sooner). */
     static final int PLUNGER_INTERVALS=10;
-    /** The plunger pump's delivered volume against its displacement less its slip: relative. */
+    /** The plunger pump's delivered volume against its law's (the displacement less its slip and its clearance loss): relative. */
     static final double PLUNGER_VOLUME=5e-3;
     /**
      * A triplex plunger pump on dense carbon dioxide (S8 of batch 2026-11-15-supercritical-fluids, S8_PLUNGER_PUMP_REVIEW.md):
@@ -531,14 +531,15 @@ public final class DenseFluidGameTests {
      * Expected: a displacement pump delivers its volume at any density. Over {@link #PLUNGER_INTERVALS} accepted intervals (or
      * every one until the island certifies), no hold and the ledger closing; in the last, the suction's volume flow (the mass
      * the generator gives over the suction pipe's density) within {@link #PLUNGER_VOLUME} of the displacement at the train's
-     * speed share less the slip at the pump's rise ({@code 1 - 0.004 rise / 25 MPa}), the suction one fluid at reduced density
-     * 0.6 to 0.8, the rise above 11 MPa.
+     * speed share less the slip at the pump's rise ({@code 1 - 0.004 rise / 25 MPa}) and the clearance's re-expansion on the
+     * suction's isentropic exponent ({@code PlungerPump#flow}, P1 of batch 2026-11-16-supercritical-followups: about 5 % here),
+     * the suction one fluid at reduced density 0.6 to 0.8, the rise above 11 MPa.
      */
     @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-plunger")
     public static void aPlungerPumpDeliversItsDisplacementOfDenseCarbonDioxideAgainstTwentyMegapascals(GameTestHelper helper) {
         var plant=new AssemblyGameTests.Plant(helper,helper.absolutePos(new BlockPos(12,2,12)),new BlockPos(-16,-2,-16),new BlockPos(28,10,28));
         var world=plant.world;var level=plant.level;String[] failure={null};Ledger[] ledger={null};long[] ids=new long[5];
-        com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel[] motor={null},gear={null};double[] suctionTemperature={0};FluidThermodynamics.State[] suctionState={null};
+        com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel[] motor={null},gear={null};double[] suctionTemperature={0},suctionExponent={Double.NaN};FluidThermodynamics.State[] suctionState={null};
         var model=com.wormzjl.icheme.science.machine.PlungerPump.model(2);var law=com.wormzjl.icheme.science.machine.PlungerPump.of(model);
         var sequence=helper.startSequence();
         try {
@@ -550,6 +551,8 @@ public final class DenseFluidGameTests {
             double lo=CO2_CRITICAL_TEMPERATURE+.5,hi=360;
             for(int i=0;i<100&&hi-lo>1e-9;i++){double mid=(lo+hi)/2;if(thermo.flashTP(mid,8e6,z,()->{}).reducedDensity()>.7)lo=mid;else hi=mid;}
             suctionTemperature[0]=(lo+hi)/2;suctionState[0]=thermo.flashTP(suctionTemperature[0],8e6,z,()->{});
+            // The exponent the pump's row reads (PassiveStepSolver.suctionKappa), on the same state: its clearance loss (P1).
+            suctionExponent[0]=thermo.isentropicExponent(suctionState[0]);
             var pd=EquipmentShape.designed(EquipmentShape.Kind.PLUNGER_PUMP,2,1,EquipmentShape.Heading.NORTH,com.wormzjl.icheme.science.equipment.UnitDesign.of(EquipmentShape.Kind.PLUNGER_PUMP).defaultSupport(2,1),com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE);
             var pump=plant.place(pd,0,0,0);
             var suction=AssemblyGameTests.Plant.front(pump,Role.SUCTION);var generator=suction.relative(AssemblyGameTests.Plant.out(pump,Role.SUCTION));
@@ -607,13 +610,13 @@ public final class DenseFluidGameTests {
                             // Every substep books its own transfer (run s8-plunger-4 read the first of three): the interval is their sum.
                             for(var b:last.boundaries())if(b.nodeId()==ids[0]&&b.kind()==ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE)mass+=Math.abs(sum(b.moles()))*perMole;
                             double density=s.mass()/s.volume(),volume=mass/last.seconds()/density,rise=view.devicePressureChange();
-                            double expected=law.displacement()*drive.share()*(1-.004*rise/law.reliefRise());
+                            double expected=law.flow(rise,drive.share(),s.pressure(),suctionExponent[0]);
                             System.out.println("DENSE_FLUID_GAMETEST plunger "+ledger[0].summary()+" suctionT="+suctionTemperature[0]+" suction=["+describe(s)+"] nodes="+last.nodes().keySet()+" density="+density
                                     +" kg/m3 volume="+volume*3600+" m3/h expected="+expected*3600+" m3/h share="+drive.share()+" rise="+rise+" Pa shaft="+drive.shaftPower()+" W status="+view.status()
                                     +" substeps "+last.accepted()+"/"+last.rejected()+" "+last.reasons()+" modes "+last.modes());
                             if(s.oneFluidSlot()<0||!(s.reducedDensity()>=.6&&s.reducedDensity()<=.8))failure[0]="The suction is not one fluid at reduced density 0.6 to 0.8: "+describe(s);
                             else if(!(rise>11e6))failure[0]="The pump does not rise to the void's 20 MPa: "+rise+" Pa";
-                            else if(!(Math.abs(volume-expected)<=PLUNGER_VOLUME*expected))failure[0]="Delivered "+volume*3600+" m3/h against "+expected*3600+" m3/h displaced less slip";
+                            else if(!(Math.abs(volume-expected)<=PLUNGER_VOLUME*expected))failure[0]="Delivered "+volume*3600+" m3/h against "+expected*3600+" m3/h displaced less slip and clearance";
                         }
                     }));
         }

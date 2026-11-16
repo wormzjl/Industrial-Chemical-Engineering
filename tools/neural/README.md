@@ -74,3 +74,4 @@ Status: Implemented 2026-09-14. Index: [../INDEX.md](../INDEX.md).
 - Implemented 2026-09-14 (F0 promoted into `src`; the rest stays offline for reproducibility)
 
 Large files (AGENTS.md, batch 2026-11-15-tools-large-files): the 6 images, Gradle results, worlds and other large files of this folder are git-ignored here; their copies are in the main checkout's `research/tools/neural/`, at the same relative paths.
+- 2026-11-16: `V3GeneralParallelCheck.java` reads the cdu17 test fixture, removed by batch 2026-11-16-cdu17-fixture-removal; last runnable at `ee13d1034`.

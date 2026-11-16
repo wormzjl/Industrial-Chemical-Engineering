@@ -345,7 +345,7 @@ public final class GuiPrototypes {
                 var meters = new com.wormzjl.icheme.client.gui.common.DeviceMeters(new com.wormzjl.icheme.client.gui.common.DeviceMeters.Data(Kind.RESERVOIR, view, model.components(), weights, true, null, false, List.of()),
                         null, com.wormzjl.icheme.client.gui.common.DeviceMeters.PhaseRatioBasis.VOLUME, com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.CELSIUS,
                         com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit.BAR, com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.PER_SECOND, false, TEXTS);
-                var m = meters.withDense(meters.denseRow(model));
+                var m = meters.withDense(meters.dense(model));
                 var in = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false, m.level(), null, List.of(), m.phases(), m.meters());
                 int row = m.dense() >= 0 ? m.dense() : s.oneFluidSlot() == com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State.VAPOR ? 2 : 0;
                 out.add(devicePage("dense-tank-" + tag, WINDOW[0], WINDOW[1], in, (d, k) -> {
@@ -364,7 +364,7 @@ public final class GuiPrototypes {
                 var meters = new com.wormzjl.icheme.client.gui.common.DeviceMeters(new com.wormzjl.icheme.client.gui.common.DeviceMeters.Data(Kind.PUMP, view, model.components(), weights, true, null, false, List.of()),
                         null, com.wormzjl.icheme.client.gui.common.DeviceMeters.PhaseRatioBasis.VOLUME, com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.CELSIUS,
                         com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit.BAR, com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.PER_HOUR, false, TEXTS);
-                var m = meters.withDense(meters.denseRow(model));
+                var m = meters.withDense(meters.dense(model));
                 var in = casingInput().withSuction(m.suction());
                 // The Suction and Health groups alone, as the page shows them under the drive.
                 List<Column.Row> rows = DeviceColumn.suction(m.suction(), TEXTS);
@@ -378,6 +378,33 @@ public final class GuiPrototypes {
                 }));
             }
         }
+        // A centrifugal pump on a two-phase supply (P2 of batch 2026-11-16-supercritical-followups, item 10): water with 3 % of
+        // its suction volume nitrogen at 2 bar, its curve present: the head share beside the gas.
+        double[] wet = new double[model.componentCount()];
+        wet[model.components().indexOf("Nitrogen")] = .02;
+        wet[wet.length - 1] = .98;
+        var s = model.flashTP(300, 2e5, wet, () -> {
+        });
+        var state = new com.wormzjl.icheme.runtime.fluid.FluidView.State(s.pressure(), s.temperature(), s.volume(), s.mass(),
+                new double[]{s.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL), s.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS), s.vaporVolume()},
+                new double[][]{s.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL).clone(), s.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS).clone(), s.vaporAmounts()},
+                com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY, s.volume());
+        var view = new com.wormzjl.icheme.runtime.fluid.FluidView(3, 1, 0, 0, "STEADY: flowing", state, 5.0, List.of(), 2e5, 1, List.of(), null, null, List.of(), null, null, null, null, null,
+                new com.wormzjl.icheme.runtime.fluid.FluidView.Pump(6.0, 2.0, .03, 1, new com.wormzjl.icheme.runtime.fluid.FluidView.Curve(100 / 3600.0, 80, .70, 2950), null), null, null, null, null);
+        var meters = new com.wormzjl.icheme.client.gui.common.DeviceMeters(new com.wormzjl.icheme.client.gui.common.DeviceMeters.Data(Kind.PUMP, view, model.components(), weights, true, null, false, List.of()),
+                null, com.wormzjl.icheme.client.gui.common.DeviceMeters.PhaseRatioBasis.VOLUME, com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.CELSIUS,
+                com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit.BAR, com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.PER_HOUR, false, TEXTS);
+        var m = meters.withDense(meters.dense(model));
+        var in = casingInput().withSuction(m.suction());
+        List<Column.Row> rows = DeviceColumn.suction(m.suction(), TEXTS);
+        out.add(devicePage("dense-two-phase-pump", WINDOW[0], WINDOW[1], rows, (d, k) -> {
+            d.title("Centrifugal pump, water with 3 % gas at 2 bar");
+            d.name("P-101", true);
+            d.tabs(0, "Overview", "Datasheet");
+            d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+            device(d, in, rows, Map.of("volumeFlow", "100.0", "maximumAddedPressure", "10.0"));
+            d.footer(2, "Close", "Apply", "Volume", "°C", "bar", "/h");
+        }));
         return out;
     }
 
@@ -425,7 +452,7 @@ public final class GuiPrototypes {
         var meters = new com.wormzjl.icheme.client.gui.common.DeviceMeters(new com.wormzjl.icheme.client.gui.common.DeviceMeters.Data(Kind.PUMP, view, model.components(), weights, true, null, false, List.of()),
                 null, com.wormzjl.icheme.client.gui.common.DeviceMeters.PhaseRatioBasis.VOLUME, com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.CELSIUS,
                 com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit.BAR, com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.PER_HOUR, false, TEXTS);
-        var m = meters.withDense(meters.denseRow(model));
+        var m = meters.withDense(meters.dense(model));
         var in = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
                 m.phases(), m.meters(), m.drive(), null, m.suction());
         System.out.printf(java.util.Locale.ROOT, "plunger: %.6g Pa, %.1f kg/m3, shaft %.2f kW on a %.0f kW motor, alpha %.4f%n", s.pressure(), density, shaft / 1000, motor / 1000, alpha);

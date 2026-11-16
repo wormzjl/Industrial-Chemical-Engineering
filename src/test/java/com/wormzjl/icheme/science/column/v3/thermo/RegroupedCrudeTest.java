@@ -13,7 +13,6 @@ class RegroupedCrudeTest {
         // pilot icheme:pilot_cryogenic (O5, E25) are test fixtures since batch 2026-11-04-open-thermo-data.
         var catalog=MaterialCatalog.bundled();assertEquals(3,catalog.packages().size());
         assertFalse(catalog.packages().containsKey(PilotCryogenicTestCatalog.PACKAGE_ID));
-        assertFalse(catalog.packages().containsKey("icheme:cdu17_tjl_acs2018"));
         var p=catalog.requirePackage("icheme:tjl20_methane");assertEquals(19,p.components().size());
         for(int i=1;i<=12;i++)assertEquals("crude_pc%02d".formatted(i),p.components().get(i+6));
         double[] edges={651.0249814474507,723.15,823.15,923.15,1023.15};

@@ -382,6 +382,32 @@ final class ServiceTest {
         });
     }
 
+    /**
+     * One dense fluid above reduced density 0.5 is a liquid line in either slot (P2 of batch 2026-11-16-supercritical-followups,
+     * item 9): carbon dioxide at 310 K is a gas line at 0.4 and takes the liquid rows from 0.6, where the screens name it
+     * "Dense fluid"; before P2 it was a gas line to the slot rule's 1. Into a pump it is a cold suction, off a tray a draw.
+     */
+    @Test void aDenseFluidTakesTheLiquidRowsWhereItReadsDense() {
+        on(() -> {
+            double[] co2 = pure(AXIS.indexOf("CarbonDioxide"));
+            for (double delta : new double[]{.4, .6, .8, 1.6}) {
+                double lo = 1e5, hi = 8e7;
+                for (int i = 0; i < 200 && hi - lo > 1e-13 * hi; i++) {
+                    double mid = (lo + hi) / 2;
+                    if (at(310, mid, co2).state().reducedDensity() < delta) lo = mid;
+                    else hi = mid;
+                }
+                var stream = at(310, (lo + hi) / 2, co2);
+                assertTrue(stream.state().dense());
+                boolean liquid = delta > FluidThermodynamics.GAS_LIKE_UNTIL;
+                assertEquals(liquid ? Service.LIQUID : Service.GAS, service(stream, OPEN), "an open line at " + delta);
+                assertEquals(liquid ? Service.SUCTION_COLD : Service.GAS, service(stream, PUMP), "into a pump at " + delta);
+                assertEquals(liquid ? Service.DRAW : Service.GAS, service(stream, TRAY), "off a tray at " + delta);
+            }
+            return null;
+        });
+    }
+
     @Test void aDryGasLeavesItsSolidsBehindAsTheWorldsBulkEndDoes() {
         on(() -> {
             var gas = at(320, 3e5, pure(NITROGEN));

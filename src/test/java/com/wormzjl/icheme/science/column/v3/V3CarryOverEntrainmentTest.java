@@ -17,7 +17,6 @@ import org.junit.jupiter.api.Test;
  * 2026-11-05, option (a)), with a warning that names the tray, the carried water and the limit. Without a column
  * diameter there are no hydraulics and the carry-over is unlimited.</p>
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3CarryOverEntrainmentTest {
     private static final double WATER_MOLECULAR_WEIGHT_KG_PER_MOL = 0.01801528;
     private static final double CARRIED_MOL_PER_SECOND = 30.0;
@@ -85,8 +84,8 @@ class V3CarryOverEntrainmentTest {
      * vapour in a 2 m column far more.
      */
     private static Case carryOverCase(double diameterMetres, double trayOneVaporScale) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         double totalFlowMolPerSecond = 2_000.0 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlowMolPerSecond;

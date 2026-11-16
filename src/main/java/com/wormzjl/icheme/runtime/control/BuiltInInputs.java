@@ -407,7 +407,7 @@ final class BuiltInInputs {
         } else if (input.role().equals("LEVEL")) {
             if (view != null && view.tank() != null && tick > 0) {
                 span = view.tank().levelHeight();
-                value = view.tank().level(view.state());
+                value = view.tank().level(view.state(), world.denseWeight(input.source()));
                 secondary = span > 0 ? 100 * value / span : 0;
                 quality = Instrument.Availability.AVAILABLE;
             }

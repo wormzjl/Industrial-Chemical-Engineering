@@ -449,6 +449,45 @@ final class FlowsheetUnitsTest {
         assertFalse(logged(run, "pump.bubble_point"), "cold water is far from boiling");
     }
 
+    /**
+     * A Pump tile sized as a plunger pump (P1 of batch 2026-11-16-supercritical-followups): its run reads the isentropic work on its
+     * inlet's exponent over the plungers' 0.88, whether the type is the player's or its kept size's; with no type it runs as a
+     * centrifugal pump, as before. Carbon dioxide at 310 K from 8.5 to 25 MPa, where the work is 15 % under {@code Q ΔP}.
+     */
+    @Test void aPumpSizedAsAPlungerRunsTheIsentropicWorkOverItsMechanicalEfficiency() {
+        double[] co2 = only("CarbonDioxide");
+        var model = FluidThermodynamics.forNetwork(CATALOG, PACKAGE);
+        var unit = new Flowsheet.Unit("P", "pump", "P", 0, 0, new com.wormzjl.icheme.science.flowsheet.Params(new com.google.gson.JsonObject()));
+        var none = com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts.NONE;
+        var typed = none.with("P", com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts.UnitFacts.AUTO.typed(com.wormzjl.icheme.science.flowsheet.sizing.UnitType.PLUNGER));
+        var kept = none.with("P", com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts.UnitFacts.AUTO.with(new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Plunger(3)));
+        var centrifugal = none.with("P", com.wormzjl.icheme.science.flowsheet.sizing.SizingFacts.UnitFacts.AUTO.with(new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Size(.1)));
+        FlowsheetRun base = null;
+        for (var facts : List.of(none, typed, kept)) {
+            var run = closes(sheet().unit("P", "pump", "{\"target\":\"rise\",\"rise\":16.5e6}").feed("in", "P", "in", feed(310, 8.5e6, co2, 100)).product("out", "P", "out").run(facts));
+            var in = run.streams().get("in");
+            double density = in.mass() / in.state().volume(), q = in.mass() / density;
+            if (facts == none) {
+                base = run;
+                assertEquals(q * 16.5e6, reading(run, "P", "hydraulic"), 1e-6 * q * 16.5e6, "no type: a centrifugal pump's Q dP");
+                org.junit.jupiter.api.Assertions.assertNotEquals(.88, reading(run, "P", "efficiency"));
+                continue;
+            }
+            double work = com.wormzjl.icheme.science.machine.PlungerPump.isentropicWork(16.5e6, in.pressure(), model.isentropicExponent(in.state()));
+            System.out.printf(java.util.Locale.ROOT, "PLUNGER_SHEET hydraulic=%.1f W (Q dP %.1f W, ratio %.4f) power=%.1f W (centrifugal %.1f W) efficiency=%.3f (centrifugal %.4f)%n",
+                    reading(run, "P", "hydraulic"), q * 16.5e6, work / 16.5e6, reading(run, "P", "power"), reading(base, "P", "power"), reading(run, "P", "efficiency"), reading(base, "P", "efficiency"));
+            assertEquals(q * work, reading(run, "P", "hydraulic"), 1e-9 * q * 16.5e6, "the isentropic work");
+            assertTrue(work < .9 * 16.5e6, "below Q dP");
+            assertEquals(.88, reading(run, "P", "efficiency"), 0);
+            assertEquals(q * work / .88, reading(run, "P", "power"), 1e-9 * q * 16.5e6);
+            assertEquals(in.enthalpy() + reading(run, "P", "power"), run.streams().get("out").enthalpy(), 1e-4 * reading(run, "P", "power"), "all of it into the discharge");
+        }
+        // The run reads only whether its pump is a plunger: a first centrifugal size moves no run.
+        assertEquals(com.wormzjl.icheme.science.flowsheet.sizing.SizedPassages.reads(none, unit), com.wormzjl.icheme.science.flowsheet.sizing.SizedPassages.reads(centrifugal, unit));
+        org.junit.jupiter.api.Assertions.assertNotEquals(com.wormzjl.icheme.science.flowsheet.sizing.SizedPassages.reads(none, unit), com.wormzjl.icheme.science.flowsheet.sizing.SizedPassages.reads(kept, unit));
+        assertEquals(com.wormzjl.icheme.science.flowsheet.sizing.SizedPassages.reads(typed, unit), com.wormzjl.icheme.science.flowsheet.sizing.SizedPassages.reads(kept, unit));
+    }
+
     /** The world's pump takes gas since request 11 of batch 2026-11-03-rotating-machinery (owner decisions D19, D20): its
      * set-flow law moves the mixture, so the sheet's pump on nitrogen closes. It still warns at the bubble point. */
     @Test void aPumpTakesGasAndWarnsAtTheBubblePoint() {

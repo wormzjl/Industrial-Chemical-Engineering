@@ -12,14 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Exact-input hot-start companion to {@link V3ColdStartTest}.
  *
- * <p>The negative points are frozen numerical roots captured at 494d3e45; the positive point starts fresh.
+ * <p>The negative points are frozen numerical roots (captured at 494d3e45, again on the medium crude in 2026-11); the
+ * positive point starts fresh.
  * The hot attempt receives only the state and convergence certificate, while problem resolution, thermodynamic
  * workspaces, residual recomputation, and acceptance audit are all fresh. Nearby-input reuse is deliberately out of
  * scope for this exact-compatibility test. The original two-phase numerical matrix is retained as negative
  * coverage: neither a cold nor hot certificate may override its independent phase rejection. A separate
  * physically valid liquid-only case verifies accepted-state reuse.</p>
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3ExactWarmStartSweepTest {
     // A finite duty made these historical numerical roots reproducible. The new independent phase audit
     // exposes their collapsed interiors; retain the roots without requiring the current cold path to find them.
@@ -85,7 +85,10 @@ class V3ExactWarmStartSweepTest {
                     .allMatch(V3AcceptanceAudit.Check::passed));
     }
 
-    /** Frozen roots at 494d3e45: keep rejection coverage independent of a changed cold trajectory. */
+    /**
+     * Frozen roots (first captured at 494d3e45, captured again on the medium crude by
+     * {@code tools/vacuum-column-test/capture-roots.sh}): keep rejection coverage independent of a changed cold trajectory.
+     */
     static ColdAttempt capturedAttempt(V3ColumnInput input, V3CondenserPhaseBranch branch) {
         try (var stream = V3ExactWarmStartSweepTest.class.getResourceAsStream("/column/invalid-binary-roots.json")) {
             var rows = com.google.gson.JsonParser.parseReader(new java.io.InputStreamReader(stream,
@@ -209,7 +212,12 @@ class V3ExactWarmStartSweepTest {
         return label.toString();
     }
 
-    private static V3ColumnInput binaryInput(
+    /**
+     * The registered two-tray {@code crude_pc03}/{@code crude_pc10} binary of the medium crude's package at the given
+     * conditions: the pair whose numerical two-phase roots the phase audit rejects (captured by
+     * {@code tools/vacuum-column-test/capture-roots.sh}).
+     */
+    static V3ColumnInput binaryInput(
             double feedFlow,
             double feedTemperature,
             double topPressure,
@@ -217,10 +225,10 @@ class V3ExactWarmStartSweepTest {
             double condenserTemperature,
             double reflux,
             double reboilerDuty) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
         double[] feedFlows = new double[thermo.componentBasis().componentCount()];
-        feedFlows[6] = feedFlow / 2.0;
-        feedFlows[13] = feedFlow / 2.0;
+        feedFlows[V3TestInputs.index(thermo, "crude_pc03")] = feedFlow / 2.0;
+        feedFlows[V3TestInputs.index(thermo, "crude_pc10")] = feedFlow / 2.0;
         return V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, thermo.packageId(), "test:registered-pr-binary",
                 thermo.componentBasis(), feedFlows, feedTemperature, 2, 1, topPressure, pressureDrop, List.of(
                         new V3ColumnSpecification.CondenserOutletTemperature(condenserTemperature),
