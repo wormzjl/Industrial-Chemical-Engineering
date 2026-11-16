@@ -114,8 +114,10 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
   `ln(T_out/T_in)/ln(ratio)`, by `w` (`CompressorSizing.Load.blended`): the ideal one to the bit at `w = 0`.
 - **Dense suctions**: one dense fluid has no bubble pressure, and at its own temperature it never flashes, so the
   sheet's isothermal trial gives it no edge; into a pump it is `SUCTION_COLD` (`Service.of`). The world's isenthalpic
-  E can still exist (carbon dioxide at 320 K and 15 MPa: 6.52 MPa). Its gas or liquid class is its slot's, the weight's
-  midpoint.
+  E can still exist (carbon dioxide at 320 K and 15 MPa: 6.52 MPa). Above reduced density 0.5 (`Service.dense`, the
+  screens' "Dense fluid" rule) it skips the vapour tests in either slot and takes the liquid branch (`DRAW`, `SUCTION_COLD`,
+  `WATER` by its own water share, or `LIQUID`): dense-phase lines run at liquid speeds, and the class changes where the word
+  does, at 0.5, not at the slot rule's 1 (P2 of batch 2026-11-16-supercritical-followups).
 - **Turbines** (`TurbineSizing`): rated power from `MachineDuty.POWERS` with `Motor.SPARE`, the lowest steam class whose
   header holds the inlet, the nearest exhaust of `MachineDuty.TURBINE_EXHAUSTS` (below the LP header); rows `TURBINE_SPARE`, `TURBINE_INLET`,
   `TURBINE_EXHAUST` (a tile exhausting at or above the LP header is red: no turbine is built for back pressure).

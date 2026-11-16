@@ -10,6 +10,7 @@
 
 - **Level loop.**
   - `InventoryControl.target(volume, desired, meanFlow, previous, elapsed, horizon, …)` returns the balance flow plus the inventory error over the horizon.
+  - The volume is `DenseReadings.levelVolume` on the vessel's view and `FluidWorldAuthority.denseWeight`: both liquids and the solids, plus one dense fluid's vapour row times its liquid-like weight, so a loop on a dense vessel holds a density, monotone in its inventory; every other vessel as before.
   - The balance flow is the actuated stream's mean flow over the interval between two samples, corrected by the volume change over the same interval.
   - `previous` NaN is a first decision (no earlier sample of that sensor and output). Its balance flow is 0, so it acts on the level error alone.
   - The horizon is `InventoryControl.horizon`: the larger of the cadence (`ControlService.CADENCE`), the process time between the last two samples and the island's slice. All times are in process seconds (`world.time().seconds`).

@@ -164,9 +164,27 @@ public final class PipePresentation {
 
     /** Colour and illustrative multiphase motion; speed uses the existing five-online-second window. */
     public static SightGlass sightGlass(FluidView view,List<String> components,double[] weights,MaterialCatalog catalog,String packageId,List<PhysicalFluidTopology.View> mappings) {
+        return sightGlass(view,components,weights,catalog,packageId,mappings,Double.NaN);
+    }
+    /**
+     * The glass of {@code view} whose moved stream is one dense fluid of liquid-like weight {@code dense} on the server's own
+     * state ({@code FluidWorldAuthority.denseWeight}; NaN for any other stream: the slots' volumes, as before). One dense fluid
+     * has no interface and makes no bubbles: the glass is the whole stream's liquid colour with its opacity times
+     * {@code dense}, clear at or below reduced density 0.5 (the gas's reading), the liquid slot's colour from 1, where the
+     * stream sits in that slot and {@code dense} is 1 (P2 of batch 2026-11-16-supercritical-followups, item 7).
+     */
+    public static SightGlass sightGlass(FluidView view,List<String> components,double[] weights,MaterialCatalog catalog,String packageId,List<PhysicalFluidTopology.View> mappings,double dense) {
         var info=view.pipeInfo();
         if(info==null||info.connections().stream().noneMatch(c->c.velocityMetresPerSecond()>0))return SightGlass.CLEAR;
         var moved=info.contents();var volumes=moved.phaseVolumes();
+        if(dense>=0) {
+            double all=volumes[0]+volumes[1]+volumes[2];if(!(all>0))return SightGlass.CLEAR;
+            var phases=moved.phaseMoles();double[] fluid=new double[components.size()];
+            for(int c=0;c<fluid.length;c++)fluid[c]=phases[0][c]+phases[1][c]+phases[2][c];
+            int full=turbid(TankDisplay.mix(fluid,components,weights,catalog,packageId),new double[]{all,0,0},moved.solids().volume());
+            int alpha=(int)Math.round((full>>>24)*Math.min(1,dense));
+            return alpha==0?SightGlass.CLEAR:new SightGlass(alpha<<24|full&0xFFFFFF,0,flowDirection(info,mappings));
+        }
         if(!(volumes[0]+volumes[1]>0))return SightGlass.CLEAR;
         var phases=moved.phaseMoles();double[] liquid=new double[components.size()];
         for(int c=0;c<liquid.length;c++)liquid[c]=phases[0][c]+phases[1][c];

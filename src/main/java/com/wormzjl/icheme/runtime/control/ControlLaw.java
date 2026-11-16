@@ -256,8 +256,9 @@ final class ControlLaw {
                                 ? s.target() * reading.span() / 100
                                 : s.target();
                 if (height > reading.span()) return Decision.noSetpoint("TARGET OUT OF RANGE");
-                double volume =
-                        state.phaseVolumes()[0] + state.phaseVolumes()[1] + state.solids().volume();
+                // The level's volume (P2 of batch 2026-11-16-supercritical-followups): one dense fluid counts by its
+                // liquid-like weight, so its loop holds a density; any other contents read as before.
+                double volume = DenseReadings.levelVolume(state, world.denseWeight(sensor.key().host()));
                 double desired = tank.geometry().volumeAt(height),
                         flow = Math.max(0, output.volumeFlow());
                 // The inventory error recovered over the horizon, on the balance between two samples, rather than a tuned
@@ -314,7 +315,7 @@ final class ControlLaw {
             return Decision.noSetpoint("NO LEVEL BALANCE");
         double height = s.unit() == Sensor.Unit.HEIGHT_PERCENT ? s.target() * reading.span() / 100 : s.target();
         if (height > reading.span()) return Decision.noSetpoint("TARGET OUT OF RANGE");
-        double volume = state.phaseVolumes()[0] + state.phaseVolumes()[1] + state.solids().volume();
+        double volume = DenseReadings.levelVolume(state, world.denseWeight(sensor.key().host()));
         double flow = Math.abs(valve.volumeFlow()), density = feedDensity(valve.massFlow(), valve.volumeFlow());
         // The feed's density from its valve's pipe; with nothing flowing, none to turn a volume into mass.
         if (!(flow > 1e-12) || !(density > 0)) return Decision.noSetpoint("NO LEVEL BALANCE");

@@ -181,7 +181,10 @@ public final class InstrumentService {
     }}
     public static ItemStack sensorItem(Sensor.Kind kind){return new ItemStack(switch(kind){case PRESSURE->ModItems.PRESSURE_PROBE.get();case TEMPERATURE->ModItems.TEMPERATURE_PROBE.get();case FLOW->ModItems.FLOWMETER.get();case LEVEL->ModItems.DIGITAL_LEVEL_METER.get();case SPEED->ModItems.SPEED_SENSOR.get();case ALARM,ANALYSER->throw new IllegalArgumentException("An alarm or an analyser is an equipment channel");});}
     /** The readings of {@code host}'s sensors; a host with none reads nothing, not even its pipe (code base review R1). */
-    public List<Sensor.Reading> sensorReadings(long host,FluidView view){var sensors=store.sensors(host);if(sensors.isEmpty())return List.of();var pipe=world.instrumentPipeReading(host);return sensors.stream().map(s->{var reading=s.kind()==Sensor.Kind.SPEED?speedReading(s,view):Sensor.read(s,view,pipe,sensorSamples.get(s.instance()));sensorSamples.put(s.instance(),reading);return reading;}).toList();}
+    public List<Sensor.Reading> sensorReadings(long host,FluidView view){var sensors=store.sensors(host);if(sensors.isEmpty())return List.of();var pipe=world.instrumentPipeReading(host);
+        // A body level counts one dense fluid by its liquid-like weight on the server's own state (P2, DenseReadings).
+        double dense=view.tank()!=null&&sensors.stream().anyMatch(s->s.kind()==Sensor.Kind.LEVEL)?world.denseWeight(host):Double.NaN;
+        return sensors.stream().map(s->{var reading=s.kind()==Sensor.Kind.SPEED?speedReading(s,view):Sensor.read(s,view,pipe,sensorSamples.get(s.instance()),dense);sensorSamples.put(s.instance(),reading);return reading;}).toList();}
     /** A speed pickup reads its turbine's shaft speed, rpm, as the trains last decided it (W3): a read of engine state. */
     private Sensor.Reading speedReading(Sensor.Installed s,FluidView view){double rpm=world.shafts().speed(s.key().host());
         return new Sensor.Reading(s.instance(),s.kind(),s.key().mount(),Double.isFinite(rpm)?rpm:0,0,0,view.committedTick(),Double.isFinite(rpm)?Instrument.Availability.AVAILABLE:Instrument.Availability.UNAVAILABLE);}

@@ -315,6 +315,62 @@ class SizingPageTest {
         assertEquals(new LineSizing.Size(.3, 2), editor.sheet().sizing().line("S-1").size());
     }
 
+    /** The settings of {@code rows}, groups opened, by key. */
+    private static Map<String, Column.Setting> settings(List<Column.Row> rows) {
+        var out = new LinkedHashMap<String, Column.Setting>();
+        for (var row : rows) {
+            if (row instanceof Column.Group g) out.putAll(settings(g.rows()));
+            if (row instanceof Column.Setting s) out.put(s.key(), s);
+        }
+        return out;
+    }
+
+    /**
+     * P2 of batch 2026-11-16-supercritical-followups: a model's box reads the model's capacity in the unit beside it (item 5;
+     * before P2 it read the model's number, "2", beside "m³/h"), for the plunger pump, the vacuum pump and the prime mover; and
+     * the limits table's "Suction density" row gives its advice in its hover, the table's other rows none (item 11).
+     */
+    @Test
+    void aModelsBoxReadsItsCapacityAndTheDensityRowItsAdvice() {
+        var texts = new SheetFixture.Texts();
+        var editor = SheetFixture.editor(SHEET);
+        List<UnitSize> sizes = List.of(new PumpSizing.Plunger(2), new com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size(com.wormzjl.icheme.science.machine.VacuumPump.Type.values()[0], 2),
+                new com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size(com.wormzjl.icheme.science.machine.PrimeMover.Family.ENGINE, 3, false));
+        for (var size : sizes) {
+            var units = new LinkedHashMap<>(sized().units());
+            units.put("P-101", new SheetSizing.SizedUnit(size, new Rating(List.of(Limit.PUMP_DENSITY.read(.8), Limit.UNIT_SHAPE.read(1)))));
+            var all = new SheetSizing.Sized(sized().lines(), units, sized().paths());
+            var last = new SimulatorHost.Finished(editor.sheet(), STEADY, 1);
+            var x = new SheetContext(editor, SheetState.of(editor.sheet(), last), SheetUnits.DEFAULT, texts, texts.measure, SheetFixture.FLUIDS,
+                    host(last, new SimulatorRunner.Rated(editor.sheet(), last, all, false), false), List.of());
+            var state = new SizingPage.State();
+            state.unit = "P-101";
+            var model = settings(SizingPage.rows(x, state)).get("sizing/size/model");
+            assertNotNull(model, "a model's box for " + size);
+            var kind = switch (size) {
+                case PumpSizing.Plunger p -> com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.PLUNGER_PUMP;
+                case com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v -> v.shape().kind();
+                case com.wormzjl.icheme.science.flowsheet.sizing.PrimeMoverSizing.Size m -> m.shape().kind();
+                default -> throw new IllegalStateException();
+            };
+            var design = com.wormzjl.icheme.science.equipment.UnitDesign.of(kind);
+            int number = size instanceof PumpSizing.Plunger p ? p.model() : size instanceof com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size v ? v.model() : 3;
+            assertEquals(design.sizeText(number), model.value(), "the capacity of " + size);
+            assertEquals(design.sizeUnit(), model.unit());
+            assertNotEquals(Integer.toString(number), model.value(), "not the model's number");
+            // The hover over the limits table: the density row's advice, its name first; no other row says anything.
+            var box = new Rect(0, 0, 420, 240);
+            var said = new java.util.LinkedHashSet<String>();
+            for (int y = 0; y < 240; y++) {
+                var hover = SizingGlass.hover(x, state, texts.measure, box, 20, y);
+                if (hover != null) said.add(hover);
+            }
+            assertEquals(java.util.Set.of(texts.get("flowsheet.limit.pump_density") + "\n" + texts.get("flowsheet.sizing.advice.pump_density")), said, "for " + size);
+        }
+        var x = context(texts, editor, STEADY, false);
+        assertNull(SizingGlass.advice(x, Limit.PUMP_RATED), "a row with no advice");
+    }
+
     @Test
     void exchangerSubTypeIsManualAndKeepsItsCountAndDimensions() {
         var x=context(new SheetFixture.Texts(),SheetFixture.editor(SHEET),STEADY,false);
