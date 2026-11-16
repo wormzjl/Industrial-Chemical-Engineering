@@ -1,4 +1,4 @@
-**Not clean: 10 failures in 5 classes.** 1 is expected (`LanguageFilesTest`, until the translation commit). 8 are sizing references of `CrudeUnitSampleTest` that WP5's design deposit moves, not re-recorded. 1 is a real rule break (`DeterministicMathSourceTest`: `Math.expm1` in `ColumnWear`). Chain-100 exact, GameTests 119 of 119, junction lines and `MIXED_GAS_COST` identical, campaign clean after one replay.
+**At the lane, not clean: 10 failures in 5 classes. After the `ColumnWear` fix and the one re-record of `CrudeUnitSampleTest` (section "After the lane"), only `LanguageFilesTest` fails, until the translation commit.** At the lane: 1 is expected (`LanguageFilesTest`, until the translation commit). 8 are sizing references of `CrudeUnitSampleTest` that WP5's design deposit moves, not re-recorded. 1 is a real rule break (`DeterministicMathSourceTest`: `Math.expm1` in `ColumnWear`). Chain-100 exact, GameTests 119 of 119, junction lines and `MIXED_GAS_COST` identical, campaign clean after one replay.
 
 # The final lane of the fouling and corrosion batch
 
@@ -71,3 +71,44 @@ Other differing lines are times, object hash codes and the log-file delete error
 | bundled defaults | 1000 → 1000 | 1000 | none | none | 0 |
 
 Head holds by the classifier. Cold: E5 65, 101, 629, 752, 803, 919; F 6, 431. Bundled random: E6 241; E9 145, 431; F 12, 47, 59, 118, 579, 678, 707, 941.
+
+## After the lane
+
+The owner accepted finding 1 as the plan's rule and finding 2 as a defect ("Yes, fix and re-record"). This is not a second lane: only the classes named here ran, with `--tests`.
+
+- `fe46960db`: `ColumnWear.foul` calls `DeterministicMath.expm1`. A grep of `science/`, `runtime/` and `fluid/benchmark` with the test's pattern finds no other banned call. `ColumnWearTest` asserts `foul` with a 1e-12 tolerance or on the paths that never call `expm1`; nothing moved.
+- `ec831f8a1`: `CrudeUnitSampleTest` re-recorded on the design deposit (WP5), each value with its old one in the method's javadoc or message. No tolerance changed. One uncovering run read the masked asserts, with temporary prints that were removed before the confirming run.
+
+| Test method | Assert | Old | New |
+|---|---|---|---|
+| `ColumnSizingSampleTest.theCondenserIsSetByItsShellDrop` | curves' need | 509 m² | 766 m² |
+| same, masked | the probe's three shells, kept, lamp | YELLOW | GREEN (83 % over the need, under the 100 % advisory) |
+| `ColumnSizingSampleTest.eachPumparoundTakesItsCoolerAndPump` | PA 1 / 2 / 3 cooler size | 1.00 × 4 / 1.00 × 4 / 1.00 × 3 | 1.00 × 5 / 1.25 × 4 / 1.00 × 5 |
+| same, masked | surface | 300 / 300 / 225 m² | 375 / 468.8 / 375 m² |
+| same, masked | need (2 %) | 198 / 240 / 153 m² | 290 / 348 / 270 m² |
+| `SizeAllSampleTest.p101sPathIsTheProbesStair` | PA 1 / PA 2 / PA 3 / E-101 step | 0.39 / 0.41 / 0.30 / 0.20 bar | 0.452 / 0.186 / 0.413 / 0.154 bar |
+| same, masked | path lost | 3.06 bar | 2.97 bar |
+| `SizeAllSampleTest.theResiduesPathIsTheProbes` | E-101 / E-102 step | 0.07 / 0.218 bar | 0.064 / 0.084 bar |
+| same, masked | path lost | 0.550 bar | 0.41 bar |
+| `UnitSizingSampleTest.e101` | size | 1.25 × 6 m | 1.50 × 10 m |
+| same, masked | surface, need | 703, 569 m² | 1688, 1344 m² |
+| same, masked | over need | 23.6 % | 25.5 % |
+| same, masked | tube / shell drop | 0.20 / 0.07 bar | 0.21 / 0.11 bar |
+| `UnitSizingSampleTest.e101KeptOneStepDownIsRatedByTheSameRule` | tube drop | 1.31 bar | 1.76 bar |
+| same, masked | shell drop | 0.432 bar | 0.715 bar |
+| `UnitSizingSampleTest.e102` | size | 6 × 12 m, bank 1 × 3 | 5.5 × 9 m, bank 2 × 3 |
+| same, masked | surface, need | 883, 732.5 m² | 1146, 953.9 m² |
+| same, masked | drop | 0.218 bar | 0.112 bar |
+| `theProbesBankStillHoldsItsDutyWhenThePlayerKeepsIt`, renamed `theProbesBankIsShortOfSurfaceOnTheDirtyService` | lamp, closest | GREEN | RED, `AIR_COOLER_SURFACE` |
+| same | need (new assert), drop | 0.05 bar | 953.9 m², 0.069 bar |
+
+Every moved value goes the way a dirty service sends it: needs rise, units grow, kept clean-sized units fall short, and kept units lose more on narrowed passages. The drops that fall belong to units that grew (more tubes, a second train). Unchanged and still asserted: the probe's clean 575.0 m² (E-101) and 750.2 m² (E-102), the pumps, H-101, the paths' head and ends.
+
+Classes run after the lane, all passing:
+- `test`: `DeterministicMathSourceTest` 2 of 2, `ColumnWearTest` 4 of 4;
+- `test`: `OperationColumnTest` 10 of 10, `ColumnRunTest` 56 of 56. These are what `affected.mjs select --since 96a6fa733..HEAD` names for the `ColumnWear` change;
+- `holdGates`: `CrudeUnitSampleTest`, 39 of 39 in 5 nested classes, the confirming run. The uncovering run before it failed only in the three methods it read.
+
+The selection also marks the fluid GameTests due, by the path rule. They did not run: the change is one call in a pure law, rounded to the same function bit for bit on the JVM in use (StrictMath).
+
+No sentence of the code guide or of the plan states a moved value.
