@@ -73,18 +73,20 @@ class HeatSidesTest {
     }
     /**
      * Plan section 4: an air cooler's process stream sees air at 25 °C through UA_eff = C (1 − e^(−UA/C)) per m² of bundle
-     * face: 2.15 (liquid), 2.44 (condensing) and 0.43 (gas) kW/K with the fans running; natural draught, a quarter of the
-     * air and its film, leaves 0.63, 0.65 and 0.29.
+     * face: 2.44 (liquid and condensing: both process films 5000 W/m²K since decision D15, the liquid 2.15 at 2000 before)
+     * and 0.43 (gas) kW/K with the fans running; natural draught, a quarter of the air and its film, leaves 0.65, 0.65 and
+     * 0.29 (the liquid 0.63 before).
      */
     @Test void anAirCoolersFilmsAreTheAirsEffectiveConductancePerPhase() {
-        double[][] perFace={{2149.6,2435.7,426.3},{629.2,650.5,293.3}};
+        double[][] perFace={{2435.7,2435.7,426.3},{650.5,650.5,293.3}};
         for(int fans=1;fans>=0;fans--) {
             var films=HeatSides.airFilms(fans);double[] expected=perFace[1-fans];
-            assertEquals(expected[0],5*films.liquid(),.5);assertEquals(expected[1],5*films.twoPhase(),.5);assertEquals(expected[2],5*films.gas(),.5);
+            assertEquals(expected[0],5*films.wallLiquid(),.5);assertEquals(expected[1],5*films.wallTwoPhase(),.5);assertEquals(expected[2],5*films.wallGas(),.5);
         }
         assertThrows(IllegalArgumentException.class,()->HeatSides.airFilms(1.5));
-        // The largest bay, liquid at 85 °C in 25 °C air with every tube meeting fresh air: about 1.6 MW (plan section 4).
-        assertEquals(1.6e6,HeatSides.airFilms(1).liquid()*5*12.2*60,.05e6);
+        // The largest bay, warm water at 85 °C in 25 °C air with every tube meeting fresh air: about 1.78 MW (1.6 MW on the
+        // 2000 W/m²K liquid film before decision D15; plan section 4).
+        assertEquals(1.78e6,HeatSides.airFilms(1).wallLiquid()*5*12.2*60,.05e6);
     }
     /** An air cooler bank has one process side over 5 m² of bare tube per m² of face, the bays' tubes in one pass each. */
     @Test void anAirCoolerHasOneProcessSideOverItsBaysTubes() {

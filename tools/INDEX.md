@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [fouling-corrosion/](fouling-corrosion/README.md) | Fit of the crude cuts' corrosion sub-record (sulfur, acid number) to the four assays | `2026-11-16-fouling-corrosion` | In progress since 2026-11-16 |
 | [code-guide/](code-guide/README.md) | Code map: files and lines per package, the layer import matrix, the guide README's module counts (`--readme`, `--check`) | `2026-11-13-codebase-review` | In use since 2026-11-13 |
 | [supercritical-probes/](supercritical-probes/README.md) | Dense and supercritical fluid probes per stage: laws, slot rule, machine shares and E, plunger geometry, CoolProp numbers; the column feed flash forms, its wet grid and the medium crude's cold one-liquid check (p3) | `2026-11-15-supercritical-fluids`, `2026-11-16-supercritical-followups`, `2026-11-16-cdu17-fixture-removal` | Kept for reference since 2026-11-16 |
 | [plunger-forms/](plunger-forms/README.md) | Candidate forms of an equipment model drawn with the kit, and their option sheets | `2026-11-15-supercritical-fluids` | Kept for reference since 2026-11-16 |
@@ -52,7 +53,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [localization/](localization/README.md) | Missing-key scan and translation checks for the lang files | `2026-11-03-localization` | Implemented 2026-11-03 |
 | [dry-ice-cost/](dry-ice-cost/README.md) | Per-job cost, shadow flashes and prototypes of the cold crystal worlds | `2026-11-02-dry-ice-cost` | Implemented 2026-11-03 |
 | [cooling-towers/](cooling-towers/README.md) | Tower verification lane, fill forms, relief sprites, polygon counts | `2026-10-30-water-cooling-tower` | Implemented 2026-11-02 |
-| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization`, `2026-11-09-final-lane-selection`, `2026-11-11-valve-followups`, `2026-11-13-codebase-review` (the Rust readers line) | Implemented 2026-11-09 |
+| [merge-lane/](merge-lane/README.md) | The one final lane before a merge, with its campaign inputs | `2026-11-02-test-suite-optimization`, `2026-11-09-final-lane-selection`, `2026-11-11-valve-followups`, `2026-11-13-codebase-review` (the Rust readers line), `2026-11-16-fouling-corrosion` (the second-lane fixes) | Implemented 2026-11-09 |
 | [ph-false-root/](ph-false-root/README.md) | TP, PH and UV sweeps on wet feeds, final lanes of the false root and TP steam fixes | `2026-11-02-ph-false-root`, `2026-11-02-tp-steam-refusal` | Implemented 2026-11-02 |
 | [vacuum-column-test/](vacuum-column-test/README.md) | CDU/VDU convergence screens and feed checks; the capture of `invalid-binary-roots.json` | `2026-10-28-vacuum-column`, `2026-11-16-cdu17-fixture-removal` | Implemented 2026-11-02 |
 | [valve-hold-probes/](valve-hold-probes/README.md) | Trace and job-path replays of a column outlet's held jobs | `2026-11-02-valve-hold` | Implemented 2026-11-02 |

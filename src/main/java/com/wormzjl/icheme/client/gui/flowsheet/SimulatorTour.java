@@ -25,12 +25,13 @@ public final class SimulatorTour {
     private SimulatorTour() {
     }
 
-    /** The tour of {@code tab}: {@code simulator.sheet}, {@code simulator.results}, {@code simulator.sizing} or {@code simulator.basis}. */
+    /** The tour of {@code tab}: {@code simulator.sheet}, {@code simulator.results}, {@code simulator.sizing}, {@code simulator.materials} or {@code simulator.basis}. */
     public static String page(SimulatorFrame.Tab tab) {
         return "simulator." + switch (tab) {
             case FLOWSHEET -> "sheet";
             case RESULTS -> "results";
             case SIZING -> "sizing";
+            case METALLURGY -> "materials";
             case BASIS -> "basis";
         };
     }
@@ -41,6 +42,7 @@ public final class SimulatorTour {
             case FLOWSHEET -> 0;
             case RESULTS -> SimulatorFrame.RESULT_DOOR;
             case SIZING -> SimulatorFrame.SIZING_DOOR;
+            case METALLURGY -> SimulatorFrame.MATERIALS_DOOR;
             case BASIS -> SimulatorFrame.BASIS_DOOR;
         };
     }

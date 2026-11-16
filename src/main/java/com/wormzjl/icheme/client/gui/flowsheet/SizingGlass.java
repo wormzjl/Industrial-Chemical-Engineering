@@ -303,7 +303,8 @@ public final class SizingGlass {
         var size = picked == null ? null : size(x, picked, sized);
         if (size == null || UnitSize.built(size) == null) return List.of();
         return List.of(x.text("sizing.requirements") + ": " + name(x, picked),
-                x.text("sizing.build_count", size.count(), equipment(x, picked, size)), x.text("sizing.build_each", sizeText(x, one(size))));
+                x.text("sizing.build_count", size.count(), equipment(x, picked, size)), x.text("sizing.build_each", sizeText(x, one(size))),
+                x.text("sizing.build_material", MaterialsPage.material(x, MaterialsPage.chosen(x, block(picked) == null ? picked : block(picked)))));
     }
 
     private static List<String> requirementLines(SheetContext x, SheetSizing.Sized sized, @Nullable String picked, Measure m, int width) {

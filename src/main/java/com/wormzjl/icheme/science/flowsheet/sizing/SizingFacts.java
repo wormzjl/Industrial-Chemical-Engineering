@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet.sizing;
 
 import com.google.gson.JsonObject;
+import com.wormzjl.icheme.science.integrity.Metallurgy;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
@@ -41,9 +42,16 @@ public record SizingFacts(DesignBasis basis, JsonObject basisUnknown, Map<String
      * @param size the size Size all gave it or the player keeps, null for none yet; a column's is its door's diameter, a valve's its
      *             inlet line's bore, so those hold none
      * @param hold a drum's entry (min) or a tank's (h), null for the row's
+     * @param material the Materials tab's Manual choice of material of construction (batch 2026-11-16-fouling-corrosion, WP6), null
+     *                 for Auto: the cheapest material whose lamp is green. Saved by name; a name this build lacks reads as Auto and
+     *                 stays in {@code unknown}
      */
-    public record UnitFacts(Mode mode, @Nullable UnitType type, @Nullable UnitSize size, @Nullable Double hold, JsonObject sizeUnknown, JsonObject unknown) {
+    public record UnitFacts(Mode mode, @Nullable UnitType type, @Nullable UnitSize size, @Nullable Double hold, JsonObject sizeUnknown, JsonObject unknown,
+                            @Nullable Metallurgy material) {
         public static final UnitFacts AUTO = new UnitFacts(Mode.AUTO, null, null, null, new JsonObject(), new JsonObject());
+
+        /** The field the Materials tab's choice is saved under. */
+        public static final String MATERIAL = "material";
 
         public UnitFacts {
             Objects.requireNonNull(mode, "mode");
@@ -51,12 +59,24 @@ public record SizingFacts(DesignBasis basis, JsonObject basisUnknown, Map<String
             Objects.requireNonNull(unknown, "unknown");
         }
 
+        /** Facts on Auto material. */
+        public UnitFacts(Mode mode, @Nullable UnitType type, @Nullable UnitSize size, @Nullable Double hold, JsonObject sizeUnknown, JsonObject unknown) {
+            this(mode, type, size, hold, sizeUnknown, unknown, null);
+        }
+
         public UnitFacts with(@Nullable UnitSize size) {
-            return new UnitFacts(mode, type, size, hold, Objects.equals(size, this.size) ? sizeUnknown.deepCopy() : new JsonObject(), unknown.deepCopy());
+            return new UnitFacts(mode, type, size, hold, Objects.equals(size, this.size) ? sizeUnknown.deepCopy() : new JsonObject(), unknown.deepCopy(), material);
         }
 
         public UnitFacts with(Mode mode) {
-            return new UnitFacts(mode, type, size, hold, sizeUnknown.deepCopy(), unknown.deepCopy());
+            return new UnitFacts(mode, type, size, hold, sizeUnknown.deepCopy(), unknown.deepCopy(), material);
+        }
+
+        /** These facts with the Materials tab's choice at {@code material}, null for Auto; an unread saved name goes with the choice. */
+        public UnitFacts withMaterial(@Nullable Metallurgy material) {
+            var rest = unknown.deepCopy();
+            rest.remove(MATERIAL);
+            return new UnitFacts(mode, type, size, hold, sizeUnknown.deepCopy(), rest, material);
         }
 
         /**
@@ -65,11 +85,11 @@ public record SizingFacts(DesignBasis basis, JsonObject basisUnknown, Map<String
          */
         public UnitFacts typed(@Nullable UnitType type) {
             var kept = type == null || type == typeOf(size) ? size : null;
-            return new UnitFacts(mode, type, kept, hold, kept == size ? sizeUnknown.deepCopy() : new JsonObject(), unknown.deepCopy());
+            return new UnitFacts(mode, type, kept, hold, kept == size ? sizeUnknown.deepCopy() : new JsonObject(), unknown.deepCopy(), material);
         }
 
         public UnitFacts holding(@Nullable Double hold) {
-            return new UnitFacts(mode, type, size, hold, sizeUnknown.deepCopy(), unknown.deepCopy());
+            return new UnitFacts(mode, type, size, hold, sizeUnknown.deepCopy(), unknown.deepCopy(), material);
         }
 
         /**
@@ -161,7 +181,7 @@ public record SizingFacts(DesignBasis basis, JsonObject basisUnknown, Map<String
     /** A copy that shares nothing mutable. */
     public SizingFacts copy() {
         var units = new LinkedHashMap<String, UnitFacts>();
-        this.units.forEach((id, facts) -> units.put(id, new UnitFacts(facts.mode(), facts.type(), facts.size(), facts.hold(), facts.sizeUnknown().deepCopy(), facts.unknown().deepCopy())));
+        this.units.forEach((id, facts) -> units.put(id, new UnitFacts(facts.mode(), facts.type(), facts.size(), facts.hold(), facts.sizeUnknown().deepCopy(), facts.unknown().deepCopy(), facts.material())));
         var lines = new LinkedHashMap<String, LineFacts>();
         this.lines.forEach((id, facts) -> lines.put(id, new LineFacts(facts.mode(), facts.service(), facts.length(), facts.size(), facts.sizeUnknown().deepCopy(), facts.unknown().deepCopy())));
         return new SizingFacts(basis, basisUnknown.deepCopy(), units, lines, unknown.deepCopy());

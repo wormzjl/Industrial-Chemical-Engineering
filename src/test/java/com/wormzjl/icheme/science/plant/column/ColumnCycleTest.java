@@ -373,6 +373,36 @@ class ColumnCycleTest {
         assertEquals(energyIn, energyOut, Math.abs(energyOut) * 1e-12, "the energy closes on the condenser");
     }
 
+    /**
+     * WP8 of batch 2026-11-16-fouling-corrosion (plan section 13.1): clean trays (capacity 1) leave the cycle as it was, bit for
+     * bit, on a table past flood; trays at 80 % of their capacity flood at 80 % of the clean feed.
+     */
+    @Test
+    void cleanTraysLeaveTheCycleExactlyAndFouledTraysFloodAt80PercentOfTheCleanFeed() {
+        var past = flooding(.8 * 1.34);
+        var before = ColumnCycle.step(past, setpoints(), 5, FEED, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE, (k, n) -> energy(past, k, n), false);
+        var clean = ColumnCycle.step(past, setpoints(), 5, FEED, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE.withTrays(1), (k, n) -> energy(past, k, n), false);
+        assertEquals(before.alpha(), clean.alpha(), 0);
+        assertArrayEquals(before.feed().moles(), clean.feed().moles(), 0);
+        assertEquals(before.feed().energy(), clean.feed().energy(), 0);
+        for (int k = 0; k < before.products().size(); k++) {
+            assertArrayEquals(before.products().get(k).moles(), clean.products().get(k).moles(), 0);
+            assertEquals(before.products().get(k).energy(), clean.products().get(k).energy(), 0);
+        }
+        assertEquals(before.condenser(), clean.condenser(), 0);
+        assertEquals(before.conditions(), clean.conditions());
+        // At 90 % of flood the clean trays take the whole set feed; at 80 % of their capacity they flood: 0.8/0.9 of it.
+        var table = flooding(.9);
+        var whole = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE, (k, n) -> energy(table, k, n), false);
+        assertEquals(1, whole.alpha(), 0);
+        assertNull(Condition.find(whole.conditions(), Condition.FLOODING));
+        var fouled = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE.withTrays(.8), (k, n) -> energy(table, k, n), false);
+        assertEquals(Condition.FLOODING, bound(fouled));
+        assertEquals(.8 / .9, fouled.alpha(), 1e-12, "the fouled trays' limit is 80 % of the clean one");
+        assertEquals(.8, table.flood().fraction(fouled.feedMoles() / 5), 1e-12, "the worst tray at 80 % of its clean flood fraction");
+        assertEquals(1, Condition.find(fouled.conditions(), Condition.HIGH_LOAD).value(), 1e-12, "and at its fouled limit");
+    }
+
     /** T3 (W3.1): flooding and a short feed together: the lower share binds and names its condition; both are listed. */
     @Test
     void floodingAndAShortFeedTheLowerBinds() {

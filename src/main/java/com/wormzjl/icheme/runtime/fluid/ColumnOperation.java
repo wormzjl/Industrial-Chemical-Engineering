@@ -148,6 +148,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         Refused refused;com.wormzjl.icheme.science.plant.column.Setpoints refusedSetpoints;Condition.Active setpointRefusal;
         /** The design had no operating point at the last request while no table stands: NOT READY, or null. */
         Condition.Active missing;
+        /** The last solve of the state taken found a compound solidifying in the column (FROZEN, owner D6): the cycle takes nothing until a solve of the state taken finds none. Memory only. */
+        Condition.Active frozen;
         /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short steam was refused, so every input is cut together until the steam is no longer short or its shortage leaves the refused state's bands. */
         boolean ruleA;
         /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the accepted solve said beyond its table (FEED_WATER_ROUTED), or null. */
@@ -170,6 +172,13 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         final Map<Long,ArrayDeque<Level>> levels=new HashMap<>();
         /** The table the last applied one replaced, for plans dated before it applied. */
         SplitTable before;
+        /**
+         * The wall's corrosion on the bottoms liquid of {@link #corroded} (WP8, plan section 13.1): its rate on the unit's material,
+         * mm/y, and what governs it (null for none). State, computed once per installed table; a reload computes it again.
+         */
+        SplitTable corroded;double corrosion;com.wormzjl.icheme.science.integrity.Mechanism corroding;
+        /** The last cycle's solid mass share and the wall's whole rate there, mm/y (WP8). Memory only. */
+        double share,wallRate;
         Run(long unit,long nextCycle){this.unit=unit;this.nextCycle=nextCycle;}
         /** The table in force at {@code tick}. */
         SplitTable tableAt(long tick){return before!=null&&tick<applied?before:table;}
@@ -218,6 +227,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     private Power power=Power.NONE;
     /** Where this world's column members draw their power. */
     public void power(Power power){this.power=Objects.requireNonNull(power);}
+    /** The walls' switches and time scales (config {@code corrosion.*}, {@code erosion.*}, {@code fouling.*}), read at each cycle. */
+    private java.util.function.Supplier<Integrity.Settings> integrity=()->Integrity.Settings.DEFAULT;
+    /** The corrosion standard of a compound list, or null where it cannot be built: no corrosion part (WP8). */
+    private java.util.function.Function<List<String>,com.wormzjl.icheme.science.integrity.CorrosionStandard> standards=list->null;
+    /** Where this world's columns read the walls' settings and the corrosion standard of the network's list (WP8). */
+    public void wear(java.util.function.Supplier<Integrity.Settings> settings,java.util.function.Function<List<String>,com.wormzjl.icheme.science.integrity.CorrosionStandard> standards) {
+        this.integrity=Objects.requireNonNull(settings);this.standards=Objects.requireNonNull(standards);
+    }
 
     /** Process time against online time: the coordinator's ({@link IslandCoordinator#time}). */
     private SimulationTime time(){return coordinator.time();}
@@ -250,6 +267,33 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             edits.add(new WorldTopologyLedger.Edit(r.device().id(),new WorldTopologyLedger.Registration(r.device().withSuspendedBy(0),r.spec(),Math.addExact(r.revision(),1))));
         if(!edits.isEmpty())submit.accept(edits);
         if(!standing(u))stopped(u);
+    }
+    /** A queued repair or cleaning of a column unit (WP8). */
+    private record Request(long unit,boolean clean,java.util.function.Consumer<Integrity.Outcome> reply) {}
+    private final ArrayDeque<Request> requests=new ArrayDeque<>();
+    /**
+     * Queues the Equipment Constructor's repair of column unit {@code unit} (WP8, plan sections 10 and 13.1): an engine event
+     * applied at the next tick drain ({@link #apply}). {@link Integrity.Outcome#NOT_IDLE} while it runs,
+     * {@link Integrity.Outcome#NOTHING_TO_REPAIR} with no wall lost (or no such unit), else its wall is new
+     * ({@link Integrity.Outcome#REPAIRED}). No item.
+     */
+    public void queueRepair(long unit,java.util.function.Consumer<Integrity.Outcome> reply){requests.add(new Request(unit,false,Objects.requireNonNull(reply)));}
+    /** Queues the cleaning of column unit {@code unit}'s trays under the same rule: its fouling to 0 ({@link Integrity.Outcome#CLEANED}). */
+    public void queueClean(long unit,java.util.function.Consumer<Integrity.Outcome> reply){requests.add(new Request(unit,true,Objects.requireNonNull(reply)));}
+    public boolean hasEvents(){return !requests.isEmpty();}
+    /** Applies the queued repairs and cleanings, each answered once. A stopped unit has no run: nothing else changes. */
+    public void apply() {
+        while(!requests.isEmpty()) {
+            var q=requests.poll();var u=topology.column(q.unit());Integrity.Outcome outcome;
+            if(u==null)outcome=Integrity.Outcome.NOTHING_TO_REPAIR;
+            else if(u.running())outcome=Integrity.Outcome.NOT_IDLE;
+            else if(q.clean()){if(u.trayFouling()>0){topology.column(u.withWear(0,u.wallLoss()));outcome=Integrity.Outcome.CLEANED;}else outcome=Integrity.Outcome.NOTHING_TO_REPAIR;}
+            else if(u.wallLoss()>0){topology.column(u.withWear(u.trayFouling(),0));outcome=Integrity.Outcome.REPAIRED;}
+            else outcome=Integrity.Outcome.NOTHING_TO_REPAIR;
+            if(u!=null&&(outcome==Integrity.Outcome.CLEANED||outcome==Integrity.Outcome.REPAIRED))
+                com.wormzjl.icheme.IChemE.LOGGER.info("column status={} master={},{},{} unit={}",outcome,u.master().x(),u.master().y(),u.master().z(),u.id());
+            q.reply().accept(outcome);
+        }
     }
     /** An event committed: a running unit whose ports have all left stops. */
     public void committed() {
@@ -345,7 +389,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var u=topology.column(unit);if(u==null)return null;
         var r=u.running()?runs.get(unit):null;var set=u.setpoints();
         if(r==null)return new com.wormzjl.icheme.science.plant.column.OperationView(com.wormzjl.icheme.science.plant.column.OperationView.Phase.STOPPED,List.of(),0,null,
-                "STOPPED",false,true,set,null,List.of(),List.of(),null);
+                "STOPPED",false,true,set,null,List.of(),List.of(),null,com.wormzjl.icheme.science.plant.column.OperationView.Trays.NONE,wear(u,0));
         var t=r.table;var step=r.last!=null&&!r.last.tripped()?r.last:null;double seconds=cycleSeconds();
         // The cycle demands its inlets at the accepted set points (W2); the view shows the requested ones beside them where they differ.
         var demanded=running(u,t);var accepted=t!=null&&set.intensivelyDiffers(t.reference().setpoints())?demanded:null;
@@ -390,7 +434,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var trays=com.wormzjl.icheme.science.plant.column.OperationView.Trays.NONE;
         if(t!=null&&t.flood().known()){double taken=step==null?0:step.feedMoles()/seconds;trays=new com.wormzjl.icheme.science.plant.column.OperationView.Trays(drop(t,taken),t.flood().fraction(taken),drop(t,set.feedRate()),t.flood().fraction(set.feedRate()),t.flood().tray()+1);}
         return new com.wormzjl.icheme.science.plant.column.OperationView(r.phase,r.conditions,step==null?0:step.alpha(),
-                r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve,trays);
+                r.pending==null?null:r.pending.trigger,r.status+water(u),true,true,set,accepted,streams,duties,solve,trays,wear(u,r.wallRate));
+    }
+    /** {@code u}'s trays and wall as its page shows them (WP8): its facts, the wall's rate {@code rate} mm/y. */
+    private static com.wormzjl.icheme.science.plant.column.OperationView.Wear wear(ColumnUnit u,double rate) {
+        double allowance=u.material().allowance(),left=allowance>0?Math.clamp(1-u.wallLoss()/allowance,0,1):0;
+        return new com.wormzjl.icheme.science.plant.column.OperationView.Wear(u.trayFouling(),left,Double.isFinite(rate)&&rate>0?rate:0,u.material());
     }
     /** The role of a column's pressure drop channel, {@code differential_pressure} (W3.3). */
     public static final String DIFFERENTIAL="COLUMN:differential";
@@ -462,15 +511,62 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(r.pending!=null)list.add(new Condition.Active(Condition.OFF_TABLE,r.pending.trigger.name().toLowerCase(Locale.ROOT)));
         if(r.table==null&&r.missing!=null)list.add(r.missing);
         if(r.refused!=null)list.add(r.refused.notice());
+        if(r.frozen!=null&&(r.refused==null||r.refused.notice()!=r.frozen))list.add(r.frozen);
         if(r.setpointRefusal!=null)list.add(r.setpointRefusal);
         if(r.routed!=null)list.add(r.routed);
         list.addAll(r.advisories);
         if(unmetered!=null)list.add(unmetered);
+        wear(topology.column(r.unit),list);
         r.conditions=List.copyOf(list);
         r.status=ColumnStatus.line(r.table!=null,r.conditions,r.last==null?0:r.last.alpha(),r.fans,r.fanPower);
         r.phase=ColumnStatus.phase(r.table!=null,r.conditions);
     }
-    /** The set points the cycle runs on (W2): the table's accepted ones with the unit's feed rate; the requested ones before any table. */
+    /**
+     * The notices of {@code u}'s trays and wall into {@code list} (WP8, plan section 13.1): TRAYS FOULED with the capacity
+     * left, THIN WALL or WEEPING with the allowance used. A wall that is through is the cycle's LEAKING trip ({@link #leaking}).
+     */
+    private static void wear(ColumnUnit u,List<Condition.Active> list) {
+        if(u==null)return;
+        if(com.wormzjl.icheme.science.integrity.ColumnWear.fouled(u.trayFouling())){double c=com.wormzjl.icheme.science.integrity.ColumnWear.capacity(u.trayFouling());
+            list.add(new Condition.Active(Condition.TRAYS_FOULED,c,-1,String.format(Locale.ROOT,"trays fouled: %.0f %% of their clean capacity left",100*c)));}
+        double allowance=u.material().allowance(),used=allowance>0?u.wallLoss()/allowance:1;
+        switch(com.wormzjl.icheme.science.integrity.WallState.stage(u.wallLoss(),allowance)) {
+            case THIN->list.add(new Condition.Active(Condition.THIN_WALL,used,-1,String.format(Locale.ROOT,"thin wall: %.0f %% of the corrosion allowance used",100*used)));
+            case WEEPING->list.add(new Condition.Active(Condition.WEEPING,used,-1,String.format(Locale.ROOT,"weeping: %.0f %% of the corrosion allowance used",100*used)));
+            default->{}
+        }
+    }
+    /**
+     * Whether {@code u}'s wall is through and holds the column (WP8): the saved loss at its material's allowance, while
+     * corrosion or erosion is on (with both off nothing fails from a wall, as {@link Integrity} does).
+     */
+    private boolean leaking(ColumnUnit u) {
+        var s=integrity.get();
+        return (s.corrosion()||s.erosion())&&com.wormzjl.icheme.science.integrity.WallState.stage(u.wallLoss(),u.material().allowance())==com.wormzjl.icheme.science.integrity.WallState.Stage.THROUGH;
+    }
+    /** The LEAKING trip (WP8): the wall is through; the column takes nothing until the constructor repairs it, stopped. */
+    static final Condition.Active LEAKING=new Condition.Active(Condition.LEAKING,1,-1,"the wall is through: stop the column and repair it with the Equipment Constructor");
+    /**
+     * The corrosion rate of {@code u}'s wall on the bottoms liquid of the table in force, mm/y (WP8, plan section 13.1): its
+     * composition (the bottoms' recoveries of the table's feed), its solved temperature and the column's bottom pressure,
+     * the matrix of plan section 6 on its material ({@code CorrosionLaw.inside}). The bottoms is a liquid: its water is its
+     * aqueous part, the rest its oil. Computed once per installed table; 0 where the table has no bottoms or the network's list
+     * has no standard. A column without solids corrodes as a vessel holding its bottoms would.
+     */
+    private double corrosion(Run r,ColumnUnit u) {
+        var t=r.table;if(t==null)return 0;
+        if(r.corroded==t)return r.corrosion;
+        r.corroded=t;r.corrosion=0;r.corroding=null;
+        int k=t.product(Port.BOTTOMS,0);var standard=standards.apply(axis);
+        if(k<0||standard==null||standard.size()!=axis.size())return 0;
+        var p=t.products().get(k);double[] moles=t.split(t.reference().feedFractions())[k];
+        int water=axis.indexOf(SplitTable.WATER);var oil=moles.clone();var aqueous=new double[moles.length];
+        if(water>=0){aqueous[water]=moles[water];oil[water]=0;}
+        double pressure=r.probes!=null?r.probes.bottomPressure():p.pressure();
+        var inside=com.wormzjl.icheme.science.integrity.CorrosionLaw.inside(u.material(),standard.digest(moles,p.temperature(),pressure,oil,aqueous));
+        r.corrosion=Double.isFinite(inside.rate())&&inside.rate()>0?inside.rate():0;r.corroding=inside.mechanism();
+        return r.corrosion;
+    }
     /** The set points the cycle runs on: the accepted ones (W2) at the feed rate it takes, the set one or a control loop's plan below it (W6.3). */
     private Setpoints running(ColumnUnit u,SplitTable table){double rate=feedRate(u);return table==null?u.setpoints().withFeedRate(rate):table.reference().setpoints().withFeedRate(rate);}
     /** A control loop's planned feed rate for a unit, mol/s, NaN for none (W6.3). */
@@ -553,12 +649,22 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(p.outcome==null)return false;
         r.pending=null;
         var u=topology.column(r.unit);
+        // A compound solidifies in the column (owner D6): no table is installed and the old one stops; the cycle takes nothing
+        // until a solve of the state taken finds none, a state inside this one's bands not asked again. Requested set points
+        // that would freeze it are refused as any set points whose solve fails: the accepted ones stay.
+        if(p.outcome instanceof ColumnSolve.Frozen f) {
+            r.retried=false;
+            if(p.trigger==DriftBands.Trigger.SETPOINT){r.refusedSetpoints=p.setpoints;r.setpointRefusal=new Condition.Active(Condition.SETPOINT_REFUSED,"the setpoint solve found "+f.text()+", the accepted set points kept");return true;}
+            r.frozen=new Condition.Active(Condition.FROZEN,f.text());
+            r.refused=new Refused(p.trigger,p.state,p.held,r.frozen);
+            return true;
+        }
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
             r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");
             r.routed=s.note().isEmpty()?null:new Condition.Active(Condition.FEED_WATER_ROUTED,s.note());
             r.advisories=s.advisories().stream().map(a->new Condition.Active(Condition.ADVISORY,a)).toList();
-            r.refused=null;r.retried=false;
+            r.refused=null;r.retried=false;r.frozen=null;
             // The requested set points are in force: no refusal of them stands.
             if(p.trigger==DriftBands.Trigger.SETPOINT||p.trigger==DriftBands.Trigger.START){r.refusedSetpoints=null;r.setpointRefusal=null;}
             // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
@@ -732,6 +838,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             available.put(s.device(),s.account().less(later));waiting.put(s.device(),laterSolids);
         }
         var totals=u.totals();
+        if(leaking(u)) {
+            // The wall is through (LEAKING, WP8): the inlets close, as on a trip, and no solve is asked; only the constructor's
+            // repair of the stopped column lifts it. Derived from the saved loss, so a reload holds it too.
+            r.last=null;r.share=0;r.wallRate=0;
+            publish(r,List.of(LEAKING),levels(r,u,running(u,r.table),available,tick,false));return;
+        }
         if(r.table==null) {
             request(r,u,tick,DriftBands.Trigger.START,null);
             publish(r,List.of(),levels(r,u,u.setpoints(),available,tick,false));return;
@@ -752,10 +864,25 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var energy=r.enthalpy;
         // The cycle runs on the accepted set points with the unit's feed rate (W2): a requested one waits for its solve.
         var set=running(u,t);double designDemand=time().seconds(u.setpoints().designFeedRate()*CYCLE_TICKS);
+        if(r.frozen!=null) {
+            // A compound solidifies in the column (FROZEN): the inlets close, as on a trip, and a solve of the state the column
+            // is given, or of requested set points the player moved, may lift it.
+            r.last=null;
+            if(r.refusedSetpoints!=null&&u.setpoints().intensivelyDiffers(r.refusedSetpoints)){r.refusedSetpoints=null;r.setpointRefusal=null;}
+            if(feedAvailable.total()>0) {
+                var given=attempted(set,feedAvailable,steam);
+                var trigger=r.refusedSetpoints==null&&u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
+                        :DriftBands.check(t.reference(),t.held(),given,designDemand).map(DriftBands.Crossing::trigger).orElse(DriftBands.Trigger.CLOSURE);
+                request(r,u,tick,trigger,given);
+            }
+            publish(r,List.of(),levels(r,u,set,available,tick,false));return;
+        }
         // Each duty passes no more than its utility has room for (C6b, W4): the heat owed as of the fence against its hold. An
         // air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
         var pas=new double[t.pumparoundPerFeed().length];for(int j=0;j<pas.length;j++)pas[j]=room(r,u,t,Utility.pumparound(j),tick);
-        var rooms=powered(r,u,t,tick,new ColumnCycle.Rooms(room(r,u,t,Utility.CONDENSER,tick),room(r,u,t,Utility.REBOILER,tick),pas,t.airFeed(u.airSurface())));
+        // Fouled trays flood at their capacity left (WP8): 1 for clean trays, the cycle as before.
+        var rooms=powered(r,u,t,tick,new ColumnCycle.Rooms(room(r,u,t,Utility.CONDENSER,tick),room(r,u,t,Utility.REBOILER,tick),pas,t.airFeed(u.airSurface())))
+                .withTrays(com.wormzjl.icheme.science.integrity.ColumnWear.capacity(u.trayFouling()));
         ColumnCycle.ProductEnergy priced=(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;};
         var b=ColumnCycle.step(t,set,cycleSeconds(),feedAvailable,steam,room,rooms,priced,false);
         // Rule A stays while the steam is short and its shortage inside the bands of the refused state; then rule B tries once more.
@@ -796,7 +923,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var out=Account.empty(weights.length);for(var a:step.products())out=out.plus(a);
         double pumparounds=0;for(double q:step.pumparounds())pumparounds+=q;
         totals=new ColumnUnit.Totals(totals.taken().plus(in),totals.produced().plus(out),totals.reboiler()+step.reboiler(),totals.condenser()+step.condenser(),totals.pumparounds()+pumparounds);
-        topology.column(u.withStations(true,stations).withTotals(totals));
+        // The trays foul and the wall is lost with the solid share of what the cycle took (WP8, plan section 13.1), booked in
+        // the same update as the totals.
+        var settings=integrity.get();double seconds=cycleSeconds();
+        r.share=com.wormzjl.icheme.science.integrity.ColumnWear.share(solids.massKg(),mass(step.feed().moles()));
+        double fouling=settings.fouling()?com.wormzjl.icheme.science.integrity.ColumnWear.foul(u.trayFouling(),r.share,seconds,settings.asymptoteProcessHours()*3600):u.trayFouling();
+        r.wallRate=(settings.corrosion()?corrosion(r,u):0)+(settings.erosion()?com.wormzjl.icheme.science.integrity.ColumnWear.solids(u.material(),r.share):0);
+        double loss=com.wormzjl.icheme.science.integrity.ColumnWear.lose(u.wallLoss(),r.wallRate,seconds,settings.yearProcessHours(),WorldTopologyLedger.IntegrityFacts.MAX_LOSS);
+        topology.column(u.withStations(true,stations).withTotals(totals).withWear(fouling,loss));
         // The totals book every duty whole; each utility is owed its duty (W4), the condenser's water its share, the air the rest
         // (COOLER_MODEL_PLAN.md section 6). A duty with no utility side is the column's own, in the totals alone.
         owed(r,u,tick,Utility.CONDENSER,-step.condenser()*t.waterShare());

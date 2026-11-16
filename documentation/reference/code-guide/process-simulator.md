@@ -36,7 +36,7 @@ at the snapshot. "pp" = package-private.
 |---|---|---|
 | [`Flowsheet`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/Flowsheet.java) | The sheet's facts: basis, units, streams, settings, sizing facts, unknown fields kept | 183 |
 | [`FlowsheetFile`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/FlowsheetFile.java) | The JSON format: `read`, `save`, `FORMAT`; keeps unknown fields, refuses a newer (`file.newer`) and an older format (`file.older`) | 249 |
-| `SizingFactsFile` (pp), `JsonFields` (pp) | Sizing's facts in the file (absent on a sheet never sized: every item on Auto); one object's checked fields, `damaged`, `beside` | 245, 167 |
+| `SizingFactsFile` (pp), `JsonFields` (pp) | Sizing's facts in the file (absent on a sheet never sized: every item on Auto; a unit's `material`, the Materials tab's choice by name); one object's checked fields, `damaged`, `beside` | 260, 167 |
 | [`Params`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/Params.java) | A door's settings as the file holds them: SI values under stable keys, the JSON kept whole | 67 |
 | [`FlowsheetCompiler`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/FlowsheetCompiler.java) | A sheet into `Calculation`s and warm-start estimates (`compile`, `estimates`, `typed`); reads the sheet's ends as roles (`Wiring.roles`); a unit that cannot run is a failing calculation; routes a utility port's water feed to its unit (`waterAlone`, `livePorts`) | 197 |
 | [`Calculation`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/Calculation.java) | One graph node (`Kind` STEP, BLOCK, CHECK): reads, writes, needs and gives (links), a `Law` | 50 |
@@ -137,11 +137,12 @@ at the snapshot. "pp" = package-private.
 
 ## Formats
 
-The flowsheet file (`FlowsheetFile.FORMAT`; no compatibility: another format is refused, owner 2026-11-04; corpus
+The flowsheet file (`FlowsheetFile.FORMAT`; no compatibility: another format is refused; corpus
 `src/test/resources/compat/flowsheet/format-2*.json`), the block body (`SheetBody.FORMAT`, a fact: the sheet inside it),
 the run results (`SimulatorResults.FORMAT`, state: dropped on a mismatch), the sent designs (`SentDesignTags`, a fact;
 corpus `compat/simulator/designs-<n>.snbt`) and the packets (on `NetworkProtocol.VERSION`): [FORMATS.md](../FORMATS.md).
-The file keeps fields it does not know; a format change re-records the corpus and the block keeps an old body as
+The file keeps fields it does not know (a unit's sizing facts carry the Materials tab's `material` by name; an unknown
+name reads Auto and stays in the row, within format 2); a format change re-records the corpus and the block keeps an old body as
 unreadable. `SheetLayout` reads a stream's `route`, so a change to it is a format change.
 
 - Packets (`ProcessSimulatorNetwork`, handlers on the server thread):
@@ -186,4 +187,4 @@ nothing solved) and `design_sent` after Send to block ([tutorial.md](tutorial.md
 - `SimulatorResults.ranOnBody(bytes)` reads only the results' head: the server never builds a run.
 - `SheetCompounds` is derived, never stored: a sheet holds compound ids, and its view is rebuilt per run.
 
-**Snapshot:** `410c37fcb`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

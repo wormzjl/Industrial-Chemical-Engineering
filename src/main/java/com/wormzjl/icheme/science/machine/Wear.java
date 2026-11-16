@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.machine;
 
+import com.wormzjl.icheme.science.integrity.ErosionLaw;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 /**
@@ -72,11 +73,13 @@ public final class Wear {
      * {@code LIQUID} from a dry screw's suction liquid volume share ({@link VacuumPump#liquidIntensity}, N5);
      * {@code LOW_FLOW} from a centrifugal pump's flow over its rated flow at its speed ({@link #lowFlow}, N1);
      * {@code WET_GAS} from a centrifugal compressor's suction condensed mass share ({@link #wetGas}, N2);
-     * {@code WET_EXHAUST} from a steam turbine's exhaust condensed mass share ({@link #wetExhaust}, N4).
+     * {@code WET_EXHAUST} from a steam turbine's exhaust condensed mass share ({@link #wetExhaust}, N4);
+     * {@code SOLIDS} from the solid mass share of a pump's stream ({@link ErosionLaw#solidsIntensity}, batch
+     * 2026-11-16-fouling-corrosion, plan section 8: 0 to 0.1 %, one from 5.1 %; no machine lists it before WP2).
      */
     public enum Fault {
         CAVITATION(FaultClass.EROSION), DRY(FaultClass.SEIZURE), LOW_FLOW(FaultClass.EROSION), WET_GAS(FaultClass.EROSION),
-        LIQUID(FaultClass.SEIZURE), WET_EXHAUST(FaultClass.EROSION);
+        LIQUID(FaultClass.SEIZURE), WET_EXHAUST(FaultClass.EROSION), SOLIDS(FaultClass.EROSION);
 
         public final FaultClass type;
 
@@ -93,6 +96,7 @@ public final class Wear {
                 case LOW_FLOW -> lowFlow(q);
                 case WET_GAS -> wetGas(q);
                 case WET_EXHAUST -> wetExhaust(q);
+                case SOLIDS -> ErosionLaw.solidsIntensity(q);
             };
         }
     }

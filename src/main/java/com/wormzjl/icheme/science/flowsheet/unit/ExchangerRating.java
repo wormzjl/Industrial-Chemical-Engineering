@@ -55,6 +55,15 @@ public final class ExchangerRating {
             return new Side(curve, massFlow * flow, inlet);
         }
 
+        /**
+         * This side behind a fouling deposit of {@code rf} m²K/W (batch 2026-11-16-fouling-corrosion, WP5): its curve with the
+         * world's films in series with the deposit ({@link HeatCurve.Films#fouled}); itself at 0. Its curve was sampled with the
+         * world's films ({@link FlowThermo#curve}).
+         */
+        public Side fouled(double rf) {
+            return rf == 0 ? this : new Side(curve.withFilms(HeatCurve.Films.DEFAULT.fouled(rf)), massFlow, inlet);
+        }
+
         /** A side that takes any heat at {@code temperature}, as the air takes it from an air cooler, whose films hold the air's. */
         public static Side sink(double temperature) {
             return new Side(new HeatCurve(new double[]{0, 1}, new double[]{temperature, temperature}, new double[]{SINK_FILM, SINK_FILM}), 1, 0);

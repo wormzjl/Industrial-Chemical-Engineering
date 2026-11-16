@@ -731,7 +731,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         // A paired heat side leads with its side selector, as its Control tab does.
         var lead=converter()!=null?hopper()?ConverterDoor.plant(converterInput(),FluidDeviceScreen::tr,false):ConverterDoor.rows(converterInput(),FluidDeviceScreen::tr):still()!=null?StillDoor.rows(stillInput(),FluidDeviceScreen::tr):tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
         var m=deviceMeters();var input=new DeviceColumn.Input(data.kind(),canEdit()&&!fixed(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
-            view.filter()!=null&&!view.filter().captured().empty(),m.level(),junction,lead,m.phases(),m.meters(),m.drive(),m.power(),m.suction());
+            view.filter()!=null&&!view.filter().captured().empty(),m.level(),junction,lead,m.phases(),m.meters(),m.drive(),m.power(),m.suction())
+            // The wall and the trim (batch 2026-11-16-fouling-corrosion, WP4); the names are lines under gui.icheme.
+            .withIntegrity(m.wall((key,args)->Component.translatable("gui.icheme."+key,args).getString()),m.trim());
         return data.controls().fixedMover()?input.withFixedDuty(tr(data.kind()==TopologyCompiler.Kind.PUMP?"inline.pump_rating":"inline.compressor_rating",value(data.controls().volumeFlow()*3600))):input;
     }
     /** Whether the Overview's glass draws this pump's curve (W10d): a constructed centrifugal pump with a driver. In-line pumps keep their tables. */
@@ -1077,6 +1079,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private void controlAction(String action){
         if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
         else if(action.equals("check_lines")){FluidNetwork.checkLines(menu);message=tr("waiting");}
+        // Clean (batch 2026-11-16-fouling-corrosion, WP5): a queued engine event; its answer is a chat line, the deposit's meters follow at the next update.
+        else if(action.equals("clean")){FluidNetwork.clean(menu);message=tr("waiting");}
         else{
             if(action.startsWith("power:")){
                 boolean on=action.endsWith(":on");
@@ -1124,6 +1128,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             if(source.startsWith("port:")){var p=heat.port(source.substring(5));if(p==null)continue;t=p.temperature();f=p.temperature()==null?null:Math.abs(p.massFlow());}
             else if(source.startsWith("part:")){var p=heat.lines()==null?null:heat.lines().part(source.substring(5));if(p==null)continue;t=p.temperature();f=p.massFlow()==null?null:Math.abs(p.massFlow());}
             else if(source.equals("duty"))return quantity(Math.abs(heat.heatWatt())/1000,"kW");
+            else if(source.equals("ua")){if(heat.ua()==null)continue;return quantity(heat.ua()/1000,"kW/K");}
             else if(source.equals("air"))return Component.translatable(HeatDiagram.KEY+"air",quantity(temperatureUnit.display(com.wormzjl.icheme.science.equipment.HeatSides.AIR_TEMPERATURE),temperatureUnit.symbol())).getString();
             String temperature=t==null?null:quantity(temperatureUnit.display(t),temperatureUnit.symbol()),flow=f==null?null:quantity(flowRateUnit.display(f),flowRateUnit.unit("kg"));
             switch(value.show()){

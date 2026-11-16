@@ -101,9 +101,13 @@ public record Pool(long id,long partner,double area,double bottom,double bundle,
      */
     public double film(FluidThermodynamics.State contents,VesselGeometry vessel) {
         var films=HeatCurve.Films.DEFAULT;double wet=wetted(contents,vessel);
-        double wetFilm=FluidThermodynamics.holdsVapor(contents)?films.twoPhase():films.liquid();
+        double wetFilm=FluidThermodynamics.holdsVapor(contents)?films.twoPhase():STILL_LIQUID_FILM;
         return wet*wetFilm+(1-wet)*films.gas();
     }
+    /** The film on tubes under a pool's liquid with no vapour over it, W/m²K: the liquid film the stream films had before
+     * decision D15 of batch 2026-11-16-fouling-corrosion, kept for a pool by the owner's decision of 2026-11-16 (D16): its
+     * liquid stands, it does not flow past the tubes, so the flowing liquid's film law does not apply to it. */
+    public static final double STILL_LIQUID_FILM=2000;
     /**
      * The heat into the vessel, W, from its contents {@code contents} at a step's start in {@code vessel}: each cell's
      * surface at the pool's {@link #film} against its wall temperature, for the active share of the slice, plus the give-back.

@@ -99,6 +99,33 @@ public final class EquipmentDeconstruction {
             EquipmentConstructorBlockEntity constructor,
             BlockPos expected,
             int stamp) {
+        var checked = checked(player, constructor, expected, stamp, true);
+        var level = player.serverLevel();
+        var vessel = checked.vessel();
+        for (var cell : ShapeRasterizer.fluidCells(vessel.shape()))
+            if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z()))
+                    instanceof EquipmentShellBlockEntity shell)
+                shell.instruments().recoverOnBreak(!player.isCreative());
+        EquipmentStructure.dismantle(level, vessel);
+        return checked.cells();
+    }
+
+    /** A structure the constructor's removal group may act on, and its protected cell count. */
+    public record Checked(EquipmentStructure.Vessel vessel, int cells) {}
+
+    /**
+     * The shared check of the removal group's actions (Deconstruct, Repair): the player may use the constructor (same level,
+     * within 8 blocks, may build, not a spectator, may interact), the structure on its line is the one the screen showed
+     * ({@code expected} origin and {@code stamp}), and every cell is loaded and the player may interact with it. A removal
+     * ({@code breaking}) also fires each cell's break event, so a protection mod may refuse it. Throws
+     * {@link IllegalStateException} with {@code not_editable}, {@code changed}, {@code unloaded} or {@code protected}.
+     */
+    public static Checked checked(
+            ServerPlayer player,
+            EquipmentConstructorBlockEntity constructor,
+            BlockPos expected,
+            int stamp,
+            boolean breaking) {
         var level = player.serverLevel();
         var at = constructor.getBlockPos();
         if (constructor.getLevel() != level
@@ -124,20 +151,16 @@ public final class EquipmentDeconstruction {
                                 || !vessel.origin().equals(shell.origin())))
                     throw new IllegalStateException("changed");
                 if (!level.mayInteract(player, position)
-                        || net.neoforged.neoforge.common.CommonHooks.fireBlockBreak(
-                                        level,
-                                        player.gameMode.getGameModeForPlayer(),
-                                        player,
-                                        position,
-                                        state)
-                                .isCanceled()) throw new IllegalStateException("protected");
+                        || breaking
+                                && net.neoforged.neoforge.common.CommonHooks.fireBlockBreak(
+                                                level,
+                                                player.gameMode.getGameModeForPlayer(),
+                                                player,
+                                                position,
+                                                state)
+                                        .isCanceled()) throw new IllegalStateException("protected");
                 count++;
             }
-        for (var cell : ShapeRasterizer.fluidCells(vessel.shape()))
-            if (level.getBlockEntity(vessel.origin().offset(cell.x(), cell.y(), cell.z()))
-                    instanceof EquipmentShellBlockEntity shell)
-                shell.instruments().recoverOnBreak(!player.isCreative());
-        EquipmentStructure.dismantle(level, vessel);
-        return count;
+        return new Checked(vessel, count);
     }
 }

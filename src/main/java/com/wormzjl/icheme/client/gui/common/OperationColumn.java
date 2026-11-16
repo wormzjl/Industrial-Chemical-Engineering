@@ -25,7 +25,8 @@ import org.jetbrains.annotations.Nullable;
  * A column's Operation tab (batch 2026-10-28-column-operation, C7, plan section 13; the owner chose layout B on
  * 2026-10-29: a page {@link #HEIGHT} high, everything in one view). On the door: Control (Off and On) and the set points
  * per unit feed, which Apply on the footer sends. On the HMI glass: the ports (rate, temperature, pressure at the port,
- * the buffer's fill, the boundary valve's opening), the duties booked against the last solve's, the last solve. The status
+ * the buffer's fill, the boundary valve's opening), the duties booked against the last solve's, the last solve, the trays'
+ * and the wall's integrity (Clean on the footer, layout B of 2026-11-16). The status
  * once, on the message display, the engine's line in its hover. The frame is the assembly screen's ({@link AssemblyColumn}).
  * Texts are keys under {@code gui.icheme.}; quantities arrive in SI and show in the client's units. No Minecraft classes:
  * the screen, the gates and the render tool place the same door.
@@ -163,9 +164,20 @@ public final class OperationColumn {
         return in.view().editable() && !in.queued() && parse(in.view().setpoints(), drafts, in.units()) != null;
     }
 
-    /** The footer's push buttons: Close, then Apply (keys {@code close}, {@code apply}), Apply the confirming one. */
-    public static List<Column.Button> footerButtons(boolean applies, HeatControlColumn.Texts t) {
-        return List.of(new Column.Button("close", t.get("fluid.close"), true, null), new Column.Button("apply", t.get(KEY + "apply"), applies, t.get(KEY + "apply.hint")));
+    /**
+     * The footer's push buttons: Close; Clean where the column has a unit (WP8 of batch 2026-11-16-fouling-corrosion, layout
+     * B: acting only while the column stands and no command awaits its answer); then Apply, the confirming one, last (keys
+     * {@code close}, {@code clean}, {@code apply}).
+     */
+    public static List<Column.Button> footerButtons(Input in, boolean applies, HeatControlColumn.Texts t) {
+        var out = new ArrayList<Column.Button>();
+        out.add(new Column.Button("close", t.get("fluid.close"), true, null));
+        if (in.view().wear() != null) {
+            boolean cleans = !in.view().running() && !in.queued();
+            out.add(new Column.Button("clean", t.get(KEY + "clean"), cleans, t.get(KEY + (cleans ? "clean.hint" : "clean.stopped"))));
+        }
+        out.add(new Column.Button("apply", t.get(KEY + "apply"), applies, t.get(KEY + "apply.hint")));
+        return out;
     }
 
     private static String kind(String key) {
@@ -273,7 +285,8 @@ public final class OperationColumn {
         out.add(new String[]{t.get(KEY + "column.condition"), t.get(KEY + "column.value"), t.get(KEY + "column.member")});
         for (var a : v.conditions()) {
             var c = a.condition();
-            boolean share = c.rank == Condition.Rank.LIMIT || c == Condition.HIGH_LOAD;
+            // A share: a LIMIT's of the set feed, a high load's of flood, the trays' capacity left, the allowance a thin or weeping wall used.
+            boolean share = c.rank == Condition.Rank.LIMIT || c == Condition.HIGH_LOAD || c == Condition.TRAYS_FOULED || c == Condition.THIN_WALL || c == Condition.WEEPING;
             out.add(new String[]{t.get(KEY + "condition." + c.name().toLowerCase(Locale.ROOT)), share ? fixed(100 * a.value(), 0) + " %" : "—", member(a, t)});
         }
         return out;
@@ -367,6 +380,20 @@ public final class OperationColumn {
                 new String[]{t.get(KEY + "solve.age"), age < 120 ? t.get(KEY + "seconds", age) : t.get(KEY + "minutes", age / 60)});
     }
 
+    /**
+     * The column's integrity (WP8 of batch 2026-11-16-fouling-corrosion, plan section 13.1, layout B): the material in the
+     * heading; the trays' capacity left and the wall left, %; the wall's rate, mm per corrosion year. Empty where the
+     * column has no unit. Its words (TRAYS FOULED, THIN WALL, WEEPING, LEAKING) stay with the status and the conditions.
+     */
+    public static List<String[]> wear(OperationView v, HeatControlColumn.Texts t) {
+        var w = v.wear();
+        if (w == null) return List.of();
+        return List.<String[]>of(new String[]{t.get(KEY + "group.integrity"), t.get("metallurgy." + w.material().name().toLowerCase(Locale.ROOT))},
+                new String[]{t.get(KEY + "trays_left"), fixed(100 * w.capacity(), 0) + " %"},
+                new String[]{t.get(KEY + "wall_left"), fixed(100 * w.wallLeft(), 0) + " %"},
+                new String[]{t.get(KEY + "wall_rate"), fixed(w.rate(), 2) + " mm/y"});
+    }
+
     /** A table's cell pad (the text's room in its cell is its width less this), and the widest a number cell grows. */
     public static final int PAD = 5, CELL_MAX = 60;
 
@@ -391,11 +418,12 @@ public final class OperationColumn {
 
     /**
      * The glass's tables for {@code v}, top to bottom (W7): the ports, the duties with the trays, the last solve (the tables of
-     * before, which the design size shows in one view), then the conditions where any hold and the set points' absolute values.
+     * before, which the design size shows in one view), the integrity where the column has a unit (a fixed place: it comes
+     * with the unit, not with the plant's state), then the conditions where any hold and the set points' absolute values.
      */
     public static List<List<String[]>> tables(OperationView v, Units u, HeatControlColumn.Texts t) {
         var out = new ArrayList<List<String[]>>();
-        for (var table : List.of(ports(v, u, t), duties(v, u, t), solve(v, t), conditions(v, t), absolutes(v, u, t))) if (!table.isEmpty()) out.add(table);
+        for (var table : List.of(ports(v, u, t), duties(v, u, t), solve(v, t), wear(v, t), conditions(v, t), absolutes(v, u, t))) if (!table.isEmpty()) out.add(table);
         return out;
     }
 

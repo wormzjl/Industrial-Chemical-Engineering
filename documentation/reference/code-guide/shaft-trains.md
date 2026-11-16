@@ -38,17 +38,17 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`science/fluid/network/ShaftPlan`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ShaftPlan.java) | A slice input keyed by device identity: `Kind` SPEED (share of rated), DISPLACEMENT, GOVERNOR, FANS, FAILED (0 closes, 1 reopens), BURNERS, FUEL, FLARE, EXHAUST; `apply(graph, plans)`, `planned` | 151 |
-| [`runtime/fluid/ShaftTrains`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftTrains.java) | The world's trains, `IslandCoordinator.Shafts`: `plans` (at dispatch, reads), `booked` (at commit and replay, records), `decide` (one driver step per train per tick for the trains that booked); `Event` Put, Remove, Configure, Reset, Governor, CreateInput, Hold (at most `MAXIMUM_EVENTS`), `apply` at the tick drain; `held` (a column's member), `failures`, `view`, `unitOf`, `driverOf`, `drawnSize`, `forget`, `time()`; `STEAM_K` | 1297 |
+| [`science/fluid/network/ShaftPlan`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ShaftPlan.java) | A slice input keyed by device identity: `Kind` SPEED (share of rated), DISPLACEMENT, GOVERNOR, FANS, FAILED (0 closes, 1 reopens), BURNERS, FUEL, FLARE, EXHAUST; `apply(graph, plans)`, `planned` | 171 |
+| [`runtime/fluid/ShaftTrains`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftTrains.java) | The world's trains, `IslandCoordinator.Shafts`: `plans` (at dispatch, reads), `booked` (at commit and replay, records), `decide` (one driver step per train per tick for the trains that booked); `Event` Put, Remove, Configure, Reset, Governor, CreateInput, Hold (at most `MAXIMUM_EVENTS`), `apply` at the tick drain; `held` (a column's member), `failures`, `view`, `unitOf`, `driverOf`, `drawnSize`, `forget`, `time()`; `STEAM_K` | 1317 |
 | [`runtime/fluid/ShaftUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftUnit.java) | A part as saved: id, kind, position, axis, `End`s, fluid device, rated power, design speed, poles, drive, `Settings(running, mode, setPoint, powerLimit, ratio)`, trip; `State(speed, previousSpeed, previousMeasured)` in the topology state; `held`: engine state, in the topology state's held list, never a fact | 90 |
 | [`runtime/fluid/ElectricStores`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ElectricStores.java) | One store per powered unit (motor, generator, air cooler side, induced tower basin): `receive`/`extract` (FE now, nothing wakes), `draw`/`give` (at a train's step), `booked` (fans and in-line movers at commit), `member` (a column's member), the cadence every `CADENCE` ticks (rest booking, restart, facts to the ledger); `fanDraw`, `towerDraw`, `feJoules`; `Settings(joulesPerFE, needPower)` | 607 |
-| [`runtime/fluid/MachineHealth`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineHealth.java) | Health per machine device (a fact only below 1): `faults(control)`, `worn`, `pump(registration)`, `booked`, `cadence`, `plans` (FAILED), `queue`/`apply` (a `Repair`); each device's standing fault and its intensity (state); `status` words; `GAS_RATIO` | 432 |
+| [`runtime/fluid/MachineHealth`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineHealth.java) | Health per machine device (a fact only below 1): `faults(control)`, `worn`, `pump(registration)`, `booked`, `cadence`, `plans` (FAILED), `queue`/`apply` (a `Repair`); each device's standing fault and its intensity (state); `status` words; `GAS_RATIO` | 621 |
 | [`runtime/fluid/PrimeMovers`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/PrimeMovers.java) | Driven by `ShaftTrains`, on the server thread: the heat fired from the fuel void's inflow times its LHV (`Burners.perKilogram`), the governor's fuel target and a gas turbine's coil gas; status words | 232 |
 | [`runtime/fluid/ColumnPower`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnPower.java) | A running column's members' power: a casing (`ShaftTrains.unitOf`) to its train, an in-line pump to its own store; `undriven` | 68 |
 | [`runtime/fluid/MachineView`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineView.java), [`MachinePresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachinePresentation.java) | One part's page view (status, speed, shaft power, electric power and FE/t, settings, trip, rating, store share and seconds left, governor valve, gearbox ratio, turbine steam, `Coupling`, `Fuel`); sessions: replay on open, the buckets after, one unanswered edit per session | 129, 101 |
 | `world/level/block/ShaftBlock`, `ShaftParts`, `ShaftCommand`, `CreativeMotorBlock` | The `shaft` block (drawn size from the train's torque, `ProcessUnit.shaftPixels`; before its train draws it `ProcessUnit.SHAFT_DEFAULT_SIZE`; no block entity); the queued part events; `/icheme shaft` (operators: list, settings, start, stop, reset, ratio); the `creative_motor` block | 81, 150, 93, 97 |
 | `world/level/block/entity/TerminalEnergy` | The FE capability on a structure's terminal cell, every face; consumers receive, a generator extracts | 90 |
-| `world/item/RepairKitItem` | `repair_kit`: queues `MachineHealth.Repair` on a mover casing cell, a steam turbine cell or an in-line device; consumed only when accepted | 98 |
+| `world/item/RepairKitItem` | `repair_kit`: queues `MachineHealth.Repair` on an in-line pump's, compressor's or control valve's pipe block; refused and kept on constructed equipment; consumed only when accepted | 103 |
 | [`network/MachineNetwork`](../../../src/main/java/com/wormzjl/icheme/network/MachineNetwork.java), `world/inventory/MachineMenu` | `machine_state`, `machine_edit` (checked at receipt, queued as a shaft event), `machine_open_driver` (a casing's or turbine's page opens its driver's), `machine_datasheet` | 425, 124 |
 | `client/gui/screens/inventory/MachineScreen`, `client/gui/common/MachineColumn`, `PumpCurve`, `MotorCurve` | The machine page and its door; the pump's curve (H(Q), NPSH3(Q), 4 × NPSH3 dashed, NPSHA); the motor's curve | 400, 283, 201, 72 |
 | `client/DriverSounds`, `client/MoverSounds` | The drivers' and movers' loops on their watches, handed to the one sound budget ([effects.md](effects.md)); the plunger pump has its own loop (`MoverSounds.casingLoop`) | 135, 126 |
@@ -96,6 +96,9 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
   admission shut, its settings kept. `ShaftTrains.failures` merges the health plans into the trains': a health
   `FAILED 1` (a repaired pump back on) never replaces a `FAILED 0` already planned (an unpowered in-line pump's close), a
   health `FAILED 0` replaces anything. After a repair a turbine's `GOVERNOR` plan opens it again.
+- Solids wear liquid movers and liquid ring pumps (`SOLIDS`), and a control valve's trim (`MachineHealth.trim`, its
+  record made at its first wear): a failed trim stands open (`ShaftPlan.Kind.TRIM`), a kit works only while no flow
+  passes (`NOT_IDLE`), and constructed machines are repaired with the Equipment Constructor ([integrity.md](integrity.md)).
 
 **Electricity.**
 
@@ -207,4 +210,4 @@ read by `IChemE.joulesPerFE`, `machinesNeedPower`, `stressPerFE`, `wearSettings`
 - A part whose cell another block holds leaves its train and splits it: a train can lose its driver to a held part and
   stand with `NO DRIVER` until the cell is cleared.
 
-**Snapshot:** `410c37fcb`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

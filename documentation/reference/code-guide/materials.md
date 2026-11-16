@@ -40,7 +40,7 @@ model continues, value and slope continuous.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`MaterialCatalog`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialCatalog.java) | Parser, validator and immutable store of the 15 kinds. Records `Property` (`criticalMolarVolume`), `CriticalVolume` (`CUBIC_RATIO`), `Pr78` (with `MathiasCopeman`), `Validity`, `Freezing` (`CRYSTAL_ANCHOR_TOLERANCE`), `Thermochemistry` (`ELEMENTS`), `Flammability`, `Combustion`, `Water` (with `Ice`), `Assay`, `Package`, `NrtlPair`, `GroupCounts`, `Homomorph`, `FluidAppearance`, nested `FluidData`; private `Method`, `Entry`, `Records`, `Definition`, `build`. Views and lenses: `restrict`, `withWater` (`CUBIC_WATER`), `inferenceView`, `lens`. Identities: `fluidRevision`, `spineRevision`, `propertyRevision` (`MAX_IDENTITY`). Data reads: `requireSpine`, `volumeTranslation`, `viscosity`, `liquidMixture`, `fluidValidity`, `groupCounts`, `henryInWater`, `homomorph`, `modifiedUnifacTables`, `heatingValues`, `formulas`, `conservedComponents`; `bundled()` | 1593 |
+| [`MaterialCatalog`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialCatalog.java) | Parser, validator and immutable store of the 15 kinds. Records `Property` (`criticalMolarVolume`), `CriticalVolume` (`CUBIC_RATIO`), `Pr78` (with `MathiasCopeman`), `Validity`, `Freezing` (`CRYSTAL_ANCHOR_TOLERANCE`), `Thermochemistry` (`ELEMENTS`), `Flammability`, `Combustion`, `Water` (with `Ice`), `Corrosion`, `Assay`, `Package`, `NrtlPair`, `GroupCounts`, `Homomorph`, `FluidAppearance`, nested `FluidData`; private `Method`, `Entry`, `Records`, `Definition`, `build`. Views and lenses: `restrict`, `withWater` (`CUBIC_WATER`), `inferenceView`, `lens`. Identities: `fluidRevision`, `spineRevision`, `propertyRevision` (`MAX_IDENTITY`). Data reads: `requireSpine`, `volumeTranslation`, `viscosity`, `liquidMixture`, `fluidValidity`, `groupCounts`, `henryInWater`, `homomorph`, `modifiedUnifacTables`, `heatingValues`, `formulas`, `conservedComponents`; `bundled()` | 1637 |
 | [`DerivedPairs`](../../../src/main/java/com/wormzjl/icheme/science/material/DerivedPairs.java) | The PR78 kernel of a compound list with every pair derived from the compounds' data: one source per unordered pair, the first that applies (`LIBRARY`, `HYDROGEN`, `HENRY`, `ACTIVITY`, then the others of its class comment), the Huron-Vidal excess and the Mathias-Copeman coefficients; `derive`, `Result` (with `identity`); the activity fits on a parallel first pass | 822 |
 | [`ModifiedUnifac`](../../../src/main/java/com/wormzjl/icheme/science/material/ModifiedUnifac.java) | The modified UNIFAC (Dortmund) table and the activity coefficients it gives from `group_counts`; its water-hydrocarbon block | 337 |
 | [`HenryConstant`](../../../src/main/java/com/wormzjl/icheme/science/material/HenryConstant.java) | A gas's `henry_in_water` sub-record, the IAPWS G7-04 form on the water's Wagner-Pruss line | 55 |
@@ -129,7 +129,7 @@ model continues, value and slope continuous.
 with it. Neither a package record's nor a method record's own `revision` is in any identity: the identity lists the
 method's physics fields, the datasets and the libraries, so a package edit alone, a compound added to a package, or a
 library added for other compounds moves no identity of a view without them. Assays and the `freezing`,
-`thermochemistry`, `flammability`, `combustion` and `hazard` sub-records are in no identity. `hazard` (`MaterialCatalog.Hazard`: channel TOXIC or CORROSIVE, a reference in ppm, its source and its own revision) and `flammability` feed the pollution standard ([pollution.md](pollution.md)).
+`thermochemistry`, `flammability`, `combustion`, `hazard` and `corrosion` sub-records are in no identity. `hazard` (`MaterialCatalog.Hazard`: channel TOXIC or CORROSIVE, a reference in ppm, its source and its own revision) and `flammability` feed the pollution standard ([pollution.md](pollution.md)). `corrosion` (`MaterialCatalog.Corrosion`: a crude cut's sulfur, acid number and fouling number, its own revision) feeds the integrity laws' standard ([integrity.md](integrity.md)).
 
 | Identity | Composed of, in order | Used for |
 |---|---|---|
@@ -270,4 +270,4 @@ Helpers: `MaterialTestBasis`, `SubRecords`, and the catalog extensions `TjlRefer
 - Ethanol's activity fits cost about four times water's, because a pair the group model gives one liquid also scans
   `SCAN_POINTS` points per trial (`DerivedPairs.Context.shape`, `oneLiquid`); a list without ethanol pays nothing.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

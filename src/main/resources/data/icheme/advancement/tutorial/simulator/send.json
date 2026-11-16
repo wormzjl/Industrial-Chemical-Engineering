@@ -1,5 +1,5 @@
 {
-  "parent": "icheme:tutorial/simulator/size",
+  "parent": "icheme:tutorial/simulator/materials",
   "display": {
     "icon": {
       "id": "icheme:field_guide",

@@ -66,6 +66,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     final Converters converters;
     /** The pumps' health (W10b). */
     final MachineHealth health;
+    /** The walls of constructed equipment (batch 2026-11-16-fouling-corrosion, WP2). */
+    final Integrity integrity;
     /** The pollution releases (batch 2026-11-15-pollution-system, WP4); null when their hazard standard could not be built. */
     private Releases releases;
     /**
@@ -198,7 +200,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         });
         // A control loop's planned column feed (W6.3): the control service's last cadence; the cycle takes it below the set rate.
         columns.feedPlans(unit->controls==null?Double.NaN:controls.columnFeed(unit));
-        health=new MachineHealth(topology,registry::owner,runtime.coordinator(),id->MachineHealth.pump(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings);shafts.health(health);
+        health=new MachineHealth(topology,registry::owner,runtime.coordinator(),id->MachineHealth.tracked(topology.active().get(id)),id->{var r=topology.active().get(id);return r==null?null:r.device().control();},IChemE::wearSettings,IChemE::integritySettings);shafts.health(health);
+        // The walls of constructed equipment (batch 2026-11-16-fouling-corrosion, WP2): booked at the health's cadence.
+        integrity=new Integrity(topology,registry::owner,runtime.coordinator(),health,IChemE::integritySettings,new IntegrityHost(corrosionStandards(catalog,model)));shafts.integrity(integrity);
+        // A running column's trays foul and its wall is lost with the solids it carries (WP8 of batch 2026-11-16-fouling-corrosion).
+        columns.wear(IChemE::integritySettings,corrosionStandards(catalog,model));
         // Block entities whose chunks loaded before this authority existed never reported themselves: every device
         // in an already loaded chunk is marked once, and its bucket binds and presents it. Nothing is pushed here.
         registry.forEachChunk((name,chunk,devices)->{var level=server.getLevel(dimension(name));var at=new net.minecraft.world.level.ChunkPos(chunk);
@@ -778,7 +784,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
             var s=formerVessel.spec();long next=topology.nextIdentity();
             var vessel=new WorldTopologyLedger.Registration(formerVessel.device().withPlacement(d.node(),d.all()),
-                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace(),s.breached(),s.ambient()),Math.addExact(formerVessel.revision(),1));
+                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace(),s.breached(),s.ambient(),s.metallurgy()),Math.addExact(formerVessel.revision(),1));
             placed.add(vessel);edits.add(new WorldTopologyLedger.Edit(former,vessel));
             long[] ids={u==null?0:u.drain(),u==null?0:u.fill()};
             for(int k=0;k<2;k++) {
@@ -899,7 +905,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         long pot=u.id(),next=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
         var old=potRecord.spec();var vessel=d.pot();
         var potDevice=potRecord.device().withPlacement(vessel.node(),vessel.ports()).withHeat(potRecord.device().heat().withArea(vessel.heat().area()));
-        var potSpec=new FluidDeviceSpec(vessel.volume(),old.temperature(),old.pressure(),old.composition(),old.solids(),vessel.levelHeight(),design.condenser(),vessel.geometry(),old.tower()).withBreached(old.breached());
+        var potSpec=new FluidDeviceSpec(vessel.volume(),old.temperature(),old.pressure(),old.composition(),old.solids(),vessel.levelHeight(),design.condenser(),vessel.geometry(),old.tower()).withBreached(old.breached()).withMetallurgy(old.metallurgy());
         // A side, outlet or burner the still has moves; one the layout adds registers; one it no longer has leaves.
         long water=0;WorldTopologyLedger.Registration waterRecord=null;
         var held=u.water()>0?registrations().get(u.water()):null;
@@ -975,6 +981,37 @@ public final class FluidWorldAuthority implements AutoCloseable {
         for(int c=0;c<out.length;c++){int i=names.indexOf(components.get(c));out[c]=i<0?missing:values[i];}
         return out;
     }
+    /**
+     * The corrosion standards of the islands' compound lists (batch 2026-11-16-fouling-corrosion, WP2): the network package's
+     * molar masses, formulas, sulfur shares, acid and fouling numbers in {@code model}'s conserved order, by component name,
+     * taken by name onto each list ({@link com.wormzjl.icheme.science.integrity.CorrosionStandards#of}, which the process
+     * simulator's Materials tab reads too).
+     */
+    static java.util.function.Function<List<String>,com.wormzjl.icheme.science.integrity.CorrosionStandard> corrosionStandards(MaterialCatalog catalog,FluidThermodynamics model) {
+        return com.wormzjl.icheme.science.integrity.CorrosionStandards.of(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),
+                model.components(),model.molecularWeights());
+    }
+    /** What the walls do to the world (WP2): the queued spec edits, a heat side's release and the corrosive air. */
+    private final class IntegrityHost implements Integrity.Host {
+        private final java.util.function.Function<List<String>,com.wormzjl.icheme.science.integrity.CorrosionStandard> standards;
+        IntegrityHost(java.util.function.Function<List<String>,com.wormzjl.icheme.science.integrity.CorrosionStandard> standards){this.standards=standards;}
+        @Override public boolean close(long id){return corrodedThrough(id);}
+        @Override public boolean open(long id){return repair(id);}
+        @Override public void release(long id){releaseContents(id);}
+        @Override public boolean restate(long id){return FluidWorldAuthority.this.restate(id);}
+        @Override public double corrosiveAir(PhysicalFluidTopology.Position at) {
+            if(!IChemE.pollutionEnabled())return 0;
+            var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
+            return service.isEmpty()?0:service.get().index(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),com.wormzjl.icheme.science.pollution.Channel.CORROSIVE);
+        }
+        @Override public com.wormzjl.icheme.science.integrity.CorrosionStandard standard(List<String> compounds){return standards.apply(compounds);}
+        /** A weeping wall (WP4) marks its device's loaded shell cell; the cell sends a change to the clients that track it. Never loads a chunk. */
+        @Override public void weeping(long id,boolean on) {
+            var r=registrations().get(id);if(r==null)return;var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));if(level==null)return;
+            var pos=new BlockPos(p.x(),p.y(),p.z());if(!level.hasChunkAt(pos))return;
+            if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)shell.weeping(id,on);
+        }
+    }
     /** A pollution release (WP4) to the pollution service of this server; nothing while the service is off. */
     private void releasePollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {
         var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
@@ -998,6 +1035,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             else{var still=topology.still(id);var v=still==null||still.heater()==com.wormzjl.icheme.science.plant.still.BatchStill.Heater.ELECTRIC?null:stills.view(id);lit=v!=null&&v.heat()>0;}
             if(lit)out.add(cell(r));
         }
+        // A wall an oxygen fire burnt through (batch 2026-11-16-fouling-corrosion, plan section 7): a flame for this one pass.
+        for(var p:integrity.fires(dimension,chunkX,chunkZ))out.add(new BlockPos(p.x(),p.y(),p.z()));
         return out;
     }
     /**
@@ -1054,41 +1093,68 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * queued again {@link FluidDeviceSpec#withBreached breached}, as a settings change is ({@link #edit}), so the island
      * applies it at its next topology batch, keeps what the vessel holds and stands it open ({@link FluidDeviceSpec#vented}).
      * False, and nothing queued, for a device that is not a breachable vessel ({@link #breachable}) or is breached already.
+     * A heat side ({@link #closable}, batch 2026-11-16-fouling-corrosion WP2) takes the same edit: its passage then compiles
+     * closed both ways, as a shut fitting's mask closes a line ({@link PhysicalFluidTopology#compile}).
      * Server thread; solves nothing; never throws (a failure is logged {@code pollution status=BREACH_FAILED}).
      */
-    public boolean breach(long id){return breached(id,true);}
-    /** Repairs a breached vessel {@code id} (the repair kit): the same queued edit back to a whole wall. False for a vessel that is not breached. */
-    public boolean repair(long id){return breached(id,false);}
-    /** Whether device {@code id} is a breached vessel. */
-    public boolean isBreached(long id){owned();var r=registrations().get(id);return r!=null&&r.spec().breached();}
-    /** Repair kits used on breached vessels, applied at the next tick drain (WP6b). */
-    private final ArrayDeque<MachineHealth.Repair> mends=new ArrayDeque<>();
+    public boolean breach(long id){return breached(id,true,false);}
     /**
-     * Queues a repair kit's repair of breached vessel {@code repair.device()} (WP6b): at the next tick drain, beside the
-     * machines' repairs, a vessel still breached takes the kit ({@code take}) and its breach is repaired ({@link #repair});
-     * {@code reply} hears {@link MachineHealth.Outcome#BREACH_REPAIRED} or {@code NO_KIT}. A vessel no longer breached then
-     * passes the kit on to the machines' repair, as any other device.
+     * A wall corroded through (WP2): {@link #breach}, and also a kettle's shell, a closed vessel whose wall a blast spares
+     * ({@link #breachable}) but corrosion does not: it stands open as a breached vessel does.
      */
-    public void queueBreachRepair(MachineHealth.Repair repair){owned();mends.add(Objects.requireNonNull(repair));}
-    private void applyMends() {
-        while(!mends.isEmpty()) {
-            var r=mends.poll();
-            if(!isBreached(r.device())){health.queue(r);continue;}
-            if(!r.take().getAsBoolean()){r.reply().accept(MachineHealth.Outcome.NO_KIT);continue;}
-            repair(r.device());r.reply().accept(MachineHealth.Outcome.BREACH_REPAIRED);
-        }
+    boolean corrodedThrough(long id){return breached(id,true,true);}
+    /** Repairs a breached vessel or a closed heat side {@code id} (the structure repair): the same queued edit back to a whole wall. False for one that is not breached. */
+    public boolean repair(long id){return breached(id,false,false);}
+    /** Whether device {@code id} is a breached vessel or a closed heat side. */
+    public boolean isBreached(long id){owned();var r=registrations().get(id);return r!=null&&r.spec().breached();}
+    /** The walls of constructed equipment (WP2): the structure repair, the cleaning and the reads for the pages. */
+    public Integrity integrity(){owned();return integrity;}
+    /**
+     * Queues the Equipment Constructor's repair of a structure's devices {@code devices} (batch 2026-11-16-fouling-corrosion,
+     * plan section 10; WP4 calls it): an engine event applied at the next tick drain, beside the repair kits. Accepted only
+     * when every listed device is idle and every vessel among them empty; then wall loss 0, machine health 1, breach closed,
+     * a closed heat side open again. No item. {@code reply} hears the {@link Integrity.Outcome} on the server thread.
+     */
+    public void queueStructureRepair(List<Long> devices,java.util.function.Consumer<Integrity.Outcome> reply){owned();integrity.queueRepair(devices,reply);}
+    /** Queues the cleaning of heat sides {@code heatSides} under the same idle-and-empty rule: every deposit to 0. */
+    public void queueClean(List<Long> heatSides,java.util.function.Consumer<Integrity.Outcome> reply){owned();integrity.queueClean(heatSides,reply);}
+    /**
+     * Queues the Equipment Constructor's repair of the column at {@code master} (WP8, plan section 13.1): an engine event at
+     * the next tick drain, accepted only while the column is stopped; then its wall is new. A column that never ran has
+     * nothing to repair. {@code reply} hears the outcome on the server thread.
+     */
+    public void queueColumnRepair(PhysicalFluidTopology.Position master,java.util.function.Consumer<Integrity.Outcome> reply){owned();var u=column(master);if(u==null)reply.accept(Integrity.Outcome.NOTHING_TO_REPAIR);else columns.queueRepair(u.id(),reply);}
+    /** Queues the cleaning of the trays of the column at {@code master} under the same rule (WP8): its fouling to 0. */
+    public void queueColumnClean(PhysicalFluidTopology.Position master,java.util.function.Consumer<Integrity.Outcome> reply){owned();var u=column(master);if(u==null)reply.accept(Integrity.Outcome.NOTHING_TO_REPAIR);else columns.queueClean(u.id(),reply);}
+    /**
+     * Queues the cleaning of heat side {@code id}'s unit (WP5, the heat page's Clean key): the side and its partner where that
+     * is a heat side of constructed equipment too ({@link Integrity#kind}; a kettle's shell is a vessel). A device that is no
+     * such heat side answers {@link Integrity.Outcome#NOTHING_TO_REPAIR} through the same queue.
+     */
+    public void queueUnitClean(long id,java.util.function.Consumer<Integrity.Outcome> reply){
+        owned();var r=registrations().get(id);var sides=new ArrayList<Long>();
+        if(Integrity.kind(r)==Integrity.Kind.HEAT_SIDE){sides.add(id);long partner=r.device().heat().partner();
+            if(partner!=0&&Integrity.kind(registrations().get(partner))==Integrity.Kind.HEAT_SIDE)sides.add(partner);}
+        integrity.queueClean(sides,reply);
     }
     /**
      * Whether a blast can breach registration {@code r}: a vessel (kind {@code RESERVOIR}) built closed, with no heat unit
      * (a still's pot, whose vent goes to its head, and a kettle's shell keep their walls) and held by no running column.
      */
     public static boolean breachable(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.RESERVOIR&&!r.spec().open()&&r.device().heat()==null&&r.device().suspendedBy()==0&&!r.device().port();}
-    private boolean breached(long id,boolean value) {
+    /**
+     * Whether a wall failure closes registration {@code r}'s passage (batch 2026-11-16-fouling-corrosion, WP2): a heat side of
+     * constructed equipment (an exchanger's, a kettle's tubes, an air cooler's, a fired coil), held by no running column.
+     */
+    public static boolean closable(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.HEAT_SIDE&&r.device().heat()!=null&&r.device().suspendedBy()==0&&!r.device().port()&&!r.device().ports().isEmpty();}
+    /** A kettle's shell: a closed vessel with the kettle's heat unit (not a still's pot), held by no running column. */
+    static boolean kettleShell(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.RESERVOIR&&!r.spec().open()&&r.device().heat()!=null&&!r.device().stillPot()&&r.device().suspendedBy()==0&&!r.device().port();}
+    private boolean breached(long id,boolean value,boolean corrosion) {
         try {
             owned();if(closed)return false;
             var r=registrations().get(id);
-            // A breach needs a breachable whole vessel; a repair any breached one.
-            if(value?!breachable(r)||r.spec().breached():r==null||!r.spec().breached())return false;
+            // A breach needs a breachable whole vessel or heat side; a repair any breached one.
+            if(value?!(breachable(r)||closable(r)||corrosion&&kettleShell(r))||r.spec().breached():r==null||!r.spec().breached())return false;
             return edit(id,r.revision(),r.device(),r.spec().withBreached(value))!=null;
         } catch(RuntimeException failure) {
             IChemE.LOGGER.warn("pollution status=BREACH_FAILED device={} breached={} detail={}",id,value,String.valueOf(failure));
@@ -1133,6 +1199,29 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     public WorldTopologyLedger.Event edit(long id,long expectedRevision,PhysicalFluidTopology.Device device,FluidDeviceSpec spec){owned();return placement.edit(id,expectedRevision,device,spec);}
     /**
+     * Devices {@code ids} are built of {@code material} (batch 2026-11-16-fouling-corrosion: a structure's material of
+     * construction, its shape's): one queued ledger event sets it on every listed device whose spec names another, and
+     * returns it; null when none does. It changes nothing the solver reads.
+     */
+    /**
+     * Queues device {@code id}'s registration again, unchanged, at its next revision (batch 2026-11-16-fouling-corrosion, WP5):
+     * its island compiles again on the engine's schedule, reading what the compile takes from outside the registration (a
+     * heat side's deposit level from the walls' facts), as an installed flowmeter's tap is compiled. False when the device is
+     * not registered or the world is closed.
+     */
+    boolean restate(long id) {
+        owned();if(closed)return false;
+        var r=registrations().get(id);if(r==null)return false;
+        submit(List.of(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device(),r.spec(),Math.addExact(r.revision(),1)))),topology.nextIdentity());
+        return true;
+    }
+    public WorldTopologyLedger.Event material(Collection<Long> ids,com.wormzjl.icheme.science.integrity.Metallurgy material) {
+        owned();Objects.requireNonNull(material);var edits=new ArrayList<WorldTopologyLedger.Edit>();
+        for(long id:new LinkedHashSet<>(ids)){var r=registrations().get(id);if(r==null||r.spec().metallurgy()==material)continue;
+            edits.add(new WorldTopologyLedger.Edit(id,new WorldTopologyLedger.Registration(r.device(),r.spec().withMetallurgy(material),Math.addExact(r.revision(),1))));}
+        return edits.isEmpty()?null:submit(edits,topology.nextIdentity());
+    }
+    /**
      * Fits a closed vessel's gas blanketing valve, its gas inlet {@code port} (role {@code BLANKET}), or removes it
      * ({@code port} null), as one queued ledger event (batch 2026-11-11-gas-blanketing). A fitted valve starts at
      * {@link FluidDeviceSpec#DEFAULT_BLANKET}; a removed one leaves no set pressure. False for a device that takes no valve: one
@@ -1172,9 +1261,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * partner it holds, are their utility sides; and its powered members (W5): those it holds draw power while it runs.
      */
     public record ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.plant.column.Setpoints setpoints,
-                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface,List<Long> reboiler,List<List<Long>> pumparounds,ColumnUnit.Members members) {
-        public ColumnStart{Objects.requireNonNull(members);condenser=List.copyOf(condenser);reboiler=List.copyOf(reboiler);pumparounds=pumparounds.stream().map(List::copyOf).toList();
+                              List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface,List<Long> reboiler,List<List<Long>> pumparounds,ColumnUnit.Members members,
+                              com.wormzjl.icheme.science.integrity.Metallurgy material) {
+        public ColumnStart{Objects.requireNonNull(members);Objects.requireNonNull(material);condenser=List.copyOf(condenser);reboiler=List.copyOf(reboiler);pumparounds=pumparounds.stream().map(List::copyOf).toList();
             if(!(airSurface>=0)||!Double.isFinite(airSurface))throw new IllegalArgumentException("Invalid air condenser surface");}
+        /** Of carbon steel (WP8 of batch 2026-11-16-fouling-corrosion: the structure's material, which a Start before it did not carry). */
+        public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.plant.column.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface,List<Long> reboiler,List<List<Long>> pumparounds,ColumnUnit.Members members){this(master,setpoints,nozzles,spots,condenser,airSurface,reboiler,pumparounds,members,com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);}
         /** Without members: none draws power (W5). */
         public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.plant.column.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface,List<Long> reboiler,List<List<Long>> pumparounds){this(master,setpoints,nozzles,spots,condenser,airSurface,reboiler,pumparounds,ColumnUnit.Members.NONE);}
         public ColumnStart(PhysicalFluidTopology.Position master,com.wormzjl.icheme.science.plant.column.Setpoints setpoints,List<PhysicalFluidTopology.Position> nozzles,List<PortSpot> spots,List<Long> condenser,double airSurface){this(master,setpoints,nozzles,spots,condenser,airSurface,List.of(),List.of());}
@@ -1257,7 +1349,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // While machines need power, a member pump with no driver at all cannot start (W5, stage 4 step 4: the owner may veto it).
         String undriven=electric.settings().needPower()?new ColumnPower(topology,electric,shafts).undriven(members):null;
         if(undriven!=null)return com.wormzjl.icheme.science.plant.column.Refusal.NO_DRIVER.text(undriven);
-        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface(),utilities,members);
+        var running=new ColumnUnit(unit,request.master(),true,setpoints,stations,existing!=null?existing.totals():ColumnUnit.Totals.empty(m),water,null,false,request.airSurface(),utilities,members,
+                existing!=null?existing.trayFouling():0,existing!=null?existing.wallLoss():0,request.material());
         var was=existing;topology.column(running);
         try{submit(edits,id);}catch(IllegalArgumentException|IllegalStateException refused){if(was!=null)topology.column(was);else topology.removeColumn(unit);return com.wormzjl.icheme.science.plant.column.Refusal.PORTS_DO_NOT_FIT.text(refused.getMessage());}
         columns.refresh();
@@ -1482,10 +1575,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // Shaft events apply after the devices they name (W3), then their trains recompile and wake what moved.
         if(shafts.hasEvents()&&propertyHold==null){shafts.apply();if(topology.hasPendingEvents())applyPending();runtime.coordinator().pumpIfUseful();}
         // Repair kits (W10b): queued engine events, applied after the devices they name; a repaired failed pump wakes its island.
-        // Repair kits on breached vessels (WP6b): their repair is a queued topology edit, as the breach was; a vessel no longer
-        // breached passes its kit on to the machines' repairs below.
-        if(!mends.isEmpty()&&propertyHold==null)applyMends();
+        // The structure repairs and cleanings (batch 2026-11-16-fouling-corrosion, WP2): queued engine events beside the kits;
+        // a breach closed again is a queued topology edit, as the breach was.
+        if(integrity.hasEvents()&&propertyHold==null){integrity.apply();if(topology.hasPendingEvents())applyPending();runtime.coordinator().pumpIfUseful();}
         if(health.hasEvents()&&propertyHold==null){health.apply();runtime.coordinator().pumpIfUseful();}
+        // A stopped column's repair and cleaning (WP8): queued engine events on its unit's facts; nothing moves an island.
+        if(columns.hasEvents()&&propertyHold==null)columns.apply();
         instruments.tick(topology.onlineTick());
         // Every 100 ticks each loaded motor is bound again (code base review R24, owner option A: kept). The pass does more than
         // a first bind: it puts the motor's data port back on a cell a structure refresh replaced, and refreshes the port after
@@ -1507,7 +1602,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         long displayTick=topology.onlineTick();displays.publishDue(displayTick);
         // The far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system), by watcher: reads only.
         if(topology.onlineTick()%100==0){publishSilhouettes();publishNoise();}
-        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null)health.cadence();
+        if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){health.cadence();integrity.cadence();}
         // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
         pushGenerators();
         com.wormzjl.icheme.network.AssemblyNetwork.presentationTick(server, topology.onlineTick());
@@ -1803,7 +1898,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public FluidSavedData.Capture capture() {
         owned();flush();var islands=new ArrayList<FluidCheckpointCodec.IslandEntry>();
         // Materialised first: a certified side's replay books its heat in transit, which the facts then carry.
-        var snapshots=runtime.coordinator().snapshots();electric.flush();health.flush();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
+        var snapshots=runtime.coordinator().snapshots();electric.flush();health.flush();integrity.flush();var world=topology.snapshot().withHeatTransits(runtime.coordinator().transits());
         for(var snapshot:snapshots) {
             if(registry.members(snapshot.id()).isEmpty())throw new IllegalStateException("Fluid island "+snapshot.id()+" holds no device; refusing to save it");
             String dimension=world.active().get(registry.members(snapshot.id()).getFirst()).device().position().dimension();
@@ -1853,9 +1948,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * CAVITATION, GAS, WET GAS or WET EXHAUST last (W10b, W10d, owner decision D37); its health and
      * suction have their meters (the view's Pump). A control that does not wear keeps its line.
      */
-    static String withHealth(String status,FlowControl control,String word) {
+    static String withHealth(String status,FlowControl control,String word){return withHealth(status,control,word,false);}
+    /** {@link #withHealth} for a machine of constructed equipment ({@code constructed}): it is repaired with the Equipment Constructor, not a kit (batch 2026-11-16-fouling-corrosion). */
+    static String withHealth(String status,FlowControl control,String word,boolean constructed) {
         if(!MachineHealth.worn(control)||word.isEmpty())return status;
-        return word.equals("FAILED")?"FAILED: use a repair kit / "+status:status+" / "+word;
+        return word.equals("FAILED")?(constructed?"FAILED: repair with the Equipment Constructor / ":"FAILED: use a repair kit / ")+status:status+" / "+word;
     }
     /** Island {@code island} as it is stored, materialising nothing: what a watch's replay reads (batch 2026-11-10-custom-shader-system). */
     IslandCoordinator.Snapshot storedIsland(long island){return onWorldList(island,runtime.coordinator().observe(island));}
@@ -2039,6 +2136,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             runtime.topology(dimension(name),events,affected,replacements,model,committed,online,additions,removals,releasedFilters,commit);
         }
         public boolean acceptsRecovery(UUID player){var online=server.getPlayerList().getPlayer(player);return online!=null&&online.getInventory().getFreeSlot()>=0;}
+        @Override public boolean fouling(){return IChemE.integritySettings().fouling();}
         @Override public Set<String> portCompounds(long port){
             var column=columns==null?Set.<String>of():columns.compounds(port);var still=stills==null?Set.<String>of():stills.compounds(port);
             var converter=converters==null?Set.<String>of():converters.compounds(port);

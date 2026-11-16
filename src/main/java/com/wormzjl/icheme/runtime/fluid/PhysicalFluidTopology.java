@@ -548,7 +548,23 @@ public final class PhysicalFluidTopology {
     public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed) {return compile(devices,boundaryStates,filterStock,idleSeed,Set.of());}
     public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed,Set<Long> flowmeters) {return compile(devices,boundaryStates,filterStock,idleSeed,flowmeters,Map.of());}
     /** {@code reliefs}: each device's pressure safety valve, by device id ({@link Relief}); {@code idleSeed} is then the ambient an open outlet's void stands at. */
-    public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed,Set<Long> flowmeters,Map<Long,Relief> reliefs) {
+    public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed,Set<Long> flowmeters,Map<Long,Relief> reliefs) {return compile(devices,boundaryStates,filterStock,idleSeed,flowmeters,reliefs,Set.of());}
+    /**
+     * {@code closedSides} (batch 2026-11-16-fouling-corrosion, WP2): the heat sides whose wall failed (their spec
+     * {@code breached}): each one's passage compiles closed both ways, the fitting mask a shut flare tip's line takes
+     * ({@code ShaftPlan}, {@code forbiddenDirections} 3), so nothing flows through it and no new solver law enters.
+     */
+    public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed,Set<Long> flowmeters,Map<Long,Relief> reliefs,Set<Long> closedSides) {
+        return compile(devices,boundaryStates,filterStock,idleSeed,flowmeters,reliefs,closedSides,Map.of());
+    }
+    /**
+     * {@code fouling} (batch 2026-11-16-fouling-corrosion, WP5, plan section 12): each fouled heat side's deposit in whole
+     * steps of {@link com.wormzjl.icheme.science.integrity.FoulingLaw#STEP} (1 to 20; a side absent is clean). Its passage
+     * compiles with its films behind the deposit ({@link HeatUnit#heatSide(double)}) and every channel narrowed by twice
+     * the deposit's thickness ({@link PipeResistance.Geometry#narrowed}); a clean side compiles as before, the same law and
+     * the same geometry.
+     */
+    public static Compiled compile(Collection<Device> devices,Map<Long,PassiveNetwork.Reservoir> boundaryStates,Map<Long,InlineFilter> filterStock,com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State idleSeed,Set<Long> flowmeters,Map<Long,Relief> reliefs,Set<Long> closedSides,Map<Long,Integer> fouling) {
         var physical=new TreeMap<Long,Device>();var positions=new HashMap<Position,Device>();var points=new HashMap<Long,Point>();
         var nodes=new ArrayList<TopologyCompiler.Node>();var links=new ArrayList<TopologyCompiler.Link>();var linkOwner=new HashMap<Long,Long>();
         for(var d:devices) {
@@ -793,7 +809,13 @@ public final class PhysicalFluidTopology {
                 for(int i=0;i<pipes.size();i++){var p=pipes.get(i);if(positiveEdges.contains(p.id()))pipes.set(i,new PassiveNetwork.Pipe(p.id(),p.first()==negative?positive:p.first(),p.second()==negative?positive:p.second(),p.sections(),p.control(),p.blockedDirections(),p.filter(),p.firstPort(),p.secondPort(),p.forbiddenDirections()));}
                 long identity=side?sideIdentity(id):filterIdentity(id);
                 // The side's heat law (W5: an air cooler against its air) rides on its passage; a side waiting for its partner has none.
-                pipes.add(side?new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withHeat(device.heat.heatSide()):new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withFilter(filterStock.getOrDefault(id,InlineFilter.empty())));
+                // A fouled side (WP5): its films behind the deposit, its passage narrowed by it; a clean side as it was.
+                int level=side?fouling.getOrDefault(id,0):0;double rf=level*com.wormzjl.icheme.science.integrity.FoulingLaw.STEP;
+                var own=side?new PassiveNetwork.Pipe(identity,negative,positive,level==0?device.geometry:device.geometry.narrowed(com.wormzjl.icheme.science.integrity.FoulingLaw.thickness(rf)))
+                        .withHeat(level==0?device.heat.heatSide():device.heat.heatSide(rf))
+                        :new PassiveNetwork.Pipe(identity,negative,positive,device.geometry).withFilter(filterStock.getOrDefault(id,InlineFilter.empty()));
+                // A heat side whose wall failed (WP2): its passage closed both ways, a fitting's restriction.
+                pipes.add(side&&closedSides.contains(id)?own.withForbiddenDirections(3):own);
                 views.put(id,List.of(new View(islandIndex,identity,true)));
             }
             // A steam ejector (batch 2026-11-10-steam-ejector-flow): its mover from its suction node to its discharge junction,

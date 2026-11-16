@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -360,5 +361,39 @@ final class FlowsheetColumnTest {
                 .product("overhead", "T", "overhead").product("distillate", "T", "distillate").product("water", "T", "water").product("bottoms", "T", "bottoms").run();
         assertEquals(FlowsheetRun.Status.STEADY, run.status(), () -> "log " + run.log());
         assertTrue(run.streams().get("water").total() > alone(FEED_TRAY).run().streams().get("water").total(), "the steam condenses overhead with the rest");
+    }
+
+    /** {@link #alone(double)} on {@code feed}. */
+    private static Sheet alone(Flowsheet.Feed feed) {
+        var sheet = new Sheet().unit("T", "column", ColumnDoor.from(BASE, ColumnComponents.Condenser.AIR_COOLER)).feed("feed", "T", "feed", feed)
+                .product("overhead", "T", "overhead").product("distillate", "T", "distillate").product("water", "T", "water").product("bottoms", "T", "bottoms");
+        for (int row = 1; row <= BASE.sideDraws().size(); row++) sheet.product("draw " + row, "T", "draw/" + row);
+        return sheet;
+    }
+
+    private static Flowsheet.Feed withSolids(Flowsheet.Feed feed, Flowsheet.Solid solid) {
+        return new Flowsheet.Feed(feed.temperature(), feed.pressure(), feed.amounts(), List.of(solid));
+    }
+
+    /**
+     * Inert particles in the feed ride the liquid to the bottoms (owner D6 of batch 2026-11-16-fouling-corrosion): every kilogram
+     * leaves there, the column's fluid solve is the particle-free one, and the reboiler gives the heat that takes them from the
+     * feed's state to the bottoms', so the sheet's heat balance stands as without them.
+     */
+    @Test void inertParticlesLeaveWithTheBottomsAndTheReboilerHeatsThem() {
+        var plainFeed = crude(BASE.feedTemperatureKelvin(), FEED_TRAY);
+        var plain = alone(plainFeed).run();
+        var dusty = alone(withSolids(plainFeed, new Flowsheet.Solid("icheme:demo_particle", "100", .5))).run();
+        assertEquals(FlowsheetRun.Status.STEADY, dusty.status(), () -> "log " + dusty.log());
+        var bottoms = dusty.streams().get("bottoms");
+        assertEquals(.5, bottoms.solids().massKg(), 1e-12, "every kilogram at the bottoms");
+        assertArrayEquals(plain.streams().get("bottoms").amountsView(), bottoms.amountsView(), "the fluid solve is the particle-free one");
+        assertTrue(dusty.streams().get("distillate").solids().empty());
+        var material = CATALOG.solids().materials().get("icheme:demo_particle");
+        var feed = dusty.streams().get("feed");
+        double sensible = .5 * material.heatCapacity() * (bottoms.temperature() - feed.temperature()) + .5 / material.density() * (bottoms.pressure() - feed.pressure());
+        double extra = dusty.reports().get("T").readings().get("reboiler") - plain.reports().get("T").readings().get("reboiler");
+        assertEquals(sensible, extra, 1e-9 * Math.abs(plain.reports().get("T").readings().get("reboiler")) + 1e-9, "the reboiler's duty holds the particles' sensible heat");
+        assertEquals(plain.heatGap(), dusty.heatGap(), 1e-6 * Math.abs(plain.reports().get("T").readings().get("condenser")), "the sheet's heat balance stands");
     }
 }

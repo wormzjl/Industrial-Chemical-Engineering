@@ -1,6 +1,21 @@
 // Records what each test class loads (affected.mjs, README.md of this folder): one JVM per test class, its class loads in
 // <laneRecord>/<task>-<pid>-<time>.log. -PlaneRecord takes a folder relative to the worktree root (-Xlog splits a path at ':').
 // The logs are no declared output, so a recorded run never comes up to date or from the cache.
+// -PlaneSelection takes the lane's selection file (affected.mjs select), relative to the worktree root: each Test task
+// named on a line "TASK <task> <n>/<total> <filter>..." runs only those filters, as --tests would (a command line of
+// --tests filters is cut off at about 8,000 characters on Windows). A task on an ALL line, or on none, runs whole.
+def selection = startParameter.projectProperties['laneSelection']
+if (selection) allprojects { project ->
+    def filters = [:]
+    project.providers.fileContents(project.rootProject.layout.projectDirectory.file(selection)).asText.get().readLines().each { line ->
+        def parts = line.trim().split(/\s+/)
+        if (parts.length > 3 && parts[0] == 'TASK' && parts[2] ==~ /\d+\/\d+/) filters[parts[1]] = parts[3..-1].collect { it.toString() }
+    }
+    tasks.withType(Test).configureEach { task ->
+        def chosen = filters[task.name]
+        if (chosen) task.setTestNameIncludePatterns(chosen)
+    }
+}
 def record = startParameter.projectProperties['laneRecord']
 if (record) allprojects {
     tasks.withType(Test).configureEach { task ->

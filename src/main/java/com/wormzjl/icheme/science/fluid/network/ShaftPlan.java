@@ -22,16 +22,32 @@ import java.util.Map;
  * capacity rate W/K ({@code value}) and its inlet K ({@code second}), keyed by the coil's device; a prime mover's fuel valve
  * takes {@code FUEL}, keyed by its fuel void, the node its run enters.
  */
-public record ShaftPlan(Kind kind, double value, double second) {
-    public enum Kind { SPEED, DISPLACEMENT, GOVERNOR, FANS, FAILED, BURNERS, FUEL, FLARE, EXHAUST }
+public record ShaftPlan(Kind kind, double value, double second, FlowControl.ControlValve valve) {
+    /**
+     * {@code TRIM} (batch 2026-11-16-fouling-corrosion, WP2, owner decision D5): a control valve whose trim failed stands
+     * open, as an unconfigured valve does ({@link FlowControl.ControlValve#unconfigured}), its registered settings kept; a
+     * trim repaired since takes its registered control {@code valve} back. Keyed by the valve's device.
+     */
+    public enum Kind { SPEED, DISPLACEMENT, GOVERNOR, FANS, FAILED, BURNERS, FUEL, FLARE, EXHAUST, TRIM }
 
     /** A plan of one value. */
     public ShaftPlan(Kind kind, double value) {
         this(kind, value, 0);
     }
 
+    /** A plan of two values and no valve. */
+    public ShaftPlan(Kind kind, double value, double second) {
+        this(kind, value, second, null);
+    }
+
+    /** A valve trim's plan: open as unconfigured for {@code restore} null (failed), else that control (repaired). */
+    public static ShaftPlan trim(FlowControl.ControlValve restore) {
+        return new ShaftPlan(Kind.TRIM, restore == null ? 0 : 1, 0, restore);
+    }
+
     public ShaftPlan {
         java.util.Objects.requireNonNull(kind);
+        if ((valve != null) != (kind == Kind.TRIM && value > 0) || kind == Kind.TRIM && value > 1) throw new IllegalArgumentException("Invalid trim plan");
         if (!(second >= 0) || !Double.isFinite(second) || !(value >= 0) || !Double.isFinite(value) || (kind == Kind.FANS || kind == Kind.FAILED || kind == Kind.BURNERS) && value > 1) throw new IllegalArgumentException("Invalid shaft plan " + value);
     }
 
@@ -113,6 +129,10 @@ public record ShaftPlan(Kind kind, double value, double second) {
                 // A failed steam turbine (code base review N4): its admission shut, as a stop or a trip shuts it; its train's
                 // governor plan opens it again once it is repaired.
                 case FlowControl.Turbine turbine when plan.kind == Kind.FAILED -> plan.value == 0 && turbine.massTarget() != 0 ? turbine.withMassTarget(0) : turbine;
+                case FlowControl.ControlValve valve when plan.kind == Kind.TRIM -> {
+                    var stands = plan.valve == null ? FlowControl.ControlValve.unconfigured() : plan.valve;
+                    yield stands.equals(valve) ? valve : stands;
+                }
                 case FlowControl.Machine machine when plan.kind == Kind.SPEED -> machine.withSpeed(plan.value);
                 case FlowControl.Compressor compressor when plan.kind == Kind.DISPLACEMENT -> {
                     double flow = Math.min(FlowControl.Mover.MAXIMUM_VOLUME_FLOW, plan.value);

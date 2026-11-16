@@ -86,9 +86,15 @@ final class FluidFacts {
      *  identity, with no drain. The control valve source {@code ON_OFF} (W7), an automated shutoff valve.
      *  28 (batch 2026-11-15-supercritical-fluids, S8): the {@code machine} control's law {@code plunger_pump}: its
      *  displacement (m³/s) in the rated flow's place, its relief rise (Pa) in the head's, its efficiency, its rated speed
-     *  (rpm). */
-    static final int SCHEMA=28;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 28. */
+     *  (rpm).
+     *  29 (batch 2026-11-16-fouling-corrosion, WP2): a device spec's {@code metallurgy} by name, after {@code ambient}
+     *  (absent: {@code CARBON_STEEL}); and a last section, the walls' facts ({@link IntegritySection}): per device identity
+     *  its wall loss (mm), fouling deposit (m²K/W) and {@code wrecked}, an entry only for a device away from new and clean
+     *  (absent: every wall new and clean, none wrecked). A control valve's trim health is in the schema-12 health list.
+     *  WP8 of the same batch, under the same unreleased schema: a column unit's tray fouling (0 to 1), wall loss (mm) and
+     *  material of construction by name, after its members (absent: a clean, new carbon steel column). */
+    static final int SCHEMA=29;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 29. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -212,8 +218,9 @@ final class FluidFacts {
      */
     record World(long nextIdentity,WorldTopologyLedger.FluidBasis basis,List<WorldTopologyLedger.Registration> registrations,
                  WorldTopologyLedger.MaterialTotal constructed,WorldTopologyLedger.MaterialTotal destroyed,List<Recovery> recoveries,WorldTopologyLedger.Restated restated,
-                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds,List<StillUnit> stills,List<ConverterUnit> converters) {
-        World {health=Map.copyOf(health);stills=List.copyOf(stills);converters=List.copyOf(converters);}
+                 List<String> removedMovers,List<ColumnUnit> columns,List<ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,WorldTopologyLedger.Builds builds,List<StillUnit> stills,List<ConverterUnit> converters,
+                 Map<Long,WorldTopologyLedger.IntegrityFacts> integrity) {
+        World {health=Map.copyOf(health);stills=List.copyOf(stills);converters=List.copyOf(converters);integrity=Map.copyOf(integrity);}
         /**
          * The electric stores (schema 11, W5). A world written before them ({@code stores} null) has a store, unmetered and
          * empty, for each powered unit it holds: an air cooler, an induced-draft tower, a motor, a generator (owner decision
@@ -235,7 +242,7 @@ final class FluidFacts {
             var parts=new HashMap<Long,ShaftUnit>();for(var u:shafts)if(parts.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate shaft unit "+u.id());
             var batch=new HashMap<Long,StillUnit>();for(var u:stills)if(batch.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate batch still "+u.id());
             var converting=new HashMap<Long,ConverterUnit>();for(var u:converters)if(converting.put(u.id(),u)!=null)throw new IllegalArgumentException("Invalid saved topology: duplicate fluid converter "+u.id());
-            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health,builds,batch,converting);
+            var snapshot=new WorldTopologyLedger.Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,pending,restated,units,parts,electricStores(),health,builds,batch,converting,integrity);
             new WorldTopologyLedger(snapshot);return snapshot;
         }
         /**
@@ -250,6 +257,7 @@ final class FluidFacts {
             private List<String> removedMovers=List.of();private List<ColumnUnit> columns=List.of();private List<ShaftUnit> shafts=List.of();
             private Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores;private Map<Long,Double> health=Map.of();
             private WorldTopologyLedger.Builds builds=WorldTopologyLedger.Builds.NONE;private List<StillUnit> stills=List.of();private List<ConverterUnit> converters=List.of();
+            private Map<Long,WorldTopologyLedger.IntegrityFacts> integrity=Map.of();
             private Builder(){}
             Builder nextIdentity(long value){nextIdentity=value;return this;}
             Builder basis(WorldTopologyLedger.FluidBasis value){basis=value;return this;}
@@ -267,7 +275,9 @@ final class FluidFacts {
             Builder builds(WorldTopologyLedger.Builds value){builds=value;return this;}
             Builder stills(List<StillUnit> value){stills=value;return this;}
             Builder converters(List<ConverterUnit> value){converters=value;return this;}
-            World build(){return new World(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,builds,stills,converters);}
+            /** Schema 29: the walls' facts; empty for a world written before them (every wall new and clean). */
+            Builder integrity(Map<Long,WorldTopologyLedger.IntegrityFacts> value){integrity=value;return this;}
+            World build(){return new World(nextIdentity,basis,registrations,constructed,destroyed,recoveries,restated,removedMovers,columns,shafts,stores,health,builds,stills,converters,integrity);}
         }
     }
     /**
@@ -305,7 +315,7 @@ final class FluidFacts {
                 .list(d.ports(),(q,p)->{position(q,p.cell());q.name(p.face()).name(p.port()).name(p.role());})
                 .record(q->q.f64(s.volume()).f64(s.temperature()).f64(s.pressure()).doubles(s.composition())
                         .record(feed->feed.f64(s.solids().volumeFraction()).list(s.solids().grades(),(e,grade)->e.text(grade.material()).text(grade.size().metres()).f64(grade.massShare())))
-                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)).bool(s.breached()).bool(s.ambient()))
+                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)).bool(s.breached()).bool(s.ambient()).name(s.metallurgy()))
                 .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points())
                 .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit).count(d.suspendedBy());
     }
@@ -340,7 +350,11 @@ final class FluidFacts {
             boolean breached=q.bool(false);
             // Schema 27: a spec written before the gas intake existed is not the atmosphere.
             boolean ambient=q.bool(false);
-            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst(),breached,ambient));});
+            // Schema 29: a spec written before materials of construction existed is carbon steel. A saved name is read
+            // through the material's own aliases (Metallurgy.byName); a name it does not know refuses the world.
+            String material=q.text(null);var metallurgy=com.wormzjl.icheme.science.integrity.Metallurgy.byName(material);
+            if(material!=null&&metallurgy==com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL&&!material.equals(metallurgy.name()))throw q.invalid("unknown Metallurgy "+material);
+            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst(),breached,ambient,metallurgy));});
         long revision=f.count(0);
         // Schema 2: a record written before joints existed connects through every face, as every pipe did then.
         long joints=f.count(PhysicalFluidTopology.ALL_FACES);if(joints>PhysicalFluidTopology.ALL_FACES)throw f.invalid("joints "+joints);
@@ -749,7 +763,7 @@ final class FluidFacts {
                 }
                 var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
                         new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
-                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving(),u.airSurface(),u.utilities(),u.members());
+                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving(),u.airSurface(),u.utilities(),u.members(),u.trayFouling(),u.wallLoss(),u.material());
             }
             columns.put(u.id(),settled(u,registrations));
         }
@@ -843,7 +857,7 @@ final class FluidFacts {
         // The build facts are kept whole: a paint of a device this rebuild left out goes with it.
         var shafts=new HashMap<Long,ShaftUnit>();for(var u:world.shafts)shafts.put(u.id(),u);
         var snapshot=new WorldTopologyLedger.Snapshot(epoch,next,registrations,List.of(),axis.total(world.constructed),axis.total(world.destroyed),basis,recoveries,restatedTotal,columns,shafts,world.electricStores(),world.health(),
-                world.builds.keeping(registrations.keySet()),stills,converters);
+                world.builds.keeping(registrations.keySet()),stills,converters,world.integrity());
         var ledger=new WorldTopologyLedger(snapshot);
         // A dismantled column whose release was still queued leaves now, its accounts booked as destroyed.
         for(var u:columns.values())if(u.leaving())ledger.removeColumn(u.id());

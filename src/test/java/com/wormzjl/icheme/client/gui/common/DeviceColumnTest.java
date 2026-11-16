@@ -25,7 +25,7 @@ class DeviceColumnTest {
     /** Every reading the screen shows (DeviceMeters.meters), each once. */
     private static final List<String> METERS = List.of("fans_state", "burners_state", "temperature", "pressure", "top_pressure", "bottom_pressure", "mass",
             "inlet_temperature", "suction_pressure", "inlet_pressure", "net_flow", "throughput", "velocity", "velocity_lowest", "velocity_highest", "gradient",
-            "gradient_lowest", "gradient_highest", "filter_load", "captured", "pressure_change", "outlet_temperature", "duty", "bypass", "fans_speed",
+            "gradient_lowest", "gradient_highest", "filter_load", "captured", "pressure_change", "outlet_temperature", "duty", "ua", "bypass", "fans_speed",
             "fan_power", "set_temperature", "duty_available", "pressure_ratio", "pressure_probe", "temperature_probe", "flowmeter", "boot_level", "body_level");
 
     private static List<DeviceColumn.Meter> meters(int count) {
@@ -180,6 +180,51 @@ class DeviceColumnTest {
         for (var key : List.of("pump_curve.title", "pump_curve.head", "pump_curve.npsh3", "pump_curve.inception", "pump_curve.available", "pump_curve.head_axis",
                 "pump_curve.npsh_axis", "pump_curve.flow_axis"))
             texts.get(key, "1");
+        assertEquals(Set.of(), texts.missing);
+    }
+
+    /**
+     * WP4 of batch 2026-11-16-fouling-corrosion: a vessel's Integrity group, a pump's beside its Health and a control valve's
+     * Trim group fit the door at every width, words whole and boxes in line, and other values move no widget.
+     */
+    @Test
+    void theIntegrityAndTrimGroupsFitTheDoor() {
+        var texts = new HeatControlColumnTest.Recording();
+        var thin = new DeviceColumn.Wall("28.0", "0.4", "1.5", "Ammonium bisulfide", "Stainless steel");
+        var sound = new DeviceColumn.Wall("100.0", "0.0", "—", "—", "Carbon steel");
+        var trim = new DeviceColumn.Trim("30.0", "10.0");
+        var suction = new DeviceColumn.Suction("6.8", "3.3", "0.4", "73.0", "87.6");
+        for (var kind : List.of(Kind.RESERVOIR, Kind.PUMP, Kind.VALVE))
+            for (boolean edit : new boolean[]{true, false}) {
+                var base = input(kind, edit, false, kind == Kind.VALVE ? DeviceColumn.Valve.PRESSURE : DeviceColumn.Valve.NONE, 4, "", "volume");
+                var withPump = kind == Kind.PUMP ? base.withSuction(suction) : base;
+                var in = withPump.withIntegrity(kind == Kind.VALVE ? null : thin, kind == Kind.VALVE ? trim : null);
+                var rows = DeviceColumn.rows(in, texts);
+                String what = kind + (edit ? "" : " reader");
+                String title = texts.get(kind == Kind.VALVE ? "device_group.trim" : "device_group.integrity");
+                int at = -1, phases = -1;
+                for (int i = 0; i < rows.size(); i++)
+                    if (rows.get(i) instanceof Column.Group g) {
+                        if (g.title().equals(title)) at = i;
+                        if (g.title().equals(texts.get("device_group.phases"))) phases = i;
+                    }
+                assertTrue(at >= 0, what + ": its group");
+                assertTrue(phases < 0 || at == phases + 1, what + ": after the Phases' basis key, so its wrapped names move no widget");
+                for (int width = 300; width <= 790; width += 7) {
+                    var column = Column.place(rows, 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT);
+                    for (var p : column.rows()) {
+                        assertTrue(p.rect().right() <= column.bounds().right(), what + " a row at " + width);
+                        for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), what + " a text cut at " + width + ": " + t);
+                        for (var s : p.slots().values()) assertTrue(s.inside(p.rect()) && s.w() >= 40, what + " a box at " + width + ": " + s);
+                        if (p.row() instanceof Column.Group g) assertEquals(1, p.texts().size(), what + " a plate in one line at " + width + ": " + g.title());
+                        if (p.row() instanceof Column.Reading r) assertTrue(p.texts().contains(r.unit()), what + " a unit whole at " + width + ": " + r.unit());
+                    }
+                    assertInLine(column, what + " at " + width);
+                    var other = Column.place(DeviceColumn.rows(withPump.withIntegrity(kind == Kind.VALVE ? null : sound, kind == Kind.VALVE ? new DeviceColumn.Trim("100.0", "—") : null), texts),
+                            10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT);
+                    assertEquals(widgets(column), widgets(other), what + " at " + width);
+                }
+            }
         assertEquals(Set.of(), texts.missing);
     }
 

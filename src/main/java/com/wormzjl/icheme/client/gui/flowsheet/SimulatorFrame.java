@@ -24,12 +24,12 @@ public final class SimulatorFrame {
         }
     }
 
-    /** The screen's tabs. */
+    /** The screen's tabs; {@link #METALLURGY} is the Materials tab (batch 2026-11-16-fouling-corrosion, WP6). */
     public enum Tab {
-        FLOWSHEET, RESULTS, SIZING, BASIS
+        FLOWSHEET, RESULTS, SIZING, METALLURGY, BASIS
     }
 
-    public static final int BOTTOM = 38, PANEL = 182, RESULT_DOOR = 168, BASIS_DOOR = 200, SIZING_DOOR = 180, DOOR_TOP = 74, CATEGORY_H = 18;
+    public static final int BOTTOM = 38, PANEL = 182, RESULT_DOOR = 168, BASIS_DOOR = 200, SIZING_DOOR = 180, MATERIALS_DOOR = 180, DOOR_TOP = 74, CATEGORY_H = 18;
     /** The design minimum and the size a door takes. */
     public static final int LEAST_W = 464, LEAST_H = 254, DOOR_W = 790, DOOR_H = 524;
 
@@ -91,15 +91,17 @@ public final class SimulatorFrame {
     }
 
     private static int tabWidth(boolean wide) {
-        return wide ? 84 : 56;
+        // Five tabs (WP6): a narrow tab row (54 px, Flowsheet whole) still ends before a 464 px window's file keys (34 px).
+        return wide ? 72 : 54;
     }
 
     private static int fileWidth(boolean wide) {
-        return wide ? 48 : 36;
+        return wide ? 48 : 34;
     }
 
     private static int tabsRight(boolean wide) {
-        return 10 + 4 * tabWidth(wide) + 3 * 4;
+        int n = Tab.values().length;
+        return 10 + n * tabWidth(wide) + (n - 1) * 4;
     }
 
     private int filesLeft(boolean wide) {

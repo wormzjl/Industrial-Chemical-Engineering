@@ -182,4 +182,22 @@ class WearTest {
         assertEquals(300, Wear.life(Double.NaN, true, fast), 1e-9);
         assertThrows(IllegalArgumentException.class, () -> new Wear.Settings(true, 0, 10));
     }
+
+    /**
+     * Batch 2026-11-16-fouling-corrosion, plan section 8: the solids fault is of the erosion class, its intensity the
+     * erosion law's, 0.18 at 1 wt% (44 process hours at the default erosion life), one from 5.1 %; no other fault moves.
+     */
+    @Test
+    void theSolidsFaultErodesBySolidShare() {
+        assertEquals(Wear.FaultClass.EROSION, Wear.Fault.SOLIDS.type);
+        assertEquals(.18, Wear.Fault.SOLIDS.intensity(.01), 1e-12);
+        assertEquals(44.4, Wear.CAVITATION_PROCESS_HOURS / Wear.Fault.SOLIDS.intensity(.01), .1, "44 process hours at 1 wt%");
+        assertEquals(1, Wear.Fault.SOLIDS.intensity(.051), 1e-12);
+        assertEquals(1, Wear.Fault.SOLIDS.intensity(.5));
+        for (double q : new double[]{Double.NaN, -1, 0, .001}) assertEquals(0, Wear.Fault.SOLIDS.intensity(q), "share " + q);
+        for (double q = 0; q < .06; q += .001)
+            assertEquals(com.wormzjl.icheme.science.integrity.ErosionLaw.solidsIntensity(q), Wear.Fault.SOLIDS.intensity(q));
+        assertEquals(7, Wear.Fault.values().length, "SOLIDS appended last");
+        assertEquals(Wear.Fault.SOLIDS, Wear.Fault.values()[6]);
+    }
 }

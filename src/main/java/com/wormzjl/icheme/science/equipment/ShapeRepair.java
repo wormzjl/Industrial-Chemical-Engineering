@@ -4,6 +4,7 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape.Connection;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Heading;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
+import com.wormzjl.icheme.science.integrity.Metallurgy;
 import java.util.*;
 import java.util.function.UnaryOperator;
 import org.jetbrains.annotations.Nullable;
@@ -138,6 +139,20 @@ public final class ShapeRepair {
         if (type != null) return type;
         repairs.accept(field + " " + saved + " -> " + ExchangerType.STANDARD.name());
         return ExchangerType.STANDARD;
+    }
+
+    /**
+     * The material of construction a saved name names (shape fields 13, batch 2026-11-16-fouling-corrosion), through
+     * {@link Metallurgy#named}'s aliases. Absent or empty reads {@link Metallurgy#CARBON_STEEL}, the material of every
+     * structure built before the field, with no repair (so an old structure is not stale); a name this build does not have
+     * reads carbon steel too, and the repair {@code <field> <name> -> CARBON_STEEL} goes to {@code repairs}.
+     */
+    public static Metallurgy material(String field, @Nullable String saved, java.util.function.Consumer<String> repairs) {
+        if (saved == null || saved.isEmpty()) return Metallurgy.CARBON_STEEL;
+        var named = Metallurgy.named(saved);
+        if (named != null) return named;
+        repairs.accept(field + " " + saved + " -> " + Metallurgy.CARBON_STEEL.name());
+        return Metallurgy.CARBON_STEEL;
     }
 
     /** A column's exchanger types as saved: the condenser's, the trim's and each pumparound cooler's, by name as written. */

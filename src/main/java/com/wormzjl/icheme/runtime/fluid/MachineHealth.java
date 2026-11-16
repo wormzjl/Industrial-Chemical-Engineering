@@ -37,10 +37,11 @@ public final class MachineHealth {
     public static final int CADENCE = ElectricStores.CADENCE;
 
     /**
-     * What a repair came to: the item is consumed only for {@code REPAIRED} and {@code BREACH_REPAIRED} (a breached vessel's
-     * wall closed, {@code FluidWorldAuthority#queueBreachRepair}, batch 2026-11-15-pollution-system WP6b).
+     * What a repair kit came to: the item is consumed only for {@code REPAIRED}. {@code NOT_IDLE} (batch
+     * 2026-11-16-fouling-corrosion, WP2): flow passed the device over its island's last committed slice, so the kit is kept.
+     * A breached vessel is repaired with the Equipment Constructor ({@link Integrity#queueRepair}), no longer with a kit.
      */
-    public enum Outcome { REPAIRED, FULL, NOT_A_PUMP, NO_KIT, BREACH_REPAIRED }
+    public enum Outcome { REPAIRED, FULL, NOT_A_PUMP, NO_KIT, NOT_IDLE }
 
     /**
      * A repair kit used on a pump: {@code take} consumes the kit at acceptance (false when it can no longer, the player
@@ -88,6 +89,8 @@ public final class MachineHealth {
     private final LongPredicate isPump;
     private final LongFunction<FlowControl> registered;
     private final Supplier<Wear.Settings> settings;
+    /** The erosion switch and the corrosion year a valve trim's wear is booked on (batch 2026-11-16-fouling-corrosion). */
+    private final Supplier<Integrity.Settings> integrity;
     private final Map<Long, Pump> pumps = new TreeMap<>();
     private final ArrayDeque<Repair> events = new ArrayDeque<>();
     /** The machines a blast breached since the last drain (WP6b). */
@@ -102,6 +105,13 @@ public final class MachineHealth {
      */
     public MachineHealth(WorldTopologyLedger topology, LongFunction<Long> owner, IslandCoordinator coordinator, LongPredicate isPump, LongFunction<FlowControl> registered,
                       Supplier<Wear.Settings> settings) {
+        this(topology, owner, coordinator, isPump, registered, settings, () -> Integrity.Settings.DEFAULT);
+    }
+
+    /** @param integrity the erosion switch and the corrosion year of the valves' trims (config {@code erosion.*}, {@code corrosion.*}) */
+    public MachineHealth(WorldTopologyLedger topology, LongFunction<Long> owner, IslandCoordinator coordinator, LongPredicate isPump, LongFunction<FlowControl> registered,
+                      Supplier<Wear.Settings> settings, Supplier<Integrity.Settings> integrity) {
+        this.integrity = Objects.requireNonNull(integrity);
         this.topology = Objects.requireNonNull(topology);
         this.owner = Objects.requireNonNull(owner);
         this.coordinator = Objects.requireNonNull(coordinator);
@@ -119,24 +129,59 @@ public final class MachineHealth {
         });
     }
 
-    private static final List<Wear.Fault> LIQUID_MOVER = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY), SCREW = List.of(Wear.Fault.LIQUID),
-            CENTRIFUGAL = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY, Wear.Fault.LOW_FLOW), COMPRESSOR = List.of(Wear.Fault.WET_GAS),
-            TURBINE = List.of(Wear.Fault.WET_EXHAUST);
+    private static final List<Wear.Fault> LIQUID_MOVER = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY, Wear.Fault.SOLIDS), SCREW = List.of(Wear.Fault.LIQUID),
+            CENTRIFUGAL = List.of(Wear.Fault.CAVITATION, Wear.Fault.DRY, Wear.Fault.LOW_FLOW, Wear.Fault.SOLIDS), COMPRESSOR = List.of(Wear.Fault.WET_GAS),
+            TURBINE = List.of(Wear.Fault.WET_EXHAUST), RING = List.of(Wear.Fault.SOLIDS);
 
     /**
-     * The faults {@code control} reads (M-12): a liquid mover cavitation and running dry, and a centrifugal pump on its curve
-     * also low flow (N1; a set-flow pump has no curve); a dry screw vacuum pump liquid at its suction (owner V6 B); a
-     * centrifugal compressor on its curve wet gas (N2: a constructed casing and an in-line compressor; a reciprocating frame
-     * is a set-flow compressor and has none); a steam turbine, a control and not a mover, wet exhaust (N4); none for
-     * another control.
+     * The faults {@code control} reads (M-12): a liquid mover cavitation, running dry and solids in its stream (batch
+     * 2026-11-16-fouling-corrosion: {@link Wear.Fault#SOLIDS}, the erosion class), and a centrifugal pump on its curve also
+     * low flow (N1; a set-flow pump has no curve); a dry screw vacuum pump liquid at its suction (owner V6 B); a liquid ring
+     * vacuum pump solids in its stream; a centrifugal compressor on its curve wet gas (N2: a constructed casing and an
+     * in-line compressor; a reciprocating frame is a set-flow compressor and has none); a steam turbine, a control and not a
+     * mover, wet exhaust (N4); none for another control.
      */
     static List<Wear.Fault> faults(FlowControl control) {
         if (control instanceof FlowControl.Turbine) return TURBINE;
         if (!(control instanceof FlowControl.Mover mover)) return List.of();
         if (mover.liquid()) return mover instanceof FlowControl.Machine m && m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump ? CENTRIFUGAL : LIQUID_MOVER;
         if (mover instanceof FlowControl.Machine m && com.wormzjl.icheme.science.machine.VacuumPump.dryScrew(m.law())) return SCREW;
+        if (mover instanceof FlowControl.Machine m && m.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump) return RING;
         if (mover instanceof FlowControl.Machine m && m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalCompressor) return COMPRESSOR;
         return List.of();
+    }
+
+    /**
+     * Whether registration {@code r} is a control valve whose trim wears by particles (batch 2026-11-16-fouling-corrosion,
+     * plan section 8): a pipe fitting (no ports) whose control is a {@link FlowControl.ControlValve} that throttles: not a
+     * valve built into a sink (a fired heater's, a flare's, a prime mover's), not a gas blanketing valve, not an automated
+     * shutoff valve. Its health record is created at its first wear above 0.
+     */
+    public static boolean trim(WorldTopologyLedger.Registration r) {
+        return r != null && r.device().ports().isEmpty() && r.device().control() instanceof FlowControl.ControlValve v && trims(v);
+    }
+
+    /** Whether control valve {@code v}'s trim wears ({@link #trim}). */
+    static boolean trims(FlowControl.ControlValve v) {
+        return !v.source().sink() && !v.onOffValve() && v.source() != FlowControl.ValveSource.BLANKET;
+    }
+
+    /** Whether registration {@code r} has a health record: a machine that wears ({@link #pump}) or a valve trim ({@link #trim}). */
+    public static boolean tracked(WorldTopologyLedger.Registration r) {
+        return pump(r) || trim(r);
+    }
+
+    /**
+     * The inert solid mass share of what connection transfer {@code t} carried, 0 to 1: its solids, crystals left out
+     * (they melt), over its mass, both directions; 0 for none.
+     */
+    static double solidShare(com.wormzjl.icheme.science.fluid.network.PipeTransfer t) {
+        if (t == null) return 0;
+        double solids = t.forward().solids().withoutCrystals().massKg() + t.reverse().solids().withoutCrystals().massKg();
+        double mass = t.forward().massKg() + t.reverse().massKg();
+        if (!(solids > 0) || !(mass > 0)) return 0;
+        double share = solids / mass;
+        return Double.isFinite(share) ? Math.min(share, 1) : 0;
     }
 
     /** Whether {@code control} wears: it has a fault ({@link #faults}). */
@@ -188,9 +233,42 @@ public final class MachineHealth {
         Map<Long, PassiveStepSolver.PipeObservation> rows = null;
         var s = settings();
         var flows = result.endpointFlows();
+        Map<Long, com.wormzjl.icheme.science.fluid.network.PipeTransfer> moved = null;
+        boolean solids = false;
+        for (var t : result.pipeTransfers()) if (!t.forward().solids().empty() || !t.reverse().solids().empty()) { solids = true; break; }
         for (int e = 0; e < solved.pipes().size(); e++) {
             var pipe = solved.pipes().get(e);
             var control = pipe.control();
+            // A control valve's trim (batch 2026-11-16-fouling-corrosion, plan section 8): particles wear it at its own drop's speed.
+            if (control instanceof FlowControl.ControlValve valve && trims(valve)) {
+                long id = solved.reservoirs().get(pipe.first()).id();
+                double rate = 0;
+                var is = integrity.get();
+                if (solids && s.enabled() && is.erosion()) {
+                    if (moved == null) {
+                        moved = new HashMap<>();
+                        for (var t : result.pipeTransfers()) moved.put(t.pipeId(), t);
+                    }
+                    double share = solidShare(moved.get(pipe.id()));
+                    if (share > 0) {
+                        if (rows == null) {
+                            rows = new HashMap<>();
+                            for (var row : result.observations()) rows.put(row.pipe(), row);
+                        }
+                        var row = rows.get(pipe.id());
+                        if (row != null) rate = com.wormzjl.icheme.science.integrity.ErosionLaw.trim(share,
+                                com.wormzjl.icheme.science.integrity.ErosionLaw.trimSpeed(row.valveDrop(), row.density()), is.yearProcessHours());
+                    }
+                }
+                // Its record is made at its first wear above 0 (a valve that never wears keeps none).
+                var p = rate > 0 ? pump(id) : pumps.get(id);
+                if (p != null) {
+                    book(p, rate, start, end);
+                    p.fault = rate > 0 ? Wear.Fault.SOLIDS : null;
+                    p.intensity = rate > 0 ? 1 : 0;
+                }
+                continue;
+            }
             if (!worn(control)) continue;
             long id = solved.reservoirs().get(pipe.first()).id();
             var p = pump(id);
@@ -200,6 +278,16 @@ public final class MachineHealth {
                 for (var row : result.observations()) rows.put(row.pipe(), row);
             }
             var row = rows.get(pipe.id());
+            // The solid mass share the mover's connection carried (batch 2026-11-16-fouling-corrosion): its SOLIDS fault's
+            // driving quantity; 0 with no solids anywhere on the island's last slice.
+            double carried = 0;
+            if (solids && row != null && integrity.get().erosion()) {
+                if (moved == null) {
+                    moved = new HashMap<>();
+                    for (var t : result.pipeTransfers()) moved.put(t.pipeId(), t);
+                }
+                carried = solidShare(moved.get(pipe.id()));
+            }
             // A mover reads while it runs (a set or curve flow above 0); a steam turbine while steam passes forward through it.
             var m = control instanceof FlowControl.Mover mover ? mover : null;
             boolean read = row != null && (m != null ? m.targetVolumeFlow() > 0 : flows[e] > 0);
@@ -234,6 +322,8 @@ public final class MachineHealth {
                     case LOW_FLOW -> share;
                     case WET_GAS -> wet;
                     case WET_EXHAUST -> exhaust;
+                    // The inert solid mass share of the stream (batch 2026-11-16-fouling-corrosion, WP2).
+                    case SOLIDS -> carried;
                 };
                 double i = fault.intensity(q);
                 if (fault.type == Wear.FaultClass.EROSION) {
@@ -272,6 +362,17 @@ public final class MachineHealth {
     void plans(PassiveNetwork graph, Map<Long, ShaftPlan> out) {
         boolean enabled = settings().enabled();
         for (var pipe : graph.pipes()) {
+            // A failed valve trim fails open, its settings kept (owner D5): the valve stands as an unconfigured one does. One
+            // repaired since takes its registered control back (an island keeps the controls its last slice solved with).
+            if (pipe.control() instanceof FlowControl.ControlValve valve && trims(valve)) {
+                long id = graph.reservoirs().get(pipe.first()).id();
+                var p = pumps.get(id);
+                if (p == null) continue;
+                if (enabled && p.failed) out.put(id, ShaftPlan.trim(null));
+                else if (valve.equals(FlowControl.ControlValve.unconfigured()) && registered.apply(id) instanceof FlowControl.ControlValve own && !own.equals(valve))
+                    out.put(id, ShaftPlan.trim(own));
+                continue;
+            }
             if (!worn(pipe.control())) continue;
             long id = graph.reservoirs().get(pipe.first()).id();
             var p = pumps.get(id);
@@ -353,6 +454,8 @@ public final class MachineHealth {
             Outcome outcome;
             if (p == null) outcome = Outcome.NOT_A_PUMP;
             else if (p.health >= 1) outcome = Outcome.FULL;
+            // A kit works on a machine or a trim no flow passes (batch 2026-11-16-fouling-corrosion, plan section 10).
+            else if (!idle(r.device())) outcome = Outcome.NOT_IDLE;
             else if (!r.take().getAsBoolean()) outcome = Outcome.NO_KIT;
             else {
                 book(p, p.rate, p.bookedTick, now);
@@ -367,6 +470,48 @@ public final class MachineHealth {
         }
         flushWakes();
         flush();
+    }
+
+    /**
+     * Makes machine or trim {@code id} new (the Equipment Constructor's structure repair, {@link Integrity#queueRepair}): its
+     * health 1, a failed one standing again and its island woken. Nothing for a device with no health record. Called at the
+     * tick drain; the facts go to the ledger at once.
+     */
+    public void renew(long id) {
+        var p = pumps.get(id);
+        if (p == null) return;
+        book(p, p.rate, p.bookedTick, coordinator.now());
+        p.health = 1;
+        if (p.failed) {
+            p.failed = false;
+            wake(id);
+        }
+        flushWakes();
+        flush();
+    }
+
+    /**
+     * Whether no flow passes machine or valve {@code id}: no connection at its node moved more than
+     * {@link Integrity#IDLE_FLOW} over its island's last committed slice and no mover of it runs; a device in no island is
+     * idle. A read of the stored island: nothing solves.
+     */
+    boolean idle(long id) {
+        Long island = owner.apply(id);
+        if (island == null) return true;
+        var result = coordinator.observe(island).lastResult().orElse(null);
+        if (result == null) return true;
+        var g = result.graph();
+        int node = -1;
+        for (int n = 0; n < g.reservoirs().size(); n++) if (g.reservoirs().get(n).id() == id) { node = n; break; }
+        if (node < 0) return true;
+        var flows = result.averageMassFlows();
+        for (int e = 0; e < g.pipes().size(); e++) {
+            var pipe = g.pipes().get(e);
+            if (pipe.first() != node && pipe.second() != node) continue;
+            if (Math.abs(flows[e]) > Integrity.IDLE_FLOW) return false;
+            if (pipe.first() == node && pipe.control() instanceof FlowControl.Mover m && m.targetVolumeFlow() > 0) return false;
+        }
+        return true;
     }
 
     // ---------------- facts and reads ----------------
@@ -444,6 +589,7 @@ public final class MachineHealth {
      * {@code GAS} belong to machines that read none of the words before them, so the order of today's words is kept.
      */
     public String status(long id) {
+        if (trim(topology.active().get(id))) return trimStatus(id);
         if (failed(id)) return "FAILED";
         var screw = pumps.get(id);
         if (screw != null && screw.liquid > com.wormzjl.icheme.science.machine.VacuumPump.LIQUID_TRACE) return "LIQUID";
@@ -454,6 +600,20 @@ public final class MachineHealth {
         if (screw != null && screw.wetGas > 0) return "WET GAS";
         if (screw != null && screw.wetExhaust > 0) return "WET EXHAUST";
         return "";
+    }
+
+    /** A valve trim's health at and below which its status line says {@code ERODED TRIM} (plan section 8). */
+    public static final double ERODED_TRIM = .25;
+
+    /**
+     * Control valve {@code id}'s trim word (batch 2026-11-16-fouling-corrosion): {@code TRIM FAILED} at health 0 while wear
+     * is on (it stands open), {@code ERODED TRIM} from {@link #ERODED_TRIM}, else empty.
+     */
+    public String trimStatus(long id) {
+        var p = pumps.get(id);
+        if (p == null) return "";
+        if (p.failed && settings().enabled()) return "TRIM FAILED";
+        return p.health <= ERODED_TRIM ? "ERODED TRIM" : "";
     }
 
     /** The gas ratio r = α/α_T above which a pump churns ({@link com.wormzjl.icheme.science.machine.GasEntrainment#churn}) and its page says {@code GAS}. */

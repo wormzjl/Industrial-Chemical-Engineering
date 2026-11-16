@@ -291,6 +291,8 @@ class CrossflowEquipmentTest {
                                             + java.util.regex.Matcher.quoteReplacement(
                                                     "still=" + BatchStillOptions.DEFAULT)
                                             + "]");
+                // An image before shape fields 13 reads carbon steel, which its text does not show.
+                if (!expected.contains("material=")) expected = expected.substring(0, expected.length() - 1) + ", material=CARBON_STEEL]";
                 assertEquals(expected, read.toString(), file.toString());
             }
     }

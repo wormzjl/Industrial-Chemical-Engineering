@@ -26,6 +26,28 @@ class ShaftPlanTest extends PortFixture {
         return state.mass() / state.volume();
     }
 
+    /**
+     * Batch 2026-11-16-fouling-corrosion, WP2: a failed valve trim stands open as an unconfigured valve, its settings kept by
+     * the plan's restore; a repaired one takes its control back; a malformed trim plan is refused.
+     */
+    @Test
+    void aFailedTrimStandsOpenAndARepairedOneTakesItsControlBack() {
+        var own = new FlowControl.ControlValve(FlowControl.ValveSource.PRESSURE, 150000, null, 3);
+        var registered = line(waterSupply(3e5), waterSupply(101325), own);
+        var failed = ShaftPlan.apply(registered, Map.of(1L, ShaftPlan.trim(null)));
+        assertEquals(FlowControl.ControlValve.unconfigured(), failed.pipes().getFirst().control());
+        assertSame(failed, ShaftPlan.apply(failed, Map.of(1L, ShaftPlan.trim(null))), "already open");
+        var repaired = ShaftPlan.apply(failed, Map.of(1L, ShaftPlan.trim(own)));
+        assertEquals(own, repaired.pipes().getFirst().control());
+        assertSame(registered, ShaftPlan.apply(registered, Map.of(1L, ShaftPlan.trim(own))), "nothing to change");
+        // A trim plan on another control changes nothing.
+        var pump = line(waterSupply(101325), waterSupply(101325), new FlowControl.Pump(.01, 5e5));
+        assertSame(pump, ShaftPlan.apply(pump, Map.of(1L, ShaftPlan.trim(null))));
+        assertThrows(IllegalArgumentException.class, () -> new ShaftPlan(ShaftPlan.Kind.TRIM, 1, 0, null));
+        assertThrows(IllegalArgumentException.class, () -> new ShaftPlan(ShaftPlan.Kind.TRIM, 0, 0, own));
+        assertThrows(IllegalArgumentException.class, () -> new ShaftPlan(ShaftPlan.Kind.FAILED, 1, 0, own));
+    }
+
     /** The registered machine stands at speed 0 (a casing with no train: NO DRIVER); its train's share 0 keeps it closed. */
     @Test
     void aMachineAtNoSpeedIsClosed() {

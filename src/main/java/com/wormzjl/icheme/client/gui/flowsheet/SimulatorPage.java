@@ -37,9 +37,10 @@ public final class SimulatorPage {
         var slots = new ArrayList<Slot>();
         var tabs = frame.tabs();
         for (var t : SimulatorFrame.Tab.values()) {
-            boolean sizing = t == SimulatorFrame.Tab.SIZING;
-            String label = x.text("tab." + t.name().toLowerCase(java.util.Locale.ROOT));
-            slots.add(new Slot(sizing && !SizingPage.open(x) ? off("tab/" + t.ordinal(), label, x.text("hint.sizing")) : Door.position("tab/" + t.ordinal(), label, t == tab), tabs.get(t.ordinal())));
+            boolean sizing = t == SimulatorFrame.Tab.SIZING || t == SimulatorFrame.Tab.METALLURGY;
+            // Five tabs (WP6): a narrow tab is 54 px, so the Flowsheet tab reads short there, as Save as does.
+            String label = x.text("tab." + t.name().toLowerCase(java.util.Locale.ROOT) + (t == SimulatorFrame.Tab.FLOWSHEET && !frame.wideKeys() ? "_short" : ""));
+            slots.add(new Slot(sizing && !SizingPage.open(x) ? off("tab/" + t.ordinal(), label, x.text(t == SimulatorFrame.Tab.SIZING ? "hint.sizing" : "hint.materials")) : Door.position("tab/" + t.ordinal(), label, t == tab), tabs.get(t.ordinal())));
         }
         boolean narrow = !frame.wideKeys(), reader = host.reader();
         var file = frame.fileKeys();
@@ -239,6 +240,12 @@ public final class SimulatorPage {
         SizingGlass.draw(c, x, state, skin.well(c, glass(frame, w)));
     }
 
+    /** The Materials tab: its door's divider and its glass (WP6), as the Sizing tab's. */
+    public static void materials(Canvas c, Skin skin, SheetContext x, MaterialsPage.State state, SimulatorFrame frame, int w) {
+        skin.vDivider(c, SimulatorFrame.MATERIALS_DOOR + 3, SimulatorFrame.DOOR_TOP, frame.bottom());
+        MaterialsGlass.draw(c, x, state, skin.well(c, SimulatorTour.glass(frame, SimulatorFrame.Tab.METALLURGY, w)));
+    }
+
     /** The Sizing tab's glass, before the skin's edge. */
     public static Rect glass(SimulatorFrame frame, int w) {
         int door = SimulatorFrame.SIZING_DOOR;
@@ -267,6 +274,7 @@ public final class SimulatorPage {
         if (tab == SimulatorFrame.Tab.RESULTS) return new SheetState.Status(ResultsPage.status(x, results), Palette.ACCENT);
         if (tab == SimulatorFrame.Tab.BASIS) return new SheetState.Status(BasisPage.status(x), Palette.ACCENT);
         if (tab == SimulatorFrame.Tab.SIZING) return SizingPage.status(x);
+        if (tab == SimulatorFrame.Tab.METALLURGY) return MaterialsPage.status(x);
         var status = x.state().status(x.t(), x.units(), compact);
         return holder == null ? status : new SheetState.Status(x.text("status.reader", holder, Door.lower(status.text())), status.tone());
     }
@@ -329,7 +337,7 @@ public final class SimulatorPage {
     }
 
     /** Draws the page the screen stands on; returns the hover. */
-    public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, SizingPage.State sizing, int category, SheetEditor editor, KitDoor kit, String title, @Nullable String holder, double mouseX, double mouseY) {
+    public static @Nullable String draw(Canvas c, Skin skin, SheetContext x, SimulatorFrame.Tab tab, SimulatorFrame frame, SheetView view, SheetGestures gestures, ResultsPage.State results, SizingPage.State sizing, MaterialsPage.State materials, int category, SheetEditor editor, KitDoor kit, String title, @Nullable String holder, double mouseX, double mouseY) {
         int w = frame.status().w() + 20, h = frame.bottom() + SimulatorFrame.BOTTOM;
         back(c, skin, status(x, tab, results, gestures, editor, frame.size() != SimulatorFrame.Size.WIDE, holder), title, frame, tab, w, h);
         switch (tab) {
@@ -355,6 +363,11 @@ public final class SimulatorPage {
                 String hover = kit.draw(c, skin, mouseX, mouseY);
                 // A limits row's advice (P2 of batch 2026-11-16-supercritical-followups, item 11), where the door has none.
                 return hover != null ? hover : SizingGlass.hover(x, sizing, c.measure(), SimulatorFrame.inner(glass(frame, w)), mouseX, mouseY);
+            }
+            case METALLURGY -> {
+                materials(c, skin, x, materials, frame, w);
+                kit.place(MaterialsPage.rows(x, materials), x.m());
+                return kit.draw(c, skin, mouseX, mouseY);
             }
             case BASIS -> {
                 basis(c, skin, x, frame, w);

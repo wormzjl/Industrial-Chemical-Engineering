@@ -109,6 +109,10 @@ class HeatControlColumnTest {
                 for (boolean on : new boolean[]{true, false})
                     out.add(new Case("heater " + side + (on ? " firing" : " out"), new HeatControlColumn.Input(heat("FIRED_HEATER", side, true, "burners", 0.7, null, List.of()), null, edit, false, HeatUnit.Mode.OFF, on, "C")));
             out.add(new Case("kettle pool", new HeatControlColumn.Input(heat("KETTLE", "SHELL", true, "none", null, null, List.of()), null, edit, false, HeatUnit.Mode.OFF, true, "C")));
+            // The Deposit group (WP5, D16): with the unit's UA left, and without a UA known.
+            var fouled = heat("EXCHANGER", "TUBE", true, "bypass", 0.25, null, List.of()).withFouling(5e-4);
+            out.add(new Case("exchanger fouled" + (edit ? "" : " reader"), new HeatControlColumn.Input(fouled.withConductance(37_500.0, 50_000.0), new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE, 330, 0, 0), edit, true, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "C")));
+            out.add(new Case("exchanger fouled, no UA" + (edit ? "" : " reader"), new HeatControlColumn.Input(fouled, new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE, 330, 0, 0), edit, true, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "C")));
         }
         return out;
     }
@@ -125,6 +129,28 @@ class HeatControlColumnTest {
             }
         assertEquals(Set.of(), texts.missing);
         assertTrue(texts.asked.size() > 30, "the cases ask for the column's texts: " + texts.asked.size());
+    }
+
+    /**
+     * The Deposit group (WP5; decision D16 of batch 2026-11-16-fouling-corrosion): the side's deposit in m²K/kW and the
+     * unit's UA left, its UA over its clean UA in % (37.5 of 50 kW/K: 75 %); the empty reading without both; Clean for an
+     * editor only.
+     */
+    @Test
+    void theDepositGroupReadsTheUaLeft() {
+        var texts = new Recording();
+        var heat = heat("EXCHANGER", "TUBE", true, "bypass", 0.25, null, List.of()).withFouling(5e-4);
+        var control = new HeatUnit.Control(HeatUnit.Mode.OUTLET_TEMPERATURE, 330, 0, 0);
+        var group = HeatControlColumn.deposit(new HeatControlColumn.Input(heat.withConductance(37_500.0, 50_000.0), control, true, true, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "C"), texts);
+        assertEquals(texts.get("heat_group.deposit"), group.title());
+        var rf = (Column.Reading) group.rows().get(0);var left = (Column.Reading) group.rows().get(1);
+        assertEquals(List.of("fouling:rf", "0.5", "m²K/kW"), List.of(rf.key(), rf.value(), rf.unit()));
+        assertEquals(List.of("fouling:ua_left", texts.get("ua_left"), "75.0", "%", texts.get("ua_left.hint")), List.of(left.key(), left.label(), left.value(), left.unit(), left.hint()));
+        assertInstanceOf(Column.Buttons.class, group.rows().get(2), "Clean for an editor");
+        var unknown = HeatControlColumn.deposit(new HeatControlColumn.Input(heat.withConductance(37_500.0, null), control, false, true, HeatUnit.Mode.OUTLET_TEMPERATURE, true, "C"), texts);
+        assertEquals("—", ((Column.Reading) unknown.rows().get(1)).value(), "no clean UA: the empty reading");
+        assertEquals(2, unknown.rows().size(), "no Clean for a reader");
+        assertEquals(java.util.Set.of(), texts.missing);
     }
 
     /** W7 (reading A86): a fan unit's draw, FE per tick and store stand in a Power group of LED meters, last on the right; none without power. */

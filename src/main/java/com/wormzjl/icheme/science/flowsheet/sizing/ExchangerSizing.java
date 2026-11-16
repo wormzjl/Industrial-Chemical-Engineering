@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
+import com.wormzjl.icheme.science.flowsheet.metallurgy.SheetMetallurgy;
 import com.wormzjl.icheme.science.flowsheet.unit.ExchangerRating;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.equipment.design.UnitRatings;
@@ -92,16 +93,23 @@ public final class ExchangerSizing {
      * @param approach  the least difference along it, K
      * @param waterOut  cooling water's outlet, °C, null if its cold side is no water
      * @param tower     a free water side's tower water at design flow, null where both sides are the sheet's
+     * @param tubeFouling  the tube side's design deposit, m²K/W (batch 2026-11-16-fouling-corrosion, WP5): its surface and its
+     *                     drop are rated dirty ({@link SheetMetallurgy#designFouling})
+     * @param shellFouling the shell side's, 0 on a kettle, whose shell is a pool and grows none
      */
     public record Load(boolean kettle, LineSizing.Carried tube, LineSizing.@Nullable Carried shell, Limit tubeDrop, @Nullable Limit shellDrop, double needed, double duty, double hotEnd, double coldEnd, double approach, @Nullable Double waterOut,
-                       @Nullable Tower tower, @Nullable Curves curves, ExchangerType model) {
+                       @Nullable Tower tower, @Nullable Curves curves, ExchangerType model, double tubeFouling, double shellFouling) {
         public Load(boolean kettle,LineSizing.Carried tube,LineSizing.@Nullable Carried shell,Limit tubeDrop,@Nullable Limit shellDrop,double needed,double duty,double hotEnd,double coldEnd,double approach,@Nullable Double waterOut,@Nullable Tower tower) {
-            this(kettle,tube,shell,tubeDrop,shellDrop,needed,duty,hotEnd,coldEnd,approach,waterOut,tower,null,ExchangerType.STANDARD);
+            this(kettle,tube,shell,tubeDrop,shellDrop,needed,duty,hotEnd,coldEnd,approach,waterOut,tower,null,ExchangerType.STANDARD,0,0);
+        }
+        /** A load rated clean on its curves. */
+        public Load(boolean kettle,LineSizing.Carried tube,LineSizing.@Nullable Carried shell,Limit tubeDrop,@Nullable Limit shellDrop,double needed,double duty,double hotEnd,double coldEnd,double approach,@Nullable Double waterOut,@Nullable Tower tower,@Nullable Curves curves,ExchangerType model) {
+            this(kettle,tube,shell,tubeDrop,shellDrop,needed,duty,hotEnd,coldEnd,approach,waterOut,tower,curves,model,0,0);
         }
         Load forType(ExchangerType type) {
             if(type==model)return this;
             var rated=curves==null?new ExchangerRating.Result(Double.POSITIVE_INFINITY,approach):ExchangerRating.required(type,curves.tube,curves.shell,duty);
-            return new Load(kettle,tube,shell,tubeDrop,shellDrop,rated.area(),duty,hotEnd,coldEnd,rated.approach(),waterOut,tower,curves,type);
+            return new Load(kettle,tube,shell,tubeDrop,shellDrop,rated.area(),duty,hotEnd,coldEnd,rated.approach(),waterOut,tower,curves,type,tubeFouling,shellFouling);
         }
         /**
          * A free cooling side's load (C2, {@code COOLER_MODEL_PLAN.md} section 3 item 3): {@code in} cooled to {@code out} against
@@ -120,7 +128,7 @@ public final class ExchangerSizing {
             if (load == null) return null;
             double flow = basis.designFlow();
             var tower = new Tower(water.supply().mass() * flow, LineSizing.Carried.of(water.supply(), flow, thermo, scratch).volume() * 3600);
-            return new Load(load.kettle, load.tube, load.shell, load.tubeDrop, load.shellDrop, load.needed, load.duty, load.hotEnd, load.coldEnd, load.approach, load.waterOut, tower,load.curves,load.model);
+            return new Load(load.kettle, load.tube, load.shell, load.tubeDrop, load.shellDrop, load.needed, load.duty, load.hotEnd, load.coldEnd, load.approach, load.waterOut, tower,load.curves,load.model,load.tubeFouling,load.shellFouling);
         }
 
         /**
@@ -140,9 +148,12 @@ public final class ExchangerSizing {
             double flow = basis.designFlow(), duty = Math.abs(heat) * flow, hotEnd = hotIn.temperature() - coldOut.temperature(), coldEnd = hotOut.temperature() - coldIn.temperature();
             double needed = Double.POSITIVE_INFINITY, approach = Math.min(hotIn.temperature() - coldIn.temperature(), Math.min(hotEnd, coldEnd));
             Curves curves=null;
+            // Each side rated dirty at its service's design deposit (WP5), so the unit sent to the block meets its duty fouled.
+            var standard = SheetMetallurgy.standard(thermo);
+            double tubeFouling = SheetMetallurgy.designFouling(standard, tubeIn, tubeOut), shellFouling = kettle ? 0 : SheetMetallurgy.designFouling(standard, shellIn, shellOut);
             if (hotIn.temperature() > coldIn.temperature()) {
-                var hot = ExchangerRating.side(thermo, hotIn, coldIn.temperature(), hotIn.temperature()).at(flow);
-                var cold = ExchangerRating.side(thermo, coldIn, coldIn.temperature(), hotIn.temperature()).at(flow);
+                var hot = ExchangerRating.side(thermo, hotIn, coldIn.temperature(), hotIn.temperature()).at(flow).fouled(tubeHot ? tubeFouling : shellFouling);
+                var cold = ExchangerRating.side(thermo, coldIn, coldIn.temperature(), hotIn.temperature()).at(flow).fouled(tubeHot ? shellFouling : tubeFouling);
                 curves=new Curves(tubeHot?hot:cold,tubeHot?cold:hot);
                 var rated = ExchangerRating.rate(hot, cold, duty);
                 needed = rated.area();
@@ -151,7 +162,7 @@ public final class ExchangerSizing {
             var waterOut = Service.water(coldIn.state()) ? (Double) (coldOut.temperature() - 273.15) : null;
             var tube = LineSizing.Carried.of(tubeIn, flow, thermo, scratch);
             var shell = kettle ? null : LineSizing.Carried.of(shellIn, flow, thermo, scratch);
-            return new Load(kettle, tube, shell, drop(tubeIn, tubeOut, !tubeHot, thermo), kettle ? null : drop(shellIn, shellOut, tubeHot, thermo), needed, duty, hotEnd, coldEnd, approach, waterOut, null,curves,ExchangerType.STANDARD);
+            return new Load(kettle, tube, shell, drop(tubeIn, tubeOut, !tubeHot, thermo), kettle ? null : drop(shellIn, shellOut, tubeHot, thermo), needed, duty, hotEnd, coldEnd, approach, waterOut, null,curves,ExchangerType.STANDARD,tubeFouling,shellFouling);
         }
 
         /** The row a side answers to, by the world's film along it: what boils, what comes in as a gas or to condense, or a liquid. */
@@ -183,7 +194,7 @@ public final class ExchangerSizing {
         readings.add(Limit.EXCHANGER_COLD_END.read(load.coldEnd()));
         readings.add(Limit.EXCHANGER_APPROACH.read(load.approach()));
         readings.add(Limit.EXCHANGER_OVER_NEED.read(100 * (surface / load.needed() - 1)));
-        readings.add(load.tubeDrop().read(SizedPassages.tube(size, load.tube())));
+        readings.add(load.tubeDrop().read(SizedPassages.tube(size, load.tube(), load.tubeFouling())));
         var row = load.shellDrop();
         if (load.shell() != null && row != null) readings.add(row.read(shellDrop(load, size)));
         if (load.kettle()) readings.add(Limit.KETTLE_FLUX.read(load.duty() / 1e3 / surface));
@@ -194,10 +205,10 @@ public final class ExchangerSizing {
         return tower == null ? rating : rating.with(Rating.WATER, tower.mass()).with(Rating.WATER_VOLUME, tower.volume());
     }
 
-    /** What {@code load}'s shell side loses at {@code size} at design flow, bar: 0 on a kettle, whose shell boils in a pool. */
+    /** What {@code load}'s shell side loses at {@code size} at design flow, bar, fouled at its design deposit: 0 on a kettle, whose shell boils in a pool. */
     public static double shellDrop(Load load, Size size) {
         var shell = load.shell();
-        return shell == null ? 0 : SizedPassages.shell(size, shell);
+        return shell == null ? 0 : SizedPassages.shell(size, shell, load.shellFouling());
     }
 
     /**

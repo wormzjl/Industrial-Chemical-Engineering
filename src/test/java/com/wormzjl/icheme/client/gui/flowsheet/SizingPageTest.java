@@ -195,8 +195,8 @@ class SizingPageTest {
             SizingGlass.draw(new Recording(texts.measure), x, state, box);
         }
         state.view = SizingPage.View.UNITS;
-        // The head is one line where the columns fit: the third row down is the third unit.
-        String key = SizingGlass.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 48 + 12 + 2 * 12 + 4);
+        // Four requirement lines (the last names the material), the head one line where the columns fit: the third row down is the third unit.
+        String key = SizingGlass.click(x, state, texts.measure, box, box.x() + 30, box.y() + 4 + 60 + 12 + 2 * 12 + 4);
         assertEquals("T-101/condenser", key);
         assertTrue(SizingGlass.pick(state, key));
         assertEquals("T-101/condenser", state.unit);

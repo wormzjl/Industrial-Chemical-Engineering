@@ -38,14 +38,14 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
 | [`Setpoints`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Setpoints.java) | The player's numbers, a fact: design and set feed rate, condenser temperature, reflux ratio; reboiler, steam, draws and pumparounds per mole of feed; `of(point)`, `withFeedRate` (capped at the design rate), `intensivelyDiffers`, `compatible` | 78 |
 | [`PortConditions`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/PortConditions.java) | A port's pressure and temperature estimated from the design (`estimate`) | 35 |
 | [`SplitTable`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/SplitTable.java) | The table: `axis`, `products` (`Product`: port, index, recovery by component, temperature, pressure), `reboilerPerFeed`, `pumparoundPerFeed`, `condenserPerFeed`, `reference` (`Reference`), `held`, `condenserWaterPerFeed`, `waterBelow`, `airArea` (`FAN_STEPS` fan speeds), `flood` (`Flood`, `NONE`), `pumparoundDraw`; `of`, `split`, `perFeed`, `product`, `waterShare`, `waterTakes`, `airFeed`, `fans`, `withFlood`, `withPumparoundDraw`, `drawTemperature`, `bottomsTemperature`; `WATER_ALWAYS`, `WATER_NEVER` | 463 |
-| [`ColumnCycle`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnCycle.java) | One cycle as arithmetic: `Account`, `Rooms` (what each utility can still pass, the air's most feed, unpowered fans and pumps; `NONE`), `Step` (`conditions`, `binding`, `tripped`), `step`; `TRIP_DEPARTURE` | 367 |
-| [`Condition`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Condition.java) | One constant per failure, each in one `Rank` (`NOT_READY`, `NOTICE`, `LIMIT`, `OFF_TABLE`, `TRIP`) with its status word; `Active` (condition, value, index, text); `binding`, `find`; `HIGH_LOAD_FRACTION`, `MAX_TEXT`, `RULE_A` | 113 |
-| [`ColumnStatus`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnStatus.java) | `phase` and `line` from a condition list: one pure formatter | 61 |
+| [`ColumnCycle`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnCycle.java) | One cycle as arithmetic: `Account`, `Rooms` (what each utility can still pass, the air's most feed, unpowered fans and pumps, the trays' capacity left `trays`, 1 clean; `NONE`, `withTrays`), `Step` (`conditions`, `binding`, `tripped`), `step`; `TRIP_DEPARTURE` | 382 |
+| [`Condition`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Condition.java) | One constant per failure, each in one `Rank` (`NOT_READY`, `NOTICE`, `LIMIT`, `OFF_TABLE`, `TRIP`) with its status word; `Active` (condition, value, index, text); `binding`, `find`; `HIGH_LOAD_FRACTION`, `MAX_TEXT`, `RULE_A` | 133 |
+| [`ColumnStatus`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnStatus.java) | `phase` and `line` from a condition list: one pure formatter | 70 |
 | [`Refusal`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Refusal.java) | Every Start and first-solve refusal as a constant with its text (`text(parameters)`): `FIRST_SOLVE`, `NO_NOZZLE`, `TOO_MANY_UTILITY_UNITS`, `NO_DRIVER` among them | 48 |
 | [`DriftBands`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/DriftBands.java) | The bands and `Trigger`; `check` (a table's, and a reference's without the closure); `reference` (a refused state as a reference) | 109 |
-| [`ColumnSolve`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnSolve.java) | The worker's job: `Job`, `Taken`, `Steam`, sealed `Outcome` (`Solved` with `advisories`, `MAX_ADVISORIES`; `Failed` with `transientFailure`); `run`; `calculate` (the one V3 solve of a column's input, for the running column and the sheet's column block alike) with its `ColdStart` (`CLASSICAL`, `LEARNED`); `warm` (the seed screen); `closure` (the condenser duty as the energy closure on one basis); `trim` (an air-then-water condenser's water share), `airArea`; `SUPERHEAT` | 525 |
+| [`ColumnSolve`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnSolve.java) | The worker's job: `Job`, `Taken`, `Steam`, sealed `Outcome` (`Solved` with `advisories`, `MAX_ADVISORIES`; `Failed` with `transientFailure`; `Frozen`, a product holding a crystal); `run`; `frozen` (the crystal test of a product); `calculate` (the one V3 solve of a column's input, for the running column and the sheet's column block alike) with its `ColdStart` (`CLASSICAL`, `LEARNED`); `warm` (the seed screen); `closure` (the condenser duty as the energy closure on one basis); `trim` (an air-then-water condenser's water share), `airArea`; `SUPERHEAT` | 567 |
 | [`ColumnWater`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnWater.java) | Where a column's feed water goes and whether its liquids settle, the one rule of the running column and the sheet's column block: `onAxis` (`SHARE`), `settling` (`TRACE`, `Settling`) | 118 |
-| [`OperationView`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/OperationView.java) | What the Operation tab shows: `Phase`, `conditions`, `accepted`, `Stream`, `Duty` (`DutyKind`), `Solve`, `Trays`, `idle`, `binding`, `ruleA`, `refused` | 120 |
+| [`OperationView`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/OperationView.java) | What the Operation tab shows: `Phase`, `conditions`, `accepted`, `Stream`, `Duty` (`DutyKind`), `Solve`, `Trays`, `Wear` (tray fouling, wall left, rate, material), `idle`, `binding`, `ruleA`, `refused` | 145 |
 | [`PortAccounts`](../../../src/main/java/com/wormzjl/icheme/science/plant/port/PortAccounts.java) | The port arithmetic the column and the batch stills share: `CYCLE_TICKS`, `FENCE_TICKS`, `onIsland`, `onWorld`, `mass`, `less`, `idle`, `debit` (with `Overdrawn`), `keep` | 85 |
 
 ## Main flow
@@ -119,8 +119,10 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
 - **Conditions.** One list of `Condition.Active` per cycle and solve; the status line, the Operation tab and the
   column's alarm channels all read it. LIMITs: `FEED_SHORT`, `STEAM_SHORT`, `PRODUCT_FULL`, `COOLING_SHORT`,
   `HEATING_SHORT`, `PUMPAROUND_SHORT`, `FLOODING`, `NO_POWER`. OFF_TABLE: `OFF_TABLE` (a solve pending, its trigger as
-  text), `SOLVE_REFUSED`. TRIP: `CLOSURE`. NOTICEs: `SETPOINT_REFUSED`, `ADVISORY` (V3's advisory texts, at most
-  `MAX_ADVISORIES`), `FEED_WATER_ROUTED`, `UNMETERED`, `HIGH_LOAD`. `Condition.binding` takes the TRIP, else the LIMIT
+  text), `SOLVE_REFUSED`. TRIPs: `CLOSURE`, `FROZEN` (a product of the solve holds a crystal, `ColumnSolve.frozen`), `LEAKING`
+  (the unit's wall is through, [integrity.md](integrity.md)). NOTICEs: `SETPOINT_REFUSED`, `ADVISORY` (V3's advisory texts, at most
+  `MAX_ADVISORIES`), `FEED_WATER_ROUTED`, `UNMETERED`, `HIGH_LOAD`, `TRAYS_FOULED`, `THIN_WALL`, `WEEPING`. Fouled trays
+  divide both flood fractions by `Rooms.trays`, so HIGH LOAD and FLOODING come earlier. `Condition.binding` takes the TRIP, else the LIMIT
   with the lowest share (the first of equal ones). No limit asks a solve. Engine state, saved nowhere.
 - **Status words** (`ColumnStatus`): STARTING or NOT READY before a table; UPSET for a TRIP, LIMITED for a LIMIT, else
   RUNNING; `LIMITED: <word>, N %` (the binding condition's word: `condenser`, `reboiler`, `flooding`, `power`, …),
@@ -190,4 +192,4 @@ Numbers: [FORMATS.md](../FORMATS.md).
 - The sheet's feed water still goes its own way: an aqueous liquid in the feed is refused there, and its water joins V3
   as steam at the feed tray with no superheat test, where this solve lets water V3 does not admit follow the distillate.
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `756e2bc5e`, 2026-11-16.

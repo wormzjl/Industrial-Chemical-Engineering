@@ -181,6 +181,8 @@ final class ViewBuilder {
             if(registration.device().actuator())for(int i:ix.incident(nodeIndex)){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex&&!(pipe.control() instanceof FlowControl.Passive)){flow=q[i];devicePressureChange=result.endpointHeads()[i];var mode=result.endpointModes().get(i);
                 if(pipe.control() instanceof FlowControl.Valve&&ix.dependent().get(i))status+=" / CONTROL_CONFLICT: dependent control constraints; holding last accepted opening";
                 else if(pipe.control() instanceof FlowControl.Valve&&ix.standing().get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
+                // A control valve's trim (batch 2026-11-16-fouling-corrosion): ERODED TRIM, or TRIM FAILED while it stands open.
+                if(pipe.control() instanceof FlowControl.ControlValve){var trim=authority.health.trimStatus(id);if(!trim.isEmpty())status+=" / "+trim;}
                 if(pipe.control() instanceof FlowControl.Mover mover) {
                     String inlet=mode==FlowControl.Mode.INLET_WRONG_PHASE?inletReason(snapshot.graph(),i,result.advancedSeconds()):"";
                     // The share of its set flow a set-flow mover moved, on its suction's density; a machine has no set flow.
@@ -189,7 +191,7 @@ final class ViewBuilder {
                             :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
                     if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
                     if(!mover.liquid()){status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
-                    status=FluidWorldAuthority.withHealth(status,mover,authority.health.status(id));
+                    status=FluidWorldAuthority.withHealth(status,mover,authority.health.status(id),Integrity.constructed(registration));
                     // The limit the mover's law holds: a set-flow pump's setting is the rise for water and scales with its
                     // supply's density, the stream its supply walk ends at (owner decision D11, A2); a compressor's is the ratio over
                     // the suction pressure; a machine's reads the suction stream it draws (decision D4).
@@ -199,7 +201,7 @@ final class ViewBuilder {
                         status+=String.format(java.util.Locale.ROOT,mover.liquid()?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
                 }else{status+=" / "+mode;
                     // A steam turbine's health word (N4): WET EXHAUST, or FAILED first.
-                    if(pipe.control() instanceof FlowControl.Turbine)status=FluidWorldAuthority.withHealth(status,pipe.control(),authority.health.status(id));}}}
+                    if(pipe.control() instanceof FlowControl.Turbine)status=FluidWorldAuthority.withHealth(status,pipe.control(),authority.health.status(id),Integrity.constructed(registration));}}}
         }
         // A generator or a void in several islands (owner decision D17) reads the status of its owner (the lowest island) and
         // the net flow of all of them.
@@ -225,8 +227,15 @@ final class ViewBuilder {
         if(filter!=null&&filter.clogged())status="filter clogged / "+status;
         var closures=snapshot.lastResult().map(PassiveIntervalSolver.Result::rejectionReasons).orElse(Map.of());
         for(var mapping:mappings){Integer p=ix.pipes.get(mapping.pipeId());if(p==null)continue;var pipe=snapshot.graph().pipes().get(p);if(pipe.blockedDirections()!=0&&pipe.filter()==null)status=FluidWorldAuthority.solidClosure(mapping.pipeId(),closures)+" / "+status;}
-        // A vessel a blast breached (batch 2026-11-15-pollution-system, WP6b) stands open until a repair kit closes it.
-        if(registration.spec().breached())status="BREACHED: open to the air, use a repair kit / "+status;
+        // A vessel a blast or corrosion breached (batch 2026-11-15-pollution-system, WP6b) stands open until the Equipment
+        // Constructor repairs it; a heat side so failed stands closed (batch 2026-11-16-fouling-corrosion, WP2). The wall's own
+        // words (THIN WALL, WEEPING, LEAKING, WRECKED, and a heat side's FOULED, WP5) come first.
+        String wall=authority.integrity.status(id);
+        boolean heatSide=registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE;
+        if(registration.spec().breached()&&!heatSide)status="BREACHED: open to the air, repair with the Equipment Constructor / "+status;
+        else if(registration.spec().breached()&&wall.isEmpty())status="LEAKING: tube leak / "+status;
+        if(authority.integrity.fouled(id))status="FOULED / "+status;
+        if(!wall.isEmpty())status=wall+" / "+status;
         if(authority.registry.diagnostic(id)!=null)status=authority.registry.diagnostic(id)+" / "+status;
         var active=authority.topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
         if(authority.unboundBindings.contains(id))status="UNBOUND: saved inventory retained / "+status;
@@ -289,7 +298,18 @@ final class ViewBuilder {
         // The heat GUI (HEAT_GUI_PLAN.md section 1): the actuator, the unit's ports and its lines.
         if(heat!=null&&view.heat()!=null) {
             com.wormzjl.icheme.science.fluid.network.HeatLaw law=ownPipe==null?null:ownPipe.heat();
-            view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,authority.heatSource(islands)));
+            var source=authority.heatSource(islands);
+            view=view.withHeat(HeatPresentation.complete(view.heat(),id,heat,law,source));
+            // A heat side's fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): its Rf.
+            if(authority.integrity.kindOf(id)==Integrity.Kind.HEAT_SIDE)view=view.withHeat(view.heat().withFouling(authority.integrity.fouling(id)));
+            // The unit's UA (decision D16 of the same batch) as its side's last plan read it; a kettle's pool page, which plans
+            // none of its own, reads its tube side's from that side's island. Cached readings only: nothing is computed here.
+            var conductance=conductance(law);
+            if(heat.pool()&&heat.partner()!=0) {
+                var tubes=source.island(heat.partner());long tube=PhysicalFluidTopology.sideIdentity(heat.partner());
+                if(tubes!=null)for(var p:tubes.graph().pipes())if(p.id()==tube)conductance=conductance(p.heat());
+            }
+            if(conductance!=null)view=view.withHeat(view.heat().withConductance(conductance.ua(),conductance.clean()));
         }
         // A batch still's pot (batch 2026-11-09-batch-distiller, W3): its status and alarms on the status line, an electric one's power.
         if(registration.device().stillPot()) {
@@ -338,7 +358,25 @@ final class ViewBuilder {
             // Independent boundary islands can have different intervals: combine rates, expressed as one second of transport.
             view=view.withPipeInfo(PipePresentation.boundaryInflow(id,sources,authority.componentNames.size()),1);
         }
+        // The wall's Integrity group and a control valve's Trim (batch 2026-11-16-fouling-corrosion, WP4): reads of what the walls
+        // and the machine health last booked. Their words are on the status line already (above, and the valve's trim clause).
+        var integrity=wall(id,registration);var trim=trim(id,registration);
+        if(integrity!=null||trim!=null)view=view.withIntegrity(integrity,trim);
         return view;
+    }
+    /** Device {@code id}'s wall as its Integrity group shows it, or null for a device whose wall is not booked. */
+    FluidView.Integrity wall(long id,WorldTopologyLedger.Registration registration){
+        var w=authority.integrity.wall(id);if(w==null)return null;
+        double used=w.allowance()>0?Math.clamp(w.loss()/w.allowance(),0,1):0;
+        double life=w.rate()>0?w.life()/authority.model.time().factor():Double.NaN;
+        return new FluidView.Integrity(used,Double.isFinite(w.rate())?Math.max(0,w.rate()):0,w.mechanism()==null?"":w.mechanism().name(),finite(life),registration.spec().metallurgy().name());
+    }
+    /** Control valve {@code id}'s trim as its Trim group shows it, or null for a device that is no trimmed control valve. */
+    FluidView.Trim trim(long id,WorldTopologyLedger.Registration registration){
+        if(!MachineHealth.trim(registration))return null;
+        Double recorded=authority.health.health(id);double h=recorded==null?1:Math.clamp(recorded,0,1);
+        double rate=authority.health.rate(id),life=h>0&&rate>0?h/rate/authority.model.time().factor():Double.NaN;
+        return new FluidView.Trim(h,finite(life));
     }
     /**
      * Why a mover is refused (decision D6), as the solver's inlet check states it on the committed state the next slice
@@ -354,5 +392,10 @@ final class ViewBuilder {
     private String nodeLabel(long id) {
         var registration=authority.topology.active().get(id);if(registration==null)return "Junction "+id;
         var p=registration.device().position();return p.x()+", "+p.y()+", "+p.z();
+    }
+    /** The unit's UA a heat law carries as planned (D16): an exchanger side's or an air cooler's; null for any other law. */
+    private static com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Conductance conductance(com.wormzjl.icheme.science.fluid.network.HeatLaw law) {
+        return law instanceof com.wormzjl.icheme.science.fluid.network.HeatSide side?side.conductance()
+                :law instanceof com.wormzjl.icheme.science.fluid.network.AirCooled cooled?cooled.conductance():null;
     }
 }

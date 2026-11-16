@@ -118,8 +118,10 @@ final class SheetSizingTest {
             var out = at(345, 8e5, scaled(DRY_CRUDE, 300));
             var load = AirCoolerSizing.Load.of(in, out, DesignBasis.DEFAULT, THERMO, new MixtureViscosity.Workspace());
             var side = ExchangerRating.side(THERMO, in, Math.min(out.temperature(), HeatSides.AIR_TEMPERATURE), in.temperature());
-            var fans = side.curve().withFilms(HeatSides.airFilms(1));
-            var world = new AirCooled(load.needed(), HeatSides.AIR, 1, null, HeatControl.Limit.NONE);
+            // Crude is rated dirty at its design deposit (batch 2026-11-16-fouling-corrosion, WP5): the world's march behind the same deposit.
+            assertTrue(load.fouling() > 0);
+            var fans = side.curve().withFilms(HeatSides.airFilms(1, load.fouling()));
+            var world = new AirCooled(load.needed(), HeatSides.AIR.fouled(load.fouling()), 1, null, HeatControl.Limit.NONE);
             double passed = -world.heat(fans, side.inlet(), 1.1 * side.massFlow()), duty = 1.1 * (in.enthalpy() - out.enthalpy());
             assertEquals(duty, passed, .001 * duty);
             return null;
@@ -128,6 +130,65 @@ final class SheetSizingTest {
 
     private static ExchangerSizing.Load load(boolean kettle, FlowStream tubeIn, FlowStream tubeOut, FlowStream shellIn, FlowStream shellOut) {
         return ExchangerSizing.Load.of(kettle, tubeIn, tubeOut, shellIn, shellOut, DesignBasis.DEFAULT, THERMO, new MixtureViscosity.Workspace());
+    }
+
+    /**
+     * WP5 (plan section 12): each side is rated dirty at its service's design deposit. Crude cooled by water: the water side's
+     * 0.000175 m²K/W (half the TEMA tower water under 50 °C, D14; 0.00035 before) and the crude's own, in series with the films, so the surface grows by
+     * {@code ΣRf ∫dQ/ΔT}, about {@code 1 + U ΣRf} with U = 1000 W/m²K for two liquid films of 2000; the drops read the narrowed
+     * passages. Nitrogen heated by steam is a clean service: deposits 0, the surface the clean rating's, bit for bit.
+     */
+    @Test void aDirtyServiceSizesOnItsDesignDepositAndACleanOneStaysExact() {
+        on(() -> {
+            double flow = DesignBasis.DEFAULT.designFlow();
+            var crudeIn = at(450, 8e5, scaled(DRY_CRUDE, 300));
+            var crudeOut = at(360, 8e5, scaled(DRY_CRUDE, 300));
+            var waterIn = at(300, 8e5, pure(WATER, 20000));
+            // The water's outlet takes the crude's heat.
+            double taken = crudeIn.enthalpy() - crudeOut.enthalpy(), low = 300, high = 370;
+            for (int step = 0; step < 60; step++) {
+                double middle = (low + high) / 2;
+                if (at(middle, 8e5, pure(WATER, 20000)).enthalpy() - waterIn.enthalpy() < taken) low = middle;
+                else high = middle;
+            }
+            var waterOut = at(low, 8e5, pure(WATER, 20000));
+            assertTrue(low < 320, "the water stays a tower water under 50 °C: " + low);
+            var dirty = load(false, waterIn, waterOut, crudeIn, crudeOut);
+            assertTrue(Double.isFinite(dirty.needed()));
+            assertEquals(com.wormzjl.icheme.science.integrity.FoulingLaw.PLACEHOLDER_SHARE * com.wormzjl.icheme.science.integrity.FoulingLaw.WATER, dirty.tubeFouling(), 1e-15, "0.000175, half the anchor 0.00035 (D14)");
+            assertTrue(dirty.shellFouling() > 0 && dirty.shellFouling() <= .0009, "crude, at most half the residue's 0.0018 (D14): " + dirty.shellFouling());
+            var hot = ExchangerRating.side(THERMO, crudeIn, waterIn.temperature(), crudeIn.temperature()).at(flow);
+            var cold = ExchangerRating.side(THERMO, waterIn, waterIn.temperature(), crudeIn.temperature()).at(flow);
+            double duty = dirty.duty();
+            double clean = ExchangerRating.rate(hot, cold, duty).area();
+            assertEquals(ExchangerRating.rate(hot.fouled(dirty.shellFouling()), cold.fouled(dirty.tubeFouling()), duty).area(), dirty.needed(), 1e-9 * dirty.needed());
+            double sum = dirty.tubeFouling() + dirty.shellFouling(), ratio = dirty.needed() / clean;
+            assertEquals(1 + 1000 * sum, ratio, .05 * (1 + 1000 * sum), "1 + U ΣRf: clean " + clean + " m², dirty " + dirty.needed() + " m²");
+            var size = ExchangerSizing.auto(dirty).size();
+            assertNotNull(size);
+            assertTrue(ExchangerSizing.shellDrop(dirty, size) > SizedPassages.shell(size, dirty.shell()), "the shell's drop reads the narrowed passage");
+            assertTrue(size.surface() >= dirty.needed(), "the unit meets its duty dirty");
+            // Steam heating nitrogen: no deposit on either side, the clean rating exactly.
+            double saturated = 413., pressure = MODEL.saturationPressure(saturated);
+            var gasIn = at(300, 5e5, pure(NITROGEN, 100));
+            var gasOut = at(380, 5e5, pure(NITROGEN, 100));
+            var steamIn = at(saturated + 10, pressure, pure(WATER, 500));
+            var steamOut = at(saturated + 5, pressure, pure(WATER, 500));
+            var gas = load(false, gasIn, gasOut, steamIn, steamOut);
+            assertEquals(0, gas.tubeFouling());
+            assertEquals(0, gas.shellFouling());
+            var steam = ExchangerRating.side(THERMO, steamIn, gasIn.temperature(), steamIn.temperature()).at(flow);
+            var nitrogen = ExchangerRating.side(THERMO, gasIn, gasIn.temperature(), steamIn.temperature()).at(flow);
+            assertEquals(ExchangerRating.rate(steam, nitrogen, (gasOut.enthalpy() - gasIn.enthalpy()) * flow).area(), gas.needed());
+            // An air cooler on crude: rated behind its design deposit, a larger bare surface than clean.
+            var cooler = AirCoolerSizing.Load.of(crudeIn, crudeOut, DesignBasis.DEFAULT, THERMO, new MixtureViscosity.Workspace());
+            assertEquals(dirty.shellFouling(), cooler.fouling(), 1e-15);
+            var side = ExchangerRating.side(THERMO, crudeIn, HeatSides.AIR_TEMPERATURE, crudeIn.temperature()).at(flow);
+            double bare = ExchangerRating.rate(new ExchangerRating.Side(side.curve().withFilms(HeatSides.airFilms(1)), side.massFlow(), side.inlet()),
+                    ExchangerRating.Side.sink(HeatSides.AIR_TEMPERATURE), cooler.duty()).area();
+            assertTrue(cooler.needed() > bare, "dirty " + cooler.needed() + " m², clean " + bare + " m²");
+            return null;
+        });
     }
 
     @Test void eachSideReadsTheDropOfWhatItDoes() {

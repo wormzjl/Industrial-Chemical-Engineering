@@ -62,10 +62,29 @@ class EquipmentNetworkCodecTest {
         // One protocol for every registrar since icheme-1 (codebase review P3-22); the equipment payloads were equipment-23.
         // icheme-2: the pollution map's payloads joined (WP9).
         // icheme-3: the steam classes gained LP, first, so their ordinals moved; the conversion rules sync and the alarm beacon's payloads (batch 2026-11-15-fluid-interfaces).
-        assertEquals("icheme-3", NetworkProtocol.VERSION);
+        // icheme-5: the constructor's design carries its material of construction (batch 2026-11-16-fouling-corrosion, WP3).
+        assertEquals("icheme-5", NetworkProtocol.VERSION);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 
+    }
+
+    /** The removal group's Repair and its structure state (batch 2026-11-16-fouling-corrosion, WP4, still icheme-5). */
+    @Test void repairAndStructureStateRoundTrip() {
+        assertEquals("icheme-5", NetworkProtocol.VERSION);
+        var repair = new EquipmentNetwork.Repair(AT, AT.north(5), -778, 12);
+        assertEquals(repair, roundTrip(EquipmentNetwork.Repair.STREAM_CODEC, repair));
+        // RepairAnswer carries a Component, as DeconstructAnswer does: its codec needs the game's bootstrap, so it is not round-tripped here.
+        var ask = new EquipmentNetwork.StructureState(AT, AT.north(5), 4321, 5, -2, 1);
+        assertEquals(ask, roundTrip(EquipmentNetwork.StructureState.STREAM_CODEC, ask));
+        assertEquals(new VesselPlacement(5, -2, 1), ask.placement());
+        assertEquals(new VesselPlacement(VesselPlacement.MAX_FORWARD, -VesselPlacement.MAX_SHIFT, VesselPlacement.MAX_SHIFT),
+                new EquipmentNetwork.StructureState(AT, AT, 0, 99, -99, 99).placement(), "the server bounds the line it looks along");
+        assertEquals(1, new EquipmentNetwork.StructureState(AT, AT, 0, -3, 0, 0).placement().forward());
+        var state = new EquipmentNetwork.StructureStateAnswer(AT, AT.north(5), .72f, "LEAKING · FAILED");
+        assertEquals(state, roundTrip(EquipmentNetwork.StructureStateAnswer.STREAM_CODEC, state));
+        var none = new EquipmentNetwork.StructureStateAnswer(AT, AT, -1, "");
+        assertEquals(none, roundTrip(EquipmentNetwork.StructureStateAnswer.STREAM_CODEC, none));
     }
 
     @Test
@@ -79,6 +98,39 @@ class EquipmentNetworkCodecTest {
         var read=roundTrip(EquipmentNetwork.ConstructorPayload.STREAM_CODEC,wire);
         assertEquals(type,read.exchangerType());
         assertEquals(type,read.design(STORED).exchangerType());
+    }
+
+    /**
+     * The material of construction (protocol icheme-5, shape fields 13): it crosses on the draft, a stored design (Send to
+     * block) carries it in its shape and an Import lands it on the draft; a name the server does not have reads carbon steel.
+     */
+    @Test
+    void aMaterialCrossesWithTheDraftAndAStoredDesign() {
+        for (var material : com.wormzjl.icheme.science.integrity.Metallurgy.values()) {
+            var shape = EquipmentShape.drum(2, 4, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 2).withMaterial(material);
+            var sent = new SentDesign("V-1", "", 1, shape, null);
+            var stored = SentDesignTags.read(SentDesignTags.write(List.of(sent), List.of()));
+            assertTrue(stored.whole(), stored.repairs().toString());
+            assertEquals(List.of(sent), stored.designs());
+            var draft = Design.DEFAULT.landed(sent);
+            assertEquals(material, draft.material());
+            var read = roundTrip(ConstructorPayload.STREAM_CODEC, ConstructorPayload.of(AT, draft, Action.KEEP));
+            assertEquals(material, read.material());
+            assertEquals(material, read.design(STORED).material());
+            assertEquals(material, read.design(STORED).shape(net.minecraft.core.Direction.NORTH).material());
+        }
+        var column = SentDesign.column("T-1", STORED.column());
+        var nickel = new SentDesign(column.tag(), column.member(), 1, column.shape().withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY), column.column());
+        assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY, Design.DEFAULT.landed(nickel).material());
+        var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
+        try {
+            ConstructorPayload.STREAM_CODEC.encode(buffer, ConstructorPayload.of(AT, DRAFT, Action.KEEP));
+            buffer.writerIndex(buffer.writerIndex() - 1 - "CARBON_STEEL".length());
+            buffer.writeUtf("TITANIUM", 64);
+            assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL, ConstructorPayload.STREAM_CODEC.decode(buffer).material());
+        } finally {
+            buffer.release();
+        }
     }
 
     @Test

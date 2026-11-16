@@ -62,7 +62,21 @@ final class SizingFactsFile {
         var type = fields.name("type", UnitType.class, null);
         var hold = fields.optionalAmount("hold");
         var size = fields.optionalObject("size");
-        return new SizingFacts.UnitFacts(mode, type, size == null ? null : unitSize(size), hold, size == null ? new JsonObject() : size.rest, fields.rest);
+        var material = material(fields);
+        return new SizingFacts.UnitFacts(mode, type, size == null ? null : unitSize(size), hold, size == null ? new JsonObject() : size.rest, fields.rest, material);
+    }
+
+    /**
+     * The Materials tab's Manual choice (batch 2026-11-16-fouling-corrosion, WP6) by its {@code Metallurgy} name, never by ordinal; null
+     * for Auto. A name this build does not know, or a value that is no name, reads as Auto and stays beside the row as a later version's,
+     * so the file loses nothing.
+     */
+    private static com.wormzjl.icheme.science.integrity.@Nullable Metallurgy material(JsonFields fields) {
+        var value = fields.rest.get(SizingFacts.UnitFacts.MATERIAL);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) return null;
+        var material = com.wormzjl.icheme.science.integrity.Metallurgy.named(value.getAsString());
+        if (material != null) fields.rest.remove(SizingFacts.UnitFacts.MATERIAL);
+        return material;
     }
 
     private static SizingFacts.LineFacts lineFacts(JsonFields fields) {
@@ -123,6 +137,7 @@ final class SizingFactsFile {
             if (unit.type() != null) row.addProperty("type", unit.type().name());
             if (unit.hold() != null) row.addProperty("hold", unit.hold());
             if (unit.size() != null) row.add("size", JsonFields.beside(unitSize(unit.size()), unit.sizeUnknown()));
+            if (unit.material() != null) row.addProperty(SizingFacts.UnitFacts.MATERIAL, unit.material().name());
             units.add(id, JsonFields.beside(row, unit.unknown()));
         });
         json.add("units", units);

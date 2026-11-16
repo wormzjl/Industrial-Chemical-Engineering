@@ -70,9 +70,13 @@ class FluidCheckpointCodecTest {
      * idle at the vessel's temperature). */
     @Test void aHeatSideRoundTrips() {
         var charge=model.initialNitrogenCharge(1,298.15,101325,()->{});
-        var side=new HeatSide(57,new HeatCurve.Films(430,487,85),new double[]{298.15,300.5},.25,-12.5,0,1,
-                new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,320,280,.75),HeatControl.Limit.HIGHEST);
-        var cooled=new AirCooled(90,com.wormzjl.icheme.science.equipment.HeatSides.AIR,.4,new HeatControl(HeatControl.Target.DUTY,5e5,0,1),HeatControl.Limit.LOWEST);
+        // D16 of the same batch: the side's films record their deposit, and the side carries the unit's UA as last planned.
+        var side=new HeatSide(57,new HeatCurve.Films(430,487,85).fouled(3e-4),new double[]{298.15,300.5},.25,-12.5,0,1,
+                new HeatControl(HeatControl.Target.OUTLET_TEMPERATURE,320,280,.75),HeatControl.Limit.HIGHEST)
+                .withConductance(new com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Conductance(12_345.5,23_456.25));
+        // State format 52 (batch 2026-11-16-fouling-corrosion, WP5): the cooler's tubes behind a deposit, so its process films
+        // are not the default ones and must come back as saved.
+        var cooled=new AirCooled(90,com.wormzjl.icheme.science.equipment.HeatSides.AIR.fouled(.0012),.4,new HeatControl(HeatControl.Target.DUTY,5e5,0,1),HeatControl.Limit.LOWEST);
         var pool=new Pool(PhysicalFluidTopology.sideIdentity(21),PhysicalFluidTopology.sideIdentity(20),56,.15,.5,new double[]{340,338,336,334,332,330,328,326},12.5,.5);
         var heated=new PassiveNetwork.Reservoir(4,0,charge,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Reservoir(4,0,charge).inventory().withPool(pool));
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,charge),new PassiveNetwork.Reservoir(2,0,charge),new PassiveNetwork.Reservoir(3,0,charge),heated),
@@ -83,7 +87,13 @@ class FluidCheckpointCodecTest {
         var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state))),key->key.on(model));
         var loaded=FluidCheckpointCodec.decode(image,key->key.on(model));var pipes=loaded.islands().getFirst().snapshot().graph().pipes();
         assertEquals(side,pipes.getFirst().heat());assertNull(pipes.get(1).heat());
-        assertEquals(full.graph().pipes().getLast().heat(),pipes.getLast().heat());assertEquals(.4,((AirCooled)pipes.getLast().heat()).draught(),"no flow, the louvers and fans stand");
+        assertEquals(side.conductance(),((HeatSide)pipes.getFirst().heat()).conductance(),"the UA as last planned");
+        assertEquals(3e-4,((HeatSide)pipes.getFirst().heat()).films().deposit(),"the deposit the films hold");
+        assertEquals(full.graph().pipes().getLast().heat(),pipes.getLast().heat());
+        assertEquals(HeatCurve.Films.DEFAULT.fouled(.0012),((AirCooled)pipes.getLast().heat()).air().process(),"the deposit's films, as saved");
+        assertEquals(.0012,((AirCooled)pipes.getLast().heat()).air().process().deposit());
+        assertNull(((AirCooled)pipes.getLast().heat()).conductance(),"a step with no flow plans no UA");
+        assertEquals(.4,((AirCooled)pipes.getLast().heat()).draught(),"no flow, the louvers and fans stand");
         assertEquals(174,pipes.getFirst().sections().getFirst().channels());
         var planned=full.graph().reservoirs().getLast().inventory().pool();
         assertEquals(pool.shape(),planned.shape());assertEquals(0,planned.active(),"no read of its tubes: the pool moves no heat");
@@ -193,7 +203,9 @@ class FluidCheckpointCodecTest {
         // W1): the 52-entry list, 2,017 bytes at 47 entries and 2,040 at 52, each id's text-table length and index (3 bytes)
         // and a seventh mask byte on each of the eight sparse compositions; the list grows them, not the devices. Fluid facts
         // schema 27 (the same batch, W2): a spec's ambient flag (1 byte) on each of the five specs and one more field count.
-        assertTrue(perDevice<2_056,"the facts and events of five devices: "+bytes.length+" bytes with the basis, "+perDevice+" without the basis and the two full compositions, "+count+" entries");
+        // Schema 29 (batch 2026-11-16-fouling-corrosion, WP2): a spec's material of construction by name, 29 bytes for the
+        // five carbon steel devices (2,085 at 52 entries).
+        assertTrue(perDevice<2_090,"the facts and events of five devices: "+bytes.length+" bytes with the basis, "+perDevice+" without the basis and the two full compositions, "+count+" entries");
         assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length+1),0,key->key.on(model))).getMessage().contains("trailing bytes"));
         assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length/2),0,key->key.on(model)));
     }

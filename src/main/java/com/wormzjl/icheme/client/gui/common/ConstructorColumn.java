@@ -137,8 +137,22 @@ public final class ConstructorColumn {
     }
 
     /** The physical removal target; null means no structure crosses the placement line. */
-    public record Removal(@Nullable String target, String position, int cells, boolean waiting, @Nullable String message, boolean warn) {
-        public Removal(String target, String position, int cells, boolean waiting) { this(target, position, cells, waiting, null, false); }
+    /**
+     * The physical removal target; null means no structure crosses the placement line. {@code waiting}: a Deconstruct or
+     * Repair waits for its answer (both keys are off). {@code used}: the structure's worst used wall allowance, 0 to 1, or
+     * NaN while unknown or for no wall (batch 2026-11-16-fouling-corrosion, WP4); {@code words} its state words, empty for none.
+     */
+    public record Removal(@Nullable String target, String position, int cells, boolean waiting, @Nullable String message, boolean warn, double used, String words) {
+        public Removal(String target, String position, int cells, boolean waiting) { this(target, position, cells, waiting, null, false, Double.NaN, ""); }
+        public Removal(@Nullable String target, String position, int cells, boolean waiting, @Nullable String message, boolean warn) { this(target, position, cells, waiting, message, warn, Double.NaN, ""); }
+    }
+
+    /** The structure's state line: "Wall NN % left", then its words; null for neither. */
+    static @Nullable String state(Removal target, HeatControlColumn.Texts t) {
+        String wall = Double.isFinite(target.used()) && target.used() >= 0 ? t.get(KEY + "repair.wall", Math.round(100 * (1 - Math.clamp(target.used(), 0, 1)))) : null;
+        String words = target.words() == null || target.words().isEmpty() ? null : target.words();
+        if (wall == null) return words;
+        return words == null ? wall : wall + " · " + words;
     }
 
     public static Page withRemoval(Page page, Removal target, HeatControlColumn.Texts t) {
@@ -146,8 +160,13 @@ public final class ConstructorColumn {
         var removal = new ArrayList<Column.Row>();
         removal.add(new Column.Paragraph(target.target() == null ? t.get(KEY + "deconstruct.none") : target.target(), Palette.TEXT));
         if (target.target() != null) removal.add(new Column.Paragraph(t.get(KEY + "deconstruct.target", target.position(), target.cells()), Palette.MUTED));
-        removal.add(new Column.Buttons(List.of(new Column.Button("deconstruct", t.get(KEY + "deconstruct"),
-                target.target() != null && !target.waiting(), t.get(KEY + "deconstruct.hint")))));
+        boolean active = target.target() != null && !target.waiting();
+        removal.add(new Column.Buttons(List.of(
+                new Column.Button("repair", t.get(KEY + "repair"), active, t.get(KEY + "repair.hint")),
+                new Column.Button("deconstruct", t.get(KEY + "deconstruct"), active, t.get(KEY + "deconstruct.hint")))));
+        // The state follows the plant: after the keys, so they keep their slots when it arrives.
+        var state = target.target() == null ? null : state(target, t);
+        if (state != null) removal.add(new Column.Paragraph(state, target.words() != null && !target.words().isEmpty() ? Palette.WARN : Palette.TEXT));
         if (target.message() != null) removal.add(new Column.Paragraph(target.message(), target.warn() ? Palette.WARN : Palette.ACCENT));
         rows.add(new Column.Group(t.get(KEY + "group.deconstruct"), t.get(KEY + "deconstruct.hint"), removal));
         return new Page(rows, page.footer(), page.display());
@@ -339,7 +358,12 @@ public final class ConstructorColumn {
      * the reach of a column's import in blocks, and a machine's design point ({@link MachineDuty#NONE} for another form).
      */
     public record Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
-                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still) {
+                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still,
+                         com.wormzjl.icheme.science.integrity.Metallurgy material) {
+        /** The draft of carbon steel (shape fields 13). */
+        public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,@Nullable Imported column,Outlet outlet,int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank,MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still) {
+            this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,towerBank,duty,exchangerType,still,com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);
+        }
         /** The draft of a form with the default still options. */
         public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,@Nullable Imported column,Outlet outlet,int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank,MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
             this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,towerBank,duty,exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT);
@@ -423,6 +447,7 @@ public final class ConstructorColumn {
         if (form.designed() && UnitDesign.of(form.kind()).hasDuty()) rows.addAll(machine(in, t));
         else rows.add(new Column.Group(t.get(KEY + "group.size"), t.get(KEY + "shift"), size));
         if (form.kind() == EquipmentShape.Kind.BATCH_STILL) rows.addAll(still(in.still(), t));
+        if (EquipmentShape.hasMaterial(form.kind())) rows.add(material(in.material(), t));
         // A bottom outlet leaving through the skirt turns where the design lets it (a trickle-bed reactor's effluent).
         if (form.designed() && Integer.bitCount(in.outlet().allowed()) > 1) rows.add(outlet(in.outlet(), t));
         var place = new ArrayList<Column.Row>();
@@ -451,6 +476,27 @@ public final class ConstructorColumn {
             rows.set(beforePlacement,new Column.Group(group.title(),group.hint(),controls));
         }
         return new Page(rows,base.footer(),base.display());
+    }
+
+    /**
+     * The structure's material of construction (batch 2026-11-16-fouling-corrosion, WP3; shape fields 13; owner decision
+     * D2: one a structure): a selector of the four, each with its name and cost index (shown, not charged: owner O2), its
+     * hover the material's place. Only a form whose structure registers a fluid device, or a column (WP8), shows it; another
+     * builds carbon steel. Keys {@code material:<constant>}.
+     */
+    static Column.Group material(com.wormzjl.icheme.science.integrity.Metallurgy current, HeatControlColumn.Texts t) {
+        var choices = new ArrayList<Column.Button>();
+        for (var m : com.wormzjl.icheme.science.integrity.Metallurgy.values()) {
+            String id = m.name().toLowerCase(java.util.Locale.ROOT);
+            choices.add(position("material:" + m.name(), t.get(KEY + "material.choice", t.get("metallurgy." + id), cost(m.cost())), m == current,
+                    t.get(KEY + "material." + id + ".hint")));
+        }
+        return new Column.Group(t.get(KEY + "group.material"), t.get(KEY + "group.material.hint"), List.of(new Column.Buttons(choices)));
+    }
+
+    /** A cost index as the selector shows it: whole where it is whole (×15), else one decimal. */
+    static String cost(double index) {
+        return index == Math.rint(index) ? Long.toString((long) index) : UnitDesign.number(index);
     }
 
     /**

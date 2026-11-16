@@ -59,6 +59,13 @@
       { "anchor": "status" }
     ]
   },
+  "simulator.materials": {
+    "stops": [
+      { "anchor": "glass" },
+      { "anchor": "status" },
+      { "anchor": "tab/2" }
+    ]
+  },
   "simulator.basis": {
     "stops": [
       { "anchor": "package" },

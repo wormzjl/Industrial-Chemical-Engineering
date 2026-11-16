@@ -642,4 +642,143 @@ class MachineHealthTest {
         assertEquals(List.of(MachineHealth.Outcome.FULL, MachineHealth.Outcome.NOT_A_PUMP), outcome);
         assertEquals(0, taken[0], "no kit taken");
     }
+
+    // ---------------- batch 2026-11-16-fouling-corrosion, WP2: a control valve's trim ----------------
+
+    private static final long VALVE = 5, DRAIN = 6, VALVE_PIPE = 50;
+    private static final FlowControl.ControlValve OWN = new FlowControl.ControlValve(FlowControl.ValveSource.PRESSURE, 150000, null, 3);
+    /** The trim's drop, Pa, and the stream's density, kg/m³: 28 m/s through the trim. */
+    private static final double DROP = 4e5, DENSITY = 1000;
+
+    /** A pressure control valve from a water node into a void; its island's last slice is synthesized, nothing solves. */
+    private final class Trim {
+        final long[] epoch = {0};
+        final IslandCoordinator coordinator;
+        final WorldTopologyLedger ledger;
+        final MachineHealth health;
+        final PassiveIntervalSolver.Result result;
+        Integrity.Settings integrity = Integrity.Settings.DEFAULT;
+        Wear.Settings wear = Wear.Settings.DEFAULT;
+
+        /** {@code saved}: the health facts; {@code flow}: the valve's mass flow, kg/s; {@code sand}: the solid kilograms of 10 kg moved. */
+        Trim(Map<Long, Double> saved, FlowControl.ControlValve control, double flow, double sand) {
+            coordinator = new IslandCoordinator(new IslandCoordinator.Dispatcher() {
+                public int availableWorkers() {
+                    return 0;
+                }
+
+                public long nextRequestId() {
+                    return 1;
+                }
+
+                public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveJobs.FluidIslandCommand command) {
+                    throw new AssertionError("nothing solves here");
+                }
+
+                public void cancel(long request) {
+                    throw new AssertionError("nothing solves here");
+                }
+            }, changed -> {
+            }, () -> 0L, new IslandCoordinator.Settings(30_000_000_000L, 20_000_000_000L, 64, false, 100, CertificatePolicy.defaults()), () -> epoch[0]);
+            var empty = WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG);
+            var device = PhysicalFluidTopology.Device.builder(VALVE, new PhysicalFluidTopology.Position(EventPathWorld.DIM, 0, 64, 0), com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,
+                    PhysicalFluidTopology.Direction.EAST, FAT, OWN).build();
+            ledger = new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0, 1000, Map.of(VALVE, new WorldTopologyLedger.Registration(device, FluidDeviceSpec.water(EventPathWorld.CATALOG), 0)),
+                    List.of(), empty.constructed(), empty.destroyed(), empty.basis()));
+            ledger.health(saved);
+            var graph = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(VALVE, 0, water(3e5)), new PassiveNetwork.Reservoir(DRAIN, 0, water(101325), PassiveNetwork.NodeKind.VOID)),
+                    List.of(new PassiveNetwork.Pipe(VALVE_PIPE, 0, 1, FAT, control)));
+            int n = model.componentCount();
+            var solids = sand > 0 ? new com.wormzjl.icheme.science.fluid.state.SolidInventory(List.of(new com.wormzjl.icheme.science.fluid.state.SolidInventory.Population(
+                    new com.wormzjl.icheme.science.material.SolidMaterialCatalog.SolidMaterial("icheme:sand", "1", 2600, 800), new com.wormzjl.icheme.science.fluid.state.ParticleSize(".0001"), sand)))
+                    : com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY;
+            var moved = new PipeTransfer(VALVE_PIPE, new PipeTransfer.Stream(10, new double[3][n], new double[3], solids), new PipeTransfer.Stream(0, new double[3][n], new double[3]));
+            var row = new PassiveStepSolver.PipeObservation(VALVE_PIPE, 3e5 - DROP, 101325, 0, 0, DENSITY, 298.15, flow != 0, List.of(1.0), List.of(0.0), flow, DENSITY, List.of(),
+                    Double.NaN, false, Double.NaN, Double.NaN, Double.NaN, DROP, PassiveStepSolver.PipeObservation.Cavitation.NONE, Double.NaN);
+            result = new PassiveIntervalSolver.Result(graph, 5, new double[]{flow}, 1, 0, 0, List.of(), Map.of(), List.of(FlowControl.Mode.PASSIVE), new double[1], new double[]{flow},
+                    List.of(moved), List.of(row), Map.of());
+            coordinator.register(new IslandCoordinator.Snapshot(1, 0, graph, new IslandClock.Snapshot(0, 0, 0, 100), Optional.of(result), "READY"), model);
+            health = new MachineHealth(ledger, id -> id == VALVE ? 1L : null, coordinator, id -> id == VALVE, id -> id == VALVE ? OWN : null, () -> wear, () -> integrity);
+        }
+
+        Trim(double sand) {
+            this(Map.of(), OWN, 1, sand);
+        }
+
+        Map<Long, ShaftPlan> plans(FlowControl.ControlValve standing) {
+            var out = new HashMap<Long, ShaftPlan>();
+            health.plans(new PassiveNetwork(result.graph().reservoirs(), List.of(result.graph().pipes().getFirst().withControl(standing))), out);
+            return out;
+        }
+
+        MachineHealth.Outcome kit(boolean[] taken) {
+            MachineHealth.Outcome[] out = {null};
+            health.queue(new MachineHealth.Repair(VALVE, () -> taken[0] = true, o -> out[0] = o));
+            health.apply();
+            return out[0];
+        }
+    }
+
+    @Test
+    void aValveTrimWearsBySolidsAtItsDrop() {
+        assertTrue(MachineHealth.trim(new Trim(1).ledger.active().get(VALVE)));
+        var trim = new Trim(1);
+        trim.health.booked(1, 0, 100, trim.result);
+        // A tenth of the mass is sand at 28 m/s through the trim; the default year of 200 process hours (D12; 20 h before, ten
+        // times the rate).
+        double rate = com.wormzjl.icheme.science.integrity.ErosionLaw.trim(.1, com.wormzjl.icheme.science.integrity.ErosionLaw.trimSpeed(DROP, DENSITY), 200);
+        assertTrue(rate > 0);
+        assertEquals(rate, trim.health.rate(VALVE), 1e-15);
+        assertEquals(1 - rate * 100 / 20.0, trim.health.health(VALVE), 1e-12);
+        assertEquals(Wear.Fault.SOLIDS, trim.health.fault(VALVE));
+        // No solids: no record and no wear.
+        var clean = new Trim(0);
+        clean.health.booked(1, 0, 100, clean.result);
+        assertEquals(0, clean.health.rate(VALVE));
+        clean.health.flush();
+        assertTrue(clean.ledger.health().isEmpty(), "a valve that never wore keeps no record");
+        // erosion.enabled false, machines.wear.enabled false: no wear.
+        var off = new Trim(1);
+        off.integrity = new Integrity.Settings(true, 20, true, false, true, 10);
+        off.health.booked(1, 0, 100, off.result);
+        assertEquals(0, off.health.rate(VALVE));
+        var worn = new Trim(1);
+        worn.wear = new Wear.Settings(false, 1, 1);
+        worn.health.booked(1, 0, 100, worn.result);
+        assertEquals(0, worn.health.rate(VALVE));
+        // A shorter process year wears it faster: 10 h against the default 200 h (2 times the rate at the old default 20 h).
+        var fast = new Trim(1);
+        fast.integrity = new Integrity.Settings(true, 10, true, true, true, 10);
+        fast.health.booked(1, 0, 100, fast.result);
+        assertEquals(20 * rate, fast.health.rate(VALVE), 1e-15 + 1e-12 * rate);
+    }
+
+    @Test
+    void aFailedTrimStandsOpenAndAKitRestoresItOnlyWhileNoFlowPasses() {
+        var eroded = new Trim(Map.of(VALVE, .2), OWN, 0, 0);
+        assertEquals("ERODED TRIM", eroded.health.status(VALVE));
+        assertEquals("", new Trim(Map.of(VALVE, .3), OWN, 0, 0).health.status(VALVE));
+        // Failed: it stands open as an unconfigured valve, its settings kept.
+        var flowing = new Trim(Map.of(VALVE, 0.0), FlowControl.ControlValve.unconfigured(), 1, 0);
+        assertEquals("TRIM FAILED", flowing.health.status(VALVE));
+        assertEquals(Map.of(VALVE, ShaftPlan.trim(null)), flowing.plans(OWN));
+        // A kit while flow passes: refused, and kept.
+        boolean[] taken = {false};
+        assertEquals(MachineHealth.Outcome.NOT_IDLE, flowing.kit(taken));
+        assertFalse(taken[0]);
+        assertTrue(flowing.health.failed(VALVE));
+        // No flow: accepted, new again, and its own control back.
+        var idle = new Trim(Map.of(VALVE, 0.0), FlowControl.ControlValve.unconfigured(), 0, 0);
+        assertEquals(MachineHealth.Outcome.REPAIRED, idle.kit(taken));
+        assertTrue(taken[0]);
+        assertEquals(1, idle.health.health(VALVE));
+        assertEquals("", idle.health.status(VALVE));
+        assertEquals(Map.of(VALVE, ShaftPlan.trim(OWN)), idle.plans(FlowControl.ControlValve.unconfigured()));
+        assertEquals(Map.of(), idle.plans(OWN), "it stands as registered");
+        // machines.wear.enabled false: nothing fails, so nothing stands open.
+        var off = new Trim(Map.of(VALVE, 0.0), OWN, 0, 0);
+        off.wear = new Wear.Settings(false, 1, 1);
+        assertEquals(Map.of(), off.plans(OWN));
+        assertEquals("ERODED TRIM", off.health.status(VALVE), "worn, not failed");
+    }
 }

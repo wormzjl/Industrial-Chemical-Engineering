@@ -1342,6 +1342,21 @@ public final class PassiveStepSolver {
         double[] amounts=PortStreams.endMoles(model,start,port,volume);double total=0;for(double n:amounts)total+=n;
         return !(total>0&&PortStreams.endMass(model,start,port,volume)>0);
     }
+    /** A stream's curve and the specific enthalpy (J/kg) it arrives at. */
+    record KeptCurve(HeatCurve curve,double inlet) {}
+    /**
+     * The curve of {@code node}'s end of {@code pipe} without a flash march (D16): {@link #sideCurve} where it keeps one for
+     * the end's stream as it stands ({@link #curveKept}), else the curve it sampled last for that end, at the state it was
+     * sampled from; null where it keeps none or the end draws nothing.
+     */
+    @org.jetbrains.annotations.Nullable KeptCurve keptCurve(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node,Runnable checkpoint) {
+        if(curveKept(graph,pipe,node)) {
+            var curve=sideCurve(graph,pipe,node,checkpoint);
+            return curve==null?null:new KeptCurve(curve,PortStreams.endSpecificEnthalpy(model,graph.reservoirs().get(node).state(),pipe.portAt(node),pipe.volume()));
+        }
+        var kept=sideCurves.get(pipe.id());var old=kept==null?null:kept[node==pipe.first()?0:1];
+        return old==null||old.curve()==null?null:new KeptCurve(old.curve(),PortStreams.endSpecificEnthalpy(model,old.start(),old.port(),old.volume()));
+    }
     /**
      * {@code graph} with each local heat actuator planned for a step that starts with {@code flows} (kg/s per connection, in
      * {@code graph}'s order; null where none is known) on its donor's curve (batch 2026-10-27-heat-exchanger-design): a fired
@@ -1351,6 +1366,11 @@ public final class PassiveStepSolver {
      * inside the step's Newton; the next step plans it again from where this one ended. An exchanger side's bypass needs its
      * partner and is planned per slice ({@link #couple}), as is a convection coil's flue gas from another island's radiant
      * coil. {@code graph} itself where nothing changes.
+     *
+     * <p>Every air cooler's bank also takes its UA for the heat page (decision D16 of batch 2026-11-16-fouling-corrosion,
+     * {@link AirCooled#conductance(HeatCurve,double,double)}), on its planned air: a controlled one's on the curve it is
+     * planned on, another's on a curve kept without a flash ({@link #keptCurve}); none where the step starts with no flow.
+     * A reading within {@link ExchangerRelay.Conductance#DEADBAND} of the last stands.</p>
      */
     /** Whether {@code graph} has a heat actuator {@link #plan} sets from the step's start flows: a fired coil or a controlled air cooler. */
     static boolean plansHeat(PassiveNetwork graph) {
@@ -1362,17 +1382,31 @@ public final class PassiveStepSolver {
         Map<Long,Double> radiant=null;
         for(int e=0;e<graph.pipes().size();e++) {
             var pipe=graph.pipes().get(e);
-            if(!(pipe.heat() instanceof FiredCoil)&&!(pipe.heat() instanceof AirCooled cooled&&cooled.control()!=null))continue;
-            double flow=flows!=null&&flows.length==graph.pipes().size()?flows[e]:0;
+            if(!(pipe.heat() instanceof FiredCoil)&&!(pipe.heat() instanceof AirCooled))continue;
+            boolean known=flows!=null&&flows.length==graph.pipes().size();double flow=known?flows[e]:0;
+            if(pipe.heat() instanceof AirCooled cooled&&cooled.control()==null) {
+                // An air cooler without a controller plans nothing: only its UA, where the step's start flow is known.
+                if(!known)continue;
+                var read=flow==0?null:keptCurve(graph,pipe,flow>=0?pipe.first():pipe.second(),checkpoint);
+                var value=flow==0?null:read==null?cooled.conductance():cooled.conductance(read.curve(),read.inlet(),flow);
+                if(ExchangerRelay.Conductance.same(value,cooled.conductance()))continue;
+                if(pipes==null)pipes=new ArrayList<>(graph.pipes());
+                pipes.set(e,pipe.withHeat(cooled.withConductance(value)));
+                continue;
+            }
             int donor=flow>=0?pipe.first():pipe.second();var curve=sideCurve(graph,pipe,donor,checkpoint);
             double inlet=curve==null?0:PortStreams.endSpecificEnthalpy(model,graph.reservoirs().get(donor).state(),pipe.portAt(donor),pipe.volume());
             HeatLaw planned=switch(pipe.heat()) {
                 case FiredCoil coil->curve==null?coil.withFiring(1):coil.planned(curve,inlet,flow);
-                case AirCooled cooled->curve==null?cooled:cooled.planned(curve,inlet,flow);
+                case AirCooled cooled->curve==null?cooled.withConductance(null):cooled.planned(curve,inlet,flow).withConductance(null);
                 default->pipe.heat();
             };
+            if(planned instanceof AirCooled cooled&&curve!=null) {
+                var value=cooled.conductance(curve,inlet,flow);var last=((AirCooled)pipe.heat()).conductance();
+                planned=cooled.withConductance(ExchangerRelay.Conductance.same(value,last)?last:value);
+            }
             if(planned instanceof FiredCoil){if(radiant==null)radiant=new HashMap<>();radiant.put(pipe.id(),curve==null?0:planned.heat(curve,inlet,flow));}
-            if(planned.equals(pipe.heat()))continue;
+            if(planned.equals(pipe.heat())&&!(planned instanceof AirCooled cooled&&cooled.conductance()!=((AirCooled)pipe.heat()).conductance()))continue;
             if(pipes==null)pipes=new ArrayList<>(graph.pipes());
             pipes.set(e,pipe.withHeat(planned));
         }
@@ -1439,7 +1473,7 @@ public final class PassiveStepSolver {
                 side=side.withInputs(side.wall(),flow>0?around/flow:0,side.giveBack(),side.active(),side.limit());
             }
             double[] flat=new double[side.cells()];Arrays.fill(flat,start.temperature());
-            var planned=side.withInputs(flat,side.bypass(),0,1);
+            var planned=side.withInputs(flat,side.bypass(),0,1).withConductance(null);
             double regulated=Double.NaN;
             if(PortStreams.endMass(model,start,port,pipe.volume())>0) {
                 double own=PortStreams.endSpecificEnthalpy(model,start,port,pipe.volume()),low=start.temperature(),high=low;
@@ -1483,7 +1517,8 @@ public final class PassiveStepSolver {
                     pipes.set(valve,driven.withControl(new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,valveLaw.targetPressure(),Math.max(0,target),valveLaw.volumeTarget(),valveLaw.sensor(),valveLaw.revision())));
                 }
             }
-            if(planned.equals(law))continue;
+            // The unit's UA (D16) is a reading: one within its deadband of the last stands, so a steady plant keeps its graph.
+            if(planned.equals(law)&&ExchangerRelay.Conductance.same(planned.conductance(),law.conductance()))continue;
             if(pipes==null)pipes=new ArrayList<>(graph.pipes());
             pipes.set(e,pipe.withHeat(planned));
         }

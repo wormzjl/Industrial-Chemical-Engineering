@@ -57,6 +57,8 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue CREATE_STRESS_PER_FE;
     private static final ModConfigSpec.BooleanValue WEAR_ENABLED;
     private static final ModConfigSpec.DoubleValue WEAR_CAVITATION_HOURS, WEAR_DRY_MINUTES;
+    private static final ModConfigSpec.BooleanValue CORROSION_ENABLED, CORROSION_EXTERNAL, EROSION_ENABLED, FOULING_ENABLED;
+    private static final ModConfigSpec.DoubleValue CORROSION_YEAR_HOURS, FOULING_TIME_HOURS;
     private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED, POLLUTION_EFFECTS, POLLUTION_PARTICLES;
     private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF;
     private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
@@ -198,6 +200,25 @@ public final class IChemE {
                         "A dry screw taking liquid spends the same life. The default 40 min is 10 min of play at the default factor 4.")
                 .defineInRange("dryProcessMinutes", com.wormzjl.icheme.science.machine.Wear.DRY_PROCESS_MINUTES, 0.01, 1e6);
         builder.pop();
+        builder.pop();
+        // The walls of constructed equipment (batch 2026-11-16-fouling-corrosion, WP2; plan section 17).
+        builder.push("corrosion");
+        CORROSION_ENABLED = builder.comment("Whether the walls of constructed equipment corrode and a wall that is through fails: a vessel stands open, a heat side's passage closes, a machine fails. False: no wall corrodes and none fails from it.")
+                .define("enabled", true);
+        CORROSION_YEAR_HOURS = builder.comment("Process hours in one corrosion year: a wall losing 1 mm/y loses 1 mm in this many process hours. The default 200 h is 50 h of play at the default fluid.timeScale 4.")
+                .defineInRange("yearProcessHours", com.wormzjl.icheme.runtime.fluid.Integrity.Settings.DEFAULT.yearProcessHours(), 0.01, 1e6);
+        CORROSION_EXTERNAL = builder.comment("Whether corrosive air around a structure adds to its walls' corrosion (needs pollution.enabled).")
+                .define("external", true);
+        builder.pop();
+        builder.push("erosion");
+        EROSION_ENABLED = builder.comment("Whether particles in a stream erode heat-side walls, control valve trims and pumps.")
+                .define("enabled", true);
+        builder.pop();
+        builder.push("fouling");
+        FOULING_ENABLED = builder.comment("Whether heat sides foul while they flow, towards the deposit their fluid sets.")
+                .define("enabled", true);
+        FOULING_TIME_HOURS = builder.comment("Process hours of the deposit's time constant: a clean side reaches 63 % of its asymptotic deposit in this many process hours of flow. The default 100 h is 25 h of play at the default fluid.timeScale 4.")
+                .defineInRange("asymptoteProcessHours", com.wormzjl.icheme.runtime.fluid.Integrity.Settings.DEFAULT.asymptoteProcessHours(), 0.01, 1e6);
         builder.pop();
         // Pollution (batch 2026-11-15-pollution-system, WP3): the field of released gases and particulate, per dimension.
         builder.push("pollution");
@@ -349,6 +370,13 @@ public final class IChemE {
     public static com.wormzjl.icheme.science.machine.Wear.Settings wearSettings() {
         if (!CONFIG_SPEC.isLoaded()) return com.wormzjl.icheme.science.machine.Wear.Settings.DEFAULT;
         return new com.wormzjl.icheme.science.machine.Wear.Settings(WEAR_ENABLED.get(), WEAR_CAVITATION_HOURS.get(), WEAR_DRY_MINUTES.get());
+    }
+
+    /** The walls' settings (batch 2026-11-16-fouling-corrosion, WP2; the defaults before the config loads). */
+    public static com.wormzjl.icheme.runtime.fluid.Integrity.Settings integritySettings() {
+        if (!CONFIG_SPEC.isLoaded()) return com.wormzjl.icheme.runtime.fluid.Integrity.Settings.DEFAULT;
+        return new com.wormzjl.icheme.runtime.fluid.Integrity.Settings(CORROSION_ENABLED.get(), CORROSION_YEAR_HOURS.get(), CORROSION_EXTERNAL.get(),
+                EROSION_ENABLED.get(), FOULING_ENABLED.get(), FOULING_TIME_HOURS.get());
     }
 
     /** Whether pollution runs (batch 2026-11-15-pollution-system, WP3; true before the config loads). */

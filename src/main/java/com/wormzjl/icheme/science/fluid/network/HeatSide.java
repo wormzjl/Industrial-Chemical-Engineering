@@ -20,13 +20,21 @@ import org.jetbrains.annotations.Nullable;
  * side stopped and so moved none: the sit-out of plan section 5.2). Its built-in {@code control} (W4, plan section 6; null
  * for none) is a fact; it plans the bypass with the wall at each slice start ({@link ExchangerRelay#plan}), and {@code limit}
  * records why the planned bypass stands where it does. Only the facts are the connection's identity ({@link #shape}).
+ *
+ * <p>{@code conductance} (decision D16 of batch 2026-11-16-fouling-corrosion) is the unit's overall UA as the side's last
+ * plan read it ({@link ExchangerRelay#conductance}), null where none was planned: a reading for the heat page, not an input
+ * to the side's equations, so it takes no part in {@link #equals}. The slice inputs carry it ({@link #withInputs}).</p>
  */
-public record HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack,long partner,double active,@Nullable HeatControl control,HeatControl.Limit limit,HeatRouting routing) implements HeatLaw {
+public record HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack,long partner,double active,@Nullable HeatControl control,HeatControl.Limit limit,HeatRouting routing,@Nullable ExchangerRelay.Conductance conductance) implements HeatLaw {
+    public HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack,long partner,double active,@Nullable HeatControl control,HeatControl.Limit limit,HeatRouting routing) {
+        this(area,films,wall,bypass,giveBack,partner,active,control,limit,routing,null);
+    }
     public HeatSide(double area,HeatCurve.Films films,double[] wall,double bypass,double giveBack,long partner,double active,@Nullable HeatControl control,HeatControl.Limit limit) {
         this(area,films,wall,bypass,giveBack,partner,active,control,limit,HeatRouting.SERIES);
     }
     public HeatSide {
         Objects.requireNonNull(films);Objects.requireNonNull(limit);Objects.requireNonNull(routing);routing.validate(wall.length);
+        if(films.outer()!=null)throw new IllegalArgumentException("A heat side's films have no outer side (an air cooler's law has)");
         if(!(area>0)||!Double.isFinite(area)||wall.length<1||!(bypass>=0&&bypass<=1)||!Double.isFinite(giveBack)||!(active>=0&&active<=1))throw new IllegalArgumentException("Invalid heat side");
         wall=wall.clone();
         for(double temperature:wall)if(!(temperature>0)||!Double.isFinite(temperature))throw new IllegalArgumentException("Invalid wall temperature");
@@ -52,7 +60,9 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
     /** This side with other slice inputs, its controller's limit as it was. */
     public HeatSide withInputs(double[] wall,double bypass,double giveBack,double active){return withInputs(wall,bypass,giveBack,active,limit);}
     /** This side with other slice inputs. */
-    public HeatSide withInputs(double[] wall,double bypass,double giveBack,double active,HeatControl.Limit why){return new HeatSide(area,films,wall,bypass,giveBack,partner,active,control,why,routing);}
+    public HeatSide withInputs(double[] wall,double bypass,double giveBack,double active,HeatControl.Limit why){return new HeatSide(area,films,wall,bypass,giveBack,partner,active,control,why,routing,conductance);}
+    /** This side with the unit's UA as planned, {@code value} (null for none). */
+    public HeatSide withConductance(@Nullable ExchangerRelay.Conductance value){return value==conductance?this:new HeatSide(area,films,wall,bypass,giveBack,partner,active,control,limit,routing,value);}
 
     /**
      * The heat (W) the stream takes up in passing, positive when it is heated: the share {@code 1 - bypass} of
@@ -78,5 +88,5 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
                 &&Objects.equals(control,side.control)&&limit==side.limit&&routing==side.routing;
     }
     @Override public int hashCode(){return 31*Objects.hash(area,films,bypass,giveBack,partner,active,control,limit,routing)+Arrays.hashCode(wall);}
-    @Override public String toString(){return "HeatSide[area="+area+", films="+films+", wall="+Arrays.toString(wall)+", bypass="+bypass+", giveBack="+giveBack+", partner="+partner+", active="+active+", control="+control+", limit="+limit+"]";}
+    @Override public String toString(){return "HeatSide[area="+area+", films="+films+", wall="+Arrays.toString(wall)+", bypass="+bypass+", giveBack="+giveBack+", partner="+partner+", active="+active+", control="+control+", limit="+limit+", conductance="+conductance+"]";}
 }

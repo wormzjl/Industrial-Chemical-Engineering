@@ -21,20 +21,20 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | Class | Role | Lines |
 |---|---|---|
 | **Screens** | | |
-| `EquipmentConstructorScreen` | `screens/`: the door at the left (`ConstructorColumn`, a `KitDoor`), the world and the ghost beside it; pages CHOOSE, DESIGN, TEMPLATES, IMPORTS, CONNECTIONS, NOZZLES, PAINT; `listImports`, `listed`, `answered`, `land`; sends the draft on `removed` when changed and with Build | 1123 |
-| `VesselScreen` | `screens/`: a column's or unit's datasheet on a door, title strip with the structure's name (an entry for a player who may name it), Size group and motion switch (`DialogColumns.vessel`); static `sheet(vessel)` builds the glass's `DialogColumns.Sheet` | 332 |
-| `AssemblyScreen` | `screens/inventory/`: a column's assembly screen on `AssemblyColumn` and `OperationColumn`: the block drawing and parts list, Check parts, Open unit, Datasheet; the name entry (`nameBox`, `saveName`); the Operation page (`operationView`, `entry`, `fits`, `glassView`) | 675 |
+| `EquipmentConstructorScreen` | `screens/`: the door at the left (`ConstructorColumn`, a `KitDoor`), the world and the ghost beside it; pages CHOOSE, DESIGN, TEMPLATES, IMPORTS, CONNECTIONS, NOZZLES, PAINT; `listImports`, `listed`, `answered`, `land`; the Repair key and the structure's state line (asked when the target changes and after a repair's answer, [integrity.md](integrity.md)); sends the draft on `removed` when changed and with Build | 1197 |
+| `VesselScreen` | `screens/`: a column's or unit's datasheet on a door, title strip with the structure's name (an entry for a player who may name it), Size group and motion switch (`DialogColumns.vessel`); static `sheet(vessel)` builds the glass's `DialogColumns.Sheet`, a fluid device's material line (`DialogColumns.material`) among its notes | 334 |
+| `AssemblyScreen` | `screens/inventory/`: a column's assembly screen on `AssemblyColumn` and `OperationColumn`: the block drawing and parts list, Check parts, Open unit, Datasheet; the name entry (`nameBox`, `saveName`); the Operation page (`operationView`, `entry`, `fits`, `glassView`) | 685 |
 | `ColumnTemplates` | `screens/inventory/`: the client's templates: `listed`, `streams`, `saveColumn`, `saveStream`, `deleteColumn`, `load` (the constructor's Templates page), `choices` | 157 |
 | `V3EditorDraft` | `screens/inventory/`: keyed text over a `V3ColumnInput` with exact values (`assemble`, `unchanged`), `loadColumn`, `loadColumnAtDesignFeed`; nested `ColumnInputDraft`, `ColumnScalarDraft`, `SideDrawDraft`, `SteamFeedDraft`, `PumparoundDraft` | 426 |
 | `V3CompositionDraft` | `screens/inventory/`: binds a `RelativeComposition` to the source `V3ColumnInput` | 30 |
 | `V3ClientPresets` | `screens/inventory/`: bundled and custom JSON libraries (`Column` with its `V3ColumnTemplate`, `Mixture` with optional solids and conditions, `streamJson`), `Library` with its `Problem`s; `MAX_FILES`, `MAX_BYTES` | 173 |
-| `ProcessSimulatorScreen` | `screens/inventory/`: the process simulator's screen ([process-simulator.md](process-simulator.md)) | 1149 |
+| `ProcessSimulatorScreen` | `screens/inventory/`: the process simulator's screen ([process-simulator.md](process-simulator.md)) | 1163 |
 | `SimulatorBlockHost` | `screens/inventory/`: a simulator screen open on a block: the runner and the block's store ([process-simulator.md](process-simulator.md)) | 152 |
 | **Builders (`common`, no Minecraft classes)** | | |
-| `ConstructorColumn` | The constructor's door, `PANEL` wide: the pages' rows (`choose`, `design`, `templates`, `imports`, `connections`, `nozzles`, `paint`), each `Page` with its footer; `listed` (an Import line), `label`, `title` (cut to `TITLE`), `withRemoval` (the Deconstruction group) | 655 |
+| `ConstructorColumn` | The constructor's door, `PANEL` wide: the pages' rows (`choose`, `design` (with `material`, the Material selector), `templates`, `imports`, `connections`, `nozzles`, `paint`), each `Page` with its footer; `listed` (an Import line), `label`, `title` (cut to `TITLE`), `withRemoval` (the Deconstruction group) | 701 |
 | `AssemblyColumn` | The assembly door: Structure and Operation tabs, the status once, Check with Check parts and its summary, Selected with Open unit; `footerButtons`; the glass split between the block and the parts list (`split`, `DRAWING_W`, `DRAWING_H`) | 291 |
 | `AssemblyDiagram` | A column assembly's parts (one per blueprint slot) and its ports in a fixed order (slot, role, ordinal, partner), which the laying tool's marks and port colours read | 182 |
-| `OperationColumn` | The Operation page and the DCS column page: `HEIGHT`, `Units`, `Input`; `rows`, `fields`, `values`, `parse`, `applies`, `footerButtons`, `status`; the glass's `tables` (`ports`, `duties`, `solve`, `conditions`, `absolutes`), `glass`, `height` | 465 |
+| `OperationColumn` | The Operation page and the DCS column page: `HEIGHT`, `Units`, `Input`; `rows`, `fields`, `values`, `parse`, `applies`, `footerButtons` (Close, Clean where the column has a unit, Apply), `status`; the glass's `tables` (`ports`, `duties`, `solve`, `wear`, `conditions`, `absolutes`), `glass`, `height` | 493 |
 | `CalculatorColumn` | The column door (the simulator's): `Page` (COLUMN, FEED, RESULTS, EQUIPMENT), `View`, `Metric`; `column`, `feed`, `results`, `equipment` (condenser kind and counts, kettle, coolers, `pumpDuties`, `PumpDuty`), `status`, `footer`, `door`, the frame (`width`, `height`, `split`), the drawing (`pitch`, `drawingHeight`, `drawing`, `Hit`) | 1191 |
 
 `AssemblyBlock` (the built column's drawing, `client/gui/flowsheet/`) is in [process-simulator.md](process-simulator.md) and [assembly-service.md](assembly-service.md); `ColumnDiagram` and `TitleStrip` in [client-kit.md](client-kit.md).
@@ -44,14 +44,14 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 **Constructor**:
 
 1. The constructor block opens the screen on the client (`EquipmentClient.openConstructor`); the server hears nothing until a save, an import or a build.
-2. CHOOSE (categories and kinds; the current kind latched and still acting) leads to DESIGN (sizes as `Setting` steppers, Shift steps by five; a column's diameter, trays and feed are its import's, shown, not stepped; nozzles; its `ColumnDiagram`). Each page's rows come from `ConstructorColumn`; the widgets rebuild only when the page's signature changes. The draft's vessel drives the ghost and the message display (`EquipmentGhost.blockedCount`, [client-rendering.md](client-rendering.md)).
+2. CHOOSE (categories and kinds; the current kind latched and still acting) leads to DESIGN (sizes as `Setting` steppers, Shift steps by five; a column's diameter, trays and feed are its import's, shown, not stepped; the Material selector, four latched keys each with its cost index, for a form whose structure registers a fluid device (`EquipmentShape.fluidDevice(kind)`), kept across pages and form switches; nozzles; its `ColumnDiagram`). Each page's rows come from `ConstructorColumn`; the widgets rebuild only when the page's signature changes. The draft's vessel drives the ghost and the message display (`EquipmentGhost.blockedCount`, [client-rendering.md](client-rendering.md)).
 3. Import sends the draft (`KEEP`), then `EquipmentNetwork.sendImportList`; the IMPORTS page lists the answer (`listed`), or the status says why there is none. A press sends the draft and `sendImportChoice(position, index, sent, label)` and returns to DESIGN; `answered` loads the server's design whole (form, sizes, type, name) or shows the refusal until the next edit. Templates sends the draft, then a template payload (`ColumnTemplates.load`, an air cooler and standard pumps).
 4. Build sends the design with `BUILD` and closes; it is active only where the design builds (a column with its import, no clash, no unplaced side nozzle). The server answers in chat ([equipment-structure.md](equipment-structure.md)).
 5. The Deconstruction group (`withRemoval`) names the nearest structure on the constructor's line, followed once a second; Deconstruct sends its origin, shape and a request id, and the screen accepts only its own answer.
 
 **Using a cell** is decided on the server: a column (or a unit its report holds) opens the assembly screen; a structure with a fluid device opens its fluid screen with the Datasheet page; any other unit gets its datasheet (`AssemblyNetwork.datasheet`, opened by `EquipmentClient.openVessel` as `VesselScreen`).
 
-**Assembly Operation page**: on a complete column whose view carries an operation, the door lays out `OperationColumn.rows`; set points are entries kept until Apply; a command is sent once and shown as queued until the answer; the glass holds the port, duty, solve, conditions and set-feed tables in the client's units; without an operation the tab shows a note.
+**Assembly Operation page**: on a complete column whose view carries an operation, the door lays out `OperationColumn.rows`; set points are entries kept until Apply; a command is sent once and shown as queued until the answer; the glass holds the port, duty, solve, integrity (the column's wear), conditions and set-feed tables in the client's units; the footer reads Close, Clean (while the column stands) and Apply; without an operation the tab shows a note.
 
 ## Contracts
 
@@ -114,4 +114,4 @@ The ghost, the blocked-cells line, Enter in a name entry and the Operation page'
 - A focused entry on the assembly screen takes its keys first (`ProcessUi.textKeyPressed`), so a typed E does not close it.
 - The Operation page's glass scrolls: at the design size it does not fit one view once a column has tray data or conditions.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

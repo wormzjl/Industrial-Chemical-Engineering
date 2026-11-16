@@ -42,10 +42,10 @@ class HeatSideNetworkTest {
         double expected=dt*side.heat(curve,source.enthalpy()/source.mass(),flow);
         assertTrue(expected<0,"cooled");
         assertEquals(expected,heat(result),1e-9*Math.abs(expected));
-        // Liquid film 2000 W/m2K on 2 m2 against the stream's capacity: the outlet stands where the exponential puts it.
+        // Warm water's liquid film, 5000 W/m2K (D15), on 2 m2 against the stream's capacity: the outlet stands where the exponential puts it.
         double out=curve.temperatureAt(source.enthalpy()/source.mass()+expected/(dt*flow));
         double cp=(curve.enthalpy(curve.knots()-1)-curve.enthalpy(0))/(curve.temperature(curve.knots()-1)-curve.temperature(0));
-        assertEquals(300+50*Math.exp(-2000*2/(flow*cp)),out,.05);
+        assertEquals(300+50*Math.exp(-5000*2/(flow*cp)),out,.05);
     }
     /** Liquid water at 10 bar and 420 K, 33 K below its saturation, heated on 22 m2 of wall at 540 K: the junction it reaches
      * boils. Over a 2 s step the junction's seed is laid out from the heated stream, and the step converges onto a two-phase

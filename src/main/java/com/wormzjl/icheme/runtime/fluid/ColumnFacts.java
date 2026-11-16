@@ -16,7 +16,7 @@ import java.util.*;
 
 /**
  * The running columns' facts section (schema 6, batch 2026-10-28-column-operation): one field, the column units by
- * identity; a world written before schema 6 has none. A unit's own record grows inside it (schemas 8, 9 and 21). Its
+ * identity; a world written before schema 6 has none. A unit's own record grows inside it (schemas 8, 9, 21 and 29). Its
  * setpoints and accounts are records the topology state's column states share, and stay in {@link FluidFacts}.
  */
 final class ColumnFacts implements FactsSection {
@@ -31,7 +31,8 @@ final class ColumnFacts implements FactsSection {
     /**
      * A column unit (schema 6, batch 2026-10-28-column-operation): its identity, origin, run switch, setpoints, stations
      * (each a port by name, which one, its port device, its valve, its account and its solids) and totals; its further
-     * condenser water sides (schema 8), its air condenser surface (schema 9) and its utility sides (schema 21).
+     * condenser water sides (schema 8), its air condenser surface (schema 9), its utility sides and members (schema 21), its
+     * tray fouling, wall loss and material of construction (schema 29, WP8).
      */
     private static void column(Fields f,ColumnUnit u) {
         var s=u.setpoints();var t=u.totals();
@@ -47,7 +48,9 @@ final class ColumnFacts implements FactsSection {
                 // Schema 21 (W4): the utility sides of the reboiler and of each pumparound's cooler.
                 .record(q->q.list(u.utilities().reboiler(),(p,side)->p.count(side)).list(u.utilities().pumparounds(),(p,sides)->p.list(sides,(e,side)->e.count(side))))
                 // Schema 21 (W5): the powered members, the fan sides, the reflux pump's movers and each pumparound pump's.
-                .record(q->q.list(u.members().fans(),(p,m)->p.count(m)).list(u.members().reflux(),(p,m)->p.count(m)).list(u.members().pumparounds(),(p,ms)->p.list(ms,(e,m)->e.count(m))));
+                .record(q->q.list(u.members().fans(),(p,m)->p.count(m)).list(u.members().reflux(),(p,m)->p.count(m)).list(u.members().pumparounds(),(p,ms)->p.list(ms,(e,m)->e.count(m))))
+                // Schema 29 (WP8): the trays' fouling (0 to 1), the wall lost (mm) and the material of construction, by name.
+                .f64(u.trayFouling()).f64(u.wallLoss()).name(u.material());
     }
     private static ColumnUnit column(Record f) {
         long id=f.count(0);var master=position(f);boolean running=f.bool(false);
@@ -73,7 +76,13 @@ final class ColumnFacts implements FactsSection {
         // A unit written before schema 21 has no members: none draws power until its next Start.
         var members=f.record(ColumnUnit.Members.NONE,q->{var fans=q.list(List.<Long>of(),p->p.count(0));var reflux=q.list(List.<Long>of(),p->p.count(0));var pumparounds=q.list(List.<List<Long>>of(),p->p.list(List.<Long>of(),s->s.count(0)));
             return valid(q,"column members",()->new ColumnUnit.Members(fans,reflux,pumparounds));});
+        // A unit written before schema 29 (WP8) is a clean, new carbon steel column. A saved material is read through the
+        // material's own aliases (Metallurgy.byName); a name it does not know refuses the world, as a device spec's does.
+        double fouling=f.f64(0),loss=f.f64(0);String named=f.text(null);var material=com.wormzjl.icheme.science.integrity.Metallurgy.byName(named);
+        if(named!=null&&com.wormzjl.icheme.science.integrity.Metallurgy.named(named)==null)throw f.invalid("unknown Metallurgy "+named);
+        if(!(fouling>=0&&fouling<=1))throw f.invalid("column tray fouling "+fouling);
+        if(!(loss>=0&&loss<=WorldTopologyLedger.IntegrityFacts.MAX_LOSS))throw f.invalid("column wall loss "+loss);
         required(master,f,"column origin");required(setpoints,f,"column setpoints");required(totals,f,"column totals");
-        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,null,leaving,air,utilities,members));
+        return valid(f,"column unit "+id,()->new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,null,leaving,air,utilities,members,fouling,loss,material));
     }
 }
