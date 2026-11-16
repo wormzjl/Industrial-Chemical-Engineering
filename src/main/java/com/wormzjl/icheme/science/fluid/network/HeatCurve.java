@@ -61,6 +61,16 @@ public final class HeatCurve {
             if(x<1)return twoPhase+(gas-twoPhase)*(x-GAS_FROM)/(1-GAS_FROM);
             return gas;
         }
+        /**
+         * These films behind a fouling deposit of resistance {@code rf} (m²K/W) in series (batch 2026-11-16-fouling-corrosion,
+         * plan section 3.2): each {@code h/(1 + h rf)}. Itself, the same instance, at {@code rf} 0, so a clean side stays bit
+         * for bit what it was.
+         */
+        public Films fouled(double rf) {
+            if(rf==0)return this;
+            if(!(rf>0)||!Double.isFinite(rf))throw new IllegalArgumentException("Invalid fouling resistance "+rf);
+            return new Films(liquid/(1+liquid*rf),twoPhase/(1+twoPhase*rf),gas/(1+gas*rf));
+        }
     }
 
     public int knots(){return h.length;}

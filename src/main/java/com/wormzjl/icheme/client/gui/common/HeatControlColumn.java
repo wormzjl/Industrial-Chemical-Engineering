@@ -20,7 +20,8 @@ import org.jetbrains.annotations.Nullable;
  * Minecraft classes, so the gates and the render tool build the same column the screen draws.
  * <p>
  * Widget keys: {@code side:0} and {@code side:1} (the side selector; the other side opens its own screen),
- * {@code power:off} and {@code power:on} (the switch), {@code check_lines} (an exchanger's lines, W8), and the fields'
+ * {@code power:off} and {@code power:on} (the switch), {@code check_lines} (an exchanger's lines, W8), {@code clean} (the
+ * deposit, batch 2026-11-16-fouling-corrosion WP5), and the fields'
  * draft keys. Choice actions: {@code target:<mode>}, and an air cooler's {@code target:fan_speed}.
  */
 public final class HeatControlColumn {
@@ -108,6 +109,9 @@ public final class HeatControlColumn {
             var settings = settings(in, t);
             if (!settings.isEmpty()) right.add(new Column.Group(t.get(on ? "heat_group.set_point" : "heat_group.manual"), null, settings));
         }
+        // The side's fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): before the rows that follow the plant's state, so
+        // its Clean key keeps its slot.
+        if (in.heat().fouling() != null) right.add(deposit(in, t));
         // What acts now, named by the server, how hard it works, and the lines it works through.
         var acting = new ArrayList<Column.Row>();
         String now = in.heat().actuator();
@@ -242,6 +246,18 @@ public final class HeatControlColumn {
         var a = heat.port(own.getFirst());
         var b = heat.port(other.getFirst());
         return a == null || b == null || b.massFlow() == 0 ? Double.NaN : Math.abs(a.massFlow()) / Math.abs(b.massFlow());
+    }
+
+    /**
+     * The Deposit group (WP5): the side's fouling resistance, m²K/kW, and the share of a clean liquid film left behind it,
+     * LED meters; then, for an editor, Clean, which removes the deposit from both sides while nothing flows through the unit.
+     */
+    static Column.Group deposit(Input in, Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        rows.add(new Column.Reading("fouling:rf", t.get("fouling_rf"), Format.number(in.heat().fouling() * 1000), "m²K/kW", t.get("fouling_rf.hint")));
+        rows.add(new Column.Reading("fouling:film", t.get("fouling_film"), Format.number(in.heat().filmLeft() * 100), "%", t.get("fouling_film.hint")));
+        if (in.canEdit()) rows.add(new Column.Buttons(List.of(new Column.Button("clean", t.get("clean"), true, t.get("clean.hint")))));
+        return new Column.Group(t.get("heat_group.deposit"), t.get("heat_group.deposit.hint"), rows);
     }
 
     /** The note on this side's lines (W8) while they are not complete, or null: complete, the plate names the real valve. */

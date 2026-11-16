@@ -231,6 +231,15 @@ public final class FluidNetwork {
         };
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
     }
+    /** Client to server: clean the deposit of the heat unit whose side the menu shows (batch 2026-11-16-fouling-corrosion, WP5). */
+    public record CleanPayload(int menuId,BlockPos position,long identity) implements CustomPacketPayload {
+        public static final Type<CleanPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"fluid_clean"));
+        public static final StreamCodec<RegistryFriendlyByteBuf,CleanPayload> STREAM_CODEC=new StreamCodec<>() {
+            public CleanPayload decode(RegistryFriendlyByteBuf b){return new CleanPayload(b.readVarInt(),b.readBlockPos(),b.readLong());}
+            public void encode(RegistryFriendlyByteBuf b,CleanPayload p){b.writeVarInt(p.menuId);b.writeBlockPos(p.position);b.writeLong(p.identity);}
+        };
+        @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}
+    }
     public record PartnerPayload(int menuId,BlockPos position,long identity) implements CustomPacketPayload {
         public static final Type<PartnerPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"fluid_open_partner"));
         public static final StreamCodec<RegistryFriendlyByteBuf,PartnerPayload> STREAM_CODEC=new StreamCodec<>() {
@@ -264,6 +273,7 @@ public final class FluidNetwork {
         registrar.playToServer(ConverterEditPayload.TYPE,ConverterEditPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)converterEdit(payload,player);});
         registrar.playToServer(PartnerPayload.TYPE,PartnerPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)openPartner(payload,player);});
         registrar.playToServer(LinesPayload.TYPE,LinesPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)checkLines(payload,player);});
+        registrar.playToServer(CleanPayload.TYPE,CleanPayload.STREAM_CODEC,(payload,context)->{if(context.player() instanceof ServerPlayer player)clean(payload,player);});
         registerDisplays(event,registrar);
         registrar.playToClient(StaticPayload.TYPE,StaticPayload.STREAM_CODEC,(payload,context)->{
             if(context.player().containerMenu instanceof FluidDeviceMenu menu&&menu.containerId==payload.menuId&&menu.identity()==payload.identity)menu.acceptStatic(decodeStatic(payload.json));
@@ -360,6 +370,30 @@ public final class FluidNetwork {
     }
     public static void openPartner(FluidDeviceMenu menu){PacketDistributor.sendToServer(new PartnerPayload(menu.containerId,menu.position(),menu.identity()));}
     public static void checkLines(FluidDeviceMenu menu){PacketDistributor.sendToServer(new LinesPayload(menu.containerId,menu.position(),menu.identity()));}
+    public static void clean(FluidDeviceMenu menu){PacketDistributor.sendToServer(new CleanPayload(menu.containerId,menu.position(),menu.identity()));}
+    /**
+     * The Clean key of a heat side's page (batch 2026-11-16-fouling-corrosion, WP5, plan section 10): the same admission as an
+     * edit, then the cleaning of the side's unit queued as an engine event ({@link FluidWorldAuthority#queueUnitClean}). The
+     * handler only queues; the answer is a chat line from the event's reply at the engine's tick drain, dropped for a player
+     * who has left.
+     */
+    public static void clean(CleanPayload payload,ServerPlayer player) {
+        if(!(player.containerMenu instanceof FluidDeviceMenu menu))return;
+        if(menu.containerId!=payload.menuId||menu.identity()!=payload.identity||!menu.position().equals(payload.position)||!menu.stillValid(player)||menu.debug()||!player.mayBuild()||player.isSpectator()||!player.level().mayInteract(player,payload.position)||!menu.admitEdit(player.server.getTickCount()))return;
+        FluidWorldAuthority.find(player.server).ifPresent(world->world.queueUnitClean(payload.identity,outcome->{
+            if(player.hasDisconnected()||player.connection==null)return;
+            player.displayClientMessage(net.minecraft.network.chat.Component.translatable(cleanKey(outcome)),false);
+        }));
+    }
+    /** The answer's text key of a cleaning's {@code outcome}: {@code message.icheme.heat.clean.<outcome>}. */
+    public static String cleanKey(com.wormzjl.icheme.runtime.fluid.Integrity.Outcome outcome) {
+        return "message.icheme.heat.clean."+switch(outcome){
+            case CLEANED->"cleaned";
+            case NOT_IDLE,NOT_EMPTY->"not_idle";
+            case WRECKED->"wrecked";
+            case REPAIRED,NOTHING_TO_REPAIR->"nothing_to_repair";
+        };
+    }
     /**
      * Queues a check of the lines of the exchanger whose side the menu shows (W8, plan section 7): its assembly is validated
      * at the next server tick, as a column's Validate is, and the side's status line reports it at the next bucket.

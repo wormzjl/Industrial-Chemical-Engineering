@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
+import com.wormzjl.icheme.science.flowsheet.metallurgy.SheetMetallurgy;
 import com.wormzjl.icheme.science.flowsheet.unit.ExchangerRating;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import com.wormzjl.icheme.science.equipment.design.UnitRatings;
@@ -80,8 +81,15 @@ public final class AirCoolerSizing {
      * @param outlet  how far its outlet stands above the air, K
      * @param stream  the stream's side at design flow, which the fans' films are put on; null on a load given whole
      * @param duty    W at design flow
+     * @param fouling the tubes' design deposit, m²K/W (batch 2026-11-16-fouling-corrosion, WP5): the surface and the drop are
+     *                rated dirty ({@link SheetMetallurgy#designFouling})
      */
-    public record Load(LineSizing.Carried mean, double needed, double outlet, ExchangerRating.@Nullable Side stream, double duty) {
+    public record Load(LineSizing.Carried mean, double needed, double outlet, ExchangerRating.@Nullable Side stream, double duty, double fouling) {
+        /** A load rated clean. */
+        public Load(LineSizing.Carried mean, double needed, double outlet, ExchangerRating.@Nullable Side stream, double duty) {
+            this(mean, needed, outlet, stream, duty, 0);
+        }
+
         /** The cooler between these streams, null if it passes no heat. */
         public static @Nullable Load of(FlowStream in, FlowStream out, DesignBasis basis, FlowThermo thermo, MixtureViscosity.Workspace scratch) {
             double removed = in.enthalpy() - out.enthalpy(), air = HeatSides.AIR_TEMPERATURE;
@@ -89,12 +97,13 @@ public final class AirCoolerSizing {
             double flow = basis.designFlow();
             var side = ExchangerRating.side(thermo, in, Math.min(out.temperature(), air), in.temperature()).at(flow);
             var mean = thermo.atTemperature((in.temperature() + out.temperature()) / 2, in.pressure(), in.amountsView(), in.solids());
-            return new Load(LineSizing.Carried.of(mean, flow, thermo, scratch), needed(side, removed * flow, 1), out.temperature() - air, side, removed * flow);
+            double fouling = SheetMetallurgy.designFouling(SheetMetallurgy.standard(thermo), in, out);
+            return new Load(LineSizing.Carried.of(mean, flow, thermo, scratch), needed(side, removed * flow, 1, fouling), out.temperature() - air, side, removed * flow, fouling);
         }
 
-        /** The bare surface {@code duty} W needs from {@code side} with the fans at {@code fans} of full speed, m². */
-        private static double needed(ExchangerRating.Side side, double duty, double fans) {
-            var filmed = new ExchangerRating.Side(side.curve().withFilms(HeatSides.airFilms(fans)), side.massFlow(), side.inlet());
+        /** The bare surface {@code duty} W needs from {@code side} with the fans at {@code fans} of full speed behind a deposit of {@code fouling} m²K/W, m². */
+        private static double needed(ExchangerRating.Side side, double duty, double fans, double fouling) {
+            var filmed = new ExchangerRating.Side(side.curve().withFilms(HeatSides.airFilms(fans, fouling)), side.massFlow(), side.inlet());
             return ExchangerRating.rate(filmed, ExchangerRating.Side.sink(HeatSides.AIR_TEMPERATURE), duty).area();
         }
     }
@@ -118,12 +127,12 @@ public final class AirCoolerSizing {
         var stream = load == null ? null : load.stream();
         if (stream == null) return null;
         double surface = size.surface();
-        if (Load.needed(stream, load.duty(), 0) <= surface) return new Fans(0, 0);
+        if (Load.needed(stream, load.duty(), 0, load.fouling()) <= surface) return new Fans(0, 0);
         if (!(load.needed() <= surface)) return new Fans(1, HeatSides.fanPower(surface, 1));
         double slow = 0, fast = 1;
         for (int step = 0; step < FAN_STEPS; step++) {
             double middle = (slow + fast) / 2;
-            if (Load.needed(stream, load.duty(), middle) <= surface) fast = middle;
+            if (Load.needed(stream, load.duty(), middle, load.fouling()) <= surface) fast = middle;
             else slow = middle;
         }
         return new Fans(fast, HeatSides.fanPower(surface, fast));
@@ -144,9 +153,9 @@ public final class AirCoolerSizing {
         return new Rating(readings);
     }
 
-    /** What {@code load}'s tubes lose at {@code size} at design flow, bar, its banks in parallel. */
+    /** What {@code load}'s tubes lose at {@code size} at design flow, bar, its banks in parallel, fouled at the design deposit. */
     public static double drop(Load load, Size size) {
-        return SizedPassages.bank(size, load.mean());
+        return SizedPassages.bank(size, load.mean(), load.fouling());
     }
 
     /**

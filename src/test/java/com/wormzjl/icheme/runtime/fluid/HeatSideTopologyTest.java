@@ -87,6 +87,66 @@ class HeatSideTopologyTest {
         var whole=new WorldTopologyLedger.Registration(side(11,ports,passage,TUBE),FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG),0);
         assertEquals(Set.of(10L),PhysicalRegistry.closedSides(List.of(breached,whole)));
     }
+    /**
+     * A fouled side (batch 2026-11-16-fouling-corrosion, WP5): at level 0 its passage compiles as before, the same geometry
+     * and an equal law; at level 5 (0.0005 m²K/W) its films are the plan's 1000, 1429 and 95 W/m²K and its passage 1 mm
+     * narrower, and the same line carries less flow. The levels the compile reads come from the walls' facts in the ledger.
+     */
+    @Test void aFouledSidesPassageCompilesWithItsFilmsBehindTheDepositAndNarrowed() {
+        var passage=HeatSides.tubePassage(.5,2);
+        var paired=new HeatUnit(HeatSides.Unit.EXCHANGER,HeatSides.Side.TUBE,450,11);
+        var ports=List.of(port(at(10,0,10),WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(at(0,2,0),EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
+        var devices=List.of(plain(1,8,0,10,Kind.GENERATOR),plain(20,9,0,10,Kind.PIPE),side(10,ports,passage,paired),plain(30,1,2,0,Kind.PIPE),plain(2,2,2,0,Kind.VOID));
+        var states=Map.of(1L,nitrogenAt(1,0,PassiveNetwork.NodeKind.GENERATOR,150000),2L,nitrogenAt(2,2,PassiveNetwork.NodeKind.VOID,101325));
+        var seed=states.get(1L).state();
+        PassiveNetwork.Pipe before=PhysicalFluidTopology.compile(devices,states,Map.of(),seed,Set.of(),Map.of(),Set.of()).islands().getFirst().graph().pipes().stream()
+                .filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
+        for(int level:new int[]{0,5}) {
+            var graph=PhysicalFluidTopology.compile(devices,states,Map.of(),seed,Set.of(),Map.of(),Set.of(),level==0?Map.of():Map.of(10L,level)).islands().getFirst().graph();
+            var own=graph.pipes().stream().filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
+            var films=((HeatSide)own.heat()).films();
+            if(level==0) {
+                assertSame(passage,own.sections().getFirst(),"a clean side's passage is its own geometry");
+                assertEquals(before.heat(),own.heat());assertEquals(before.sections(),own.sections());
+                assertSame(HeatCurve.Films.DEFAULT,films);
+            } else {
+                assertEquals(passage.diameter()-.001,own.sections().getFirst().diameter(),1e-15);
+                assertEquals(passage.channels(),own.sections().getFirst().channels());
+                assertEquals(1000,films.liquid(),1e-9);assertEquals(1428.57,films.twoPhase(),.01);assertEquals(95.24,films.gas(),.01);
+            }
+        }
+        // A side without its partner moves no heat; its narrowed passage carries less on the same head.
+        var lone=List.of(plain(1,8,0,10,Kind.GENERATOR),plain(20,9,0,10,Kind.PIPE),side(10,ports,passage,TUBE),plain(30,1,2,0,Kind.PIPE),plain(2,2,2,0,Kind.VOID));
+        double[] flows=new double[2];
+        for(int level:new int[]{0,5}) {
+            var graph=PhysicalFluidTopology.compile(lone,states,Map.of(),seed,Set.of(),Map.of(),Set.of(),level==0?Map.of():Map.of(10L,level)).islands().getFirst().graph();
+            var own=graph.pipes().stream().filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
+            var result=new PassiveIntervalSolver(model).solve(graph,.05,PassiveIntervalSolver.Settings.defaults(),()->{});
+            flows[level==0?0:1]=result.averageMassFlows()[graph.pipes().indexOf(own)];
+        }
+        assertTrue(flows[1]>0&&flows[1]<flows[0],"the fouled passage carries less on the same head: "+flows[0]+" → "+flows[1]);
+        // The registry reads each side's level from the ledger's walls' facts, so a restored world compiles what it saved.
+        var record=new WorldTopologyLedger.Registration(side(10,ports,passage,paired),FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG),0);
+        var loose=new WorldTopologyLedger.Registration(plain(20,9,0,10,Kind.PIPE),FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG),0);
+        var empty=WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG);
+        var active=new LinkedHashMap<Long,WorldTopologyLedger.Registration>();active.put(10L,record);active.put(20L,loose);
+        var ledger=new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0,1000,active,List.of(),empty.constructed(),empty.destroyed(),empty.basis()));
+        boolean[] fouling={true};
+        var registry=new PhysicalRegistry(ledger,model,InlineFilter.empty(),new PhysicalRegistry.Host() {
+            public IslandCoordinator coordinator(){throw new AssertionError();}
+            public void topology(String dimension,Set<UUID> events,Set<Long> affected,List<IslandCoordinator.Replacement> replacements,long committed,long online,
+                                 Map<Long,PassiveNetwork.Reservoir> additions,Set<Long> removals,Map<Long,InlineFilter> releasedFilters,Runnable commit){throw new AssertionError();}
+            public boolean acceptsRecovery(UUID player){return false;}
+            public void refused(UUID event,String reason){}
+            public void committed(Set<Long> removed,Set<Long> recompiled){}
+            @Override public boolean fouling(){return fouling[0];}
+        });
+        assertEquals(Map.of(),registry.fouling(active.values()),"no walls' facts: every side clean");
+        ledger.integrity(Map.of(10L,new WorldTopologyLedger.IntegrityFacts(0,.00057,false),20L,new WorldTopologyLedger.IntegrityFacts(.1,0,false)));
+        assertEquals(Map.of(10L,5),registry.fouling(active.values()),"whole steps of 0.0001 m²K/W; a pipe's wall loss is no deposit");
+        fouling[0]=false;
+        assertEquals(Map.of(),registry.fouling(active.values()),"fouling.enabled false: the deposit acts on nothing");
+    }
     @Test void anAirCoolersOutletApproachesItsAirWithTheFansOnAndOff() {
         var shape=com.wormzjl.icheme.science.equipment.EquipmentShape.unit(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.AIR_COOLER,3,6,
                 com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.SOUTH,4);

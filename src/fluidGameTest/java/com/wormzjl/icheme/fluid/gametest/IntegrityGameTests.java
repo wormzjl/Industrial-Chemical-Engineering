@@ -289,4 +289,119 @@ public final class IntegrityGameTests {
                 })
                 .thenSucceed();
     }
+
+    /** Heat side {@code side}'s compiled passage, or null while no island holds it. */
+    private static com.wormzjl.icheme.science.fluid.network.PassiveNetwork.Pipe passage(FluidWorldAuthority world, long side) {
+        long id = PhysicalFluidTopology.sideIdentity(side);
+        for (var s : world.diagnosticSnapshots())
+            for (var p : s.graph().pipes()) if (p.id() == id) return p;
+        return null;
+    }
+
+    /**
+     * A heat side's fouling deposit takes effect (batch 2026-11-16-fouling-corrosion, WP5): hot water through an air cooler at
+     * natural draught (no power). The deposit set at its cap (0.002 m²K/W) recompiles the side's passage 4 mm narrower with
+     * its process films behind the deposit, its status line says FOULED and it moves less heat. Its page's Clean, refused while
+     * water flows, is accepted once the supply and the drain are gone; refed, the clean passage moves its old heat again.
+     */
+    @GameTest(template = "empty", timeoutTicks = 6000, batch = "integrity_fouling")
+    public static void aFouledCoolerMovesLessHeatUntilItIsCleaned(GameTestHelper helper) {
+        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
+        var level = plant.level;
+        var world = plant.world;
+        String[] failure = {null};
+        long[] side = {0};
+        double[] duty = {0, 0, 0}, bore = {0};
+        Integrity.Outcome[] outcome = {null, null};
+        BlockPos[] ends = new BlockPos[2];
+        var water = FluidDeviceSpec.water(com.wormzjl.icheme.science.material.MaterialRuntime.active()).composition();
+        Runnable feed = () -> {
+            level.setBlock(ends[0], ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), net.minecraft.world.level.block.Block.UPDATE_ALL);
+            level.setBlock(ends[1], ModBlocks.FLUID_VOID.get().defaultBlockState(), net.minecraft.world.level.block.Block.UPDATE_ALL);
+            TankCharge.run(world, ((FluidDeviceBlockEntity) level.getBlockEntity(ends[0])).fluidIdentity(), new FluidDeviceSpec(1, 358.15, 2e5, water));
+            long sink = ((FluidDeviceBlockEntity) level.getBlockEntity(ends[1])).fluidIdentity();
+            var r = world.registrations().get(sink);
+            world.edit(sink, r.revision(), r.device(), new FluidDeviceSpec(1, 298.15, 101_325, water));
+        };
+        var sequence = helper.startSequence();
+        try {
+            plant.hold();
+            var cooler = plant.place(AssemblyGameTests.Plant.unit(EquipmentShape.Kind.AIR_COOLER), 0, 0, 0);
+            var inlet = AssemblyGameTests.Plant.front(cooler, EquipmentShape.Role.PROCESS_INLET);
+            var outlet = AssemblyGameTests.Plant.front(cooler, EquipmentShape.Role.PROCESS_OUTLET);
+            ends[0] = inlet.relative(AssemblyGameTests.Plant.out(cooler, EquipmentShape.Role.PROCESS_INLET)).immutable();
+            ends[1] = outlet.relative(AssemblyGameTests.Plant.out(cooler, EquipmentShape.Role.PROCESS_OUTLET)).immutable();
+            plant.pipe(inlet);
+            plant.pipe(outlet);
+            plant.devices.add(ends[0]);
+            plant.devices.add(ends[1]);
+            feed.run();
+            side[0] = EquipmentStructure.sideIdentities(level, cooler)[0];
+        } catch (RuntimeException e) {
+            failure[0] = "build: " + e;
+        }
+        if (failure[0] == null) sequence = sequence
+                .thenWaitUntil(() -> {
+                    var view = world.view(side[0]);
+                    helper.assertTrue(view.heat() != null && Math.abs(view.heat().heatWatt()) > 0 && passage(world, side[0]) != null, "Waiting for the cooler to run");
+                })
+                .thenIdle(600)
+                .thenExecute(() -> {
+                    duty[0] = Math.abs(world.view(side[0]).heat().heatWatt());
+                    bore[0] = passage(world, side[0]).sections().getFirst().diameter();
+                    var view = world.view(side[0]);
+                    if (view.heat().fouling() == null || view.heat().fouling() != 0 || view.heat().filmLeft() != 1) failure[0] = "a clean side's deposit reads " + view.heat().fouling();
+                    if (!world.integrity().set(side[0], 0, com.wormzjl.icheme.science.integrity.FoulingLaw.CAP, false)) failure[0] = "the deposit was not set";
+                })
+                .thenWaitUntil(() -> {
+                    var p = passage(world, side[0]);
+                    helper.assertTrue(p != null && Math.abs(p.sections().getFirst().diameter() - (bore[0] - .004)) < 1e-12, "Waiting for the fouled passage to compile");
+                })
+                .thenIdle(600)
+                .thenExecute(() -> {
+                    var view = world.view(side[0]);
+                    duty[1] = Math.abs(view.heat().heatWatt());
+                    if (failure[0] == null && !(duty[1] < .97 * duty[0])) failure[0] = "the fouled cooler moved " + duty[1] + " W against " + duty[0] + " W clean";
+                    if (failure[0] == null && !view.status().contains("FOULED")) failure[0] = "the status line does not say FOULED: " + view.status();
+                    if (failure[0] == null && Math.abs(view.heat().filmLeft() - 1 / 5.0) > 1e-9) failure[0] = "film left " + view.heat().filmLeft();
+                    var air = ((com.wormzjl.icheme.science.fluid.network.AirCooled) passage(world, side[0]).heat()).air();
+                    if (failure[0] == null && Math.abs(air.process().liquid() - 400) > 1e-9) failure[0] = "the fouled liquid film is " + air.process().liquid();
+                    world.queueUnitClean(side[0], o -> outcome[0] = o);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(outcome[0] != null, "Waiting for the first cleaning's answer"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && outcome[0] != Integrity.Outcome.NOT_IDLE) failure[0] = "a cooler cleaned while water flows: " + outcome[0];
+                    level.removeBlock(ends[0], false);
+                    level.removeBlock(ends[1], false);
+                })
+                .thenWaitUntil(() -> {
+                    // Asked again at each wait until the passage stands idle; each ask is one queued event.
+                    if (outcome[1] == null) world.queueUnitClean(side[0], o -> outcome[1] = o);
+                    else if (outcome[1] == Integrity.Outcome.NOT_IDLE) outcome[1] = null;
+                    helper.assertTrue(outcome[1] == Integrity.Outcome.CLEANED || outcome[1] != null && outcome[1] != Integrity.Outcome.NOT_IDLE,
+                            "Waiting for the idle cooler to be cleaned: " + outcome[1]);
+                })
+                .thenExecute(() -> {
+                    if (failure[0] == null && outcome[1] != Integrity.Outcome.CLEANED) failure[0] = "the idle cooler was not cleaned: " + outcome[1];
+                    if (failure[0] == null && world.integrity().fouling(side[0]) != 0) failure[0] = "a deposit is left: " + world.integrity().fouling(side[0]);
+                    feed.run();
+                })
+                .thenWaitUntil(() -> {
+                    var p = passage(world, side[0]);
+                    helper.assertTrue(p != null && p.sections().getFirst().diameter() == bore[0] && world.view(side[0]).heat() != null
+                            && Math.abs(world.view(side[0]).heat().heatWatt()) > 0, "Waiting for the clean passage to run again");
+                })
+                .thenIdle(600)
+                .thenExecute(() -> {
+                    duty[2] = Math.abs(world.view(side[0]).heat().heatWatt());
+                    if (failure[0] == null && Math.abs(duty[2] - duty[0]) > .03 * duty[0]) failure[0] = "the cleaned cooler moved " + duty[2] + " W against " + duty[0] + " W before";
+                    if (failure[0] == null && world.view(side[0]).status().contains("FOULED")) failure[0] = "the cleaned cooler still says FOULED";
+                });
+        sequence.thenExecute(plant::remove)
+                .thenWaitUntil(() -> helper.assertTrue(plant.removed(), "Waiting for the plant to leave"))
+                .thenExecute(() -> {
+                    plant.release();
+                    if (failure[0] != null) helper.fail(failure[0]);
+                }).thenSucceed();
+    }
 }

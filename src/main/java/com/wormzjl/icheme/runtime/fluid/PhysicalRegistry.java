@@ -34,6 +34,8 @@ public final class PhysicalRegistry {
         default Set<String> portCompounds(long port){return Set.of();}
         /** An applied event did nothing for the player who asked; the reason reaches them with the reply to their input. */
         void refused(UUID event,String reason);
+        /** Whether a heat side's fouling deposit acts on its compiled passage (config {@code fouling.enabled}, batch 2026-11-16-fouling-corrosion WP5). */
+        default boolean fouling(){return true;}
         /** An application committed; {@code removed} are the devices it took out of the registry, {@code recompiled} the
          * surviving devices of the part it compiled: their island (or the absence of one) may have changed. */
         void committed(Set<Long> removed,Set<Long> recompiled);
@@ -112,6 +114,24 @@ public final class PhysicalRegistry {
         for(var r:records)if(r.spec().breached()&&r.device().kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.HEAT_SIDE)closed.add(r.device().id());
         return closed;
     }
+    /**
+     * Each fouled heat side among {@code records} (batch 2026-11-16-fouling-corrosion, WP5): its deposit in whole steps
+     * ({@link com.wormzjl.icheme.science.integrity.FoulingLaw#level}), read from the walls' facts in the ledger, so a restore
+     * compiles the graph the save had before the walls' first cadence. A heat side of constructed equipment only
+     * ({@link Integrity#kind}); empty with fouling off ({@link Host#fouling}).
+     */
+    Map<Long,Integer> fouling(Collection<WorldTopologyLedger.Registration> records) {
+        var facts=topology.integrity();
+        if(facts.isEmpty()||!host.fouling())return Map.of();
+        var levels=new HashMap<Long,Integer>();
+        for(var r:records) {
+            var f=facts.get(r.device().id());
+            if(f==null||f.fouling()==0||Integrity.kind(r)!=Integrity.Kind.HEAT_SIDE)continue;
+            int level=com.wormzjl.icheme.science.integrity.FoulingLaw.level(f.fouling());
+            if(level>0)levels.put(r.device().id(),level);
+        }
+        return levels;
+    }
     /** Compiles the loaded registry once and binds every device to the island a checkpoint restored for it. */
     public void load() {
         var islands=host.coordinator().snapshots();
@@ -131,7 +151,7 @@ public final class PhysicalRegistry {
         for(var entry:stock.entrySet()){var r=active.get(entry.getKey());if(r!=null&&r.device().fixed()){fixedStates.put(entry.getKey(),entry.getValue());fixedModels.put(entry.getKey(),stockModels.get(entry.getKey()));}}
         // A disconnected filter's ports stand at the ambient (NetworkReduction.ambient), as an empty vessel does.
         var compiled=PhysicalFluidTopology.compile(active.values().stream().map(WorldTopologyLedger.Registration::device).toList(),stock,cakes,
-                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(active.values()),closedSides(active.values()));
+                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(active.values()),closedSides(active.values()),fouling(active.values()));
         diagnostics.putAll(compiled.diagnostics());pipeViews.putAll(compiled.pipeViews());tankFaces.putAll(compiled.tankFaces());
         for(var island:compiled.islands()) {
             var graph=island.graph();
@@ -533,7 +553,7 @@ public final class PhysicalRegistry {
             }
         }
         var compiled=PhysicalFluidTopology.compile(component.values().stream().map(WorldTopologyLedger.Registration::device).toList(),componentStock,componentCakes,
-                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(component.values()),closedSides(component.values()));
+                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(component.values()),closedSides(component.values()),fouling(component.values()));
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologyBatches);FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologyEvents,events.size());
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.compiledDevices,component.size());
         // The islands this batch splits: an original whose devices land in two or more of the new islands (owner decision

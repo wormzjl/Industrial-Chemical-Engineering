@@ -37,7 +37,10 @@ import java.util.function.Supplier;
  * <li>The repair and the cleaning ({@link #queueRepair}, {@link #queueClean}) are queued engine events applied at the tick
  * drain ({@link #apply}), accepted only while every listed device is idle and every vessel among them empty.</li>
  * </ul>
- * Nothing here wakes an island but a failure, a repair or a cleaning: wear above 0 changes nothing the solver reads.
+ * Nothing here wakes an island but a failure, a repair, a cleaning or a heat side's deposit stepping a whole
+ * {@link FoulingLaw#STEP} (WP5): wear above 0 changes nothing the solver reads, and a deposit only its whole steps, which the
+ * compile reads from the ledger's facts ({@link PhysicalRegistry#fouling}). When a side's step moves, the facts go to the
+ * ledger first, then one restate of the side ({@link Host#restate}) recompiles its island.
  */
 public final class Integrity {
     /** The cadence, online ticks (the machines' health's). */
@@ -87,6 +90,15 @@ public final class Integrity {
         /** A heat side's holdup let into the air once, as a burst line block's is ({@link FluidWorldAuthority#releaseContents}). */
         void release(long id);
 
+        /**
+         * Queues device {@code id}'s registration again, unchanged, at its next revision (WP5): its island compiles again on the
+         * engine's schedule and reads the heat side's deposit level from the ledger's facts, as an installed flowmeter's tap is
+         * compiled ({@link PhysicalRegistry#flowmeter}). False when nothing was queued.
+         */
+        default boolean restate(long id) {
+            return false;
+        }
+
         /** The corrosive air index of the cube at {@code at} (0 while pollution is off). */
         double corrosiveAir(PhysicalFluidTopology.Position at);
 
@@ -120,6 +132,8 @@ public final class Integrity {
         Mechanism corroding;
         /** Its wall through has failed since it was last below through: a failure is applied once, whatever its edit's timing. */
         boolean flowing, failed;
+        /** The deposit level the side's compiled passage carries, as last handed to the ledger (WP5; state). */
+        int compiled;
         long bookedTick, evaluated = Long.MIN_VALUE;
 
         Record(long now) {
@@ -177,6 +191,38 @@ public final class Integrity {
         });
         // One whole discovery at the start; later ones sweep SWEEP registrations per cadence.
         discover(Integer.MAX_VALUE, now);
+        // The restored graph was compiled from these facts (PhysicalRegistry#fouling), and so are its pending events.
+        var s = settings.get();
+        for (var w : walls.values()) w.compiled = level(w, s);
+    }
+
+    /** The deposit level a heat side's passage compiles with under {@code s} (WP5): its whole steps, 0 with fouling off. */
+    private static int level(Record w, Settings s) {
+        return s.fouling() && w.kind == Kind.HEAT_SIDE ? FoulingLaw.level(w.fouling) : 0;
+    }
+
+    /**
+     * Hands the facts to the ledger, then queues one restate for each heat side whose deposit level moved since its graph
+     * was compiled (WP5, plan section 12): the graph changes only in whole steps, so between two steps nothing the solver reads
+     * changes and no event is queued.
+     */
+    private void flushAndRestate(Settings s) {
+        flush();
+        for (var e : walls.entrySet()) {
+            var w = e.getValue();
+            int level = level(w, s);
+            if (level == w.compiled) continue;
+            w.compiled = level;
+            host.restate(e.getKey());
+            restates++;
+        }
+    }
+
+    private long restates;
+
+    /** The restates queued for a deposit level's change since the start (a counter for the tests and the diagnostics). */
+    public long restates() {
+        return restates;
     }
 
     // ---------------- which devices ----------------
@@ -341,7 +387,7 @@ public final class Integrity {
             }
         }
         weeps();
-        flush();
+        flushAndRestate(s);
     }
 
     /** The walls that weep, as last told to the host (state, not saved: the first cadence after a load tells them again). */
@@ -547,7 +593,7 @@ public final class Integrity {
         }
         // A repaired wall stops weeping at once (WP4).
         if (!weeping.isEmpty()) weeps();
-        flush();
+        flushAndRestate(s);
     }
 
     private Outcome repair(List<Long> devices, long now, Settings s) {
@@ -678,6 +724,15 @@ public final class Integrity {
         return w == null ? 0 : w.fouling;
     }
 
+    /**
+     * Whether heat side {@code id}'s status line says {@code FOULED} (WP5, plan section 12): its deposit at least
+     * {@link FoulingLaw#FOULED}, fouling on, not wrecked (a wreck says so instead).
+     */
+    public boolean fouled(long id) {
+        var w = walls.get(id);
+        return w != null && w.kind == Kind.HEAT_SIDE && !w.wrecked && w.fouling >= FoulingLaw.FOULED && settings.get().fouling();
+    }
+
     /** Heat side {@code id}'s deposit in whole steps of {@link FoulingLaw#STEP}, 0 to 20: what the films read (WP5). */
     public int foulingLevel(long id) {
         return FoulingLaw.level(fouling(id));
@@ -750,7 +805,7 @@ public final class Integrity {
         w.loss = facts.wallLoss();
         w.fouling = facts.fouling();
         w.wrecked = facts.wrecked();
-        flush();
+        flushAndRestate(settings.get());
         return true;
     }
 

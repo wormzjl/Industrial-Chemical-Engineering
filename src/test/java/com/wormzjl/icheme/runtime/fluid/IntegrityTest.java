@@ -84,7 +84,19 @@ class IntegrityTest {
     private static final class Host implements Integrity.Host {
         final List<Long> closed = new ArrayList<>(), opened = new ArrayList<>(), released = new ArrayList<>();
         final List<String> weeps = new ArrayList<>();
+        /** The restates queued (WP5), and what the ledger held for each side when its restate was queued. */
+        final List<Long> restated = new ArrayList<>();
+        final List<Double> ledgerAtRestate = new ArrayList<>();
+        WorldTopologyLedger ledger;
         double air;
+
+        @Override
+        public boolean restate(long id) {
+            restated.add(id);
+            var facts = ledger == null ? null : ledger.integrity().get(id);
+            ledgerAtRestate.add(facts == null ? 0 : facts.fouling());
+            return true;
+        }
 
         public boolean close(long id) {
             closed.add(id);
@@ -147,10 +159,19 @@ class IntegrityTest {
             var active = new LinkedHashMap<Long, WorldTopologyLedger.Registration>();
             for (var r : registrations) active.put(r.device().id(), r);
             ledger = new WorldTopologyLedger(new WorldTopologyLedger.Snapshot(0, 1000, active, List.of(), empty.constructed(), empty.destroyed(), empty.basis()));
-            LongFunctionOwner owner = id -> active.containsKey(id) ? 1L : null;
+            owner = id -> active.containsKey(id) ? 1L : null;
             health = new MachineHealth(ledger, owner::apply, coordinator, id -> id == PUMP && active.containsKey(PUMP), id -> null, () -> new Wear.Settings(true, 1, 1));
             coordinator.register(new IslandCoordinator.Snapshot(1, 0, graph, new IslandClock.Snapshot(0, 0, 0, 100), Optional.of(result(graph, flows)), "READY"), MODEL.withTime(time));
+            host.ledger = ledger;
             integrity = new Integrity(ledger, owner::apply, coordinator, health, () -> settings, host);
+        }
+
+        final LongFunctionOwner owner;
+
+        /** The walls as a load builds them again from the ledger's facts, with their own host. */
+        Integrity reload(Host other) {
+            other.ledger = ledger;
+            return new Integrity(ledger, owner::apply, coordinator, health, () -> settings, other);
         }
 
         /** Advances the online clock by {@code ticks} and runs the walls' cadence. */
@@ -434,6 +455,68 @@ class IntegrityTest {
         flowing.integrity.set(SIDE, 0, .0005, false);
         assertEquals(Integrity.Outcome.NOT_IDLE, flowing.clean(SIDE));
         assertEquals(.0005, flowing.integrity.fouling(SIDE));
+    }
+
+    /**
+     * WP5 (plan section 12): the graph sees a deposit only in whole steps of 0.0001 m²K/W. Flowing water at 25 °C grows towards
+     * 0.00035 with a 10 h time constant: under the first step for three process hours, over it in the fourth (1.15e-4), so one
+     * restate is queued then, after the facts reached the ledger; none in the hour after, still at that step.
+     */
+    @Test
+    void aDepositStepQueuesOneRestateAfterItsFactsReachTheLedger() {
+        var rig = plant(1, nitrogen(101325), 1, 0, false);
+        rig.booked();
+        rig.cadence(MachineHealth.CADENCE);
+        for (int hour = 1; hour <= 3; hour++) {
+            rig.cadence(20 * 3600);
+            assertEquals(0, rig.integrity.foulingLevel(SIDE), "hour " + hour);
+        }
+        assertEquals(List.of(), rig.host.restated, "under a step the graph stays as it is: no event");
+        rig.cadence(20 * 3600);
+        assertEquals(1, rig.integrity.foulingLevel(SIDE));
+        assertEquals(List.of(SIDE), rig.host.restated);
+        assertEquals(rig.integrity.fouling(SIDE), rig.host.ledgerAtRestate.getFirst(), 1e-18, "the facts are in the ledger before the restate");
+        rig.cadence(20 * 3600);
+        assertEquals(1, rig.integrity.foulingLevel(SIDE));
+        assertEquals(1, rig.integrity.restates(), "the same step queues nothing more");
+        // A set deposit (the command, the tests) and a cleaning each move the step once.
+        rig.integrity.set(SIDE, 0, .0005, false);
+        assertEquals(List.of(SIDE, SIDE), rig.host.restated);
+        rig.integrity.set(SIDE, 0, .00052, false);
+        assertEquals(2, rig.integrity.restates(), "a deposit inside the same step changes nothing the solver reads");
+        var idle = plant();
+        idle.integrity.set(SIDE, 0, .0005, false);
+        assertEquals(Integrity.Outcome.CLEANED, idle.clean(SIDE));
+        assertEquals(List.of(SIDE, SIDE), idle.host.restated, "set to 5, cleaned to 0");
+        assertEquals(0, idle.host.ledgerAtRestate.getLast());
+    }
+
+    @Test
+    void aRestoredWorldQueuesNoRestateAndFoulingOffRestatesToClean() {
+        var rig = plant();
+        rig.integrity.set(SIDE, 0, .0005, false);
+        // A load builds the walls from the ledger's facts; the restored graph was compiled from the same facts.
+        var host = new Host();
+        var restored = rig.reload(host);
+        assertEquals(5, restored.foulingLevel(SIDE));
+        rig.epoch[0] += MachineHealth.CADENCE;
+        restored.cadence();
+        assertEquals(List.of(), host.restated);
+        // fouling.enabled false: the deposit stays a fact, the graph reads level 0, once.
+        rig.settings = new Integrity.Settings(true, 20, true, true, false, 10);
+        rig.epoch[0] += MachineHealth.CADENCE;
+        restored.cadence();
+        assertEquals(List.of(SIDE), host.restated);
+        assertEquals(.0005, restored.fouling(SIDE));
+        assertFalse(restored.fouled(SIDE));
+        rig.epoch[0] += MachineHealth.CADENCE;
+        restored.cadence();
+        assertEquals(1, restored.restates());
+        // On again, and at FOULED's threshold the status word stands.
+        rig.settings = Integrity.Settings.DEFAULT;
+        restored.set(SIDE, 0, FoulingLaw.FOULED, false);
+        assertTrue(restored.fouled(SIDE));
+        assertEquals(List.of(SIDE, SIDE), host.restated);
     }
 
     @Test

@@ -25,6 +25,16 @@ public final class PipeResistance {
         public double area(){return channels*Math.PI*diameter*diameter/4;}
         /** This run with {@code value} channels. */
         public Geometry withChannels(int value){return new Geometry(length,diameter,roughness,minorLoss,value);}
+        /**
+         * This run with a deposit {@code thickness} (m) on every channel's wall (batch 2026-11-16-fouling-corrosion, plan
+         * section 3.2): the diameter less twice the thickness, never below half the clean diameter. Itself, the same
+         * instance, at no thickness.
+         */
+        public Geometry narrowed(double thickness) {
+            if(thickness==0)return this;
+            if(!(thickness>0)||!Double.isFinite(thickness))throw new IllegalArgumentException("Invalid deposit thickness "+thickness);
+            return new Geometry(length,Math.max(diameter-2*thickness,diameter/2),roughness,minorLoss,channels);
+        }
     }
     public record Loss(double pressureDrop,double massFlowDerivative,double reynolds) {}
     public static Loss evaluate(Geometry pipe,double massFlow,double density,double viscosity) {

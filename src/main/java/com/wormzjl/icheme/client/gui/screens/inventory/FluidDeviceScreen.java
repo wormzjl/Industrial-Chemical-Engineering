@@ -1070,6 +1070,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private void controlAction(String action){
         if(action.startsWith("side:"))FluidNetwork.openPartner(menu);
         else if(action.equals("check_lines")){FluidNetwork.checkLines(menu);message=tr("waiting");}
+        // Clean (batch 2026-11-16-fouling-corrosion, WP5): a queued engine event; its answer is a chat line, the deposit's meters follow at the next update.
+        else if(action.equals("clean")){FluidNetwork.clean(menu);message=tr("waiting");}
         else{
             if(action.startsWith("power:")){
                 boolean on=action.endsWith(":on");

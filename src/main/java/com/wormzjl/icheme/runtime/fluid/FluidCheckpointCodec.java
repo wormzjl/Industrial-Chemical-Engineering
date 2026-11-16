@@ -114,10 +114,12 @@ import java.util.function.Function;
  * <p>50 (the same batch, FINAL_LANE_REVIEW.md): an island's model key says whether its model carries water (one byte after
  * the island's compound list; a package record's {@code Dry}). An island that holds no water runs on its list without
  * water; reloaded on the list with water, its model's revision differed and its certificate was discarded.</p>
+ * <p>52 (batch 2026-11-16-fouling-corrosion, WP5; 51 is held by 2026-11-15-supercritical-fluids): an air cooler's side
+ * (heat law tag 3) carries its tubes' process films after its air's natural draught, which a fouling deposit lowers.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=50;
+    public static final int VERSION=52;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -477,6 +479,7 @@ public final class FluidCheckpointCodec {
                     control(w,heat.control());w.u8(heat.limit().ordinal());w.text(heat.routing().name());}
                 case com.wormzjl.icheme.science.fluid.network.AirCooled cooled->{var air=cooled.air();w.u8(3);w.f64(cooled.area());
                     w.f64(air.temperature());w.f64(air.barePerFace());w.f64(air.film());w.f64(air.capacity());w.f64(air.natural());
+                    var process=air.process();w.f64(process.liquid());w.f64(process.twoPhase());w.f64(process.gas());
                     w.f64(cooled.draught());control(w,cooled.control());w.u8(cooled.limit().ordinal());}
                 case com.wormzjl.icheme.science.fluid.network.FiredCoil coil->{w.u8(2);w.f64(coil.setTemperature());w.f64(coil.duty());w.f64(coil.firing());w.i64(coil.partner());w.f64(coil.limit());}
                 case com.wormzjl.icheme.science.fluid.network.ConvectionCoil coil->{w.u8(4);w.f64(coil.conductance());w.i64(coil.radiant());w.f64(coil.flue());}
@@ -537,7 +540,9 @@ public final class FluidCheckpointCodec {
         if(tag==4)return new com.wormzjl.icheme.science.fluid.network.ConvectionCoil(r.f64(),r.i64(),r.f64());
         if(tag==5)return new com.wormzjl.icheme.science.fluid.network.ExhaustCoil(r.f64(),r.f64());
         if(tag==3) {
-            double area=r.f64();var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(r.f64(),r.f64(),r.f64(),r.f64(),r.f64());double draught=r.f64();
+            double area=r.f64(),temperature=r.f64(),bare=r.f64(),film=r.f64(),capacity=r.f64(),natural=r.f64();
+            var process=new com.wormzjl.icheme.science.fluid.network.HeatCurve.Films(r.f64(),r.f64(),r.f64());
+            var air=new com.wormzjl.icheme.science.fluid.network.AirCooled.Air(temperature,bare,film,capacity,natural,process);double draught=r.f64();
             var control=control(r);return new com.wormzjl.icheme.science.fluid.network.AirCooled(area,air,draught,control,limit(r));
         }
         if(tag!=1)throw r.invalid("unknown heat law "+tag);
