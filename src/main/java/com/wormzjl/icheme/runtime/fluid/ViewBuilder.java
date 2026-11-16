@@ -175,7 +175,7 @@ final class ViewBuilder {
                     // the suction pressure; a machine's reads the suction stream it draws (decision D4).
                     if(!snapshot.graph().reservoirs().get(pipe.first()).empty()&&mode!=FlowControl.Mode.INLET_WRONG_PHASE&&mode!=FlowControl.Mode.PUMP_SUCTION_LIMIT) {var suction=snapshot.graph().reservoirs().get(pipe.first()).state();
                         double density=mover instanceof FlowControl.Pump?InletPhase.density(authority.model,NetworkReduction.reopened(snapshot.graph()),i,mover.targetVolumeFlow(),result.advancedSeconds()):suction.mass()/suction.volume();
-                        double limit=mover.riseLimit(density,suction.pressure(),authority.model.pumpReferenceDensity(),mover.liquid()?1.4:authority.model.heatCapacityRatio(suction));
+                        double limit=mover.riseLimit(density,suction.pressure(),authority.model.pumpReferenceDensity(),com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(authority.model,mover,suction));
                         status+=String.format(java.util.Locale.ROOT,mover.liquid()?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
                 }else{status+=" / "+mode;
                     // A steam turbine's health word (N4): WET EXHAUST, or FAILED first.

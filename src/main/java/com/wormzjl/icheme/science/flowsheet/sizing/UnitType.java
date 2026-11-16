@@ -4,7 +4,8 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape;
 
 /**
  * What a tile with one function is built as (batch 2026-11-02-process-simulator, {@code SIZING_PLAN.md} section 3.10). The run needs
- * none, as the world's law is the same for each pair; Auto proposes one from the numbers, and a key keeps the player's. Saved by
+ * none, as the world's law is the same for each pair, but for the Pump tile's plunger pump, whose work and efficiency its run reads
+ * ({@code Passages#pumpType}); Auto proposes one from the numbers, and a key keeps the player's. Saved by
  * name. The steam turbine (W8) is built one way, so it has no type here.
  */
 public enum UnitType {

@@ -13,7 +13,9 @@ import com.wormzjl.icheme.science.fluid.network.InletPhase;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.machine.CentrifugalCompressor;
 import com.wormzjl.icheme.science.machine.CentrifugalPump;
+import com.wormzjl.icheme.science.flowsheet.sizing.UnitType;
 import com.wormzjl.icheme.science.machine.Motor;
+import com.wormzjl.icheme.science.machine.PlungerPump;
 
 import java.util.List;
 
@@ -24,7 +26,10 @@ import java.util.List;
  *
  * <p>Its shaft power is its design's (batch 2026-11-03-rotating-machinery, W8 form A, owner decision D42), and all of it heats the
  * discharge, since the losses stay in the fluid: a pump's is the ideal work {@code Q Δp} over the best efficiency of a centrifugal
- * pump rated at the tile's duty ({@link CentrifugalPump#rated}, Corripio); a compressor's is the world's closure's, the polytropic
+ * pump rated at the tile's duty ({@link CentrifugalPump#rated}, Corripio); a Pump tile whose sizing holds the plunger pump (the
+ * player's type or its kept size's, {@link com.wormzjl.icheme.science.flowsheet.Passages#pumpType}), the isentropic work on its
+ * inlet's exponent over {@link PlungerPump#MECHANICAL_EFFICIENCY} (P1 of batch 2026-11-16-supercritical-followups); a compressor's
+ * is the world's closure's, the polytropic
  * work already over {@link CentrifugalCompressor#DEFAULT_EFFICIENCY}. Each proposes its driver: a 2-pole IE3 motor with the
  * {@link Motor#SPARE} ({@link #driver}).
  */
@@ -55,12 +60,17 @@ public final class MoverUnit implements UnitModel {
             double rise = outlet - in.pressure();
             if (!(rise > 0)) throw new FlowsheetFailure("mover.rise");
             if (closure.refuses(InletPhase.bulk(thermo.model(), in.state()), false)) throw new FlowsheetFailure(closure.deviceName() + ".phase");
-            double density = in.mass() / in.state().volume(), ideal = closure.power(in.mass(), rise, density, in.pressure(), kappa(thermo.model(), in.state()));
             boolean pump = closure instanceof FlowControl.Pump;
+            // A Pump tile sized as a plunger pump (P1 of batch 2026-11-16-supercritical-followups): the isentropic work on its inlet's
+            // exponent over the plungers' mechanical efficiency, as the world books it.
+            boolean plunger = pump && u.passages().pumpType() == UnitType.PLUNGER;
+            double density = in.mass() / in.state().volume();
+            double ideal = plunger ? in.mass() / density * PlungerPump.isentropicWork(rise, in.pressure(), thermo.model().isentropicExponent(in.state()))
+                    : closure.power(in.mass(), rise, density, in.pressure(), kappa(thermo.model(), in.state()));
             // One dense fluid has no bubble point and, at its own temperature, no edge (S4b): no warning, in either slot.
             if (pump && !in.state().dense() && thermo.boils(in.temperature(), in.pressure() * (1 - AT_BUBBLE), in.amounts())) report.note(Note.warning(u.id(), "pump.bubble_point"));
             double head = rise / (density * GRAVITY);
-            double efficiency = pump ? pumpEfficiency(in.mass() / density) : CentrifugalCompressor.DEFAULT_EFFICIENCY;
+            double efficiency = plunger ? PlungerPump.MECHANICAL_EFFICIENCY : pump ? pumpEfficiency(in.mass() / density) : CentrifugalCompressor.DEFAULT_EFFICIENCY;
             double shaft = pump ? ideal / efficiency : ideal;
             u.write(board, report, "out", thermo.heated(in, shaft, outlet));
             report.duty(shaft);

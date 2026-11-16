@@ -80,10 +80,20 @@ public final class PumpSizing {
      * @param reducedDensity its suction's reduced density {@code v_c / v} where it is one dense fluid ({@code State.dense()},
      *                 S5 of batch 2026-11-15-supercritical-fluids), which {@link Limit#PUMP_DENSITY} reads; NaN for any other
      *                 suction, which reads no such row
+     * @param pressure its suction's pressure, Pa, which a plunger pump's clearance loss and work read (batch
+     *                 2026-11-16-supercritical-followups, P1); NaN where the caller gives none: then a plunger pump's work is
+     *                 {@code Q ΔP} and its displacement loses no clearance
+     * @param exponent its suction's isentropic exponent ({@code FluidThermodynamics#isentropicExponent}); NaN with no pressure
      */
-    public record Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils, double reducedDensity) {
+    public record Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils, double reducedDensity,
+                       double pressure, double exponent) {
         /** A pump with no flow: no size, no lamp. */
         public static final Load NONE = new Load(0, 0, 0, null, Double.NaN);
+
+        /** A pump whose suction's pressure and exponent are not given. */
+        public Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils, double reducedDensity) {
+            this(flow, head, mostHead, npsh, density, edge, boils, reducedDensity, Double.NaN, Double.NaN);
+        }
 
         /** A pump whose liquid's density is not given: its duty has no shaft power. */
         public Load(double flow, double head, double mostHead, @Nullable Double npsh) {
@@ -122,12 +132,16 @@ public final class PumpSizing {
             if (!suction.flows()) return NONE;
             double weight = suction.density() * PassiveStepSolver.GRAVITY, reference = thermo.model().pumpReferenceDensity() * PassiveStepSolver.GRAVITY;
             double dense = liquid.state() != null && liquid.state().dense() ? liquid.state().reducedDensity() : Double.NaN;
-            if (height == null) return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, null, suction.density(), Double.POSITIVE_INFINITY, true, dense);
+            // A plunger pump's clearance and work read the suction's pressure and exponent (P1); the world's row reads the same.
+            double exponent = liquid.state() != null ? thermo.model().isentropicExponent(liquid.state()) : Double.NaN;
+            double pressure = Double.isNaN(exponent) ? Double.NaN : liquid.pressure();
+            if (height == null) return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, null, suction.density(), Double.POSITIVE_INFINITY, true, dense,
+                    pressure, exponent);
             double vapour = thermo.vapourPressure(liquid.temperature(), liquid.pressure(), liquid.amountsView()), edge = thermo.zoneEdge(liquid.temperature(), liquid.pressure(), liquid.amountsView());
             boolean boils = vapour < Double.POSITIVE_INFINITY;
             double from = boils ? vapour : 0, at = liquid.pressure() + weight * height - 1e5 * LineSizing.drop(suction, size, suction.length());
             return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, (at - from) / weight, suction.density(),
-                    edge < Double.POSITIVE_INFINITY ? (edge - from) / weight : Double.POSITIVE_INFINITY, boils, dense);
+                    edge < Double.POSITIVE_INFINITY ? (edge - from) / weight : Double.POSITIVE_INFINITY, boils, dense, pressure, exponent);
         }
 
         boolean flows() {
@@ -181,25 +195,42 @@ public final class PumpSizing {
     }
 
     /**
-     * A plunger pump's duty on {@code load} (S8): its shaft power the flow times the rise over {@link PlungerPump#MECHANICAL_EFFICIENCY},
-     * as the world books the plungers' work; no NPSH3 of its own.
+     * The isentropic work per suction volume of {@code load}'s rise from its suction ({@link PlungerPump#isentropicWork}), J/m³:
+     * the rise itself where the load gives no suction pressure.
+     */
+    static double plungerWork(Load load) {
+        double rise = rise(load);
+        return Double.isNaN(load.pressure()) ? rise : PlungerPump.isentropicWork(rise, load.pressure(), load.exponent());
+    }
+
+    /** The share of a plunger's displacement its clearance leaves at {@code load}'s rise ({@link PlungerPump#volumetricEfficiency}):
+     * 1 where the load gives no suction pressure. */
+    static double plungerVolumetricEfficiency(Load load) {
+        double rise = rise(load);
+        return Double.isNaN(load.pressure()) || !Double.isFinite(rise) ? 1 : PlungerPump.volumetricEfficiency(rise, load.pressure(), load.exponent());
+    }
+
+    /**
+     * A plunger pump's duty on {@code load} (S8): its shaft power the flow times the isentropic work of the rise over
+     * {@link PlungerPump#MECHANICAL_EFFICIENCY}, as the world books the plungers' work (P1 of batch 2026-11-16-supercritical-followups;
+     * {@code Q ΔP} on a liquid); no NPSH3 of its own.
      */
     public static Duty plungerDuty(Load load) {
-        double shaft = load.flow() / 3600 * rise(load) / PlungerPump.MECHANICAL_EFFICIENCY;
+        double shaft = load.flow() / 3600 * plungerWork(load) / PlungerPump.MECHANICAL_EFFICIENCY;
         return new Duty(load.flow(), load.head(), shaft, Double.NaN, Double.isNaN(shaft) ? Double.NaN : Motor.ratingFor(shaft));
     }
 
     /**
      * Every limit of {@code load} read at plunger pump {@code size} (S8): the world's flow, the flow with {@link Limit#AUTO_SPARE}
-     * against the model's displacement ({@link Limit#PUMP_RATED}: above 120 % the flow is more than it displaces), and the rise
-     * against its relief rise. No head, suction density or NPSH row: it displaces its volume at any density, and its suction limit
-     * is the world's.
+     * against what the model delivers, its displacement times the clearance's share at the load's rise ({@link Limit#PUMP_RATED}:
+     * above 120 % the flow is more than it delivers; P1), and the rise against its relief rise. No head, suction density or NPSH
+     * row: it displaces its volume at any density, and its suction limit is the world's.
      */
     public static Rating rate(Load load, Plunger size) {
         if (!load.flows()) return Rating.NONE;
         var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.PUMP_FLOW.read(load.flow()));
-        readings.add(Limit.PUMP_RATED.read(100 * Selection.spared(load.flow()) / size.capacity()));
+        readings.add(Limit.PUMP_RATED.read(100 * Selection.spared(load.flow()) / (size.capacity() * plungerVolumetricEfficiency(load))));
         double rise = rise(load);
         if (Double.isFinite(rise)) readings.add(Limit.PLUNGER_RISE.read(rise / 1e6));
         return plungerDuty(load).on(new Rating(readings));

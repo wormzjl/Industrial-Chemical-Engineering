@@ -1201,23 +1201,30 @@ public final class PassiveStepSolver {
      * The heat capacity ratio of the gas the mover on {@code pipe} draws, on its suction node's state at the step's start
      * ({@link FluidThermodynamics#heatCapacityRatio}; batch 2026-11-03-rotating-machinery, plan section 3.2): one value
      * for the whole step, so every row, every mode test and the transport's booking read the same polytropic exponent.
-     * A liquid mover does not use it. A steam turbine reads its inlet's the same way (plan section 3.4). Cached by the
+     * A liquid mover does not use it, except a plunger pump, which reads its suction's isentropic exponent instead
+     * ({@link #suctionKappa}). A steam turbine reads its inlet's the same way (plan section 3.4). Cached by the
      * state's identity: a state is immutable.
      */
     private double kappa(PassiveNetwork graph,PassiveNetwork.Pipe pipe) {
-        if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid())return 1.4;
+        if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&!plunger(mover))return 1.4;
         var state=graph.reservoirs().get(pipe.first()).state();int slot=System.identityHashCode(state)&15;
         if(kappaStates[slot]!=state){kappaValues[slot]=suctionKappa(model,pipe.control(),state);kappaStates[slot]=state;}
         return kappaValues[slot];
     }
     /**
-     * The heat capacity ratio the solve reads for the mover or turbine {@code control} drawing from {@code suction}: 1.4 for
-     * a liquid mover (its law does not use it), else the gas's on that state ({@link FluidThermodynamics#heatCapacityRatio}).
+     * The heat capacity ratio the solve reads for the mover or turbine {@code control} drawing from {@code suction}: a plunger
+     * pump's suction's isentropic exponent ({@link FluidThermodynamics#isentropicExponent}: its clearance's re-expansion and
+     * its isentropic work, batch 2026-11-16-supercritical-followups, P1); 1.4 for any other liquid mover (its law does not
+     * use it); else the gas's on that state ({@link FluidThermodynamics#heatCapacityRatio}).
      * The one function the solve ({@link #kappa}), a driver's charge and its speed control read (code base review M-01, M-07).
      */
     public static double suctionKappa(FluidThermodynamics model,FlowControl control,FluidThermodynamics.State suction) {
-        if(control instanceof FlowControl.Mover mover&&mover.liquid())return 1.4;
+        if(control instanceof FlowControl.Mover mover&&mover.liquid())return plunger(mover)?model.isentropicExponent(suction):1.4;
         return model.heatCapacityRatio(suction);
+    }
+    /** Whether {@code mover} is a plunger pump on its shaft, whose law reads the suction's isentropic exponent. */
+    private static boolean plunger(FlowControl.Mover mover) {
+        return mover instanceof FlowControl.Machine machine&&machine.law() instanceof com.wormzjl.icheme.science.machine.PlungerPump;
     }
     /**
      * The share of its dry efficiency a centrifugal compressor on connection {@code edge} of {@code graph} keeps on its wet

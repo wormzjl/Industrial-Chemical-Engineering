@@ -71,9 +71,16 @@ public record PositiveDisplacement(double displacement, double reliefRise) {
     }
 
     /** The share of the displacement at a rise of {@code v} relief rises: the smooth minimum of the two lines. */
-    private static double share(double v) {
+    static double share(double v) {
         double x = 1 - SLIP * v, y = RELIEF_SLOPE * (1 - v) + LIFT, d = x - y;
         return .5 * (x + y - Math.sqrt(d * d + ROUNDING * ROUNDING));
+    }
+
+    /** {@code d share / dv}: between {@code −RELIEF_SLOPE} and {@code −SLIP} at every rise (the plunger pump's law,
+     * {@link PlungerPump}, which subtracts its clearance loss from {@link #share}). */
+    static double shareSlope(double v) {
+        double x = 1 - SLIP * v, y = RELIEF_SLOPE * (1 - v) + LIFT, d = x - y;
+        return .5 * (-SLIP - RELIEF_SLOPE - d * (RELIEF_SLOPE - SLIP) / Math.sqrt(d * d + ROUNDING * ROUNDING));
     }
 
     /** The rise in relief rises at which the law passes the share {@code u}: {@code (x − u)(y − u) = ε²/4} with both factors

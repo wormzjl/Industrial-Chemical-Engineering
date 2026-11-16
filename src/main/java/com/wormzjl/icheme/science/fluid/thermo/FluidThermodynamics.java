@@ -459,6 +459,8 @@ public final class FluidThermodynamics {
     public double velocityLimit(State state){return streams.velocityLimit(state);}
     public double isothermalAcousticBound(State state){return streams.isothermalAcousticBound(state);}
     public double heatCapacityRatio(State state){return streams.heatCapacityRatio(state);}
+    /** The isentropic exponent {@code K_s/P} of the phase a plunger pump draws from {@code state} ({@link NetworkStreams#isentropicExponent}). */
+    public double isentropicExponent(State state){return streams.isentropicExponent(state);}
     /**
      * The fluid a phase-selective vessel outlet draws, read off the vessel's own state with no flash and no extra
      * equation-of-state root: every term is a sum over the phase amounts, volumes and molar properties {@link #state}
