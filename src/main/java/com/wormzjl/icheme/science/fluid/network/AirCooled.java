@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.fluid.network;
 
-import com.wormzjl.icheme.science.math.DeterministicMath;
 import java.util.Objects;
 import org.jetbrains.annotations.Nullable;
 
@@ -31,6 +30,7 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
         public Air(double temperature,double barePerFace,double film,double capacity,double natural){this(temperature,barePerFace,film,capacity,natural,HeatCurve.Films.DEFAULT);}
         public Air {
             Objects.requireNonNull(process);
+            if(process.outer()!=null)throw new IllegalArgumentException("An air cooler's process films have no outer side");
             if(!(temperature>0)||!(barePerFace>0)||!(film>0)||!(capacity>0)||!(natural>0&&natural<1)||!Double.isFinite(temperature+barePerFace+film+capacity))
                 throw new IllegalArgumentException("Invalid air side");
         }
@@ -47,15 +47,14 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
          * ({@link #process}) on the bare tube in series with the air's film on the fins, and C the air's
          * capacity rate; the air's film and capacity scale with its flow. Shut louvers leave the films' limit at no air,
          * which is zero: they are kept just above it, as a curve's films are positive, and move no heat a march can see.
+         * The films returned are the {@link #process} films with this air as their {@link HeatCurve.Films.Outer}, so a
+         * liquid's viscous resistance (decision D13 of batch 2026-11-16-fouling-corrosion) lies inside the tubes; the wall's
+         * effective films are {@link HeatCurve.Films#wallLiquid} and its siblings.
          */
         public HeatCurve.Films films(double draught) {
             if(!(draught>=0&&draught<=1))throw new IllegalArgumentException("Invalid air share "+draught);
             double share=Math.max(draught,SHUT),air=film*share,rate=capacity*share;
-            return new HeatCurve.Films(effective(process.liquid(),air,rate),effective(process.twoPhase(),air,rate),effective(process.gas(),air,rate));
-        }
-        private double effective(double process,double air,double rate) {
-            double conductance=1/(1/(barePerFace*process)+1/air);
-            return -rate*DeterministicMath.expm1(-conductance/rate)/barePerFace;
+            return new HeatCurve.Films(process.liquid(),process.twoPhase(),process.gas(),new HeatCurve.Films.Outer(barePerFace,air,rate));
         }
     }
     /** The air share the films take for shut louvers: a curve's films are positive. */

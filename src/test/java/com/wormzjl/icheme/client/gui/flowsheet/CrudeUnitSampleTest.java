@@ -623,7 +623,7 @@ class CrudeUnitSampleTest {
             var in = run.streams().get("S-10");
             var out = run.streams().get("RESIDUE");
             double duty = 1.1 * (in.enthalpy() - out.enthalpy()), capacity = duty / (in.temperature() - out.temperature()), air = HeatSides.AIR_TEMPERATURE;
-            return capacity * Math.log((in.temperature() - air) / (out.temperature() - air)) / HeatSides.airFilms(1).liquid();
+            return capacity * Math.log((in.temperature() - air) / (out.temperature() - air)) / HeatSides.airFilms(1).wallLiquid();
         }
 
         /**

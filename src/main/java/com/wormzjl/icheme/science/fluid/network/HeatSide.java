@@ -27,6 +27,7 @@ public record HeatSide(double area,HeatCurve.Films films,double[] wall,double by
     }
     public HeatSide {
         Objects.requireNonNull(films);Objects.requireNonNull(limit);Objects.requireNonNull(routing);routing.validate(wall.length);
+        if(films.outer()!=null)throw new IllegalArgumentException("A heat side's films have no outer side (an air cooler's law has)");
         if(!(area>0)||!Double.isFinite(area)||wall.length<1||!(bypass>=0&&bypass<=1)||!Double.isFinite(giveBack)||!(active>=0&&active<=1))throw new IllegalArgumentException("Invalid heat side");
         wall=wall.clone();
         for(double temperature:wall)if(!(temperature>0)||!Double.isFinite(temperature))throw new IllegalArgumentException("Invalid wall temperature");

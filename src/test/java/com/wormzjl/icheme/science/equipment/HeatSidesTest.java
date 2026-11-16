@@ -80,11 +80,11 @@ class HeatSidesTest {
         double[][] perFace={{2149.6,2435.7,426.3},{629.2,650.5,293.3}};
         for(int fans=1;fans>=0;fans--) {
             var films=HeatSides.airFilms(fans);double[] expected=perFace[1-fans];
-            assertEquals(expected[0],5*films.liquid(),.5);assertEquals(expected[1],5*films.twoPhase(),.5);assertEquals(expected[2],5*films.gas(),.5);
+            assertEquals(expected[0],5*films.wallLiquid(),.5);assertEquals(expected[1],5*films.wallTwoPhase(),.5);assertEquals(expected[2],5*films.wallGas(),.5);
         }
         assertThrows(IllegalArgumentException.class,()->HeatSides.airFilms(1.5));
         // The largest bay, liquid at 85 °C in 25 °C air with every tube meeting fresh air: about 1.6 MW (plan section 4).
-        assertEquals(1.6e6,HeatSides.airFilms(1).liquid()*5*12.2*60,.05e6);
+        assertEquals(1.6e6,HeatSides.airFilms(1).wallLiquid()*5*12.2*60,.05e6);
     }
     /** An air cooler bank has one process side over 5 m² of bare tube per m² of face, the bays' tubes in one pass each. */
     @Test void anAirCoolerHasOneProcessSideOverItsBaysTubes() {

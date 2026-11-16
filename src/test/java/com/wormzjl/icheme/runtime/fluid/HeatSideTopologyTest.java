@@ -167,7 +167,7 @@ class HeatSideTopologyTest {
             double outlet=end.reservoirs().get(after.second()).state().temperature();
             var curve=HeatCurve.sample(model,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(water(inlet,130_000)),130_000,air-10,inlet+10,HeatCurve.Films.DEFAULT,()->{});
             double cp=(curve.enthalpy(curve.knots()-1)-curve.enthalpy(0))/(curve.temperature(curve.knots()-1)-curve.temperature(0));
-            double film=HeatSides.airFilms(fans).liquid();
+            double film=HeatSides.airFilms(fans).wallLiquid();
             assertEquals(air+(inlet-air)*Math.exp(-film*definition.area()/(flow*cp)),outlet,.1,"fans "+fans+" at "+flow+" kg/s");
             outlets[fans]=outlet;
         }

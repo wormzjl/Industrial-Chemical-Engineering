@@ -43,23 +43,67 @@ public final class HeatCurve {
     /** Each knot's liquid-like weight ({@link #liquidLikeWeight}), NaN for a knot of more than one phase; null with
      * {@link #vapour}. */
     private final double[] liquidLike;
+    /** Each knot's viscous resistance ({@link #viscous(double)}, m²K/W, 0 for a thin liquid or no liquid film); null with
+     * {@link #vapour}. */
+    private final double[] viscous;
 
-    public HeatCurve(double[] h,double[] t,double[] film){this(h,t,film,null,null);}
-    private HeatCurve(double[] h,double[] t,double[] film,double[] vapour,double[] liquidLike) {
+    /** The reference viscosity of the liquid film, Pa·s: water at 20 °C ({@link #viscous(double)}). */
+    public static final double VISCOUS_REFERENCE=1e-3;
+    /** The film's exponent on the viscosity ratio at one mass flow and bore: Dittus-Boelter's Re^0.8 Pr^0.4 gives μ^-0.4. */
+    public static final double VISCOUS_EXPONENT=.4;
+    /** The most viscous resistance, m²K/W: the reference liquid film falls at most to the gas film. */
+    public static final double VISCOUS_MOST=1/Films.DEFAULT.gas()-1/Films.DEFAULT.liquid();
+
+    public HeatCurve(double[] h,double[] t,double[] film){this(h,t,film,null,null,null);}
+    private HeatCurve(double[] h,double[] t,double[] film,double[] vapour,double[] liquidLike,double[] viscous) {
         if(h.length<2||h.length!=t.length||h.length!=film.length||vapour!=null&&vapour.length!=h.length
-                ||(vapour==null)!=(liquidLike==null)||liquidLike!=null&&liquidLike.length!=h.length)throw new IllegalArgumentException("At least two matching knots required");
+                ||(vapour==null)!=(liquidLike==null)||(vapour==null)!=(viscous==null)||liquidLike!=null&&liquidLike.length!=h.length
+                ||viscous!=null&&viscous.length!=h.length)throw new IllegalArgumentException("At least two matching knots required");
         this.h=h.clone();this.t=t.clone();this.film=film.clone();this.vapour=vapour==null?null:vapour.clone();this.liquidLike=liquidLike==null?null:liquidLike.clone();
+        this.viscous=viscous==null?null:viscous.clone();
         for(int i=0;i<h.length;i++)if(!Double.isFinite(this.h[i])||!Double.isFinite(this.t[i])||this.t[i]<=0||!Double.isFinite(this.film[i])||this.film[i]<=0
-                ||i>0&&(this.h[i]<=this.h[i-1]||this.t[i]<this.t[i-1]))
+                ||i>0&&(this.h[i]<=this.h[i-1]||this.t[i]<this.t[i-1])||this.viscous!=null&&!(this.viscous[i]>=0&&this.viscous[i]<=VISCOUS_MOST))
             throw new IllegalArgumentException("A heat curve needs increasing enthalpy, nondecreasing temperature and positive films");
     }
-    /** The same stream with {@code films} on its knots, by their vapour fractions (batch 2026-10-27-heat-exchanger-design,
-     * W4: an air cooler's fans change its films from step to step). Only a sampled curve knows its vapour fractions. */
+    /** The same stream with {@code films} on its knots, by their vapour fractions and viscous resistances (batch
+     * 2026-10-27-heat-exchanger-design, W4: an air cooler's fans change its films from step to step). Only a sampled curve
+     * knows them; no flash. */
     public HeatCurve withFilms(Films films) {
         if(vapour==null)throw new IllegalStateException("A heat curve given its films directly has no vapour fractions");
-        double[] value=new double[h.length];for(int i=0;i<h.length;i++)value[i]=films.at(vapour[i],liquidLike[i]);
-        return new HeatCurve(h,t,value,vapour,liquidLike);
+        return new HeatCurve(h,t,filmed(films,vapour,liquidLike,viscous),vapour,liquidLike,viscous);
     }
+    /**
+     * The knots' films: {@link Films#at(double,double,double)} of each knot, with an air cooler's {@link Films.Outer}
+     * applied once per regime for every knot of no viscous resistance, and once more for a knot whose viscous liquid film
+     * has weight (an air cooler's controller re-films a curve per trial share, {@link AirCooled#planned}).
+     */
+    private static double[] filmed(Films films,double[] xs,double[] ws,double[] vs) {
+        double liquid=films.wallLiquid(),twoPhase=films.wallTwoPhase(),gas=films.wallGas();
+        double[] value=new double[xs.length];
+        for(int i=0;i<xs.length;i++) {
+            double x=xs[i],w=ws[i],v=vs[i];
+            value[i]=v>0&&liquidWeighted(x,w)?Films.blend(x,w,films.wallViscous(v),twoPhase,gas):Films.blend(x,w,liquid,twoPhase,gas);
+        }
+        return value;
+    }
+    /** Whether the liquid film has weight at vapour fraction {@code x} and liquid-like weight {@code w} ({@link Films#at(double,double)}). */
+    private static boolean liquidWeighted(double x,double w){return Double.isNaN(w)?x<LIQUID_UNTIL:w>0;}
+    /**
+     * The viscous resistance of a liquid film, m²K/W (owner decision D13 of batch 2026-11-16-fouling-corrosion, 2026-11-16):
+     * in turbulent flow at one mass flow and bore the film falls with the liquid's viscosity {@code mu} (Pa·s) as
+     * Nu = 0.023 Re^0.8 Pr^0.4 gives, φ = (μ_ref/μ)^0.4 of the reference film at {@link #VISCOUS_REFERENCE} (water at 20 °C:
+     * it and every thinner liquid keep the reference film). As a resistance in series with the film, as a deposit is:
+     * (1/φ − 1)/2000. μ 3 mPa·s gives φ 0.644 (film 1289 W/m²K), 10 mPa·s 0.398 (796), 30 mPa·s 0.257 (513); the film never
+     * falls below the gas film, {@link #VISCOUS_MOST}, which μ 1.79 Pa·s reaches. 0 for a thin, non-finite or non-positive
+     * {@code mu}.
+     */
+    public static double viscous(double mu) {
+        if(!(mu>VISCOUS_REFERENCE)||!Double.isFinite(mu))return 0;
+        double phi=DeterministicMath.pow(VISCOUS_REFERENCE/mu,VISCOUS_EXPONENT);
+        return Math.min(VISCOUS_MOST,(1/phi-1)/Films.DEFAULT.liquid());
+    }
+    /** A knot's viscous resistance ({@link #viscous(double)}), m²K/W; 0 for a curve given its films directly. */
+    public double viscous(int knot){return viscous==null?0:viscous[knot];}
     /**
      * The liquid-like weight of a state of one fluid, the model's ({@link FluidThermodynamics#liquidLikeWeight}): 0 (gas
      * film) at or below reduced density {@link #FILM_GAS_UNTIL}, 1 (liquid film) from {@link #FILM_LIQUID_FROM}, a
@@ -67,39 +111,78 @@ public final class HeatCurve {
      */
     public static double liquidLikeWeight(FluidThermodynamics.State state){return FluidThermodynamics.liquidLikeWeight(state);}
 
-    /** The films of the three phase regimes (W/m2K), each with its share of the wall and fouling (plan section 4). */
-    public record Films(double liquid,double twoPhase,double gas) {
+    /**
+     * The films of the three phase regimes (W/m2K), each with its share of the wall and fouling (plan section 4). With an
+     * {@code outer} (an air cooler's, {@link AirCooled.Air#films}) the three are the films inside the tubes and the wall
+     * sees each through the outer side ({@link #wallLiquid}): a liquid's viscous resistance ({@link HeatCurve#viscous(double)})
+     * then lies inside the tubes, before the air. Null for every other side.
+     */
+    public record Films(double liquid,double twoPhase,double gas,@org.jetbrains.annotations.Nullable Outer outer) {
         public static final Films DEFAULT=new Films(2000,5000,100);
+        public Films(double liquid,double twoPhase,double gas){this(liquid,twoPhase,gas,null);}
         public Films{if(!(liquid>0)||!(twoPhase>0)||!(gas>0)||!Double.isFinite(liquid+twoPhase+gas))throw new IllegalArgumentException("Invalid films");}
+        /**
+         * An air cooler's outer side per m² of bare tube (W4): its bare tube per m² of face {@code barePerFace}, the air's
+         * film on the fins {@code air} (W/K per m² of face) and its capacity rate {@code rate} (W/K per m² of face). A data
+         * record, so films with one compare by value ({@code PassiveStepSolver}'s curve cache).
+         */
+        public record Outer(double barePerFace,double air,double rate) {
+            /** The effective film on the bare tube of a process film {@code process}: UA_eff = C (1 − e^(−UA/C)) per m² of
+             * face, UA the process film on the bare tube in series with the air's film ({@link AirCooled.Air#films}). */
+            public double apply(double process) {
+                double conductance=1/(1/(barePerFace*process)+1/air);
+                return -rate*DeterministicMath.expm1(-conductance/rate)/barePerFace;
+            }
+        }
+        /** The liquid film the wall sees: {@link #liquid}, through the {@link #outer} side with one. */
+        public double wallLiquid(){return outer==null?liquid:outer.apply(liquid);}
+        /** The two-phase film the wall sees ({@link #wallLiquid}). */
+        public double wallTwoPhase(){return outer==null?twoPhase:outer.apply(twoPhase);}
+        /** The gas film the wall sees ({@link #wallLiquid}). */
+        public double wallGas(){return outer==null?gas:outer.apply(gas);}
+        /** The liquid film the wall sees behind a viscous resistance {@code viscous} (m²K/W) in series with {@link #liquid}. */
+        double wallViscous(double viscous){double inner=1/(1/liquid+viscous);return outer==null?inner:outer.apply(inner);}
         /** The film at vapour mass fraction {@code x}: liquid, blended to the two-phase film by {@link #LIQUID_UNTIL}, held to
          * {@link #GAS_FROM}, blended to gas by 1. */
-        public double at(double x) {
-            if(x<=0)return liquid;
-            if(x<LIQUID_UNTIL)return liquid+(twoPhase-liquid)*x/LIQUID_UNTIL;
-            if(x<=GAS_FROM)return twoPhase;
-            if(x<1)return twoPhase+(gas-twoPhase)*(x-GAS_FROM)/(1-GAS_FROM);
-            return gas;
-        }
+        public double at(double x){return blend(x,Double.NaN,wallLiquid(),wallTwoPhase(),wallGas());}
         /**
          * The film of a point of vapour fraction {@code x} and liquid-like weight {@code w} ({@link #liquidLikeWeight}): with
          * no weight (NaN, a point of two phases) {@link #at(double)}; else the gas film at {@code w <= 0}, the liquid film at
          * {@code w >= 1}, {@code gas + w (liquid - gas)} between: one fluid never takes the two-phase film.
          */
-        public double at(double x,double w) {
-            if(Double.isNaN(w))return at(x);
+        public double at(double x,double w){return blend(x,w,wallLiquid(),wallTwoPhase(),wallGas());}
+        /**
+         * {@link #at(double,double)} with the liquid film behind a viscous resistance {@code viscous} (m²K/W,
+         * {@link HeatCurve#viscous(double)}) in series: {@code 1/(1/liquid + viscous)}, inside an {@link #outer} side. At
+         * {@code viscous} 0 exactly {@link #at(double,double)}.
+         */
+        public double at(double x,double w,double viscous) {
+            if(viscous==0)return at(x,w);
+            return blend(x,w,wallViscous(viscous),wallTwoPhase(),wallGas());
+        }
+        /** The blend of {@link #at(double,double)} over the wall's three films. */
+        static double blend(double x,double w,double liquid,double twoPhase,double gas) {
+            if(Double.isNaN(w)) {
+                if(x<=0)return liquid;
+                if(x<LIQUID_UNTIL)return liquid+(twoPhase-liquid)*x/LIQUID_UNTIL;
+                if(x<=GAS_FROM)return twoPhase;
+                if(x<1)return twoPhase+(gas-twoPhase)*(x-GAS_FROM)/(1-GAS_FROM);
+                return gas;
+            }
             if(w<=0)return gas;
             if(w>=1)return liquid;
             return gas+w*(liquid-gas);
         }
         /**
          * These films behind a fouling deposit of resistance {@code rf} (m²K/W) in series (batch 2026-11-16-fouling-corrosion,
-         * plan section 3.2): each {@code h/(1 + h rf)}. Itself, the same instance, at {@code rf} 0, so a clean side stays bit
-         * for bit what it was.
+         * plan section 3.2): each {@code h/(1 + h rf)}, inside the {@link #outer} side. Itself, the same instance, at {@code rf}
+         * 0, so a clean side stays bit for bit what it was. Series resistances add in any order: a viscous liquid behind a
+         * deposit is {@code 1/(1/liquid + rf + viscous)}.
          */
         public Films fouled(double rf) {
             if(rf==0)return this;
             if(!(rf>0)||!Double.isFinite(rf))throw new IllegalArgumentException("Invalid fouling resistance "+rf);
-            return new Films(liquid/(1+liquid*rf),twoPhase/(1+twoPhase*rf),gas/(1+gas*rf));
+            return new Films(liquid/(1+liquid*rf),twoPhase/(1+twoPhase*rf),gas/(1+gas*rf),outer);
         }
     }
 
@@ -226,7 +309,8 @@ public final class HeatCurve {
                     // vapour coordinate is (it is 1 - w); between a liquid and a vapour point a phase change lies (a pure
                     // component's plateau), so the knot has no weight and takes the two-phase film.
                     double weight=continuous(previous,point)?previous.w+share*(point.w-previous.w):Double.NaN;
-                    if(value>previous.h&&value<point.h)knots.add(new Point(previous.t+share*(point.t-previous.t),value,x,weight,-1,false));
+                    double viscous=previous.viscous+share*(point.viscous-previous.viscous);
+                    if(value>previous.h&&value<point.h)knots.add(new Point(previous.t+share*(point.t-previous.t),value,x,weight,-1,false,viscous));
                 }
             }
             knots.add(point);previous=point;
@@ -234,10 +318,10 @@ public final class HeatCurve {
         knots.sort((a,c)->Double.compare(a.h,c.h));
         var kept=new ArrayList<Point>();
         for(var point:knots)if(kept.isEmpty()||point.h>kept.getLast().h)kept.add(point);
-        double[] hs=new double[kept.size()],ts=new double[kept.size()],fs=new double[kept.size()],xs=new double[kept.size()],ws=new double[kept.size()];
+        double[] hs=new double[kept.size()],ts=new double[kept.size()],xs=new double[kept.size()],ws=new double[kept.size()],vs=new double[kept.size()];
         double floor=0;
-        for(int i=0;i<kept.size();i++){var point=kept.get(i);hs[i]=point.h;ts[i]=floor=Math.max(floor,point.t);xs[i]=point.vapour;ws[i]=point.w;fs[i]=films.at(point.vapour,point.w);}
-        return new HeatCurve(hs,ts,fs,xs,ws);
+        for(int i=0;i<kept.size();i++){var point=kept.get(i);hs[i]=point.h;ts[i]=floor=Math.max(floor,point.t);xs[i]=point.vapour;ws[i]=point.w;vs[i]=point.viscous;}
+        return new HeatCurve(hs,ts,filmed(films,xs,ws,vs),xs,ws,vs);
     }
     private static final int DIVISIONS=16,MAXIMUM_KNOTS=512;
     /** How closely a phase boundary is bisected, K: the plateau's edge is then out by cp times this, about 4 J/kg against a
@@ -246,8 +330,9 @@ public final class HeatCurve {
     /** A sampled point: its vapour coordinate is the vapour mass fraction, or {@code 1 - w} for a point of one fluid of
      * liquid-like weight {@code w} (NaN for a point of more than one phase), so one fluid is never bisected as a phase change;
      * {@code slot} its one fluid slot (-1 for none or an inserted knot) and {@code dense} whether that fluid is
-     * {@link FluidThermodynamics.State#dense()}. */
-    private record Point(double t,double h,double vapour,double w,int slot,boolean dense) {}
+     * {@link FluidThermodynamics.State#dense()}; {@code viscous} its liquid film's viscous resistance ({@link #viscous(double)}),
+     * 0 where the liquid film has no weight. */
+    private record Point(double t,double h,double vapour,double w,int slot,boolean dense,double viscous) {}
     /** Whether one fluid runs continuously from {@code a} to {@code b}: both of one fluid, in the same slot or both dense. */
     private static boolean continuous(Point a,Point b) {
         return !Double.isNaN(a.w)&&!Double.isNaN(b.w)&&(a.slot>=0&&a.slot==b.slot||a.dense&&b.dense);
@@ -255,8 +340,31 @@ public final class HeatCurve {
     private static Point point(FluidThermodynamics model,double[] amounts,double pressure,double temperature,Runnable checkpoint) {
         checkpoint.run();
         var state=model.flashTP(temperature,pressure,amounts,checkpoint);
-        double w=liquidLikeWeight(state);
-        return new Point(temperature,state.enthalpy()/state.mass(),Double.isNaN(w)?model.vaporMass(state)/state.mass():1-w,w,state.oneFluidSlot(),state.dense());
+        double w=liquidLikeWeight(state),vapour=Double.isNaN(w)?model.vaporMass(state)/state.mass():1-w;
+        // A plateau or a gas point, where the liquid film has no weight, reads no viscosity.
+        double viscous=liquidWeighted(vapour,w)?viscous(liquidViscosity(model,state,w)):0;
+        return new Point(temperature,state.enthalpy()/state.mass(),vapour,w,state.oneFluidSlot(),state.dense(),viscous);
+    }
+    /**
+     * The viscosity (Pa·s) of the liquid a point's liquid film wets the wall with: the one fluid's ({@code w} not NaN), else
+     * its held liquid slots' (oil and aqueous), weighted by slot volume, the network's rule for a stream of several phases
+     * ({@code NetworkReduction.viscosity}). Solids are not on the curve: no slurry term. NaN, the reference film, where no
+     * liquid is held or the viscosity model refuses the liquid.
+     */
+    private static double liquidViscosity(FluidThermodynamics model,FluidThermodynamics.State state,double w) {
+        try {
+            if(!Double.isNaN(w)){int slot=state.oneFluidSlot();return slot<0?Double.NaN:model.slotViscosity(state,slot,null,null);}
+            double value=0,volume=0;
+            for(int slot:new int[]{FluidThermodynamics.State.LIQUID,FluidThermodynamics.State.AQUEOUS}) {
+                double v=state.slotVolume(slot);
+                if(v>0){value+=v*model.slotViscosity(state,slot,null,null);volume+=v;}
+            }
+            return volume>0?value/volume:Double.NaN;
+        } catch(IllegalArgumentException refused) {
+            // MixtureViscosity.liquid refuses a liquid with no supported carrier (only conditional solutes) and a component
+            // without liquid data: such a liquid keeps the reference film, and the curve samples as it did before D13.
+            return Double.NaN;
+        }
     }
     private static void refine(FluidThermodynamics model,double[] amounts,double pressure,Point a,Point b,TreeMap<Double,Point> points,int depth,Runnable checkpoint) {
         if(depth>=24||b.t-a.t<BOUNDARY_KELVIN||points.size()>=MAXIMUM_KNOTS)return;
