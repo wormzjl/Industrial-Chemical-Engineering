@@ -580,7 +580,11 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - **O9, what a random crude varies** (the owner's note; section 5.6):
   - **Decided** (owner, 2026-11-16: "Yes, cuts stay"): the twelve shared cuts and the light ends stay. A random crude draws its amounts on them, so no identity of the package moves with a crude.
   - Assumed, for the owner to correct when the randomization is designed: contents are one factor per tag on one profile over the boiling range. A crude cannot have, say, its sulfur in the naphtha only.
-  - Assumed likewise: a crude's character (paraffinic, naphthenic, aromatic) arrives with the reactor design as type tags (section 14). Until then crudes differ in boiling range and contents, not in character.
+  - Assumed likewise: a crude's character (paraffinic, naphthenic, aromatic) arrives with the reactor design as type tags (section 14).
+- **O10, ammonium salts on cold walls** (owner's case of the hydroprocessing wash water; review 4.7). Revision 5 has the water's end (the speciation law in the wet separator) and not the salt: ammonia and hydrogen chloride stay gases in every exchanger, so nothing precipitates, a wash prevents nothing, and neutralising a crude overhead with ammonia is free.
+  - A (proposed): in this batch, as WP4d after WP4b. Kind `salts` with the ammonium chloride record; the law `salt_deposit` at heat sides (dry: the wall's `saltFouling` grows where the gases' pressure product exceeds `Kp` at the colder end; wet: it dissolves); M13 under the deposit. Nothing is taken from the stream. A wall's facts gain `saltFouling` (default 0), inside schema 30. A crude overhead over-neutralised above its dew point then fouls its exchanger at 130 °C.
+  - B: with the hydroprocessing design. Until then ammonia has no cost.
+  - Either way the bisulfide's record and H2S in the speciation law come with the hydroprocessing and sour water design. Until then crudes differ in boiling range and contents, not in character.
 
 ## 17. Risks
 

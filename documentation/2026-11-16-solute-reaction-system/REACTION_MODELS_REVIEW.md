@@ -267,6 +267,55 @@ Owner, 2026-11-16: "Level 1: speciation". Sections 4.3 and 4.4's proposals (a pa
 
 **pH** by the charge balance, 25 °C: hydrogen chloride 0.00274 mol/kg gives 2.56; with half, equal and double the ammonia 2.86, 5.90 and 9.24; with equal caustic 7.00.
 
+### 4.7 Ammonium salts and the wash water
+
+Owner, 2026-11-16: "In hydroprocessing water is injected to dissolve ammonium salts in HC which would otherwise precipitate on equipment. Explain how the system deals with this simulation."
+
+**Expected.**
+
+- The reactor turns nitrogen into ammonia, sulfur into H2S and chloride into hydrogen chloride. As the effluent cools, two of these gases meet as a solid on a cold wall wherever the product of their partial pressures exceeds the salt's dissociation constant: `NH3 + HCl ⇌ NH4Cl(s)` and `NH3 + H2S ⇌ NH4HS(s)`.
+- `ln Kp = 34.29 − 21 193 K/T` for ammonium chloride and `34.25 − 10 873 K/T` for ammonium bisulfide, in bar² (from the formation enthalpies and entropies, recalled, at constant enthalpy). Against the published chart fit `T(°F) = 523 · exp(0.0507 · ln Kp[psi²])` the chloride's temperatures are 3 to 8 K low; the bisulfide gives 29 °C at the published point of 39 psi² and 27 °C.
+
+| Stream | Product of partial pressures | Salt deposits below |
+|---|---|---|
+| Crude overhead, 1.5 bar, HCl 50 ppm, ammonia 100 ppm | 1.1e-8 bar² | NH4Cl: 130 °C |
+| The same, ammonia 500 ppm | 5.6e-8 | NH4Cl: 143 °C |
+| The same, HCl 5 ppm, ammonia 10 ppm | 1.1e-10 | NH4Cl: 97 °C |
+| Hydrotreater effluent, 60 bar, HCl 2 ppm, ammonia 0.2 % | 1.4e-5 | NH4Cl: 193 °C |
+| Hydrocracker effluent, 150 bar, HCl 1 ppm, ammonia 0.5 % | 1.1e-4 | NH4Cl: 215 °C |
+| Hydrotreater effluent, ammonia 0.2 %, H2S 1 % | 0.072 | NH4HS: 22 °C (never, above a cooler's 45 °C) |
+| Hydrocracker effluent, ammonia 0.5 %, H2S 2 % | 2.25 | NH4HS: 52 °C (the air cooler's cold end) |
+
+- The deposit insulates the wall and narrows the passage. Ammonium chloride takes up water from the gas and corrodes the steel under it.
+- Wash water is injected ahead of the cold exchangers. Enough must be injected that about a quarter stays liquid at that point; the salts dissolve (ammonium chloride: about 0.37 kg per kg of water at 20 °C, recalled) and leave as sour water from the cold separator. The rate is set by the bisulfide's strength in that water, 4 to 8 wt%, and by the speed in the tubes, below 6 m/s for carbon steel. A feed of 100 t/h with 1 000 mg/kg of nitrogen makes 365 kg/h of bisulfide: 4.2 t/h of water at 8 %, 8.8 t/h at 4 %.
+- The same salt belongs to this batch's own unit. A crude column's overhead neutralised with ammonia deposits ammonium chloride at 130 °C, above its water dew point (about 100 °C): the overhead exchanger fouls before any water condenses.
+
+**What the design (plan revision 5) does.**
+
+1. The three gases are compounds. In every exchanger and air cooler they stay gases at any temperature: the cubic has no solid salt, and a heat side exchanges nothing (plan 7.4). Nothing precipitates.
+2. The wash water is a real stream. The flash decides how much of it stays liquid, so the quarter that must stay liquid is the kernel's own answer.
+3. In the cold separator, a holdup with free water, the speciation law runs (hydrogen chloride is `strong`): the hydrogen chloride and its equivalent of ammonia become `acid_chloride` and `ammonium` on the water and leave by the boot; the pH comes from the charge balance.
+4. H2S has no record in this batch, so no bisulfide forms: the sour water holds the chloride's ammonium only.
+5. Without wash water the separator is dry, the gases pass on, and nothing follows from it.
+
+The water's end is right; the reason for the water is missing. For the same reason neutralising a crude overhead with ammonia has no cost in revision 5, whatever the amount.
+
+**Proposal** (plan option O10). The dry salt as a third form of the same pairs: one record kind and one law at heat sides.
+
+- Kind `salts`: `base` and `acid` (compounds), `constant` (`ln Kp = a − b/T`), `density`, `solubility`.
+- Law `salt_deposit`, at a heat side passage (a site class the plan has, 7.2), evaluated at the cadence on the committed state:
+  - A side without free water at its colder end: with `p_b` and `p_a` the two gases' partial pressures and `T_c` the wall's colder end, the pressure that deposits is `δ = ½ [(p_a + p_b) − √((p_a − p_b)² + 4 Kp(T_c))]`, where it is positive. The deposit grows by `g · (δ/P) · gas flow · molar mass`, on the side's own area: `dRf/dt = rate / (density · deposit conductivity · area)`.
+  - A side with free water at its colder end: no deposit, and the salt it holds dissolves at `water flow · solubility`: gone within one cadence at any practical rate. So a continuous wash keeps the side clean and a wash now and then cleans it, as in a plant.
+  - The deposit is a second fact of the wall, `saltFouling`, beside `fouling`: water removes salt and leaves coke. Both act through what exists: each film `h/(1 + h Rf)` and the narrowed passage.
+- Nothing is taken from the stream: the deposit is an amount without mass, as the wall's coke is (plan D1). No compound moves at a passage, so conservation stays exact and the solver is not touched. The cost: the gas keeps its hydrogen chloride while the salt lies on the wall; with a continuous wash all of it ends in the sour water in a plant too.
+- Under the deposit: a side that holds salt and whose gas holds water vapour corrodes at a stated rate (M13: 2.5 mm/y on carbon steel, recalled order of magnitude, with M12's material factors).
+- `g` = 10, in line with the coking law's 13: the hydrotreater of the table (0.54 kg/h of salt on 200 m²) reaches the `FOULED` level in 29 process hours without wash; a plant takes ten times as long.
+- Records: ammonium chloride now. Ammonium bisulfide and the H2S record of the speciation law come with the hydroprocessing and sour water design; no stream of this batch reaches its range (the crude overhead: −54 °C).
+
+Not proposed: a deposit that holds its nitrogen and chlorine exactly. It needs a material exchange at a passage, which the frame forbids, or the chloride kept as a tag between holdups, which the owner's choice of a compound (O1) ended.
+
+Sources of this section (search summaries; the API RP 932-B charts were not reached): [Digital Refining, the chart fit of the deposition temperature](https://www.digitalrefining.com/article/1002443/the-); [The Petro Solutions, wash water injection in hydroprocessing units](https://thepetrosolutions.com/?p=3612); [AFPM, bisulfide deposition at 80 to 150 °F and the 20 ft/s guidance](https://afpm.org/print/pdf/node/43082); [Digital Refining Q&A, 20 to 25 % of the wash water liquid](https://www.digitalrefining.com/qanda/286); [H.G. Houston, ammonium chloride corrosion in hydrotreating units](https://hghouston.com/archive/special-corrosion-topics/ammonium-chloride).
+
 ## 5. Not found, and open
 
 - The numeric table of hydrochloric acid corrosion in API RP 581 Part 2 Annex B. The plan's M12 anchors are recalled.
