@@ -211,10 +211,10 @@ public final class DeviceColumn {
         // A pump's Suction and Health (W10d): after its set points and drive, as the owner saw them (D37); meters only, a
         // fixed height whatever they read, so the Phases' basis key keeps its slot.
         if (in.suction() != null) rows.addAll(suction(in.suction(), t));
-        // The wall and the trim (WP4), beside Health: meters and one-line names of a fixed height, so the basis key below keeps its slot.
+        if (in.phases() != null) rows.add(phases(in.phases(), t));
+        // The wall and the trim (WP4): after the Phases' basis key, as the names wrap with what they read at a narrow door.
         if (in.wall() != null) rows.add(integrity(in.wall(), t));
         if (in.trim() != null) rows.add(trim(in.trim(), t));
-        if (in.phases() != null) rows.add(phases(in.phases(), t));
         // From here the texts follow the plant: these groups hold no widget.
         if (in.level() != null) {
             var level = in.level();

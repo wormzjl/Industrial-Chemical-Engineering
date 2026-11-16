@@ -54,8 +54,11 @@ class ConstructorColumnTest {
                 new ConstructorColumn.Removal("V-101 · Drum", "4, 64, 8", 382, false),
                 new ConstructorColumn.Removal("V-101 · Drum", "4, 64, 8", 382, true))) {
             var shown = ConstructorColumn.withRemoval(page, target, t);
-            var button = ConstructorColumn.buttons(shown.rows()).stream().filter(b -> b.key().equals("deconstruct")).findFirst().orElseThrow();
-            assertEquals(target.target() != null && !target.waiting(), button.active());
+            // WP4 of batch 2026-11-16-fouling-corrosion: Repair stands beside Deconstruct, off with it.
+            for (var key : List.of("deconstruct", "repair")) {
+                var button = ConstructorColumn.buttons(shown.rows()).stream().filter(b -> b.key().equals(key)).findFirst().orElseThrow();
+                assertEquals(target.target() != null && !target.waiting(), button.active(), key);
+            }
             for (int width : new int[]{ConstructorColumn.WIDTH, ConstructorColumn.WIDTH - BAR}) {
                 var placed = Column.place(shown.rows(), 0, 0, width, M, Column.Metrics.COMPACT);
                 assertTrue(placed.bounds().w() <= width);
@@ -150,6 +153,9 @@ class ConstructorColumnTest {
         var distant = new ConstructorColumn.Removal("V-101 · Very long equipment name at the world border", "-29999980, -64, 29999980", 1000000, false,
                 "You do not have permission to deconstruct every cell of this equipment.", true);
         out.add(new Case("deconstruction at world border with error", ConstructorColumn.withRemoval(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, 16, t), distant, t)));
+        // WP4: the structure's wall left and words after the keys, a refusal of its Repair under them.
+        var worn = new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false, "Drain and depressure its vessels first.", true, .97, "LEAKING · FAILED");
+        out.add(new Case("repair with wall state and refusal", ConstructorColumn.withRemoval(ConstructorColumn.design(design(Form.VERTICAL, 2, 4, 2, 1, 0, 0), t), worn, t)));
         return out;
     }
 

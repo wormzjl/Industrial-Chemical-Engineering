@@ -101,6 +101,7 @@ public final class GuiPrototypes {
         out.addAll(fluidConverter());
         out.addAll(blanketValve());
         out.addAll(reliefValve());
+        out.addAll(integrity());
         return out;
     }
 
@@ -956,9 +957,12 @@ public final class GuiPrototypes {
         templates.add(new ConstructorColumn.Template("Two-tray pot", false, DIALOG.get(CONSTRUCTOR + "template.unusable", "Two-tray pot", "a column needs a tray")));
         templates.add(new ConstructorColumn.Template("My vacuum column", true, DIALOG.get(CONSTRUCTOR + "template.own", "My vacuum column")));
         var templatePage = ConstructorColumn.templates(templates, 0, DIALOG);
-        var removal = ConstructorColumn.withRemoval(drum, new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false), DIALOG);
+        var removal = ConstructorColumn.withRemoval(drum, new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false, null, false, .93, "WEEPING"), DIALOG);
+        var refused = ConstructorColumn.withRemoval(drum, new ConstructorColumn.Removal("V-101 · Vertical drum", "12, 64, -8", 382, false,
+                "Drain and depressure its vessels first.", true, 1, "LEAKING"), DIALOG);
         return List.of(
                 new Prototype("equipment-constructor-removal", 464, 254, (d, theme) -> constructorDoor(d, removal, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-repair-refused", 464, 254, (d, theme) -> constructorDoor(d, refused, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-column-design", 464, 254, (d, s) -> {
                     constructorDoor(d, columnDesign, "Distillation column", "change", DIALOG.get(CONSTRUCTOR + "volume", "1696.5", "792.7"), Palette.ACCENT, Map.of());
                     columnDrawing(d, d.well(new Rect(d.w - 16 - 140, 16, 152, d.h - 32)));
@@ -1293,6 +1297,48 @@ public final class GuiPrototypes {
     /** The names the device pages' title strips show (N1), by kind. */
     static final Map<Kind, String> NAMES = Map.of(Kind.PUMP, "P-101", Kind.COMPRESSOR, "K-101", Kind.VALVE, "FV-101", Kind.GENERATOR, "F-101", Kind.RESERVOIR, "TK-101",
             Kind.VOID, "FL-101", Kind.FILTER, "S-101", Kind.HEAT_SIDE, "E-101");
+
+    /**
+     * The walls on the device pages (batch 2026-11-16-fouling-corrosion, WP4): the casing pump P-101 with its Integrity group
+     * beside Health (a chrome steel casing at 72 % used, 0.4 mm/y of sulfidation, 1.5 min of play left), and the control valve
+     * FV-101 with its Trim group (an eroded trim at 22 %, 10 min of play left).
+     */
+    static List<Prototype> integrity() {
+        var casing = casingInput().withSuction(new DeviceColumn.Suction("6.8", "3.3", "0.4", "73.0", "87.6"))
+                .withIntegrity(new DeviceColumn.Wall("28.0", "0.4", "1.5", "Sulfidation", "Chrome steel"), null);
+        var valve = new DeviceColumn.Input(Kind.VALVE, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.MASS_FLOW, new DeviceColumn.Opening(0.63, "Holding the set point"),
+                false, null, null, List.of(), phases("volume", 1, 0, 0, 0), List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"),
+                meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar"))).withIntegrity(null, new DeviceColumn.Trim("22.0", "10.0"));
+        // A drum V-101 as a reader sees it: a stainless shell weeping by sour water, 93 % used.
+        var drum = new DeviceColumn.Input(Kind.RESERVOIR, false, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
+                null, List.of(meter("temperature", "45.0", "°C"), meter("pressure", "1.02", "bar")))
+                .withIntegrity(new DeviceColumn.Wall("7.0", "1.2", "0.4", "Sour water", "Stainless steel"), null);
+        return List.of(
+                devicePage("integrity-vessel", WINDOW[0], WINDOW[1], drum, (d, s) -> {
+                    d.title("Vertical drum");
+                    d.name("V-101", false);
+                    d.tabs(0, "Overview");
+                    d.status("WEEPING · " + Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    device(d, drum, DeviceColumn.rows(drum, TEXTS), Map.of());
+                    d.footer(1, "Close", "Mole", "°C", "bar", "/h");
+                }),
+                devicePage("integrity-pump-casing", WINDOW[0], WINDOW[1], casing, (d, s) -> {
+                    d.title("Centrifugal pump");
+                    d.name("P-101", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing") + " · THIN WALL", Palette.MUTED);
+                    device(d, casing, DeviceColumn.rows(casing, TEXTS), Map.of("volumeFlow", "100.0", "maximumAddedPressure", "10.0"));
+                    d.footer(2, "Close", "Apply", "Mole", "°C", "bar", "/h");
+                }),
+                devicePage("integrity-valve-trim", WINDOW[0], WINDOW[1], valve, (d, s) -> {
+                    d.title("Control valve");
+                    d.tabs(0, "Overview");
+                    d.status(Door.tr("gui.icheme.fluid.flowing") + " · ERODED TRIM", Palette.MUTED);
+                    var box = device(d, valve, Map.of("massFlow", "2.50"));
+                    contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", "2.5"}));
+                    d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
+                }));
+    }
 
     /** The valve, the tallest page, in a {@link #WINDOW} window; and in a 1366 by 768 one, where scale 2 still leaves it a bar. */
     static List<Prototype> valve() {

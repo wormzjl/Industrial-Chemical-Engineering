@@ -122,6 +122,48 @@ class DeviceMetersTest {
 
     /** The meters are a builder's: no Minecraft class, and nothing of the screens. */
     @Test
+    void aWallAndATrimReadAsTheirGroupsShowThem() {
+        // Batch 2026-11-16-fouling-corrosion, WP4: a vessel at 72 % of its 3 mm allowance thinning at 0.4 mm/y by
+        // sulfidation, 90 s of play left; a valve trim at 0.3 with 600 s of play left.
+        var view = new FluidView(1, 1, 0, 0, "THIN WALL", null, 0, List.of())
+                .withIntegrity(new FluidView.Integrity(.72, .4, "SULFIDATION", 90.0, "CHROME_STEEL"), new FluidView.Trim(.3, 600.0));
+        var m = new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.VOLUME,
+                TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_SECOND, false, T);
+        // Left: 100 (1 − 0.72) = 28.0 %; rate 0.4 mm/y; life 90 s / 60 = 1.5 min; the names from their lines under gui.icheme.
+        assertEquals(new DeviceColumn.Wall("28.0", "0.4", "1.5", "mechanism.sulfidation", "metallurgy.chrome_steel"), m.wall(T));
+        assertEquals(new DeviceColumn.Trim("30.0", "10.0"), m.trim());
+        // While it does not thin: — for the life; a device with neither: no groups.
+        var still = new FluidView(1, 1, 0, 0, "", null, 0, List.of()).withIntegrity(new FluidView.Integrity(0, 0, "", null, "CARBON_STEEL"), null);
+        var s = new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR, still, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.VOLUME,
+                TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_SECOND, false, T);
+        assertEquals(new DeviceColumn.Wall("100.0", "0.0", "—", "—", "metallurgy.carbon_steel"), s.wall(T));
+        assertNull(s.trim());
+        var none = new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR, new FluidView(1, 1, 0, 0, "", null, 0, List.of()), AXIS, WEIGHTS, true, null, false, List.of()),
+                null, PhaseRatioBasis.VOLUME, TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_SECOND, false, T);
+        assertNull(none.wall(T));
+        assertNull(none.trim());
+    }
+
+    @Test
+    void theWallAndTrimCrossInTheViewsJsonAndEveryNameHasItsLine() {
+        var gson = new com.google.gson.Gson();
+        var view = new FluidView(7, 2, 0, 0, "WEEPING", null, 0, List.of())
+                .withIntegrity(new FluidView.Integrity(.93, 1.2, "SOUR_WATER", null, "STAINLESS_STEEL"), new FluidView.Trim(.5, 12.0));
+        assertEquals(view, gson.fromJson(gson.toJson(view), FluidView.class));
+        var plain = new FluidView(7, 2, 0, 0, "", null, 0, List.of());
+        assertNull(gson.fromJson(gson.toJson(plain), FluidView.class).integrity());
+        // Every mechanism and material has its name, and the groups their lines.
+        var names = new HeatControlColumnTest.Recording("gui.icheme.");
+        for (var mechanism : com.wormzjl.icheme.science.integrity.Mechanism.values()) names.get(DeviceMeters.mechanismKey(mechanism.name()));
+        for (var material : com.wormzjl.icheme.science.integrity.Metallurgy.values()) names.get("metallurgy." + material.name().toLowerCase(java.util.Locale.ROOT));
+        assertEquals(java.util.Set.of(), names.missing);
+        var lines = new HeatControlColumnTest.Recording();
+        DeviceColumn.integrity(new DeviceColumn.Wall("28.0", "0.4", "1.5", "Sulfidation", "Chrome steel"), lines);
+        DeviceColumn.trim(new DeviceColumn.Trim("30.0", "10.0"), lines);
+        assertEquals(java.util.Set.of(), lines.missing);
+    }
+
+    @Test
     void theMetersNameNoMinecraftClass() throws Exception {
         var source = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/client/gui/common/DeviceMeters.java"));
         for (var word : List.of("net.minecraft", "com.mojang", "gui.screens", "FluidNetwork")) assertFalse(source.contains(word), word);

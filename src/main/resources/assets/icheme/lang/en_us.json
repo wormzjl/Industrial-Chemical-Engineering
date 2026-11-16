@@ -4604,7 +4604,7 @@
   "tutorial.icheme.item.pressure_gauge.serves": "A dial fitted to a socket that shows the pressure there.",
   "tutorial.icheme.item.temperature_gauge.serves": "A dial fitted to a socket that shows the temperature there.",
   "tutorial.icheme.item.accessory_wrench.serves": "Takes fitted accessories off again.",
-  "tutorial.icheme.item.repair_kit.serves": "Restores the health of an in-line pump or compressor, or a control valve's trim, while no flow passes it.",
+  "tutorial.icheme.item.repair_kit.serves": "Restores in-line pumps, compressors and control valve trims while no flow passes them.",
   "tutorial.icheme.item.pressure_probe.serves": "Measures pressure and reports it to the screens and controllers.",
   "tutorial.icheme.item.temperature_probe.serves": "Measures temperature and reports it to the screens and controllers.",
   "tutorial.icheme.item.flowmeter.serves": "Measures the flow in a pipe and reports it to the screens and controllers.",

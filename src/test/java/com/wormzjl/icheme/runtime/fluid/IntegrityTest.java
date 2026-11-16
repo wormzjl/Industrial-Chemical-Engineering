@@ -83,6 +83,7 @@ class IntegrityTest {
     /** What the walls did to the world. */
     private static final class Host implements Integrity.Host {
         final List<Long> closed = new ArrayList<>(), opened = new ArrayList<>(), released = new ArrayList<>();
+        final List<String> weeps = new ArrayList<>();
         double air;
 
         public boolean close(long id) {
@@ -93,6 +94,10 @@ class IntegrityTest {
         public boolean open(long id) {
             opened.add(id);
             return true;
+        }
+
+        public void weeping(long id, boolean on) {
+            weeps.add(id + (on ? " weeps" : " stops"));
         }
 
         public void release(long id) {
@@ -344,6 +349,25 @@ class IntegrityTest {
         assertEquals("WEEPING", rig.integrity.status(VESSEL));
         rig.integrity.set(VESSEL, .4 * through, 0, false);
         assertEquals("", rig.integrity.status(VESSEL));
+    }
+
+    @Test
+    void aWeepingWallIsToldAtEachCadenceAndOnceWhenItStops() {
+        var rig = plant(1, nitrogen(101325), 0, 0, false);
+        double through = Metallurgy.CARBON_STEEL.allowance();
+        rig.integrity.set(VESSEL, .5 * through, 0, false);
+        rig.cadence(MachineHealth.CADENCE);
+        assertEquals(List.of(), rig.host.weeps, "a thin wall does not weep");
+        rig.integrity.set(VESSEL, .95 * through, 0, false);
+        rig.cadence(MachineHealth.CADENCE);
+        rig.cadence(MachineHealth.CADENCE);
+        assertEquals(List.of(VESSEL + " weeps", VESSEL + " weeps"), rig.host.weeps, "told at every cadence: the host sends only a change");
+        assertTrue(rig.integrity.weeping(VESSEL));
+        assertEquals(Integrity.Outcome.REPAIRED, rig.repair(VESSEL));
+        assertEquals(List.of(VESSEL + " weeps", VESSEL + " weeps", VESSEL + " stops"), rig.host.weeps, "a repaired wall stops at once");
+        assertFalse(rig.integrity.weeping(VESSEL));
+        rig.cadence(MachineHealth.CADENCE);
+        assertEquals(3, rig.host.weeps.size(), "and is not told again");
     }
 
     @Test
