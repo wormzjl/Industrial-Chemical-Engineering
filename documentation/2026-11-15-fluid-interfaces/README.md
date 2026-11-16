@@ -1,6 +1,6 @@
 # Fluid interfaces and pipe accessories
 
-Batch started 2026-11-15 on `claude/fluid-interfaces-a51f3a`, cut from `claude/equipment-visual-design-d4e22c` at `9c777e86e` (plan D12). Status: In progress since 2026-11-15.
+Batch started 2026-11-15 on `claude/fluid-interfaces-a51f3a`, cut from `claude/equipment-visual-design-d4e22c` at `9c777e86e` (plan D12). Status: Implemented 2026-11-16 (0.33.0), merged to `main` with batch `2026-11-15-equipment-visual-design`.
 
 Class: PHYSICS (new devices; no existing reference may move). Lanes touched: thermo (data only), fluid laws (`FlowControl`), runtime (`FluidWorldAuthority`, `FluidFacts`, `Converters`), flowsheet and control (`runtime/instrument`, `runtime/control`), equipment (`world/**`, `registry`, new geometry files), client.
 
@@ -70,6 +70,8 @@ The owner accepted the plan's decisions D1 to D12 on 2026-11-15: "Liquid hopper 
   - The lane: chain-100 exact; campaign 992 / 993 after one replay / 1000; junction lines 33 of 33. Test step: 3,649 tests, 5 failures, both stale pins, fixed in `ecc4d49e9` (PreparedRefillTest, test only) and `5e306724b` (three tutorial lines). GameTests: 101 of 102. `LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence` overflowed; it is read as timing-sensitive. **The merge is on hold for the owner's choice (A, B or C in the review).**
   - The owner chose "A: pace the test". `LevelLoopGameTests.pace` now waits while the drum island's slice has been in flight more than 10 online ticks, and the result line counts held decisions. Test only; nothing in `src/main` changed. One focused run of the three level loop tests: all pass. Highs: 61.08 % vented, 65.68 % blanketed, 79.78 % blanketed from empty. heldDecisions 0 in each. Recorded in FINAL_LANE_REVIEW.md.
   - Second lane on the joined tree `953635400` (main 0.32.0 merged in; owner: "Run the lane"), baseline the 0.32.0 lane at `a2ea53029`: 3,777 tests, 0 failures; chain-100 exact; GameTests 110 of 110; campaign 992 / 995 / 1000, no new hold, no replay; junction lines 33 of 33; no reference moved. Review section "Second run, on the joined tree (main at 0.32.0)"; finding 5: no test joins a pollution monitor and an alarm beacon on one bus.
+- 2026-11-16: `main` moved to 0.32.0 (the pollution system batch, `f305ac6b0`) during the first lane. Merged into the batch branch as `953635400`: 21 conflicts, every side kept. A device spec carries `breached` (schema 26) then `ambient` (schema 27), with no 13-argument constructor left; the schema-27 corpus image written again on the joined tree (59 registrations); protocol `icheme-3` after the pollution map's `icheme-2`; the beacon's screen gives the pollution monitor's index unit no symbol. Compile of the three source sets and five format test classes (80 tests) by the main thread; then the second lane above, clean.
+- 2026-11-16: version 0.33.0, merged to `main` (owner: "auto merge when done", "no need to wait"), not pushed.
 
 ## Documents
 
@@ -88,6 +90,8 @@ The owner accepted the plan's decisions D1 to D12 on 2026-11-15: "Liquid hopper 
 
 ## Open items
 
+- From the second lane (finding 5): no test puts a pollution monitor's ANALYSER inputs and an alarm beacon on one data bus. Proposal: one GameTest, a monitor's reading over its limit raises a beacon on the same bus.
+- The level loop's worst case in play is unchanged: a coupled level loop waits up to one slice plus 99 ticks before its outlet moves. Option B (the loop decides on each published state; worst peak about 61 to 66 % on the two-cycle drum) was offered and not taken (FINAL_LANE_REVIEW.md).
 - Not checked in game: the intake's look and its screen (no switch, no fields); the hopper's look, its bucket use, its screen (Forge tank, rule, booked rate only).
 - A hopper (and any converter) on a blocked line shows CONVERTING while it books 0 L/s: the status reads the plan, not the booking. Proposal: report IDLE when a slice booked nothing (owner choice).
 - `V3AcceptanceAuditor` adds its out-of-range notice without the 16-entry cap: a package with 16 evidence lines fails every column solve that reaches the notice. Proposal: cap it like the other notices, or keep the package's evidence out of the notice budget (owner choice).

@@ -14,8 +14,8 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
-| [2026-11-15-fluid-interfaces/](2026-11-15-fluid-interfaces/README.md) | Orifice plate, automated shutoff valve, liquid hopper, gas intake with the rare gases, placeholder crude oil, JEI for the fluid converter | In progress since 2026-11-15 |
-| [2026-11-15-equipment-visual-design/](2026-11-15-equipment-visual-design/README.md) | Better-looking, less bare equipment: review of every kind, then trim, finishes and shading | In progress since 2026-11-15 |
+| [2026-11-15-fluid-interfaces/](2026-11-15-fluid-interfaces/README.md) | Orifice plate, automated shutoff valve, liquid hopper, gas intake with the rare gases, placeholder crude oil, JEI for the fluid converter, alarm beacon | Implemented 2026-11-16 (0.33.0) |
+| [2026-11-15-equipment-visual-design/](2026-11-15-equipment-visual-design/README.md) | Better-looking, less bare equipment: review of every kind, then trim, finishes and shading | Implemented 2026-11-16 (0.33.0) |
 | [2026-11-15-pollution-system/](2026-11-15-pollution-system/README.md) | Air pollution in 16 m cubes: toxic, combustible, corrosive, particulate; spread, effects, explosions, meter, monitor, map overlay | Implemented 2026-11-16 |
 | [2026-11-15-fluid-step-cost/](2026-11-15-fluid-step-cost/README.md) | Fluid step cost: kept workspaces and the vessel closure's Jacobian from tangents; pattern and pivot forms measured and not kept | Implemented 2026-11-15 (0.31.1) |
 | [2026-11-15-tools-large-files/](2026-11-15-tools-large-files/README.md) | Large files out of `tools/`: images, worlds, Gradle results and files over 1 MB to `research/tools/`, `/tools/**` ignore lines | Implemented 2026-11-16 |

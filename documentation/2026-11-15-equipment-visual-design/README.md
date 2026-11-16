@@ -1,6 +1,6 @@
 # Equipment visual design
 
-Batch started 2026-11-15 on `claude/equipment-visual-design-d4e22c`. Status: In progress since 2026-11-15. The combined steam turbine (W1 to W4) is built on `claude/turbine-sections-365c63`, not merged.
+Batch started 2026-11-15 on `claude/equipment-visual-design-d4e22c`. Status: Implemented 2026-11-16 (0.33.0), merged to `main` with batch `2026-11-15-fluid-interfaces` (its README holds the merge's history and the final lane: `../2026-11-15-fluid-interfaces/FINAL_LANE_REVIEW.md`).
 
 Purpose: make the implemented equipment look better and less bare (owner request, 2026-11-15).
 
@@ -147,5 +147,4 @@ Purpose: make the implemented equipment look better and less bare (owner request
   `startLength`; `ConstructorDefaultsTest` passes). For the owner: the residue cooler's 0.22 bar on one long train (a
   sizing-rule question); access steel on large bays.
 - Relief sprites: the shader-pack variant needs an owner-run client check (R3).
-- Status: the relief sprites, the combined steam turbine and the larger air cooler bay are built and merged into the
-  batch branch; nothing is on `main`. `CHANGELOG.md`, the translation commit and the version wait for the merge.
+- The relief sprites, the combined steam turbine and the larger air cooler bay are on `main` since 0.33.0.

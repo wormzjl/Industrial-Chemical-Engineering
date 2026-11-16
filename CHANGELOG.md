@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-16
+
 ### Added
 
 - Fluid interfaces (`2026-11-15-fluid-interfaces`; plan D1 to D12, A1 to A8; joined on `claude/fluid-interfaces-batch`, `8f12eee7c`, `690d683a8`, `12dfbcda2`, `df3c928b1`):
@@ -29,7 +31,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Changed
 
-- Formats (`documentation/reference/FORMATS.md`): fluid facts schema 27 (26 is reserved by the pollution system batch), accessory facts schema 7, control store format 5, protocol `icheme-3` (`icheme-2` is reserved). `FormatsTableTest` skips a reservation row.
+- Formats (`documentation/reference/FORMATS.md`): fluid facts schema 27 (a device spec's `ambient`, after the pollution system's `breached` at 26; the control valve source `ON_OFF`), accessory facts schema 7, control store format 5, protocol `icheme-3` (after the pollution map's `icheme-2`). `FormatsTableTest` skips a reservation row.
 - A generator's own loss coefficient now reaches its line (`PhysicalFluidTopology.boundaryHalf`); every existing line is bit-identical, since no generator had one.
 - The level loop GameTests pace the server on the drum island's slice in flight (`LevelLoopGameTests.pace`): while a slice has been in flight more than 10 online ticks, each tick waits, as a 20 TPS server with a quick worker would; the run's result line counts the decisions that held.
 
