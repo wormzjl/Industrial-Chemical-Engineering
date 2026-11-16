@@ -970,7 +970,7 @@
   "gui.icheme.vessel.vacuum_pump.power": "%s kW de potencia máxima en el eje en su curva; motor de %s kW",
   "gui.icheme.vessel.vacuum_pump.seal": "Agua de sello interna a 25 °C: unos %s m³/h se llevan su calor",
   "gui.icheme.vessel.plunger_pump.model": "Bomba triplex de émbolos %s, %s m³/h a %s rpm",
-  "gui.icheme.vessel.plunger_pump.relief": "Válvula de alivio a un aumento de %s MPa: entrega su desplazamiento a cualquier aumento menor, menos 0,4 %% por aumento de alivio",
+  "gui.icheme.vessel.plunger_pump.relief": "Alivio a %s MPa de aumento; entrega su desplazamiento, menos 0,4 %% en él",
   "gui.icheme.vessel.plunger_pump.power": "%s kW en el eje al aumento de alivio; motor de %s kW",
   "gui.icheme.vessel.prime_mover.rating": "%s: %s MW netos a %s rpm, rendimiento del %s %% a su potencia nominal",
   "gui.icheme.vessel.prime_mover.fuel": "Combustible %s MW nominal, unos %s kg/s; suministro mín. %s bar(a)",

@@ -970,7 +970,7 @@
   "gui.icheme.vessel.vacuum_pump.power": "%s kW de puissance maximale sur l'arbre sur sa courbe ; moteur %s kW",
   "gui.icheme.vessel.vacuum_pump.seal": "Eau d'anneau interne à 25 °C : environ %s m³/h en évacue la chaleur",
   "gui.icheme.vessel.plunger_pump.model": "Pompe triplex à plongeurs %s, %s m³/h à %s tr/min",
-  "gui.icheme.vessel.plunger_pump.relief": "Soupape à une hausse de %s MPa : elle refoule sa cylindrée à toute hausse inférieure, moins 0,4 %% par hausse de soupape",
+  "gui.icheme.vessel.plunger_pump.relief": "Soupape à %s MPa de hausse ; refoule sa cylindrée, moins 0,4 %% à cette hausse",
   "gui.icheme.vessel.plunger_pump.power": "%s kW sur l'arbre à la hausse de soupape ; moteur de %s kW",
   "gui.icheme.vessel.prime_mover.rating": "%s : %s MW nets à %s tr/min, rendement de %s %% au nominal",
   "gui.icheme.vessel.prime_mover.fuel": "Combustible %s MW au nominal, env. %s kg/s ; au moins %s bar(a)",
