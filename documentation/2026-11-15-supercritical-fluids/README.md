@@ -144,6 +144,12 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   files, on the final text: `test` 75 classes, 516 tests; `equipmentGates` `UnitTextTest`; `holdGates` 8 suites, 57
   tests; `columnGates` 2 classes (up to date after run 1); none failed (`LanguageFilesTest`, `SizingPageTest` among
   them). Not run: `EngineDigestTest` (the lane re-records line 313), chain-100, the GameTests, the campaign.
+- 2026-11-16: the final lane (sub-thread; owner: "Approve all"). Digest re-recorded once: line 313, the grade token only
+  (`a599419dd`). `lane.sh head` at `a599419dd`: 3,938 tests, 0 failures; chain-100 exact; GameTests 114 of 114 (110 fluid,
+  4 dense); junction lines 33 of 33; campaign 993 / 995 after one replay of 118 and 678 (F, clean) / 1000 against the
+  0.33.0 lane, refusals 0. Not clean: 4 unannounced moved printed results, no asserted one (`WaterIntoCryogenicMethaneTest`
+  interval 6, `HoldClassWorldsTest` 778 flow, `PumpBottomPortDrainTest` last digits, `G4F2` grade label), for the main
+  thread. [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md).
 
 ## Documents
 
@@ -172,6 +178,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   the rule and its client evaluation, the pump's head share, the before and after table, the renders, the owner items.
 - [S8_PLUNGER_PUMP_REVIEW.md](S8_PLUNGER_PUMP_REVIEW.md): S8, the plunger pump: the law, the saves, the probe on carbon dioxide, the
   readers of a liquid machine, the equipment and its polygons, the simulator, the dense GameTest, the runs, the owner items.
+- [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane: the digest re-record, tests, chain-100, GameTests, junction
+  lines, the campaign against the 0.33.0 lane, every printed line that moved and its reason.
 - [MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md): the merge of main 0.33.0: conflicts, the revision tokens of the 33
   records both sides changed, the rare gases' critical volumes, the digest measurement, main's slot readers, the runs.
 - [S1_ENGINE_REVIEW.md](S1_ENGINE_REVIEW.md): S1, the band boxes 3 and 4 removed, the phase traits, the digest lines that moved.
