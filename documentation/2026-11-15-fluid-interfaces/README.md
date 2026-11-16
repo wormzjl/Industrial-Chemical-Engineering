@@ -64,12 +64,18 @@ The owner accepted the plan's decisions D1 to D12 on 2026-11-15: "Liquid hopper 
   - `12dfbcda2`, W9: three conflicts, all the shared wire version; 20 classes, 180 tests pass.
   - `df3c928b1`, `main` at 0.31.1 (the fluid step cost batch, the tools large files batch, two reservations by batch `2026-11-15-pollution-system`): two document conflicts, every row kept. Renumbered: `main` reserved fluid facts schema 26 and protocol `icheme-2`, so the batch takes **fluid facts schema 27 alone** (the `ambient` flag and the valve source `ON_OFF`; the flag is read by its presence, so no code changed; the schema-26 image removed, `compat/fluid/schema-27/` holds an intake, a hopper unit, an orifice pipe and an actuated valve, 58 registrations) and the merge takes **protocol `icheme-3` alone** (with the visual design batch's LP class). `FormatsTableTest` skips a reservation row: `main`'s two reservation rows failed it. 14 classes, 169 tests pass. Where the notes of the three branches say schema 26 or `icheme-2`, read this line.
 
+- 2026-11-16: merge preparation on `claude/fluid-interfaces-lane` (from `b6e61f7ad`), with the final lane: [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md).
+  - `369728ef7`: the translation commit, 90 keys and 3 rewritten hints in each of zh_cn, fr_fr, es_es, ja_jp. LanguageFilesTest 2/2, UnitTextTest 1/1.
+  - `3e9a8484f`: the alarm beacon's model rework (owner: "need to improve this model before merge, this doesn't make sense"; chose "Stacked unit"). AlarmGeometryTest 3/3.
+  - The lane: chain-100 exact; campaign 992 / 993 after one replay / 1000; junction lines 33 of 33. Test step: 3,649 tests, 5 failures, both stale pins, fixed in `ecc4d49e9` (PreparedRefillTest, test only) and `5e306724b` (three tutorial lines). GameTests: 101 of 102. `LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence` overflowed; it is read as timing-sensitive. **The merge is on hold for the owner's choice (A, B or C in the review).**
+
 ## Documents
 
 - [FLUID_INTERFACES_PLAN.md](FLUID_INTERFACES_PLAN.md): decisions D1 to D12, the physics with numbers, work packages W1 to W8, what is ruled out.
 - [CRUDE_JEI_BUILD.md](CRUDE_JEI_BUILD.md): W3 and W5 as built.
 - [PIPE_FITTINGS_BUILD.md](PIPE_FITTINGS_BUILD.md): W6 and W7 as built.
 - [ALARM_BEACON_PLAN.md](ALARM_BEACON_PLAN.md) and [ALARM_BEACON_BUILD.md](ALARM_BEACON_BUILD.md): W9, the alarm beacon.
+- [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane of the merge with the equipment visual design batch.
 
 ## Code areas
 
