@@ -107,10 +107,13 @@ public final class SizingPage {
         return red;
     }
 
-    /** What Send to block stores: each unit and member at the size the tab shows ({@link SheetSizing#designs}); none before a rating. */
+    /**
+     * What Send to block stores: each unit and member at the size the tab shows ({@link SheetSizing#designs}), of the material the
+     * Materials tab shows ({@link MaterialsPage#chosen}: the player's, else Auto's); none before a rating.
+     */
     public static List<SentDesign> designs(SheetContext x) {
         var sized = sized(x);
-        return sized == null ? List.of() : SheetSizing.designs(x.editor().sheet(), sized);
+        return sized == null ? List.of() : SheetSizing.designs(x.editor().sheet(), sized, id -> MaterialsPage.chosen(x, id));
     }
 
     /**

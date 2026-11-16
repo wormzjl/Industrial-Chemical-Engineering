@@ -74,6 +74,7 @@
         { "id": "balance", "media": "card:balance" },
         { "id": "heat", "check": "server", "criterion": "sheet_run" },
         { "id": "size" },
+        { "id": "materials", "media": "read" },
         { "id": "send", "check": "server", "criterion": "design_sent" }
       ]
     },

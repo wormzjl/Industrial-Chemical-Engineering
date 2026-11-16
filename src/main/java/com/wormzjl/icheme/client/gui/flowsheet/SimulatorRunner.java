@@ -9,6 +9,7 @@ import com.wormzjl.icheme.science.flowsheet.FlowsheetSolver;
 import com.wormzjl.icheme.science.flowsheet.Note;
 import com.wormzjl.icheme.science.flowsheet.Report;
 import com.wormzjl.icheme.science.flowsheet.RevisionNotice;
+import com.wormzjl.icheme.science.flowsheet.metallurgy.SheetMetallurgy;
 import com.wormzjl.icheme.science.flowsheet.sizing.Proposal;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
 import com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog;
@@ -58,6 +59,12 @@ public final class SimulatorRunner {
         default SheetSizing.Sized rate(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint) {
             return thermo(catalog, checkpoint, thermo -> SheetSizing.rate(sheet, run, thermo));
         }
+
+        /** Every unit rated for each material of construction on {@code run}, its heat sides' line speeds from {@code sized} (WP6). */
+        default SheetMetallurgy.Rows materials(Flowsheet sheet, FlowsheetRun run, MaterialCatalog catalog, Runnable checkpoint, SheetSizing.@Nullable Sized sized) {
+            if (run.status() != FlowsheetRun.Status.STEADY) return SheetMetallurgy.Rows.NONE;
+            return thermo(catalog, checkpoint, thermo -> SheetMetallurgy.rate(sheet, run, thermo, sized));
+        }
     }
 
     /**
@@ -75,8 +82,14 @@ public final class SimulatorRunner {
      * @param sheet the sheet rated, the job's own copy
      * @param run   the run it was rated on
      * @param edit  whether {@code sheet} is Size all's edit, which the editor takes as one step
+     * @param materials every unit rated for each material of construction (the Materials tab): a choice picks among them, so a
+     *                  choice needs no new rating
      */
-    public record Rated(Flowsheet sheet, SimulatorHost.Finished run, SheetSizing.Sized sized, boolean edit) {
+    public record Rated(Flowsheet sheet, SimulatorHost.Finished run, SheetSizing.Sized sized, boolean edit, SheetMetallurgy.Rows materials) {
+        /** A rating with no materials rows. */
+        public Rated(Flowsheet sheet, SimulatorHost.Finished run, SheetSizing.Sized sized, boolean edit) {
+            this(sheet, run, sized, edit, SheetMetallurgy.Rows.NONE);
+        }
     }
 
     private final Supplier<MaterialCatalog> catalogs;
@@ -294,7 +307,8 @@ public final class SimulatorRunner {
             task = SheetState.Task.RATE;
             now = null;
             try {
-                made = new Rated(sheet, ran, engine.rate(sheet, run, catalog, this::checkpoint), false);
+                var sized = engine.rate(sheet, run, catalog, this::checkpoint);
+                made = new Rated(sheet, ran, sized, false, engine.materials(sheet, run, catalog, this::checkpoint, sized));
             } catch (CancellationException stop) {
                 // The run stands; the tab rates it when it opens.
             }
@@ -327,7 +341,7 @@ public final class SimulatorRunner {
             var after = ran ? new SimulatorHost.Finished(all.sheet(), all.run(), seconds(), null, RevisionNotice.tokens(all.sheet(), catalog))
                     : new SimulatorHost.Finished(all.sheet(), shown.run(), shown.seconds(), shown.alone(), shown.ranOn());
             finished = after;
-            made = new Rated(all.sheet(), after, all.sized(), true);
+            made = new Rated(all.sheet(), after, all.sized(), true, engine.materials(all.sheet(), after.run(), catalog, this::checkpoint, all.sized()));
         }
 
         /** The run on show, rated at the sheet's sizes. A sheet whose units or lines are not the run's has nothing it can read there, so every item is red. */
@@ -335,7 +349,8 @@ public final class SimulatorRunner {
             var shown = base;
             if (shown == null) return;
             var run = SheetState.sameShape(sheet, shown.sheet()) ? shown.run() : FlowsheetRun.none();
-            made = new Rated(sheet, shown, engine.rate(sheet, run, catalog, this::checkpoint), false);
+            var sized = engine.rate(sheet, run, catalog, this::checkpoint);
+            made = new Rated(sheet, shown, sized, false, engine.materials(sheet, run, catalog, this::checkpoint, sized));
         }
     }
 

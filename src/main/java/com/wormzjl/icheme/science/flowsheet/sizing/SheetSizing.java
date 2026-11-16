@@ -198,6 +198,18 @@ public final class SheetSizing {
      * as is a unit with nothing to size.
      */
     public static List<SentDesign> designs(Flowsheet sheet, Sized sized) {
+        return designs(sheet, sized, id -> {
+            var manual = sheet.sizing().unit(id).material();
+            return manual != null ? manual : com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL;
+        });
+    }
+
+    /**
+     * As {@link #designs(Flowsheet, Sized)}, each structure of the material {@code material} gives its unit's id (batch
+     * 2026-11-16-fouling-corrosion, WP6: the Materials tab's choice, Auto's as the concrete material). A block's member is built of
+     * its block's material. A kind with no fluid device, whose material does not matter, stays carbon steel.
+     */
+    public static List<SentDesign> designs(Flowsheet sheet, Sized sized, Function<String, com.wormzjl.icheme.science.integrity.Metallurgy> material) {
         var names = new HashMap<String, String>();
         for (var unit : sheet.units()) names.put(unit.id(), unit.name());
         var out = new ArrayList<SentDesign>();
@@ -209,6 +221,7 @@ public final class SheetSizing {
             if (shape == null) continue;
             int slash = id.indexOf('/');
             String block = slash < 0 ? id : id.substring(0, slash), member = slash < 0 ? "" : id.substring(slash + 1);
+            if (shape.column() || shape.fluidDevice()) shape = shape.withMaterial(material.apply(block));
             var column = size instanceof ColumnSizing.Size c ? new ColumnDesign(c.layout(), c.diameter()) : null;
             out.add(new SentDesign(names.getOrDefault(block, block), member, size.count(), shape, column));
             if (out.size() == SentDesign.MAX) break;

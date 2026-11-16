@@ -111,6 +111,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             () -> this.tab == SimulatorFrame.Tab.FLOWSHEET ? () -> com.wormzjl.icheme.client.gui.tutorial.GuideClient.report(com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.SHEET_STEP) : null);
     private final ResultsPage.State resultsState = new ResultsPage.State();
     private final SizingPage.State sizingState = new SizingPage.State();
+    /** The Materials tab's pick (batch 2026-11-16-fouling-corrosion, WP6). */
+    private final com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.State materialsState = new com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.State();
     /** The sheet Size all started from: its edit lands only on that sheet. */
     private @Nullable Flowsheet sizingFrom;
     private SimulatorRunner.@Nullable Rated applied;
@@ -334,7 +336,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             changedAt = ticks;
         }
         var last = host.last();
-        if (tab != SimulatorFrame.Tab.SIZING || last == null || host.running() != null || host.rating() || ticks - changedAt < RATE_TICKS) return;
+        if (tab != SimulatorFrame.Tab.SIZING && tab != SimulatorFrame.Tab.METALLURGY || last == null || host.running() != null || host.rating() || ticks - changedAt < RATE_TICKS) return;
         if (rateLast == last && rateSheet == sheet) return;
         var rated = host.rated();
         rateLast = last;
@@ -360,7 +362,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         frame = new SimulatorFrame(width, height, font.width(title));
         entries.clear();
         var x = context();
-        if (tab == SimulatorFrame.Tab.SIZING && !SizingPage.open(x)) tab = SimulatorFrame.Tab.FLOWSHEET;
+        if (tab == SimulatorFrame.Tab.SIZING && !SizingPage.open(x) || tab == SimulatorFrame.Tab.METALLURGY && !com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.open(x)) tab = SimulatorFrame.Tab.FLOWSHEET;
         var shown = shownDoor(x);
         built = new Built(x, shown);
         signature = signature(x, shown);
@@ -399,6 +401,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         });
         else if (tab == SimulatorFrame.Tab.BASIS) pageWidgets(BasisPage.rows(x), BasisPage.values(x), SimulatorFrame.BASIS_DOOR, (key, text) -> BasisPage.entry(context(), key, text));
         else if (tab == SimulatorFrame.Tab.SIZING) pageWidgets(SizingPage.rows(x, sizingState), SizingPage.values(x, sizingState), SimulatorFrame.SIZING_DOOR, (key, text) -> SizingPage.entry(context(), sizingState, key, text));
+        else if (tab == SimulatorFrame.Tab.METALLURGY) pageWidgets(com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.rows(x, materialsState), Map.of(), SimulatorFrame.MATERIALS_DOOR, (key, text) -> {
+        });
     }
 
     /** The help sign (P4b): the tab's tour, where it has one. A tour sends nothing to the server. */
@@ -600,6 +604,8 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             // A new rating's sizes fill the entries, but not under the player's hands: the next rebuild after typing takes them.
             if (!(getFocused() instanceof SkinField)) text.append(System.identityHashCode(SizingPage.sized(x))).append(SizingPage.open(x)).append(SizingPage.sizes(x));
         }
+        if (tab == SimulatorFrame.Tab.METALLURGY)
+            text.append(materialsState.unit).append(SimulatorPage.keys(com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.rows(x, materialsState))).append(System.identityHashCode(com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.rows(x))).append(com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.open(x));
         return text.toString();
     }
 
@@ -642,7 +648,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
                 else if (key.equals("category-") || key.equals("category+")) category = Math.floorMod(category + (key.endsWith("+") ? 1 : -1), com.wormzjl.icheme.client.gui.flowsheet.Tiles.CATEGORIES.size());
                 else if (key.startsWith("unit/")) unitKey(key.substring(5));
                 else if (key.startsWith("dialog/")) dialogKey(key.substring(7));
-                else if (!SizingPage.press(x, sizingState, key)) ResultsPage.press(resultsState, key);
+                else if (!SizingPage.press(x, sizingState, key) && !com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.press(x, materialsState, key)) ResultsPage.press(resultsState, key);
             }
         }
         rebuild();
@@ -997,6 +1003,13 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             rebuildWidgets();
             return true;
         }
+        if (tab == SimulatorFrame.Tab.METALLURGY) {
+            var c = context();
+            var glass = SimulatorFrame.inner(com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.glass(frame, tab, width));
+            if (!com.wormzjl.icheme.client.gui.flowsheet.MaterialsGlass.pick(materialsState, com.wormzjl.icheme.client.gui.flowsheet.MaterialsGlass.click(c, materialsState, c.m(), glass, x, y))) return false;
+            rebuildWidgets();
+            return true;
+        }
         if (tab != SimulatorFrame.Tab.FLOWSHEET) return false;
         var tile = frame.tileAt(category, SimulatorFrame.inner(frame.tileWell()), x, y);
         if (tile != null) return gestures.carry(tile);
@@ -1032,6 +1045,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
         }
         if (tab == SimulatorFrame.Tab.FLOWSHEET && canvasBox.contains(x, y)) view.wheel(dy, x, y);
         if (tab == SimulatorFrame.Tab.SIZING && SimulatorPage.glass(frame, width).contains(x, y)) SizingGlass.scroll(sizingState, dy);
+        if (tab == SimulatorFrame.Tab.METALLURGY && com.wormzjl.icheme.client.gui.flowsheet.SimulatorTour.glass(frame, tab, width).contains(x, y)) com.wormzjl.icheme.client.gui.flowsheet.MaterialsGlass.scroll(materialsState, dy);
         return true;
     }
 
@@ -1124,7 +1138,7 @@ public final class ProcessSimulatorScreen extends Screen implements MenuAccess<P
             g.pose().popPose();
         } else {
             var canvas = new GuiCanvas(g, font, 0, 0);
-            hovered = SimulatorPage.draw(canvas, skin, x, tab, frame, view, gestures, resultsState, sizingState, category, editor, kit, title.getString(), host.holder(), mouseX, mouseY);
+            hovered = SimulatorPage.draw(canvas, skin, x, tab, frame, view, gestures, resultsState, sizingState, materialsState, category, editor, kit, title.getString(), host.holder(), mouseX, mouseY);
         }
     }
 
