@@ -50,9 +50,10 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
 
 ## Open items
 
-- `ColumnOperationGameTests` loads the changed class. `runFluidGameTestServer` selects by namespace only, not by class:
-  running it means the whole fluid GameTest server. Waiting on the owner's choice.
-- The failure-modes plants compiled but were not rebuilt (the 15-minute review world was not run).
+- `ColumnOperationGameTests` and the failure-modes plants were compiled but not run on this change.
+  `runFluidGameTestServer` selects by namespace only, not by class. The parent session read the diff and chose not to
+  run `icheme_fluid_test`: the other rigs call the old `Options` constructor, whose defaults reproduce their old build.
+  The next final lane runs the fluid GameTests once. The 15-minute failure-modes review world was not run.
 - Pumparound pumps read PUMP_RATED outside the window, and the coolers are 3 to 8 times the need: these are the sizer's catalogue gaps, not
   the rig's.
 - The cooling water lines stay as laid; a tower-water line size would need the sizer to size the free port's water.
