@@ -5,6 +5,7 @@ import com.wormzjl.icheme.science.plant.column.Port;
 import com.wormzjl.icheme.science.plant.column.Setpoints;
 import com.wormzjl.icheme.science.plant.column.SplitTable;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
+import com.wormzjl.icheme.science.integrity.Metallurgy;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -27,9 +28,14 @@ import java.util.Objects;
  * 2026-11-10-column-failure-modes, facts schema 21), each outside the column with its partner held inside; a duty with none
  * is free, as every reboiler and pumparound duty was before them (a save before the field keeps them free until its next Start).
  * {@code members}: its powered members as its Start found them (W5, facts schema 21): the air condenser's fan sides and its
- * pumps' movers; none for a save before the field, whose members draw nothing until its next Start.</p>
+ * pumps' movers; none for a save before the field, whose members draw nothing until its next Start.
+ * {@code trayFouling}, {@code wallLoss} and {@code material} (WP8 of batch 2026-11-16-fouling-corrosion, plan section 13.1,
+ * facts schema 29): the trays' fouling by the particles the column carried, 0 to 1; the wall lost, mm; the material of
+ * construction, its structure's as its Start found it. A save before the fields reads a clean, new carbon steel column, which
+ * keeps carbon steel until its next Start. All three survive a Stop.</p>
  */
-public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface,Utilities utilities,Members members) {
+public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface,Utilities utilities,Members members,
+                         double trayFouling,double wallLoss,Metallurgy material) {
     /** The most stations a saved unit may hold. A column has at most eleven today (ColumnTrays): a feed, two steams, an off-gas, a sour water, a distillate, four draws, a bottoms. */
     public static final int MAXIMUM_STATIONS=16;
     /** The most condenser water sides: one a shell, as many as a design's condenser count allows. */
@@ -46,6 +52,8 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
     public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface){this(id,master,running,setpoints,stations,totals,condensers,state,leaving,airSurface,Utilities.NONE);}
     /** Without members: none draws power. */
     public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface,Utilities utilities){this(id,master,running,setpoints,stations,totals,condensers,state,leaving,airSurface,utilities,Members.NONE);}
+    /** A clean, new carbon steel column (WP8): no tray fouling, no wall loss. */
+    public ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean running,Setpoints setpoints,List<Station> stations,Totals totals,List<Long> condensers,State state,boolean leaving,double airSurface,Utilities utilities,Members members){this(id,master,running,setpoints,stations,totals,condensers,state,leaving,airSurface,utilities,members,0,0,Metallurgy.CARBON_STEEL);}
     public ColumnUnit {
         Objects.requireNonNull(master);Objects.requireNonNull(setpoints);Objects.requireNonNull(totals);stations=List.copyOf(stations);
         if(id<=0||master.lane()!=0||stations.size()>MAXIMUM_STATIONS)throw new IllegalArgumentException("Invalid column unit");
@@ -64,6 +72,9 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         // A side serves one duty: its transit is owed by one.
         var sides=new HashSet<>(condensers);for(long s:utilities.all())if(!sides.add(s))throw new IllegalArgumentException("A utility side serves one duty");
         Objects.requireNonNull(members);
+        Objects.requireNonNull(material);
+        if(!(trayFouling>=0&&trayFouling<=1))throw new IllegalArgumentException("Invalid tray fouling "+trayFouling);
+        if(!(wallLoss>=0&&wallLoss<=WorldTopologyLedger.IntegrityFacts.MAX_LOSS))throw new IllegalArgumentException("Invalid column wall loss "+wallLoss);
     }
 
     /** The first condenser water side, or 0 for none. */
@@ -158,11 +169,15 @@ public record ColumnUnit(long id,PhysicalFluidTopology.Position master,boolean r
         return kept;
     }
     /** These stations, running or not; a stopped column forgets its engine state. */
-    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condensers,value?state:null,leaving,airSurface,utilities,members);}
-    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condensers,state,leaving,airSurface,utilities,members);}
-    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condensers,state,leaving,airSurface,utilities,members);}
-    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,value,leaving,airSurface,utilities,members);}
-    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,true,airSurface,utilities,members);}
+    public ColumnUnit withStations(boolean value,List<Station> next){return new ColumnUnit(id,master,value,setpoints,next,totals,condensers,value?state:null,leaving,airSurface,utilities,members,trayFouling,wallLoss,material);}
+    public ColumnUnit withSetpoints(Setpoints value){return new ColumnUnit(id,master,running,value,stations,totals,condensers,state,leaving,airSurface,utilities,members,trayFouling,wallLoss,material);}
+    public ColumnUnit withTotals(Totals value){return new ColumnUnit(id,master,running,setpoints,stations,value,condensers,state,leaving,airSurface,utilities,members,trayFouling,wallLoss,material);}
+    public ColumnUnit withState(State value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,value,leaving,airSurface,utilities,members,trayFouling,wallLoss,material);}
+    public ColumnUnit leave(){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,true,airSurface,utilities,members,trayFouling,wallLoss,material);}
+    /** This unit with its trays fouled to {@code fouling} and its wall lost by {@code loss} mm (WP8). */
+    public ColumnUnit withWear(double fouling,double loss){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,leaving,airSurface,utilities,members,fouling,loss,material);}
+    /** This unit built of {@code value} (WP8: its structure's material, taken at Start). */
+    public ColumnUnit withMaterial(Metallurgy value){return new ColumnUnit(id,master,running,setpoints,stations,totals,condensers,state,leaving,airSurface,utilities,members,trayFouling,wallLoss,value);}
 
     /**
      * A running unit's engine state (plan section 12): its split table and the products' partial molar enthalpies (J/mol), the

@@ -107,7 +107,9 @@ public final class ColumnStarts {
         var pumps = new ArrayList<java.util.List<Long>>();
         for (int i = 1; i <= trays.pumparounds().size(); i++) pumps.add(movers(level, world, entry, ColumnBlueprint.pumparoundPump(i)));
         var members = new ColumnUnit.Members(fans, movers(level, world, entry, ColumnBlueprint.REFLUX_PUMP), pumps);
-        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser, air, reboiler, pumparounds, members), null);
+        // The column's material of construction (WP8 of batch 2026-11-16-fouling-corrosion): its unit's wall corrodes and wears as it.
+        return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser, air, reboiler, pumparounds, members,
+                vessel.shape().material()), null);
     }
 
     /** The fluid movers of every unit or fitting the report places in pump slot {@code slot}: a casing's, or an in-line pump's. */

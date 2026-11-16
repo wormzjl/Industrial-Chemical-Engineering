@@ -22,10 +22,11 @@ import org.jetbrains.annotations.Nullable;
  * @param streams   the ports, in the table's order: inlets, then products
  * @param duties    the duties the last cycle booked against the last solve's
  * @param solve     the table in force, or null before the first
+ * @param wear      the trays' fouling and the wall (WP8 of batch 2026-11-16-fouling-corrosion), or null where the column has no unit
  */
 public record OperationView(Phase phase, List<Condition.Active> conditions, double alpha, @Nullable DriftBands.Trigger resolving, String engine,
                             boolean running, boolean editable, Setpoints setpoints, @Nullable Setpoints accepted, List<Stream> streams, List<Duty> duties, @Nullable Solve solve,
-                            Trays trays) {
+                            Trays trays, @Nullable Wear wear) {
     /** The statuses of plan section 13; a solve in flight is said beside them ({@link #resolving}). */
     public enum Phase {
         NOT_READY, STOPPED, STARTING, RUNNING, LIMITED, UPSET
@@ -74,6 +75,30 @@ public record OperationView(Phase phase, List<Condition.Active> conditions, doub
         public boolean known() {
             return Double.isFinite(dropAtSet) || Double.isFinite(floodAtSet);
         }
+    }
+
+    /**
+     * A column's trays and wall (WP8, plan section 13.1), read from its unit's facts: the trays' fouling, 0 to 1 (their capacity
+     * left is {@code ColumnWear.capacity}); the wall left, a share of its corrosion allowance, 0 to 1; the rate it is lost at by
+     * the last cycle, mm per corrosion year (0 while stopped); the material of construction.
+     */
+    public record Wear(double fouling, double wallLeft, double rate, com.wormzjl.icheme.science.integrity.Metallurgy material) {
+        public Wear {
+            Objects.requireNonNull(material, "material");
+            if (!(fouling >= 0 && fouling <= 1) || !(wallLeft >= 0 && wallLeft <= 1) || !(rate >= 0) || !Double.isFinite(rate))
+                throw new IllegalArgumentException("Invalid column wear");
+        }
+
+        /** The trays' capacity left, 0.6 to 1. */
+        public double capacity() {
+            return com.wormzjl.icheme.science.integrity.ColumnWear.capacity(fouling);
+        }
+    }
+
+    /** A view without the wear (a column with no unit). */
+    public OperationView(Phase phase, List<Condition.Active> conditions, double alpha, @Nullable DriftBands.Trigger resolving, String engine, boolean running, boolean editable,
+                         Setpoints setpoints, @Nullable Setpoints accepted, List<Stream> streams, List<Duty> duties, @Nullable Solve solve, Trays trays) {
+        this(phase, conditions, alpha, resolving, engine, running, editable, setpoints, accepted, streams, duties, solve, trays, null);
     }
 
     /** A view without tray readings. */

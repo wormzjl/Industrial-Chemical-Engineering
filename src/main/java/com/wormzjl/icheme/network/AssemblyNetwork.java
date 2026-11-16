@@ -175,6 +175,14 @@ public final class AssemblyNetwork {
         b.writeDouble(o.trays().dropAtSet());
         b.writeDouble(o.trays().floodAtSet());
         b.writeVarInt(o.trays().tray());
+        // The trays' fouling and the wall (WP8 of batch 2026-11-16-fouling-corrosion), where the column has a unit.
+        b.writeBoolean(o.wear() != null);
+        if (o.wear() != null) {
+            b.writeDouble(o.wear().fouling());
+            b.writeDouble(o.wear().wallLeft());
+            b.writeDouble(o.wear().rate());
+            b.writeEnum(o.wear().material());
+        }
         var solve = o.solve();
         b.writeBoolean(solve != null);
         if (solve == null) return;
@@ -204,12 +212,13 @@ public final class AssemblyNetwork {
             for (int i = 0, n = Wire.count(b, MAX_STREAMS, 18, "assembly duty"); i < n; i++)
                 duties.add(new OperationView.Duty(b.readEnum(OperationView.DutyKind.class), b.readVarInt(), b.readDouble(), b.readDouble()));
             var trays = new OperationView.Trays(b.readDouble(), b.readDouble(), b.readDouble(), b.readDouble(), b.readVarInt());
+            var wear = b.readBoolean() ? new OperationView.Wear(b.readDouble(), b.readDouble(), b.readDouble(), b.readEnum(com.wormzjl.icheme.science.integrity.Metallurgy.class)) : null;
             OperationView.Solve solve = null;
             if (b.readBoolean()) {
                 var trigger = b.readBoolean() ? b.readEnum(DriftBands.Trigger.class) : null;
                 solve = new OperationView.Solve(trigger, b.readBoolean(), b.readDouble());
             }
-            return new OperationView(phase, conditions, alpha, resolving, engine, running, editable, setpoints, accepted, streams, duties, solve, trays);
+            return new OperationView(phase, conditions, alpha, resolving, engine, running, editable, setpoints, accepted, streams, duties, solve, trays, wear);
         } catch (IllegalArgumentException invalid) {
             throw new DecoderException(invalid.getMessage());
         }
@@ -288,7 +297,9 @@ public final class AssemblyNetwork {
 
     /** An Operation tab command (C7). */
     public enum Action {
-        START, STOP, APPLY
+        START, STOP, APPLY,
+        /** Clean the trays of the stopped column (WP8 of batch 2026-11-16-fouling-corrosion): a queued engine event. */
+        CLEAN
     }
 
     /**
@@ -549,6 +560,17 @@ public final class AssemblyNetwork {
                     else refusals.put(master, refused);
                 }
                 case STOP -> AssemblyService.stop(level, m.origin());
+                // Clean (WP8): one queued engine event on the column's unit; its answer, at the engine's tick drain, to the
+                // player while connected.
+                case CLEAN -> {
+                    var server = player.server;
+                    var uuid = player.getUUID();
+                    AssemblyService.clean(level, m.origin(), outcome -> {
+                        var to = server.getPlayerList().getPlayer(uuid);
+                        if (to != null && !to.hasDisconnected() && to.connection != null)
+                            to.displayClientMessage(net.minecraft.network.chat.Component.translatable(AssemblyService.cleanKey(outcome)), false);
+                    });
+                }
                 case APPLY -> {
                     String refused = AssemblyService.setpoints(level, m.origin(), payload.values());
                     if (refused != null) IChemE.LOGGER.info("column status=SETPOINTS_REFUSED master={} reason={}", m.origin().toShortString(), refused);

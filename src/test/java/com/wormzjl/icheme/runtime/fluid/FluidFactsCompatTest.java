@@ -100,7 +100,9 @@ class FluidFactsCompatTest {
                 new ColumnUnit.Totals(account,com.wormzjl.icheme.science.plant.column.ColumnCycle.Account.empty(m),2e5,-3e5,-1e4),List.of(tube,tube2),null,false,
                 // Facts schema 9 (U2): the air condenser's bare tube.
                 1234.5,new ColumnUnit.Utilities(List.of(utility),List.of(List.of(),List.of(utility+1,utility+2))),
-                new ColumnUnit.Members(List.of(member,member+1),List.of(member+2),List.of(List.of(),List.of(member+3)))));
+                new ColumnUnit.Members(List.of(member,member+1),List.of(member+2),List.of(List.of(),List.of(member+3))),
+                // Facts schema 29 (WP8): fouled trays and a thinned stainless steel wall.
+                .6,1.25,Metallurgy.STAINLESS_STEEL));
         var held0=world.registry.registrations().get(pipe);
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(held0.device().withSuspendedBy(unit),held0.spec(),held0.revision()+1)),
                 new WorldTopologyLedger.Edit(port,new WorldTopologyLedger.Registration(feed,new FluidDeviceSpec(1,330,260000,FluidDeviceSpec.nitrogen(CATALOG).composition()),0))),port+1,null);
@@ -218,6 +220,30 @@ class FluidFactsCompatTest {
             var bytes=FluidFacts.section(damaged);
             assertThrows(IllegalArgumentException.class,()->FluidFacts.read(bytes,0,bytes.length,"damaged walls",r->{new IntegritySection().read(r,FluidFacts.World.builder());return null;}));
         }
+    }
+    /**
+     * Facts schema 29, WP8: a column unit's tray fouling, wall loss and material survive an exact load and a facts-only
+     * rebuild; a unit written before them (schema 27) is a clean, new carbon steel column; a material this build does not
+     * know refuses the section.
+     */
+    @Test void aColumnsWearSurvivesBothLoadsAndAnOlderImageReadsACleanCarbonSteelColumn() throws IOException {
+        var world=corpusWorld();var saved=image(world);var unit=world.ledger.columns().values().iterator().next();
+        assertEquals(.6,unit.trayFouling(),0);assertEquals(1.25,unit.wallLoss(),0);assertEquals(Metallurgy.STAINLESS_STEEL,unit.material());
+        for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG))) {
+            var back=restored.world().orElseThrow().columns().get(unit.id());
+            assertEquals(.6,back.trayFouling(),0,restored.route().toString());assertEquals(1.25,back.wallLoss(),0);assertEquals(Metallurgy.STAINLESS_STEEL,back.material());
+        }
+        var older=load(read(CORPUS.resolve("schema-27")),key->key.on(model),CATALOG).world().orElseThrow();
+        assertFalse(older.columns().isEmpty());
+        for(var u:older.columns().values()){assertEquals(0,u.trayFouling(),0);assertEquals(0,u.wallLoss(),0);assertEquals(Metallurgy.CARBON_STEEL,u.material());}
+        // The section alone: the unit reads back; its material renamed to one this build does not know refuses it.
+        var good=FluidFacts.section(f->new ColumnFacts().write(f,world.ledger.snapshot()));
+        var builder=FluidFacts.World.builder();FluidFacts.read(good,0,good.length,"columns",r->{new ColumnFacts().read(r,builder);return null;});
+        var name="STAINLESS_STEEL".getBytes(java.nio.charset.StandardCharsets.UTF_8);int at=-1;
+        for(int i=0;i+name.length<=good.length&&at<0;i++)if(java.util.Arrays.equals(good,i,i+name.length,name,0,name.length))at=i;
+        assertTrue(at>=0,"the material is saved by name");
+        var damaged=good.clone();damaged[at+name.length-1]='X';
+        assertThrows(IllegalArgumentException.class,()->FluidFacts.read(damaged,0,damaged.length,"damaged columns",r->{new ColumnFacts().read(r,FluidFacts.World.builder());return null;}));
     }
     /** Facts schema 26 (batch 2026-11-15-pollution-system, WP6b): a closed 4 m3 vessel a blast breached, standing open to the air. */
     private static long breached(EventPathWorld world) {
@@ -1410,6 +1436,9 @@ class FluidFactsCompatTest {
             if(!u.utilities().none())text.append(":reboiler=").append(u.utilities().reboiler()).append(":pumparounds=").append(u.utilities().pumparounds());
             // Schema 21: the members, written only where there are some, as an older image has none.
             if(!u.members().none())text.append(":fans=").append(u.members().fans()).append(":reflux=").append(u.members().reflux()).append(":pumps=").append(u.members().pumparounds());
+            // Schema 29 (WP8): the trays' fouling, the wall's loss and the material, written only away from a clean, new carbon
+            // steel column, as an older image reads one.
+            if(u.trayFouling()!=0||u.wallLoss()!=0||u.material()!=Metallurgy.CARBON_STEEL)text.append(":fouling=").append(u.trayFouling()).append(":loss=").append(u.wallLoss()).append(":material=").append(u.material());
             for(var s:u.stations())text.append(":").append(s.port()).append(s.index()).append("=").append(s.device()).append("/").append(s.valve()).append("/").append(s.account().total()).append("/").append(s.account().energy()).append("/").append(s.solids().massKg());
         }
         return text.toString();

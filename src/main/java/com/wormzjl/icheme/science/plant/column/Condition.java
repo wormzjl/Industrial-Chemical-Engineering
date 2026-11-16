@@ -50,7 +50,21 @@ public enum Condition {
      * batch 2026-11-16-fouling-corrosion). The cycle takes nothing until a solve of the state taken shows none. The text names
      * the compound and the product.
      */
-    FROZEN(Rank.TRIP, "frozen");
+    FROZEN(Rank.TRIP, "frozen"),
+    /**
+     * The trays are fouled by the particles the column carries (plan section 13.1, WP8): fouling at
+     * {@code ColumnWear.FOULED_FROM} or more. The value is the trays' capacity left, 0 to 1; the text says it.
+     */
+    TRAYS_FOULED(Rank.NOTICE, "trays fouled"),
+    /** The wall has used half its corrosion allowance or more ({@code WallState.Stage.THIN}); the value is the share used. */
+    THIN_WALL(Rank.NOTICE, "thin wall"),
+    /** The wall has used nine tenths of its allowance or more ({@code WallState.Stage.WEEPING}); the value is the share used. */
+    WEEPING(Rank.NOTICE, "weeping"),
+    /**
+     * The wall is through ({@code WallState.Stage.THROUGH}, plan section 13.1): the cycle takes nothing until the Equipment
+     * Constructor repairs the stopped column. Derived from the saved wall loss at every cycle.
+     */
+    LEAKING(Rank.TRIP, "leaking");
 
     /** The flood fraction from which a cycle reports {@link #HIGH_LOAD}. */
     public static final double HIGH_LOAD_FRACTION = .85;

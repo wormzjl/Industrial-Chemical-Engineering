@@ -14,6 +14,7 @@ import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.PortPlan;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
+import com.wormzjl.icheme.science.integrity.Metallurgy;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction;
@@ -1518,5 +1519,114 @@ class ColumnRunTest {
         String status=old.ops().status(old.unit());
         assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
         assertNull(Condition.find(old.ops().conditions(old.unit()),Condition.HEATING_SHORT),"a free duty limits nothing");
+    }
+    // ---------------- WP8 of batch 2026-11-16-fouling-corrosion: a column that carries solids fouls and wears ----------------
+
+    /**
+     * WP8 (plan section 13.1): a column fed about 1 wt% of inert solids fouls its trays toward {@code f∞ = φ/0.02} and loses
+     * wall at the solids' rate; on a table at 95 % of flood its feed limit falls with the trays' capacity, FLOODING binding.
+     * The fouling time is set to 180 process seconds (the default is 10 process hours), so the run's 1,800 s reach the
+     * asymptote; a cycle is 20 process seconds, and the solids that waited in the inlet before the first table move with its
+     * first cycle: at a time near one cycle their slug would latch the trays above the asymptote, since fouling never falls.
+     */
+    @Test void aColumnFedSolidsFoulsItsTraysAndItsFeedLimitFalls() {
+        feedSolids=new SlurryFeed(4e-3,List.of(new SlurryFeed.Grade("icheme:demo_particle",com.wormzjl.icheme.science.fluid.state.ParticleSize.micrometres("10"),1)));productPort=Port.BOTTOMS;lineBore=productBore=.005;
+        var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();
+        ops.wear(()->new Integrity.Settings(true,20,true,true,true,.05),list->null);
+        var run=ops.run(unit);ops.table(unit,run.table.withFlood(new SplitTable.Flood(.95/feedRate,12,false,1000,3000)),run.enthalpy);
+        world.runTo(9000);
+        var u=world.ledger.column(unit);double share=ops.run(unit).share;
+        assertTrue(share>.003&&share<.03,"about 1 wt% of solids: "+share);
+        double target=com.wormzjl.icheme.science.integrity.ColumnWear.asymptote(share);
+        assertEquals(target,u.trayFouling(),.1*target,"the trays at their asymptote");
+        double capacity=com.wormzjl.icheme.science.integrity.ColumnWear.capacity(u.trayFouling());
+        var last=ops.last(unit);
+        assertEquals(Condition.FLOODING,last.binding().condition(),ops.status(unit));
+        assertEquals(capacity/.95,last.alpha(),.02,"the feed limited to the fouled trays' capacity");
+        assertTrue(u.wallLoss()>0,"the solids wear the wall");
+        assertEquals(com.wormzjl.icheme.science.integrity.ColumnWear.solids(u.material(),share),ops.run(unit).wallRate,1e-12,"no corrosion part: only the solids'");
+        if(com.wormzjl.icheme.science.integrity.ColumnWear.fouled(u.trayFouling()))assertNotNull(Condition.find(ops.conditions(unit),Condition.TRAYS_FOULED));
+        var view=ops.view(unit,world.ledger.onlineTick(),id->Double.NaN);
+        assertEquals(u.trayFouling(),view.wear().fouling(),0);assertEquals(Metallurgy.CARBON_STEEL,view.wear().material());
+    }
+
+    /**
+     * WP8: without solids the trays stay clean and only the corrosion part books, at the rate of the matrix on the bottoms
+     * of the installed table (here a standard that reads the feed's gas as oxygen: an oxygen fire on carbon steel).
+     */
+    @Test void withoutSolidsTheTraysStayCleanAndOnlyTheBottomsCorrosionBooks() {
+        productPort=Port.BOTTOMS;
+        var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();var model=world.model;int m=model.componentCount();
+        var n2=EventPathWorld.nitrogen().composition();int gas=0;for(int i=1;i<m;i++)if(n2[i]>n2[gas])gas=i;
+        var formulas=new double[m][5];formulas[gas]=new double[]{0,0,0,2,0};
+        var standards=com.wormzjl.icheme.science.integrity.CorrosionStandards.on(model.components(),model.molecularWeights(),formulas,new double[m],new double[m],new double[m]);
+        ops.wear(()->Integrity.Settings.DEFAULT,standards);
+        world.runTo(3000);
+        var u=world.ledger.column(unit);var run=ops.run(unit);var t=run.table;int k=t.product(Port.BOTTOMS,0);
+        var bottoms=t.split(t.reference().feedFractions())[k];var p=t.products().get(k);
+        var water=new double[m];int w=model.components().indexOf(SplitTable.WATER);var oil=bottoms.clone();if(w>=0){water[w]=bottoms[w];oil[w]=0;}
+        var expected=com.wormzjl.icheme.science.integrity.CorrosionLaw.inside(Metallurgy.CARBON_STEEL,standards.apply(model.components()).digest(bottoms,p.temperature(),p.pressure(),oil,water));
+        assertEquals(com.wormzjl.icheme.science.integrity.Mechanism.OXYGEN_FIRE,expected.mechanism());
+        assertEquals(0,u.trayFouling(),0,"no solids: clean trays");
+        assertEquals(0,run.share,0);
+        assertEquals(expected.rate(),run.wallRate,0,"the corrosion part alone");
+        double perCycle=expected.rate()*5/(20*3600.);double cycles=u.wallLoss()/perCycle;
+        assertTrue(cycles>=1,"the wall thins: "+u.wallLoss());
+        assertEquals(Math.rint(cycles),cycles,1e-6,"booked a whole number of cycles");
+        assertEquals(com.wormzjl.icheme.science.integrity.Mechanism.OXYGEN_FIRE,run.corroding);
+    }
+
+    /**
+     * WP8: a wall that is through raises LEAKING (UPSET) and the cycle takes nothing; with corrosion and erosion both off
+     * nothing fails from it. Repair and Clean are refused while the column runs and accepted once it has stopped; the
+     * repaired column runs again.
+     */
+    @Test void aThroughWallTripsTheColumnUntilItIsRepairedStoppedAndCleanWaitsForTheStopToo() {
+        var r=rig(0);var world=r.world();var ops=r.ops();long unit=r.unit();
+        world.runTo(1500);
+        var u=world.ledger.column(unit);world.ledger.column(u.withWear(.7,u.material().allowance()));
+        world.runTo(1700);
+        assertEquals(Condition.LEAKING,Condition.binding(ops.conditions(unit)).condition(),ops.status(unit));
+        assertTrue(ops.status(unit).startsWith("UPSET: the wall is through"),ops.status(unit));
+        assertTrue(EquipmentAlarm.column(ops.conditions(unit)).contains(EquipmentAlarm.UPSET));
+        assertNotNull(Condition.find(ops.conditions(unit),Condition.TRAYS_FOULED));
+        double taken=sum(world.ledger.column(unit).totals().taken().moles());
+        world.runTo(3000);
+        assertEquals(taken,sum(world.ledger.column(unit).totals().taken().moles()),0,"a leaking column takes nothing");
+        // With corrosion and erosion both off nothing fails from a wall (as Integrity): the column takes its feed again.
+        ops.wear(()->new Integrity.Settings(false,20,true,false,true,10),list->null);
+        world.runTo(3500);
+        assertNull(Condition.find(ops.conditions(unit),Condition.LEAKING),ops.status(unit));
+        assertTrue(sum(world.ledger.column(unit).totals().taken().moles())>taken);
+        ops.wear(()->Integrity.Settings.DEFAULT,list->null);
+        world.runTo(3800);
+        assertEquals(Condition.LEAKING,Condition.binding(ops.conditions(unit)).condition(),ops.status(unit));
+        var answers=new ArrayList<Integrity.Outcome>();
+        ops.queueRepair(unit,answers::add);ops.queueClean(unit,answers::add);ops.apply();
+        assertEquals(List.of(Integrity.Outcome.NOT_IDLE,Integrity.Outcome.NOT_IDLE),answers,"refused while it runs");
+        var table=ops.run(unit).table;var enthalpy=ops.run(unit).enthalpy;
+        ops.stop(unit,false,edits->world.registry.submit(edits,world.ledger.nextIdentity(),null));
+        world.runTo(4200);
+        assertFalse(world.ledger.column(unit).running(),ops.status(unit));
+        answers.clear();
+        ops.queueRepair(unit,answers::add);ops.queueRepair(unit,answers::add);ops.queueClean(unit,answers::add);ops.queueClean(unit,answers::add);
+        assertEquals(List.of(),answers,"answered at the engine's drain");
+        ops.apply();
+        assertEquals(List.of(Integrity.Outcome.REPAIRED,Integrity.Outcome.NOTHING_TO_REPAIR,Integrity.Outcome.CLEANED,Integrity.Outcome.NOTHING_TO_REPAIR),answers);
+        u=world.ledger.column(unit);
+        assertEquals(0,u.wallLoss(),0);assertEquals(0,u.trayFouling(),0);assertFalse(u.running());
+        answers.clear();ops.queueRepair(Long.MAX_VALUE,answers::add);ops.apply();
+        assertEquals(List.of(Integrity.Outcome.NOTHING_TO_REPAIR),answers,"no such unit");
+        // A Start again: its ports in their places, its table installed; the repaired column takes its feed.
+        long feed=world.ledger.nextIdentity(),product=feed+1;var fs=u.station(Port.FEED,0);var ps=u.station(Port.DISTILLATE,0);
+        var g=new PipeResistanceGeometry(world.registry.registrations().get(fs.valve()).device().geometry());var n2=EventPathWorld.nitrogen().composition();
+        world.ledger.column(u.withStations(true,List.of(fs.withDevice(feed),ps.withDevice(product))));
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
+                new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))),product+1,null);
+        ops.refresh();ops.table(unit,table,enthalpy);
+        taken=sum(world.ledger.column(unit).totals().taken().moles());
+        world.runTo(6000);
+        assertNull(Condition.find(ops.conditions(unit),Condition.LEAKING),ops.status(unit));
+        assertTrue(sum(world.ledger.column(unit).totals().taken().moles())>taken,"the repaired column runs again: "+ops.status(unit));
     }
 }
