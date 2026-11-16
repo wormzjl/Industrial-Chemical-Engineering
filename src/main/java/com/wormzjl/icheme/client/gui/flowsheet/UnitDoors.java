@@ -389,7 +389,8 @@ public final class UnitDoors {
             case "cooler" -> x.text("door.status.duty", SheetUnits.megawatts(Math.abs(duty)));
             case "pump", "compressor" -> {
                 var p = x.props(x.into(unit.id(), "in"));
-                yield p == null ? x.text("door.status.solved") : x.text("door.status.mover", Door.upper(StreamDoors.phaseName(x, p)), SheetUnits.number(1, p.vapour()));
+                yield p == null ? x.text("door.status.solved") : p.phases().denseFluid() ? x.text("door.status.mover_dense")
+                        : x.text("door.status.mover", Door.upper(StreamDoors.phaseName(x, p)), SheetUnits.number(1, p.vapour()));
             }
             case "drum" -> held(x, unit);
             case "splitter" -> {
@@ -412,9 +413,13 @@ public final class UnitDoors {
         if (p == null) return x.text("door.status.solved");
         var phases = p.phases();
         var names = new ArrayList<String>();
-        if (phases.gas() > 0) names.add(Door.lower(x.text("phase.gas")));
-        if (phases.organic() > 0) names.add(Door.lower(x.text("phase.organic")));
-        if (phases.aqueous() > 0) names.add(Door.lower(x.text("phase.aqueous")));
+        // One dense fluid (S5) is named once, whichever slot holds it.
+        if (phases.denseFluid()) names.add(x.text("phase.dense_word"));
+        else {
+            if (phases.gas() > 0) names.add(Door.lower(x.text("phase.gas")));
+            if (phases.organic() > 0) names.add(Door.lower(x.text("phase.organic")));
+            if (phases.aqueous() > 0) names.add(Door.lower(x.text("phase.aqueous")));
+        }
         if (phases.solid() > 0) names.add(Door.lower(x.text("phase.solid")));
         return x.text("door.status.phases", String.join(", ", names));
     }

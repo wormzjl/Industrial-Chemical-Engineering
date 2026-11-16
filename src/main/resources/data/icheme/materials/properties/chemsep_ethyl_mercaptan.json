@@ -81,6 +81,12 @@
       "revision": "chemsep-8.3-ppr78-r1"
     }
   },
+  "critical_volume": {
+    "volume_m3_per_mol": 0.000207,
+    "estimated": false,
+    "source": "Critical volume 0.207 m3/kmol of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Ethyl mercaptan\" (ChemSep index 1802, CAS 75-08-1). Read by the dense-fluid residual viscosity. Written by tools/compound-import/critical-volume.mjs.",
+    "revision": "chemsep-8.3-vc-r1"
+  },
   "viscosity": {
     "liquid": {
       "type": "log_table",

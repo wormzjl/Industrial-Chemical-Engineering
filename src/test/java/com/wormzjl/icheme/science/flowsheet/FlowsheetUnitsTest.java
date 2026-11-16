@@ -486,6 +486,74 @@ final class FlowsheetUnitsTest {
         assertEquals(reading(run, "C", "power") / Motor.efficiency(motor, 2), reading(run, "C", "electric"), 1e-6);
     }
 
+    /**
+     * A pump and a compressor on one dense fluid (S4 of batch 2026-11-15-supercritical-fluids): carbon dioxide at 310 K on
+     * each side of reduced density 1 (the vapour slot at 8.32509 MPa, the liquid slot at 8.32648 MPa) run to the same
+     * numbers within the density between them, 0.1 %, and the pump warns on neither: one dense fluid has no bubble point,
+     * and at its own temperature it never flashes (S4b; as first implemented it warned on both, its edge its own pressure).
+     */
+    @Test void aPumpAndACompressorOnADenseFluidSeeNoSlotLine() {
+        double[] co2 = only("CarbonDioxide");
+        FlowsheetRun[] pumps = new FlowsheetRun[2], compressors = new FlowsheetRun[2];
+        double[] pressures = {8.325088e6, 8.326483e6};
+        for (int i = 0; i < 2; i++) {
+            pumps[i] = closes(sheet().unit("P", "pump", "{\"target\":\"rise\",\"rise\":2e6}").feed("in", "P", "in", feed(310, pressures[i], co2, 100)).product("out", "P", "out").run());
+            compressors[i] = closes(sheet().unit("C", "compressor", "{\"target\":\"rise\",\"rise\":4e6}").feed("in", "C", "in", feed(310, pressures[i], co2, 100)).product("out", "C", "out").run());
+        }
+        var below = pumps[0].streams().get("in").state();
+        var above = pumps[1].streams().get("in").state();
+        assertEquals(FluidThermodynamics.State.VAPOR, below.oneFluidSlot());
+        assertEquals(FluidThermodynamics.State.LIQUID, above.oneFluidSlot());
+        for (String key : List.of("power", "head", "rise")) {
+            assertEquals(reading(pumps[0], "P", key), reading(pumps[1], "P", key), 2e-3 * Math.abs(reading(pumps[0], "P", key)), "the pump's " + key);
+            assertEquals(reading(compressors[0], "C", key), reading(compressors[1], "C", key), 2e-3 * Math.abs(reading(compressors[0], "C", key)), "the compressor's " + key);
+        }
+        assertFalse(logged(pumps[0], "pump.bubble_point") || logged(pumps[1], "pump.bubble_point"), "no bubble warning on either side");
+    }
+
+    /**
+     * The compressor sizing's discharge on one dense suction (S4b): its exponent blends the ideal-gas one to the solved
+     * streams' by the liquid-like weight w. Carbon dioxide at 320 K and 15 MPa (w = 1), ratio 2: the solved outlet, 344.8 K,
+     * where the ideal-gas estimate read 388.8 K. At the slot line (w = 0.5) it is continuous, between the two (361.4 K
+     * against 345.9 K solved and 377.5 K ideal). Nitrogen at 300 K and 10 MPa is dense too, at w = 0: the ideal exponent to
+     * the bit.
+     */
+    @Test void aCompressorsDischargeOnADenseSuctionFollowsTheSolvedOutlet() {
+        MaterialRuntime.with(CATALOG, PACKAGE, () -> {
+            var model = FluidThermodynamics.forNetwork(CATALOG, PACKAGE);
+            var thermo = new FlowThermo(model, CATALOG, PACKAGE, () -> {
+            });
+            double[] co2 = only("CarbonDioxide");
+            double[][] cases = {{320, 15e6}, {310, 8.325088e6}, {310, 8.326483e6}};
+            double[] discharge = new double[cases.length], solved = new double[cases.length], ideal = new double[cases.length];
+            for (int i = 0; i < cases.length; i++) {
+                double t = cases[i][0], p = cases[i][1];
+                var run = closes(sheet().unit("C", "compressor", "{\"target\":\"rise\",\"rise\":" + p + "}").feed("in", "C", "in", feed(t, p, co2, 100)).product("out", "C", "out").run());
+                var in = run.streams().get("in");
+                var out = run.streams().get("out");
+                var load = com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing.Load.of(in, out, com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis.DEFAULT, thermo,
+                        new com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace());
+                assertTrue(in.state().dense());
+                assertEquals(2, load.ratio(), 1e-9);
+                discharge[i] = load.suction() * Math.pow(load.ratio(), load.exponent());
+                solved[i] = out.temperature();
+                ideal[i] = t * Math.pow(2, 1 / com.wormzjl.icheme.science.machine.CentrifugalCompressor.sigma(model.heatCapacityRatio(in.state()), com.wormzjl.icheme.science.machine.CentrifugalCompressor.DEFAULT_EFFICIENCY));
+            }
+            assertEquals(solved[0], discharge[0], 3, "a liquid-like suction: the solved outlet");
+            assertTrue(ideal[0] - solved[0] > 30, "where the ideal-gas estimate stood far above it");
+            assertEquals(discharge[1], discharge[2], .2, "continuous across the slot line");
+            for (int i = 1; i < 3; i++) assertTrue(discharge[i] > solved[i] && discharge[i] < ideal[i], "between the solved outlet and the ideal estimate at the slot line");
+            var gas = closes(sheet().unit("C", "compressor", "{\"target\":\"rise\",\"rise\":1e7}").feed("in", "C", "in", feed(300, 1e7, NITROGEN, 100)).product("out", "C", "out").run());
+            var in = gas.streams().get("in");
+            assertTrue(in.state().dense());
+            var load = com.wormzjl.icheme.science.flowsheet.sizing.CompressorSizing.Load.of(in, gas.streams().get("out"), com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis.DEFAULT, thermo,
+                    new com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace());
+            assertEquals(1 / com.wormzjl.icheme.science.machine.CentrifugalCompressor.sigma(model.heatCapacityRatio(in.state()), com.wormzjl.icheme.science.machine.CentrifugalCompressor.DEFAULT_EFFICIENCY), load.exponent(), 0,
+                    "an ordinary gas (w = 0): the ideal exponent to the bit");
+            return null;
+        });
+    }
+
     /** W8's worked pump (batch 2026-11-03-rotating-machinery, W8_BUILD_PLAN.md section 2): water, 100 m³/h at 80 m head. */
     @Test void aPumpProposesItsMotor() {
         double flow = 100 / 3600., hydraulic = 1000 * 9.80665 * flow * 80, eta = MoverUnit.pumpEfficiency(flow);

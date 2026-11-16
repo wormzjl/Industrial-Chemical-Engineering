@@ -284,12 +284,22 @@ final class V3AcceptanceAuditor {
                 control.checkpoint();
                 if (flash.phase() == V3FeedPhase.TWO_PHASE) continue;
                 return V3AcceptanceAudit.Check.fail(V3AuditFamily.INTERIOR_PHASE_IDENTITY, 1.0, 0.0,
-                        "tray " + (node + 1) + " carries the same phase as both liquid and vapor; x-y=" + distance
-                                + ", Z separation=" + separation);
+                        interiorPhaseIdentityText(node, flash.detail(), distance, separation));
             }
         }
         return V3AcceptanceAudit.Check.pass(V3AuditFamily.INTERIOR_PHASE_IDENTITY, 0.0, 0.0,
                 "no interior liquid/vapor pair collapses to the same composition and EOS root");
+    }
+
+    /**
+     * The text of a tray whose liquid and vapour are one fluid (batch 2026-11-15-supercritical-fluids, D2): a capability
+     * limit of a stage model with two phases, so it names the cause and what the player changes. The overall flash's
+     * detail says which one-phase answer it is.
+     */
+    static String interiorPhaseIdentityText(int node, String flashDetail, double distance, double separation) {
+        return "tray " + (node + 1) + " has no liquid and vapour to separate: it is at or above its mixture's critical point"
+                + " (" + flashDetail + "); lower the pressure or change the cut; x-y=" + distance
+                + ", Z separation=" + separation;
     }
 
     /** Total hydrocarbon phase enthalpy rate of one node from a direct property call on the candidate flows. */

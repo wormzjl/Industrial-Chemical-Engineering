@@ -33,6 +33,26 @@ class FluidThermodynamicsTest {
         var pentane=pure(6);var liquid=model.flashTP(300,1e6,pentane,()->{});closure(pentane,liquid);assertEquals(1,TestPhases.liquid(liquid)[6],1e-8);
         exposed=TestPhases.liquid(liquid);exposed[6]=0;assertEquals(1,TestPhases.liquid(liquid)[6],1e-8,"State component access must remain defensive");
     }
+    /**
+     * S2a of batch 2026-11-15-supercritical-fluids: a state's one fluid slot, whether that fluid is on a supercritical isotherm,
+     * and its reduced density on the untranslated cubic. Nitrogen at 300 K (Tc 126.2 K) is one supercritical fluid at every
+     * pressure: v/b about 1040 at 0.1 MPa and 10.4 at 10 MPa, so v_c/v near 0.004 and 0.38. Liquid nitrogen at 100 K and
+     * 1 MPa is one fluid below its critical temperature; a state of two phases has no one fluid slot.
+     */
+    @Test void aStateNamesItsOneFluidSlotAndWhetherItIsDense() {
+        var nitrogen=pure(model.components().indexOf("Nitrogen"));
+        var dilute=model.flashTP(300,1e5,nitrogen,()->{});
+        assertEquals(FluidThermodynamics.State.VAPOR,dilute.oneFluidSlot());
+        assertTrue(dilute.dense());assertEquals(.0038,dilute.reducedDensity(),.0003);
+        var compressed=model.flashTP(300,1e7,nitrogen,()->{});
+        assertTrue(compressed.oneFluidSlot()>=0);assertTrue(compressed.dense());assertEquals(.37,compressed.reducedDensity(),.03);
+        var liquid=model.flashTP(100,1e6,nitrogen,()->{});
+        assertEquals(FluidThermodynamics.State.LIQUID,liquid.oneFluidSlot());
+        assertFalse(liquid.dense());assertTrue(liquid.reducedDensity()>1.5,"a liquid's v_c/v: "+liquid.reducedDensity());
+        var wet=pure(0);wet[water]=1;
+        var twoPhase=model.flashTP(300,101325,wet,()->{});
+        assertEquals(-1,twoPhase.oneFluidSlot());assertFalse(twoPhase.dense());assertTrue(Double.isNaN(twoPhase.reducedDensity()));
+    }
     @Test void crudePresetsAndThreePhaseWaterMaintainComponentInventory() {
         var catalog=MaterialCatalog.bundled();
         for(String id:new String[]{"icheme:light_crude","icheme:medium_crude","icheme:heavy_crude"}) {

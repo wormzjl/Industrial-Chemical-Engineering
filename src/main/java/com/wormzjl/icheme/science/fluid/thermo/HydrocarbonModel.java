@@ -8,6 +8,7 @@ import com.wormzjl.icheme.science.thermo.PengRobinsonKernel;
 import com.wormzjl.icheme.science.thermo.ThermoComponent;
 import com.wormzjl.icheme.science.thermo.phase.CubicPhaseEvaluator;
 import com.wormzjl.icheme.science.thermo.PhaseIdentification;
+import com.wormzjl.icheme.science.thermo.PhaseTraits;
 import com.wormzjl.icheme.science.thermo.phase.WaterShare;
 import com.wormzjl.icheme.science.thermo.phase.PackageBinding;
 import java.util.ArrayList;
@@ -181,8 +182,20 @@ public final class HydrocarbonModel {
         double[] logPhi=new double[compounds.size()+1];
         System.arraycopy(values.logFugacityCoefficientsView(),0,logPhi,0,kernel.length);
         if(water<0)logPhi[compounds.size()]=Double.NaN;
-        return new Phase(v,h,h-p*v,dvdp,logPhi,root==PengRobinsonKernel.Root.VAPOR&&PhaseIdentification.vapourLike(values.phaseIdentificationParameter(),values.compressibility()),
-                values.supportSnapshot());
+        double identification=values.phaseIdentificationParameter();
+        return new Phase(v,h,h-p*v,dvdp,logPhi,root==PengRobinsonKernel.Root.VAPOR&&PhaseIdentification.vapourLike(identification,values.compressibility()),
+                values.supportSnapshot(),traits(t,values,identification));
+    }
+    /**
+     * The evaluated root's traits on the untranslated cubic of the hydrocarbon kernel (batch 2026-11-15-supercritical-fluids,
+     * S2a): the numbers of {@link PhaseTraits#of(int, double, double, double, double, double, double)} formed from the
+     * values' own untranslated volume, so the identification parameter is the very double {@code vaporLike} and
+     * {@link #liquidLike(TranslatedPengRobinson.Values)} read. Water's share of a wet phase does not enter them.
+     */
+    private static PhaseTraits traits(double t,TranslatedPengRobinson.Values values,double identification) {
+        double b=values.coVolume();
+        return new PhaseTraits(values.physicalRootCount(),values.compressibility(),values.untranslatedVolume()/b,identification,
+                values.attraction()/(b*PengRobinsonKernel.GAS_CONSTANT*t));
     }
 
     /**
@@ -356,7 +369,8 @@ public final class HydrocarbonModel {
             if(n<amounts.length)out[n]=Double.NaN;
             if(!(v>0)||!Double.isFinite(h))throw new IllegalArgumentException("Invalid translated phase properties");
             if(!(phaseSlope<0))throw new IllegalArgumentException("Invalid translated phase properties");
-            return new Phase(v,h,h-p*v,phaseSlope,out,base.vaporLike(),base.carried());
+            // The base root's traits, as its vaporLike flag: the first-order model does not evaluate the cubic again.
+            return new Phase(v,h,h-p*v,phaseSlope,out,base.vaporLike(),base.carried(),base.traits());
         }
     }
 
@@ -395,12 +409,15 @@ public final class HydrocarbonModel {
      * the conserved basis (water last; not a number on a list without water). {@code vaporLike}: a vapour evaluation's
      * root is vapour-like by the phase identification parameter. {@code carried}: the kernel support it was evaluated on
      * (kernel basis, never mutated), or null for the whole list; outside it {@code ln phi} is the kernel's fill.
+     * {@code traits}: the evaluated root's {@link PhaseTraits} on the hydrocarbon kernel's untranslated cubic (S2a of batch
+     * 2026-11-15-supercritical-fluids); a first-order model's phase carries its base root's. Null only from the
+     * convenience constructor, for tests that never read them.
      */
     public record Phase(double molarVolume,double molarEnthalpy,double molarInternalEnergy,
-                        double volumePressureDerivative,double[] logFugacity,boolean vaporLike,boolean[] carried) {
-        /** A phase evaluated on the whole list. */
+                        double volumePressureDerivative,double[] logFugacity,boolean vaporLike,boolean[] carried,PhaseTraits traits) {
+        /** A phase evaluated on the whole list, with no traits (tests that never read them). */
         public Phase(double molarVolume,double molarEnthalpy,double molarInternalEnergy,double volumePressureDerivative,double[] logFugacity,boolean vaporLike) {
-            this(molarVolume,molarEnthalpy,molarInternalEnergy,volumePressureDerivative,logFugacity,vaporLike,null);
+            this(molarVolume,molarEnthalpy,molarInternalEnergy,volumePressureDerivative,logFugacity,vaporLike,null,null);
         }
         /** Whether {@code ln phi} of conserved component {@code i} is the equation of state's (its support carried it). */
         public boolean carries(int i) { return carried==null||i<carried.length&&carried[i]; }

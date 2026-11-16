@@ -43,11 +43,14 @@ final class NetworkStreams {
     /**
      * The gas's ideal-gas heat capacity ratio {@code k = c_p/(c_p − R)} at the state's temperature, for a compressor's
      * polytropic exponent (batch 2026-11-03-rotating-machinery, plan section 3.2): the vapour's components on the
-     * package's own ideal-gas data (water's from its cubic record on a list with water). 1.4 for a state that holds no gas.
+     * package's own ideal-gas data (water's from its cubic record on a list with water). A state with no gas that is one
+     * dense fluid ({@link State#dense()}) takes the same formula on that fluid's amounts (S2b of batch
+     * 2026-11-15-supercritical-fluids); 1.4 for any other state that holds no gas.
      */
     public double heatCapacityRatio(State state) {
         double t=state.temperature(),moles=0,cp=0;
         double[] vapor=state.vaporAmountsView();int n=model.hydrocarbon.componentCount();
+        if(!(state.vaporVolume()>0)&&state.dense())vapor=state.amountsView(state.oneFluidSlot());
         double total=0;for(double x:vapor)total+=x;
         if(!(total>0))return 1.4;
         var terms=model.hydrocarbon.prepare(t);
@@ -58,6 +61,40 @@ final class NetworkStreams {
         }
         cp/=moles;
         return cp/(cp-R);
+    }
+    /**
+     * The reduced densities {@code v_c / v} between which one fluid goes from gas-like to liquid-like (S2b and S4 of batch
+     * 2026-11-15-supercritical-fluids): gas-like at or below {@link #GAS_LIKE_UNTIL}, liquid-like from
+     * {@link #LIQUID_LIKE_FROM}, a {@link MixtureViscosity#smoothstep} between. An ordinary liquid ({@code v/b} 1.1 to 1.5, so
+     * 2.6 to 3.6) and an ordinary gas (below 0.5 up to {@code Tr} 0.97 at saturation) are wholly one or the other. The
+     * heat-transfer film reads it on every one-fluid state ({@code HeatCurve}); a compressor's condensed share reads it on
+     * a dense one ({@code InletPhase}). A pump reads its own weight ({@link #pumpLiquidLikeWeight}). An owner option
+     * (S2_NETWORK_REVIEW.md, S4_MACHINES_REVIEW.md).
+     */
+    public static final double GAS_LIKE_UNTIL=.5,LIQUID_LIKE_FROM=1.5;
+    /**
+     * The liquid-like weight of a state of one fluid ({@link State#oneFluidSlot()}): 0 at or below reduced density
+     * {@link #GAS_LIKE_UNTIL}, 1 from {@link #LIQUID_LIKE_FROM}, a smoothstep between; NaN for any other state.
+     */
+    public static double liquidLikeWeight(State state) {
+        if(state.oneFluidSlot()<0)return Double.NaN;
+        return MixtureViscosity.smoothstep((state.reducedDensity()-GAS_LIKE_UNTIL)/(LIQUID_LIKE_FROM-GAS_LIKE_UNTIL));
+    }
+    /**
+     * A pump's own upper bound of the liquid-like weight (owner, 2026-11-16, option 1 B of DENSE_PUMP_RESEARCH_REVIEW.md
+     * of batch 2026-11-15-supercritical-fluids): a centrifugal pump keeps its full head on one dense fluid from its critical
+     * density; only its rise {@code ρ g H} falls with the density. Pumps run carbon dioxide down to 400 to 500 kg/m3 (reduced
+     * density 0.86 to 1.07), one test pump stably at 340 kg/m3 (0.73). The lower bound is {@link #GAS_LIKE_UNTIL}, the gas rule.
+     */
+    public static final double PUMP_LIQUID_LIKE_FROM=1.0;
+    /**
+     * A pump's liquid-like weight of a state of one fluid ({@link State#oneFluidSlot()}): 0 at or below reduced density
+     * {@link #GAS_LIKE_UNTIL}, 1 from {@link #PUMP_LIQUID_LIKE_FROM}, a smoothstep between; NaN for any other state. A
+     * pump's vapour share of one dense fluid is {@code 1} minus it ({@code InletPhase}).
+     */
+    public static double pumpLiquidLikeWeight(State state) {
+        if(state.oneFluidSlot()<0)return Double.NaN;
+        return MixtureViscosity.smoothstep((state.reducedDensity()-GAS_LIKE_UNTIL)/(PUMP_LIQUID_LIKE_FROM-GAS_LIKE_UNTIL));
     }
     /** Whether the state holds a gas phase to draw. */
     public static boolean holdsVapor(State state){return state.vaporVolume()>0;}
@@ -102,10 +139,25 @@ final class NetworkStreams {
         if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
         return speed;
     }
-    /** The vapour stream's viscosity (Wilke over its components, water among them). */
+    /** The vapour stream's viscosity: {@link #slotViscosity} of the vapour slot. */
     public double vaporViscosity(State state,MixtureViscosity.Workspace scratch,Prepared prepared) {
         var terms=prepared==null?null:model.match(prepared,state.temperature()).viscosities();
-        return model.viscosity.vapor(state.temperature(),state.vaporAmountsView(),scratch,terms);
+        return slotViscosity(state,State.VAPOR,scratch,terms);
+    }
+    /**
+     * The fluid viscosity of one held slot, the one rule every stream and node reads (S2b of batch
+     * 2026-11-15-supercritical-fluids): the vapour slot, and a liquid slot whose root is on a supercritical isotherm of its
+     * own composition, read {@link MixtureViscosity#dense} at the slot's molar density (its amounts over its volume); any
+     * other liquid slot reads {@link MixtureViscosity#liquid} as before. A gas below a quarter of its critical density keeps
+     * its Wilke value bit for bit; a dense fluid's viscosity follows its density across the slot line. {@code terms}: the
+     * state's own temperature's viscosity terms, or null.
+     */
+    public double slotViscosity(State state,int slot,MixtureViscosity.Workspace scratch,MixtureViscosity.Prepared terms) {
+        double t=state.temperature();double[] amounts=state.amountsView(slot);
+        var phase=state.phase(slot);
+        if(slot==State.VAPOR||phase!=null&&phase.traits()!=null&&phase.traits().supercriticalIsotherm())
+            return model.viscosity.dense(t,amounts,total(amounts)/state.slotVolume(slot),scratch,terms);
+        return model.viscosity.liquid(t,amounts,terms).pascalSeconds();
     }
     /** The vapour stream of {@code state}, or null when it holds no gas. */
     public PhaseStream vaporStream(State state,Prepared prepared,MixtureViscosity.Workspace scratch) {
@@ -176,9 +228,16 @@ final class NetworkStreams {
         return h/phaseMass(state,phase);
     }
     /** A phase stream's velocity limit: {@link #vaporVelocityLimit} for the gas, the configured maximum for a liquid
-     * with its solids (a liquid's own isothermal sound speed is 900 to 1500 m/s at the network's states, D37 S5). */
+     * with its solids (a liquid's own isothermal sound speed is 900 to 1500 m/s at the network's states, D37 S5). A liquid
+     * slot that holds a state's one dense fluid ({@link State#dense()}) takes the vapour's law on its own slot, its solids'
+     * mass with it: such a fluid's sound speed falls below 100 m/s near its critical point (S2b of batch
+     * 2026-11-15-supercritical-fluids). */
     public double phaseVelocityLimit(State state,int phase) {
-        return phase==GAS?vaporVelocityLimit(state):model.maximumVelocity;
+        if(phase==GAS)return vaporVelocityLimit(state);
+        int slot=state.slot(phase);
+        if(slot<0||slot!=state.oneFluidSlot()||!state.dense())return model.maximumVelocity;
+        double volume=state.slotVolume(slot);
+        return Math.min(model.maximumVelocity,acoustic(volume,phaseMass(state,phase),volume*state.phase(slot).isothermalCompressibility()));
     }
     /** A phase stream's viscosity: {@link #vaporViscosity} for the gas; a liquid's own viscosity (one log-mixing rule over
      * its components, water among them) with the slurry correction for its share of the solids, over the stream's volume. */
@@ -186,7 +245,7 @@ final class NetworkStreams {
         if(phase==GAS)return vaporViscosity(state,scratch,prepared);
         var terms=prepared==null?null:model.match(prepared,state.temperature()).viscosities();
         int slot=state.slot(phase);
-        double liquid=state.slotVolume(slot),value=liquid*model.viscosity.liquid(state.temperature(),state.amountsView(slot),terms).pascalSeconds();
+        double liquid=state.slotVolume(slot),value=liquid*slotViscosity(state,slot,scratch,terms);
         double solid=phaseSolidShare(state,phase)*state.solidMoments().volume();
         if(solid>0){double phi=solid/(liquid+solid);value=com.wormzjl.icheme.science.fluid.transport.SlurryTransport.effectiveViscosity(value/liquid,Math.min(phi,0.62-1e-9))*(liquid+solid);}
         return value/(liquid+solid);
@@ -195,7 +254,7 @@ final class NetworkStreams {
      * with: the gas's own, or the liquid's own. */
     public double phaseCarrierViscosity(State state,int phase,MixtureViscosity.Workspace scratch) {
         if(phase==GAS)return vaporViscosity(state,scratch,null);
-        return model.viscosity.liquid(state.temperature(),state.amountsView(state.slot(phase))).pascalSeconds();
+        return slotViscosity(state,state.slot(phase),scratch,null);
     }
     /** The stream of one phase of {@code state}, or null when it does not hold that phase; {@link #vaporStream} for the
      * gas. */

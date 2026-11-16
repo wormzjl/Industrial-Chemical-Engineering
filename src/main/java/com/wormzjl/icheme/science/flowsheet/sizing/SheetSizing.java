@@ -631,6 +631,10 @@ public final class SheetSizing {
             var sized = inlet(id);
             if (sized == null || sized.size() == null) return SizedUnit.NONE;
             var load = PumpSizing.Load.of(sized.line(), sized.size(), stream(id, "in"), stream(id, "out"), height(id), thermo);
+            // The plunger pump (batch 2026-11-15-supercritical-fluids, S8): the player's type, else the kept size's, else Auto's.
+            var kept = SizingFacts.UnitFacts.typeOf(entry.size());
+            var type = entry.type() != null ? entry.type() : kept != null ? kept : PumpSizing.type(load);
+            if (type == UnitType.PLUNGER) return Sizing.sized(entry, PumpSizing.Plunger.class, size -> PumpSizing.rate(load, size), () -> PumpSizing.autoPlunger(load));
             return Sizing.sized(entry, PumpSizing.Size.class, size -> PumpSizing.rate(load, size), () -> PumpSizing.auto(load));
         }
 

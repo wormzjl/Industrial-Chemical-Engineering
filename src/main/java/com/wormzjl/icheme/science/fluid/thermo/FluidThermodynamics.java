@@ -164,12 +164,19 @@ public final class FluidThermodynamics {
         else pumpReferenceDensity=water.molarMass()/(reference.specificVolume()*water.molarMass());
         this.catalog=catalog;
         thermodynamicRevision="fluid-trbdf2-r1:"+hydrocarbon.revision()+":"+viscosity.revision();
+        // The fluid checkpoint writes it as an NBT string (FluidCheckpointCodec, the core record's PropertyRevision), at most
+        // 65,535 UTF-8 bytes: refused here, at the model, rather than at the first save (MaterialCatalog.MAX_IDENTITY).
+        int revisionBytes=thermodynamicRevision.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        if(revisionBytes>MAX_THERMODYNAMIC_REVISION_BYTES)
+            throw new IllegalArgumentException("the model's thermodynamic revision is "+revisionBytes+" UTF-8 bytes, above "+MAX_THERMODYNAMIC_REVISION_BYTES);
         // The trace cutoff joins the hydraulic acceptance law, not the thermodynamic reference: it changes which unknowns a
         // Newton pass carries, so a certificate issued under another cutoff describes a different numerical path - but it
         // changes no property data, so a saved island's inventory and energy stay readable across a change of it.
         // line-cap-saturation-v1 names the cap law of every throttling line (PassiveStepSolver.saturated, 2026-10-18): the
         // smooth saturation of the law's flow at the stream's velocity limit, max= the configured limit it is built from.
-        revision=thermodynamicRevision+":line-cap-saturation-v1:trace-relative-v1:max="+Double.toHexString(maximumVelocity)
+        // dense-movers-v1: a pump's vapour share and a compressor's condensed share of one dense fluid, and its pump's
+        // suction limit, follow its liquid-like weight (S4 of batch 2026-11-15-supercritical-fluids).
+        revision=thermodynamicRevision+":line-cap-saturation-v1:dense-movers-v1:trace-relative-v1:max="+Double.toHexString(maximumVelocity)
                 +":trace="+Double.toHexString(tracePolicy.cutoffMoleFraction())+":solids-v1:"+solidSettings
                 // time= the time factor (batch 2026-11-11-minecraft-time-delta): a solved interval, a certificate and a
                 // junction buffer describe process seconds per tick, so a changed factor drops them and the islands
@@ -238,6 +245,8 @@ public final class FluidThermodynamics {
      */
     private final String revision;
     public String thermodynamicRevision(){return thermodynamicRevision;}
+    /** The longest {@link #thermodynamicRevision}, UTF-8 bytes: the NBT string the fluid checkpoint stores it in. */
+    public static final int MAX_THERMODYNAMIC_REVISION_BYTES=65535;
     public String revision(){return revision;}
     /** The catalog this model was built from; the phase engine is built from it on first use. */
     private final MaterialCatalog catalog;
@@ -467,6 +476,15 @@ public final class FluidThermodynamics {
         public double[] molesView(){return moles;}
         @Override public double[] moles(){return moles.clone();}
     }
+    /** {@link NetworkStreams#GAS_LIKE_UNTIL} and {@link NetworkStreams#LIQUID_LIKE_FROM}: the reduced densities of
+     * {@link #liquidLikeWeight}. */
+    public static final double GAS_LIKE_UNTIL=NetworkStreams.GAS_LIKE_UNTIL,LIQUID_LIKE_FROM=NetworkStreams.LIQUID_LIKE_FROM;
+    /** The liquid-like weight of a one-fluid state ({@link NetworkStreams#liquidLikeWeight}); NaN for any other. */
+    public static double liquidLikeWeight(State state){return NetworkStreams.liquidLikeWeight(state);}
+    /** {@link NetworkStreams#PUMP_LIQUID_LIKE_FROM}: a pump's upper bound of its own weight. */
+    public static final double PUMP_LIQUID_LIKE_FROM=NetworkStreams.PUMP_LIQUID_LIKE_FROM;
+    /** A pump's liquid-like weight of a one-fluid state ({@link NetworkStreams#pumpLiquidLikeWeight}); NaN for any other. */
+    public static double pumpLiquidLikeWeight(State state){return NetworkStreams.pumpLiquidLikeWeight(state);}
     public static boolean holdsVapor(State state){return NetworkStreams.holdsVapor(state);}
     public static boolean holdsLiquid(State state){return NetworkStreams.holdsLiquid(state);}
     public double slotMass(State state,int slot){return streams.slotMass(state,slot);}
@@ -502,6 +520,7 @@ public final class FluidThermodynamics {
     public double phaseVelocityLimit(State state,int phase){return streams.phaseVelocityLimit(state,phase);}
     public double phaseViscosity(State state,int phase,MixtureViscosity.Workspace scratch,Prepared prepared){return streams.phaseViscosity(state,phase,scratch,prepared);}
     public double phaseCarrierViscosity(State state,int phase,MixtureViscosity.Workspace scratch){return streams.phaseCarrierViscosity(state,phase,scratch);}
+    public double slotViscosity(State state,int slot,MixtureViscosity.Workspace scratch,MixtureViscosity.Prepared terms){return streams.slotViscosity(state,slot,scratch,terms);}
     public PhaseStream phaseStream(State state,int phase,Prepared prepared,MixtureViscosity.Workspace scratch){return streams.phaseStream(state,phase,prepared,scratch);}
     /** The amount sum {@link #state} forms ({@code sum}), without its validation: a state's own amounts are valid. */
     static double total(double[] values){double total=0;for(double value:values)total+=value;return total;}
@@ -1029,12 +1048,24 @@ public final class FluidThermodynamics {
      * The engine's fluid phases in the state's slots (W3b): a vapour-like phase in the vapour slot, the liquids by the slot
      * rule ({@link #placedState}); a one-root phase by its own phase identification parameter. More than one vapour or
      * more than two liquids is a typed hold of {@code kind} (a fourth fluid phase).
+     *
+     * <p>One dense fluid (owner decision O2 A, batch 2026-11-15-supercritical-fluids, S2c): an answer of exactly one fluid
+     * phase whose root is on a supercritical isotherm of its own composition
+     * ({@link com.wormzjl.icheme.science.thermo.PhaseTraits#supercriticalIsotherm()}, mixtures included) is liquid iff its
+     * reduced density ({@link com.wormzjl.icheme.science.thermo.PhaseTraits#reducedDensity()}) is at least 1, whatever
+     * label the engine gave it: the engine labels a one-root mixture by the identification parameter itself, so the slot
+     * line of a pure component and of the same component with a trace of another stays the same. The traits are the ones
+     * the engine's phase carries; a phase without them (no traits, or a NaN attraction) is placed by the rule below. Every
+     * answer of two or more fluid phases keeps the engine's labels: a LIQUID or VAPOR label as given, a FLUID one by the
+     * root's identification parameter ({@link HydrocarbonModel#liquidLike}).</p>
      */
     private State placed(double t,double p,List<PhaseAmounts> fluids,TranslatedPengRobinson.Workspace terms,UnsupportedPhases.Kind kind) {
         int n=componentCount();double[] vapor=new double[n];var liquids=new ArrayList<double[]>();boolean gas=false;
+        var dense=fluids.size()==1?fluids.getFirst().traits():null;
+        if(dense!=null&&!dense.supercriticalIsotherm())dense=null;
         for(var phase:fluids) {
             double[] amounts=conserved(phase.amountsView());
-            boolean liquid=switch(phase.kind()) {
+            boolean liquid=dense!=null?dense.reducedDensity()>=1:switch(phase.kind()) {
                 case LIQUID->true;
                 case VAPOR->false;
                 default->hydrocarbon.liquidLike(t,p,amounts,phase.state().root(),terms);
@@ -1295,6 +1326,33 @@ public final class FluidThermodynamics {
         public double slotVolume(int slot){return slot==VAPOR?vaporVolume:slot==LIQUID?liquidSlotVolume:aqueousSlotVolume;}
         /** The volume of both liquids. */
         public double condensedVolume(){return liquidSlotVolume+aqueousSlotVolume;}
+        /**
+         * The one slot that holds fluid, when exactly one of the three has a positive volume; else -1 (two or three phases,
+         * or none). S2a of batch 2026-11-15-supercritical-fluids.
+         */
+        public int oneFluidSlot() {
+            boolean v=vaporVolume>0,l=liquidSlotVolume>0,a=aqueousSlotVolume>0;
+            if(v&&!l&&!a)return VAPOR;
+            if(l&&!v&&!a)return LIQUID;
+            if(a&&!v&&!l)return AQUEOUS;
+            return -1;
+        }
+        /**
+         * Whether the state is one fluid on a supercritical isotherm of its own composition ({@link #oneFluidSlot()} and its
+         * phase's {@link com.wormzjl.icheme.science.thermo.PhaseTraits#supercriticalIsotherm()}): a fluid whose density runs
+         * from a gas's to a liquid's with no phase change, whichever slot it sits in.
+         */
+        public boolean dense() {
+            int slot=oneFluidSlot();
+            var traits=slot<0||phase(slot)==null?null:phase(slot).traits();
+            return traits!=null&&traits.supercriticalIsotherm();
+        }
+        /** The one fluid's reduced density {@code v_c / v} on the untranslated cubic; NaN unless {@link #oneFluidSlot()} holds one. */
+        public double reducedDensity() {
+            int slot=oneFluidSlot();
+            var traits=slot<0||phase(slot)==null?null:phase(slot).traits();
+            return traits==null?Double.NaN:traits.reducedDensity();
+        }
         /** Each component's amount over the three slots, water last. */
         public double[] totals() {
             double[] n=new double[vaporAmounts.length];

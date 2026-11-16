@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "icheme:fluid_nitrogen",
   "component": "Nitrogen",
-  "revision": "fluid-nitrogen-coolprop-r4",
+  "revision": "fluid-nitrogen-coolprop-r5",
   "source": "Ideal-gas Cp: a degree-5 fit in (T - 298.15 K), through its 273.16 K value, to the ideal-gas Cp of CoolProp Nitrogen.json EOS[0].alpha0 (Span et al. 2000; CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT)), 273.16..900 K, worst 0.011 %; below 273.16 K the heat capacity is held at its 273.16 K value, 29.116 J/(mol K), within 0.05 % of the same ideal-gas Cp down to the triple point (owner decision D37, simplification S4). Viscosity: the CoolProp 8.0.0 tables of properties/pilot_nitrogen.json (Lemmon and Jacobsen 2004). PR constants from CoolProp. Nitrogen cross-interactions initially estimated zero. Built by tools/open-thermo-data/derive.mjs (batch 2026-11-04-open-thermo-data, O2).",
   "molecular_weight_kg_per_mol": 0.0280134,
   "normal_boiling_point_kelvin": 77.355,
@@ -15,8 +15,8 @@
     "temperature_min_kelvin": 63.151,
     "temperature_max_kelvin": 900,
     "pressure_min_pascal": 100,
-    "pressure_max_pascal": 10000000,
-    "evidence": "Nitrogen triple point 63.151 K (Span et al. 2000) to 900 K. Validated in F4 (FluidNitrogenCryogenicTest, references from the Span et al. 2000 equation of state in CoolProp 8.0.0 since batch 2026-11-04-open-thermo-data): ideal-gas Cp below 273.16 K (the fit's value there, held) within 0.05 % of the zero-pressure Cp; vapour Cp at 100 K and 200 K, 1 atm, within 1 %; viscosity tables cover the temperature range. Every phase at its own pressure (P3 WP4): PR78 saturation pressure at 77.355 K +1.21 %, saturated liquid density -0.07 %; compressed liquid to 10 MPa within 0.19, 0.34, 1.15 % of the Helmholtz reference at Tr 0.6, 0.7, 0.8 (3.55 % at Tr 0.9) and -0.17 % at 77.36 K, 10 MPa (DirectLiquidContinuityTest; P1 study). 10 MPa per P3 design section 8.1: the declared critical band (Tr 0.95-1.1 x Pr 0.8-1.5, 119.9-138.8 K x 2.72-5.09 MPa, and the plan's two smaller boxes) is research-only, typed by the equilibrium engine (P3 WP7). Viscosity above 2 MPa for dense states is a reference-pressure value."
+    "pressure_max_pascal": 30000000,
+    "evidence": "Nitrogen triple point 63.151 K (Span et al. 2000) to 900 K. Validated in F4 (FluidNitrogenCryogenicTest, references from the Span et al. 2000 equation of state in CoolProp 8.0.0 since batch 2026-11-04-open-thermo-data): ideal-gas Cp below 273.16 K (the fit's value there, held) within 0.05 % of the zero-pressure Cp; vapour Cp at 100 K and 200 K, 1 atm, within 1 %; viscosity tables cover the temperature range. Every phase at its own pressure (P3 WP4): PR78 saturation pressure at 77.355 K +1.21 %, saturated liquid density -0.07 %; compressed liquid to 10 MPa within 0.19, 0.34, 1.15 % of the Helmholtz reference at Tr 0.6, 0.7, 0.8 (3.55 % at Tr 0.9) and -0.17 % at 77.36 K, 10 MPa (DirectLiquidContinuityTest; P1 study). 10 MPa per P3 design section 8.1: the declared critical band (Tr 0.95-1.1 x Pr 0.8-1.5, 119.9-138.8 K x 2.72-5.09 MPa, and the plan's two smaller boxes) is research-only, typed by the equilibrium engine (P3 WP7). Viscosity above 2 MPa for dense states is a reference-pressure value. To 30 MPa since batch 2026-11-15-supercritical-fluids (S3, owner decision O4 A): against CoolProp's reference equation (G3F11SupercriticalRegionTest M1, M8), density within 3.4 % and cp within 6.4 % outside the critical band, 6.9 % and 11.6 % at Tr 1.0-1.2 x Pr 1.5-3 (declared 11 % and 13 %), and the compressed liquid within G3F1's bounds to 30 MPa."
   },
   "estimated_heavy_residue": false,
   "ideal_gas_cp": {
@@ -82,6 +82,12 @@
     ],
     "source": "IAPWS G7-04, Guideline on the Henry's Constant and Vapor-Liquid Distribution Constant for Gases in H2O and D2O at High Temperatures (2004), after R. Fernandez-Prini, J. L. Alvarez, A. H. Harvey, J. Phys. Chem. Ref. Data 32 (2003) 903, table of A, B, C for N2 in H2O: ln(kH/p*) = A/Tr + B tau^0.355/Tr + C Tr^-0.41 exp(tau), Tr = T/647.096 K, tau = 1 - Tr, p* the saturation pressure of water, kH on the mole-fraction basis. Coefficients as in Table 2 of the guideline (iapws.org, read 2026-11-11). Copyright 2004 IAPWS; publication in whole or in part is allowed provided attribution is given to IAPWS.",
     "revision": "iapws-g7-04-r1"
+  },
+  "critical_volume": {
+    "volume_m3_per_mol": 0.00008941423555697415,
+    "estimated": false,
+    "source": "One over the critical molar density 11183.901464580624 mol/m3 of CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Nitrogen.json STATES.critical. Read by the dense-fluid residual viscosity. Written by tools/compound-import/critical-volume.mjs.",
+    "revision": "coolprop-8.0.0-critical-r1"
   },
   "viscosity": {
     "liquid": {

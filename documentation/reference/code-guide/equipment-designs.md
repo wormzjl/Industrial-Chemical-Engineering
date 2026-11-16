@@ -21,7 +21,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | Class | Role | Lines |
 |---|---|---|
 | **The design framework** | | |
-| `UnitDesign` | One kind's sizes, rows, datasheet `Line`s, `moves`, `outlets`, `build`, `held`, `layoutRevision`; the `Kind` to design map (`of`); `soundGain`, `soundPitch`, `driver`; a machine's design point (`hasDuty`, `duty`, `size`, `length`, `step`, `check`) and ratings (`ratedRpm`, `designSpeed`, `ratedPower`, `pumpRating`, `compressorRating`, `vacuumPump`, `primeMoverModel`, `steamCoil`, `coilSurface`, `coilPassage`, `displacement`) | 525 |
+| `UnitDesign` | One kind's sizes, rows, datasheet `Line`s, `moves`, `outlets`, `build`, `held`, `layoutRevision`; the `Kind` to design map (`of`); `soundGain`, `soundPitch`, `driver`; a machine's design point (`hasDuty`, `duty`, `size`, `length`, `step`, `check`) and ratings (`ratedRpm`, `designSpeed`, `ratedPower`, `pumpRating`, `compressorRating`, `vacuumPump`, `primeMoverModel`, `steamCoil`, `coilSurface`, `coilPassage`, `displacement`) | 556 |
 | `Sizes` | A design's constant sizes, rows, moving parts and `layoutRevision`; `COMPUTED` where the design overrides | 45 |
 | `ProcessUnit` | The shared drawing kit (solids, nozzles, pipes, motors, decks, ladders, stairs, wound stairs, stair towers, tables, the machines' pieces, `shaftEnds`, `terminal`, `serviceCase`, `loadShaft`, `damper`, `openSkirt`, the heaters' parts); `minSupport`, `defaultSupport`; `Bank`, `Fans`, `Motion`, `MOTION_PERIOD`, `Floating`; `of` caches built units | 3098 |
 | `UnitRatings` | `design/`: the datasheet and sizing ratings: `tubeSurface`, `kettleShell`, `bundleFace`, `fans`, `fanDiameter`, `coverage`, `pumpFlow`, `pumpPower`, `pumpDischarge`, `stroke`, `compressorSpeed`, `compressorPower`, `displacement`, `heaterDuty` | 135 |
@@ -51,6 +51,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | `SteamTurbineDesign`, `SteamTurbineTrain` | The one steam turbine kind (`front`, `sections`, `drops`, `DEFAULT_STEAM`, `CONDENSING_EXHAUST`, `DRAFT_STEAM`, `DRAFT_EXHAUST`) and its drawing (stepped barrels, `hood`, `pedestal`, the LP casing) | 404, 578 |
 | `MotorDesign`, `GearboxDesign` | Motor and generator (terminal box = FE port); a parallel-shaft gearbox | 223, 161 |
 | `VacuumPumpDesign`, `EjectorDesign` | Liquid ring and dry screw vacuum pumps (models from `VacuumPump`); a steam ejector | 286, 119 |
+| `PlungerPumpDesign` | A triplex plunger pump (models from `PlungerPump`, size the model's number): a monoblock on its base with its power end, cradle, cover, dampener and riser | 224 |
 | `PrimeMoverDesign` | A combustion engine or a gas turbine package (models from `PrimeMover`), its own exhaust stack and coil | 563 |
 | **Other units** | | |
 | `BatchStillDesign`, `BatchStillOptions` | A batch still (`StillPlan`, `FUEL_BORE`) and its options, a fact of its shape | 475, 107 |
@@ -126,4 +127,4 @@ Offline: `tools/new-units/` (sweeps every size through the walk, climb and pipe 
 - `withTrays` and `withFeed` drop a column's components; `withComponents(null)` drops its operating point.
 - New kinds join the simulator (`FlowsheetCatalog`), the reference items and pages (`EquipmentInfoCoverageTest`, `GuideCoverageTest`, [tutorial.md](tutorial.md)); a renamed kind needs a `ShapeRepair` alias and an item alias.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

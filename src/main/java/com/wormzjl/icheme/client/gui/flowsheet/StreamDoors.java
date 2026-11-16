@@ -32,9 +32,14 @@ public final class StreamDoors {
         return stream.feed() != null && stream.from() == null ? feed(x, stream, view) : product(x, stream, view);
     }
 
-    /** The phase keys, named in full (the owner, 2026-11-04: "these names should not be shortened"): the glass gives each at least 62 px. */
-    private static List<String> phaseKeys(SheetContext x) {
-        return List.of(x.text("phase.organic"), x.text("phase.aqueous"), x.text("phase.gas"), x.text("phase.solid"));
+    /**
+     * The phase keys, named in full (the owner, 2026-11-04: "these names should not be shortened"): the glass gives each at least
+     * 62 px. The key of the phase that holds one dense fluid reads "Dense" (S5 of batch 2026-11-15-supercritical-fluids).
+     */
+    private static List<String> phaseKeys(SheetContext x, Flowsheet.Stream stream) {
+        var props = x.props(stream);
+        int dense = props == null ? -1 : props.phases().dense();
+        return List.of(x.text(dense == 0 ? "phase.dense" : "phase.organic"), x.text(dense == 1 ? "phase.dense" : "phase.aqueous"), x.text(dense == 2 ? "phase.dense" : "phase.gas"), x.text("phase.solid"));
     }
 
     /**
@@ -43,7 +48,7 @@ public final class StreamDoors {
      * owner: OFFGAS, 99.6 % gas, opened on a trace liquid's composition; "The largest phase").
      */
     static Door.Glass contents(SheetContext x, Flowsheet.Stream stream, Door.View view) {
-        var keys = phaseKeys(x);
+        var keys = phaseKeys(x, stream);
         if (!view.phasePicked) view.phase = largest(x, stream);
         return new Door.Glass() {
             @Override public void draw(Canvas c, Skin skin, Rect box) {
@@ -176,9 +181,10 @@ public final class StreamDoors {
         return x.text("door.status.feed", props == null ? x.text("door.status.not_solved_short") : phaseName(x, props), flow, t, p);
     }
 
-    /** One word for a stream's phases. */
+    /** One word for a stream's phases: "dense fluid" for one dense fluid ({@link StreamProps.Phases#denseFluid}, S5). */
     static String phaseName(SheetContext x, StreamProps props) {
         var p = props.phases();
+        if (p.denseFluid()) return x.text("phase.dense_word");
         return p.gas() >= 100 ? x.text("phase.gas_word") : p.gas() > 0 ? x.text("phase.two_word") : x.text("phase.liquid_word");
     }
 

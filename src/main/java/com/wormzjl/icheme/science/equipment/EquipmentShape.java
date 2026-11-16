@@ -186,7 +186,10 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         COMBUSTION_ENGINE, GAS_TURBINE,
         // Converters between Forge fluids and process fluids (batch 2026-11-12-fluid-conversion): two tanks and a controller;
         // atmospheric for liquids, pressure vessels for gas.
-        FLUID_CONVERTER, GAS_CONVERTER;
+        FLUID_CONVERTER, GAS_CONVERTER,
+        // A triplex plunger pump casing on the shaft trains (batch 2026-11-15-supercritical-fluids, S8): a liquid mover on a
+        // PlungerPump law, its displacement at any density, for one dense fluid and small flows to high pressures.
+        PLUNGER_PUMP;
 
         /** A fluid converter (batch 2026-11-12-fluid-conversion): the liquid one or the gas one. */
         public boolean converter() { return this == FLUID_CONVERTER || this == GAS_CONVERTER; }
@@ -224,7 +227,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
         /** A self-powered fluid mover, with one suction and one discharge nozzle. */
         public boolean mover() {
-            return this == PUMP || this == COMPRESSOR || this == CENTRIFUGAL_COMPRESSOR || vacuumPump();
+            return this == PUMP || this == COMPRESSOR || this == CENTRIFUGAL_COMPRESSOR || vacuumPump() || this == PLUNGER_PUMP;
         }
 
         /** A vacuum pump casing (batch 2026-11-10-vacuum-pump): a gas mover on a {@code VacuumPump} law. */

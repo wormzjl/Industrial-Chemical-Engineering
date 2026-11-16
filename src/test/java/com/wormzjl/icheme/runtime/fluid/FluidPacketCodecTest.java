@@ -40,10 +40,11 @@ class FluidPacketCodecTest {
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(Double.NaN,101325,.05,.000045,.01,500000,n));
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(298.15,Double.POSITIVE_INFINITY,.05,.000045,.01,500000,n));
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(298.15,-1,.05,.000045,.01,500000,n));
-        // The input box is the property package's envelope (F4; plan decision 9): a structurally valid 12 MPa reaches the
+        // The input box is the property package's envelope (F4; plan decision 9): a structurally valid 32 MPa reaches the
         // server, whose edit handler refuses it against the envelope before anything is queued.
         var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();
-        var outside=new FluidNetwork.Controls(298.15,12000000,.05,.000045,.01,500000,n);
+        // 32 MPa since batch 2026-11-15-supercritical-fluids (S3: the envelope reaches 30 MPa; 12 MPa before).
+        var outside=new FluidNetwork.Controls(298.15,32000000,.05,.000045,.01,500000,n);
         assertThrows(IllegalArgumentException.class,()->new FluidDeviceSpec(1,outside.temperature(),outside.pressure(),outside.composition()).validate(model,TopologyCompiler.Kind.GENERATOR));
         assertThrows(IllegalArgumentException.class,()->model.domain().requireInputPressure(outside.pressure()));
         assertThrows(IllegalArgumentException.class,()->new FluidNetwork.Controls(298.15,101325,.05,.000045,.01,500000,new double[23]));
@@ -429,8 +430,8 @@ class FluidPacketCodecTest {
         assertEquals("Controls are outside the supported range",FluidNetwork.reason(refused));
         // A setting outside the package envelope is replied with the input box's own text.
         var domain=assertThrows(IllegalArgumentException.class,
-                ()->new FluidDeviceSpec(1,298.15,1.2e7,n).validate(com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel(),TopologyCompiler.Kind.GENERATOR));
-        assertEquals("Pressure 1.2E7 Pa outside the package envelope 100.0..1.0E7 Pa (package icheme:refinery)",FluidNetwork.reason(domain));
+                ()->new FluidDeviceSpec(1,298.15,3.2e7,n).validate(com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel(),TopologyCompiler.Kind.GENERATOR));
+        assertEquals("Pressure 3.2E7 Pa outside the package envelope 100.0..3.0E7 Pa (package icheme:refinery)",FluidNetwork.reason(domain));
         assertEquals("Stale fluid controls",FluidNetwork.reason(new IllegalStateException("Stale fluid controls")));
         assertEquals("null",FluidNetwork.reason(new RuntimeException()));
     }

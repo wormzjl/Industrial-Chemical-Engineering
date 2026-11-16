@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "icheme:tjl20_methane",
   "component": "Methane",
-  "revision": "tjl20-methane-spine-r3-example-density",
+  "revision": "tjl20-methane-spine-r4-example-density",
   "source": "Example override: illustrative hypothetical liquid density; not a measured dataset",
   "molecular_weight_kg_per_mol": 0.0160428,
   "normal_boiling_point_kelvin": 111.66,
@@ -15,8 +15,8 @@
     "temperature_min_kelvin": 293.15,
     "temperature_max_kelvin": 900,
     "pressure_min_pascal": 100,
-    "pressure_max_pascal": 10000000,
-    "evidence": "Fluid network only (not the column range): the 298.15..900 K caloric fit continued to 293.15 K (the bundled ambient continuation qualified in the fluid-network batch, with the pure-component viscosity tables sampled from 293.15 K); 100 Pa..10 MPa: every phase at its own pressure (P3 WP4 direct path), and above its 293.15 K floor methane (Tc 190.56 K) is a supercritical gas outside every declared critical-band box (P3 WP7); PR78 density +0.95 % at 300 K and 10 MPa against the Helmholtz reference (P1 study section 2.5). Viscosity above 2 MPa is a reference-pressure value."
+    "pressure_max_pascal": 30000000,
+    "evidence": "Fluid network only (not the column range): the 298.15..900 K caloric fit continued to 293.15 K (the bundled ambient continuation qualified in the fluid-network batch, with the pure-component viscosity tables sampled from 293.15 K); 100 Pa..10 MPa: every phase at its own pressure (P3 WP4 direct path), and above its 293.15 K floor methane (Tc 190.56 K) is a supercritical gas outside every declared critical-band box (P3 WP7); PR78 density +0.95 % at 300 K and 10 MPa against the Helmholtz reference (P1 study section 2.5). Viscosity above 2 MPa is a reference-pressure value. To 30 MPa since batch 2026-11-15-supercritical-fluids (S3, owner decision O4 A): against CoolProp's reference equation (G3F11SupercriticalRegionTest M1, M8), density within 3.2 % and cp within 6.4 % outside the critical band, 6.8 % and 10.0 % at Tr 1.0-1.2 x Pr 1.5-3 (declared 11 % and 13 %); no liquid lies above this record's 293.15 K floor."
   },
   "estimated_heavy_residue": false,
   "ideal_gas_cp": {
@@ -89,6 +89,12 @@
     ],
     "source": "IAPWS G7-04, Guideline on the Henry's Constant and Vapor-Liquid Distribution Constant for Gases in H2O and D2O at High Temperatures (2004), after R. Fernandez-Prini, J. L. Alvarez, A. H. Harvey, J. Phys. Chem. Ref. Data 32 (2003) 903, table of A, B, C for CH4 in H2O: ln(kH/p*) = A/Tr + B tau^0.355/Tr + C Tr^-0.41 exp(tau), Tr = T/647.096 K, tau = 1 - Tr, p* the saturation pressure of water, kH on the mole-fraction basis. Coefficients as in Table 2 of the guideline (iapws.org, read 2026-11-11). Copyright 2004 IAPWS; publication in whole or in part is allowed provided attribution is given to IAPWS.",
     "revision": "iapws-g7-04-r1"
+  },
+  "critical_volume": {
+    "volume_m3_per_mol": 0.00009862781099124106,
+    "estimated": false,
+    "source": "One over the critical molar density 10139.128 mol/m3 of CoolProp 8.0.0 (github.com/CoolProp/CoolProp ae81610e, MIT) Methane.json STATES.critical. Read by the dense-fluid residual viscosity. Written by tools/compound-import/critical-volume.mjs.",
+    "revision": "coolprop-8.0.0-critical-r1"
   },
   "viscosity": {
     "liquid": {

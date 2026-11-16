@@ -101,6 +101,7 @@ final class SizingFactsFile {
         try {
             return switch (kind) {
                 case "PUMP" -> new PumpSizing.Size(fields.number("discharge"));
+                case "PLUNGER_PUMP" -> new PumpSizing.Plunger(fields.whole("model"));
                 case "EXCHANGER" -> new ExchangerSizing.Size(fields.bool("kettle"), fields.whole("shells"), fields.number("shell"), fields.whole("tubes"),fields.name("type",com.wormzjl.icheme.science.equipment.ExchangerType.class,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD));
                 case "AIR_COOLER" -> new AirCoolerSizing.Size(fields.number("width"), fields.whole("length"), new ProcessUnit.Bank(fields.whole("parallel"), fields.whole("series")), fields.whole("banks", 1));
                 case "HEATER" -> new HeaterSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("length"));
@@ -164,6 +165,11 @@ final class SizingFactsFile {
             case PumpSizing.Size pump -> {
                 json.addProperty("kind", "PUMP");
                 json.addProperty("discharge", pump.discharge());
+            }
+            // A plunger pump (batch 2026-11-15-supercritical-fluids, S8): its model's number.
+            case PumpSizing.Plunger plunger -> {
+                json.addProperty("kind", "PLUNGER_PUMP");
+                json.addProperty("model", plunger.model());
             }
             case ExchangerSizing.Size exchanger -> {
                 json.addProperty("kind", "EXCHANGER");

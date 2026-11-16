@@ -309,6 +309,7 @@ public abstract class UnitDesign {
         DESIGNS.put(Kind.GAS_TURBINE, new PrimeMoverDesign(com.wormzjl.icheme.science.machine.PrimeMover.Family.GAS_TURBINE));
         DESIGNS.put(Kind.FLUID_CONVERTER, new ConverterDesign(false));
         DESIGNS.put(Kind.GAS_CONVERTER, new ConverterDesign(true));
+        DESIGNS.put(Kind.PLUNGER_PUMP, new PlungerPumpDesign());
     }
 
     /** The design of a designed kind ({@link Kind#designed()}): a storage vessel's or a unit's. */
@@ -453,6 +454,7 @@ public abstract class UnitDesign {
             case COMPRESSOR -> UnitRatings.compressorSpeed(shape.diameter());
             case STEAM_TURBINE -> SteamTurbineTrain.speed(shape.diameter());
             case LIQUID_RING_PUMP, DRY_SCREW_PUMP -> VacuumPumpDesign.model(shape).speed();
+            case PLUNGER_PUMP -> PlungerPumpDesign.law(shape).ratedSpeed();
             case COMBUSTION_ENGINE, GAS_TURBINE -> PrimeMoverDesign.model(shape).speed();
             default -> 0;
         };
@@ -510,6 +512,16 @@ public abstract class UnitDesign {
     /** A vacuum pump casing's model name ({@code LR1-500}, {@code DS-650}). */
     public static String vacuumPumpModel(EquipmentShape shape) {
         return VacuumPumpDesign.name(shape);
+    }
+
+    /** A plunger pump casing's law, its model's displacement, relief rise and design speed (batch 2026-11-15-supercritical-fluids, S8). */
+    public static com.wormzjl.icheme.science.machine.PlungerPump plungerPump(EquipmentShape shape) {
+        return PlungerPumpDesign.law(shape);
+    }
+
+    /** A plunger pump casing's model name ({@code PP-30}). */
+    public static String plungerPumpModel(EquipmentShape shape) {
+        return PlungerPumpDesign.name(shape);
     }
 
     /** A reciprocating frame's displacement at its design speed, m³/s (W3). */

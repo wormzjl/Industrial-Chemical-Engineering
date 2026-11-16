@@ -13,8 +13,10 @@ import org.jetbrains.annotations.Nullable;
  * {@link #SURFACE} from where it leaves the vessel, and never less than the pipe it was designed for: a column's access
  * stands round its nozzles, so the nozzle takes what its place allows. A boot drum's oil outlet beside its front saddle
  * takes the bore that keeps its flange clear of the saddle ({@link EquipmentShape.Boot#largest}, owner decision
- * 2026-10-28). Every other nozzle takes a pipe's largest, as its parts give way to it (owner decision 2026-10-21).
- * Computed from the shape, never saved.
+ * 2026-10-28). A plunger pump's two nozzles take the column's rule (batch 2026-11-15-supercritical-fluids, S8): a 25 MPa
+ * pump's nozzles are DN25 to DN150, so its neck takes what its place among the liquid end, the dampener and the base
+ * allows, never less than its design pipe. Every other nozzle takes a pipe's largest, as its parts give way to it (owner
+ * decision 2026-10-21). Computed from the shape, never saved.
  */
 public final class NozzleBore {
     /** The bores tried, m. */
@@ -50,7 +52,7 @@ public final class NozzleBore {
     }
 
     private static double largest(EquipmentShape shape, int k, Function<EquipmentShape, ShapeRasterizer.Solid> solids) {
-        if (shape.kind() != EquipmentShape.Kind.COLUMN) {
+        if (shape.kind() != EquipmentShape.Kind.COLUMN && shape.kind() != EquipmentShape.Kind.PLUNGER_PUMP) {
             // A boot drum's oil outlet beside its front saddle keeps its flange clear of it (EquipmentShape.bootFor).
             var boot = shape.bootPlace();
             var role = shape.nozzles().get(k).role();

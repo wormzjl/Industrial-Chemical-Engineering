@@ -151,7 +151,36 @@ class FluidFactsCompatTest {
         phases(world);
         walls(world);
         world.runTo(world.ledger.onlineTick()+20);
-        pipeFittings(world);return world;
+        pipeFittings(world);
+        plungerPumps(world);
+        world.runTo(world.ledger.onlineTick()+20);return world;
+    }
+    /**
+     * Facts schema 28 (batch 2026-11-15-supercritical-fluids, S8): a plunger pump casing, a PP-10 (10 m³/h at 300 rpm, relief
+     * rise 25 MPa) with a set flow, and a PP-100 switched off (the {@code plunger_pump} law a new name in the four fields every
+     * law carries; no pipe meets them). A liquid law: without its own case it would be saved as a centrifugal pump.
+     */
+    private static void plungerPumps(EventPathWorld world) {
+        long small=world.ledger.nextIdentity(),large=small+1;var spec=FluidDeviceSpec.nitrogen(CATALOG);
+        var smallLaw=com.wormzjl.icheme.science.machine.PlungerPump.of(com.wormzjl.icheme.science.machine.PlungerPump.model(2));
+        var largeLaw=com.wormzjl.icheme.science.machine.PlungerPump.of(com.wormzjl.icheme.science.machine.PlungerPump.model(4));
+        world.registry.submit(List.of(
+                new WorldTopologyLedger.Edit(small,new WorldTopologyLedger.Registration(machine(small,110,240,Kind.PUMP,new FlowControl.Machine(smallLaw,0,true,.002,0)),spec,0)),
+                new WorldTopologyLedger.Edit(large,new WorldTopologyLedger.Registration(machine(large,110,244,Kind.PUMP,new FlowControl.Machine(largeLaw,0,false,0,0)),spec,0))),large+1,null);
+    }
+    /** The plunger pump casings, each its identity, displacement (m³/s), relief rise (Pa), rated speed, switch and set flow, in identity order: what schema 28 carries. */
+    private static String plungerPumps(WorldTopologyLedger.Snapshot world) {
+        var text=new StringBuilder();
+        for(var r:new TreeMap<>(world.active()).values())if(r.device().control() instanceof FlowControl.Machine m&&m.law() instanceof com.wormzjl.icheme.science.machine.PlungerPump p){
+            if(!text.isEmpty())text.append(";");text.append(r.device().id()).append("=").append(p.displacement()).append("/").append(p.reliefRise()).append("/").append(p.ratedSpeed()).append("/").append(m.enabled()).append("/").append(m.setFlow());}
+        return text.toString();
+    }
+    /** A plunger pump casing's facts (schema 28) survive an exact load and a facts-only rebuild as a plunger pump. */
+    @Test void aPlungerPumpsFactsSurviveBothExactAndFactsOnlyLoads(){
+        var world=corpusWorld();var saved=image(world);var expected=plungerPumps(world.ledger.snapshot());
+        assertEquals(2,expected.split(";").length,"the corpus world has two plunger pumps: "+expected);
+        for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG)))
+            assertEquals(expected,plungerPumps(restored.world().orElseThrow()),restored.route()+": the plunger pumps as saved");
     }
     /** Facts schema 27 (batch 2026-11-15-fluid-interfaces, W2): a gas intake, the atmosphere as a generator ({@code ambient}), on a dead-end pipe. */
     private static void intake(EventPathWorld world) {
@@ -1254,6 +1283,8 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("vacuumPumps",""),vacuumPumps(ledger),folder+": vacuum pumps");
                 // Schema 20 wrote the prime movers' fuel voids, steam coils and units; an older image reads none.
                 assertEquals(expected.getProperty("primeMovers",""),primeMovers(ledger),folder+": prime movers");
+                // Schema 28 wrote the plunger pump casings; an older image reads none.
+                assertEquals(expected.getProperty("plungerPumps",""),plungerPumps(ledger),folder+": plunger pumps");
                 assertEquals(Long.parseLong(expected.getProperty("vessels")),vessels,folder+": vessels");
                 double total=Arrays.stream(moles(rebuilt.checkpoint(),model.componentCount())).sum();
                 assertEquals(Double.parseDouble(expected.getProperty("moles")),total,1e-12*total,folder+": stock");
@@ -1399,6 +1430,7 @@ class FluidFactsCompatTest {
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));
         props.setProperty("primeMovers",primeMovers(loaded.world().orElseThrow()));
+        props.setProperty("plungerPumps",plungerPumps(loaded.world().orElseThrow()));
         props.setProperty("moles",Double.toString(Arrays.stream(moles(loaded.checkpoint(),model.componentCount())).sum()));
         try(var out=Files.newBufferedWriter(folder.resolve("expected.properties"))){props.store(out,"Facts schema "+FluidFacts.SCHEMA+" corpus image, state format "+FluidCheckpointCodec.VERSION);}
     }

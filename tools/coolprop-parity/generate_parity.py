@@ -10,24 +10,81 @@ Writes parity-<Fluid>.json next to the CoolProp fluid files for N2, CO2, CH4, C2
                 pV_eos = CoolProp's EOS pressure at (T, rhoV), and the iterative (superancillaries off) Psat, rhoL, rhoV.
   refused:      grid states CoolProp refuses (below the melting line), with its message.
 
+Batch 2026-11-15-supercritical-fluids (S0) added seven fluids (n-Propane, Ethylene, n-Hexane, n-Heptane, Toluene,
+n-Decane, n-Dodecane) and, for every fluid but water, the supercritical grid of G3F11SupercriticalRegionTest as
+single_phase rows of source "supercritical": Tr in SUPER_TR, and 300, 500, 700 K where above Tr 2, times (Pr in SUPER_PR,
+and 10, 20, 30 MPa), reduced by the
+fluid file's own STATES.critical (the oracle's constants; CoolProp 8 reports another critical point for n-Heptane),
+skipping T above min(Tmax, 900 K) and P above pmax. The rows of the first six fluids before them are unchanged.
+The follow-up M8 added, for the eight fluids of LIQUID_FLUIDS, the compressed-liquid grid as rows of source
+"compressed_liquid": Tr in LIQUID_TR on STATES.critical T, times 2, 5, 10, 20, 30 MPa, kept where T >= Ttriple,
+P > Psat(T) and P <= pmax; states below the melting line go to refused. Earlier rows are unchanged.
+
 Fugacity coefficient: CoolProp.AbstractState('HEOS', fluid).fugacity_coefficient(0) after a PT_INPUTS update;
 PropsSI has no keyed output for it. For a pure fluid it equals exp(alphar + delta*dalphar_ddelta - ln Z).
 Every single-phase value is cross-checked against PropsSI(..., 'T', T, 'P', P, fluid).
 
 Run from the worktree root:
-  "$TEMP/coolprop-probe-venv/Scripts/python.exe" tools/coolprop-parity/generate_parity.py src/test/resources/science/thermo/coolprop
+  tmp/coolprop-venv/Scripts/python.exe -I tools/coolprop-parity/generate_parity.py src/test/resources/science/thermo/coolprop
 """
 import json
 import math
 import sys
 from pathlib import Path
 
+# The fixtures' layout (one record per line); found beside this script, also under python -I.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import compact_json  # noqa: E402
+
 import CoolProp
 import CoolProp.CoolProp as CP
 import numpy as np
 
-FLUIDS = ["Nitrogen", "CarbonDioxide", "Methane", "Ethane", "Hydrogen", "Water"]
+FLUIDS = ["Nitrogen", "CarbonDioxide", "Methane", "Ethane", "Hydrogen", "Water",
+          "n-Propane", "Ethylene", "n-Hexane", "n-Heptane", "Toluene", "n-Decane", "n-Dodecane"]
 PRESSURES = [0.01e6, 0.1e6, 1e6, 2e6, 5e6, 10e6, 20e6]
+# The supercritical grid of G3F11SupercriticalRegionTest (M1, M5); water has none (plan S6).
+SUPER_TR = [1.02, 1.05, 1.1, 1.15, 1.2, 1.3, 1.5, 2.0]
+SUPER_PR = [0.5, 0.8, 1, 1.2, 1.5, 2, 3, 4]
+SUPER_P = [10e6, 20e6, 30e6]
+# Ambient and hot isotherms above Tr 2 (nitrogen, hydrogen, methane at the network's usual temperatures).
+SUPER_T_ABSOLUTE = [300.0, 500.0, 700.0]
+SUPER_T_MAX = 900.0
+# The compressed-liquid grid of G3F11SupercriticalRegionTest (M8): Tr on the file's STATES.critical T, 2 to 30 MPa.
+LIQUID_FLUIDS = ["CarbonDioxide", "Nitrogen", "Methane", "Ethane", "n-Propane", "Ethylene", "n-Hexane", "Toluene"]
+LIQUID_TR = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95]
+LIQUID_P = [2e6, 5e6, 10e6, 20e6, 30e6]
+
+
+def supercritical_grid(fluid, out_dir, t_max, p_max):
+    """The (T, P) states of the supercritical grid, reduced by the fluid file's STATES.critical (data, not run)."""
+    if fluid == "Water":
+        return []
+    critical = json.loads((Path(out_dir) / f"{fluid}.json").read_text(encoding="utf-8"))["STATES"]["critical"]
+    tc, pc = float(critical["T"]), float(critical["p"])
+    states = []
+    temperatures = [tr * tc for tr in SUPER_TR] + [t for t in SUPER_T_ABSOLUTE if t > SUPER_TR[-1] * tc]
+    for t in temperatures:
+        if t > min(t_max, SUPER_T_MAX):
+            continue
+        for p in [pr * pc for pr in SUPER_PR] + SUPER_P:
+            if p <= p_max:
+                states.append((t, p))
+    return states
+
+def compressed_liquid_grid(fluid, out_dir, t_triple, p_max):
+    """The (T, P) liquid states of the M8 grid: T at or above Ttriple, P above CoolProp's Psat(T) and at most pmax."""
+    if fluid not in LIQUID_FLUIDS:
+        return []
+    tc = float(json.loads((Path(out_dir) / f"{fluid}.json").read_text(encoding="utf-8"))["STATES"]["critical"]["T"])
+    states = []
+    for t in [tr * tc for tr in LIQUID_TR]:
+        if t < t_triple:
+            continue
+        p_sat = CP.PropsSI("P", "T", t, "Q", 0, fluid)
+        states += [(t, p) for p in LIQUID_P if p_sat < p <= p_max]
+    return states
+
 
 # States of research/2026-09-24-coolprop-low-temperature/pr78-vs-coolprop/probe.py (main checkout).
 PROBE_SAT = {"Nitrogen": [63.151, 70, 77.355, 90, 100, 110, 120],
@@ -104,6 +161,8 @@ def main(out_dir):
         temperatures = list(np.linspace(t_min + 1.0, 0.95 * t_crit, 5)) + list(np.linspace(1.05 * t_crit, t_max, 6))
         grid = [(float(T), P, "grid") for T in temperatures for P in PRESSURES]
         grid += [(float(T), PMPa * 1e6, "probe") for T, PMPa in PROBE_DENSE.get(fluid, [])]
+        grid += [(T, P, "supercritical") for T, P in supercritical_grid(fluid, out, st.Tmax(), st.pmax())]
+        grid += [(T, P, "compressed_liquid") for T, P in compressed_liquid_grid(fluid, out, t_triple, st.pmax())]
         for T, P, source in grid:
             try:
                 states.append(single_phase(fluid, T, P, source))
@@ -124,7 +183,7 @@ def main(out_dir):
             "single_phase": states, "saturation": sat, "refused": refused,
         }
         path = out / f"parity-{fluid}.json"
-        path.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8", newline="\n")
+        compact_json.write(path, doc)
         print(f"{fluid}: {len(states)} single-phase states, {len(sat)} saturation states, {len(refused)} refused -> {path}")
 
 

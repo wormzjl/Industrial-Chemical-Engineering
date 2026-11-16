@@ -58,10 +58,12 @@ public final class EjectorLaw {
      * @param motive     the motive steam's pressure, Pa
      * @param suction    the load's, Pa
      * @param discharge  the discharge's, Pa
-     * @param condensing where the set condenses the water, Pa: {@link #CONDENSING} times its vapour pressure at the load's temperature
+     * @param condensing where the set condenses the water, Pa: {@link #CONDENSING} times its vapour pressure at the load's temperature;
+     *                   positive infinity at and above water's critical temperature, where no water condenses and the set
+     *                   lifts it to the discharge as it does the gas (batch 2026-11-15-supercritical-fluids, S2c)
      */
     public static double steam(double gas, double water, double motive, double suction, double discharge, double condensing) {
-        return K * motiveFactor(motive) * (gas * DeterministicMath.log(discharge / suction) + asAir(water, WATER) * Math.max(0, DeterministicMath.log(condensing / suction)));
+        return K * motiveFactor(motive) * (gas * DeterministicMath.log(discharge / suction) + asAir(water, WATER) * Math.max(0, DeterministicMath.log((condensing < Double.POSITIVE_INFINITY ? condensing : discharge) / suction)));
     }
 
     /** El-Dessouky's PCF at {@code motive} Pa over its value at 10 bar, flat above 15 bar: 1.35 at 3 bar, 0.93 at 15 and above. */

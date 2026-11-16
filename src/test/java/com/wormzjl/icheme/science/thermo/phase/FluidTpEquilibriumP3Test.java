@@ -619,14 +619,15 @@ class FluidTpEquilibriumP3Test {
     }
 
     /**
-     * The pure-fluid band with D14's corner (box 4, Tr 1.0-1.1 x Pr 1.5-2) and D15's widening of box 2 (Tr 0.95-0.97 x
-     * Pr 0.58-0.8, the liquid between boxes 1 and 2 below Pr 0.8), closed intervals: the boxes by reduced values, and the
-     * engine's grade on pure nitrogen of the pilot package (research-only inside, estimated-with-declared-error just
-     * outside), including the two G3 evidence states: 131.19 K and 5.10 MPa (F5's corner, -8.02 %) and 121.19 K and
-     * 2.70 MPa (F5's band gap, -9.06 %).
+     * The pure-fluid band with D15's widening of box 2 (Tr 0.95-0.97 x Pr 0.58-0.8, the liquid between boxes 1 and 2 below
+     * Pr 0.8), closed intervals, and no supercritical box: boxes 3 (Tr 1.05-1.2 x Pr 2-3) and 4 (D14's corner, Tr 1.0-1.1 x
+     * Pr 1.5-2) were removed by owner decision O3 B (batch 2026-11-15-supercritical-fluids, S1), since a pure fluid there has
+     * one root and cannot split. The boxes by reduced values, and the engine's grade on pure nitrogen of the pilot package
+     * (research-only inside, estimated-with-declared-error outside), including the two G3 evidence states: 121.19 K and
+     * 2.70 MPa (F5's band gap, -9.06 %, inside) and 131.19 K and 5.10 MPa (F5's corner, -8.02 %, outside since S1).
      */
     @Test
-    void theBandCarriesD14sCornerAndD15sWidenedBoxTwo() {
+    void theBandCarriesD15sWidenedBoxTwoAndNoSupercriticalBox() {
         assertEquals(1, FluidTpEquilibrium.pureBandBox(1.0, 1.0));
         assertEquals(2, FluidTpEquilibrium.pureBandBox(0.92, 0.60));
         assertEquals(2, FluidTpEquilibrium.pureBandBox(0.96, 0.795));
@@ -634,9 +635,9 @@ class FluidTpEquilibriumP3Test {
         assertEquals(0, FluidTpEquilibrium.pureBandBox(0.971, 0.79), "box 2 reaches Tr 0.97");
         assertEquals(0, FluidTpEquilibrium.pureBandBox(0.93, 0.76), "below Tr 0.95 box 2 keeps Pr 0.74");
         assertEquals(0, FluidTpEquilibrium.pureBandBox(0.96, 0.57));
-        assertEquals(3, FluidTpEquilibrium.pureBandBox(1.1, 2.5));
-        assertEquals(4, FluidTpEquilibrium.pureBandBox(1.05, 1.75));
-        assertEquals(4, FluidTpEquilibrium.pureBandBox(1.0, 2.0));
+        assertEquals(0, FluidTpEquilibrium.pureBandBox(1.1, 2.5), "no box 3 above Tc (O3 B)");
+        assertEquals(0, FluidTpEquilibrium.pureBandBox(1.05, 1.75), "no box 4 above Tc (O3 B)");
+        assertEquals(0, FluidTpEquilibrium.pureBandBox(1.0, 2.0), "no box 4 above Tc (O3 B)");
         assertEquals(1, FluidTpEquilibrium.pureBandBox(1.05, 1.5), "a shared edge reports the lower box");
         assertEquals(0, FluidTpEquilibrium.pureBandBox(0.99, 1.75));
         assertEquals(0, FluidTpEquilibrium.pureBandBox(1.11, 1.75));
@@ -646,14 +647,15 @@ class FluidTpEquilibriumP3Test {
         var nitrogen = engine.evaluator().component(0);
         double tc = nitrogen.criticalTemperatureKelvin();
         double pc = nitrogen.criticalPressurePascal();
-        double[][] inside = {{131.19, 5.10e6}, {121.19, 2.70e6}, {1.04 * tc, 1.75 * pc}, {0.965 * tc, 0.79 * pc}, {tc, 1.9 * pc}};
+        double[][] inside = {{121.19, 2.70e6}, {0.965 * tc, 0.79 * pc}};
         for (double[] s : inside) {
             var r = engine.tp(request(engine, s[0], s[1], 1.0), ws);
             assertEquals(Status.CONVERGED, r.status(), r.detail());
             assertTrue(r.diagnostics().criticalBand(), s[0] + " K " + s[1] + " Pa in the band");
             assertEquals(CoverageGrade.RESEARCH_ONLY, r.coverage().grade());
         }
-        double[][] outside = {{1.12 * tc, 1.75 * pc}, {0.99 * tc, 1.75 * pc}, {0.93 * tc, 0.77 * pc}, {1.04 * tc, 2.05 * pc}};
+        double[][] outside = {{1.12 * tc, 1.75 * pc}, {0.99 * tc, 1.75 * pc}, {0.93 * tc, 0.77 * pc}, {1.04 * tc, 2.05 * pc},
+                {131.19, 5.10e6}, {1.04 * tc, 1.75 * pc}, {tc, 1.9 * pc}};
         for (double[] s : outside) {
             var r = engine.tp(request(engine, s[0], s[1], 1.0), ws);
             assertEquals(Status.CONVERGED, r.status(), r.detail());

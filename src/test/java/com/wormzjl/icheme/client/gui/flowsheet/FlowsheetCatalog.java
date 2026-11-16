@@ -83,6 +83,8 @@ public final class FlowsheetCatalog {
             case COMBUSTION_ENGINE -> ENGINE;
             case GAS_TURBINE -> GAS_TURBINE;
             case FLUID_CONVERTER, GAS_CONVERTER -> CONVERTER;
+            // The plunger pump (batch 2026-11-15-supercritical-fluids, S8): the Pump tile's second type (PumpSizing.Plunger).
+            case PLUNGER_PUMP -> PUMP;
         };
     }
 
@@ -121,6 +123,7 @@ public final class FlowsheetCatalog {
             case GRATE_BOILER -> GRATE;
             case FIXED_BED_GASIFIER -> FIXED_BED;
             case FLUID_CONVERTER, GAS_CONVERTER -> CONVERTER;
+            case PLUNGER_PUMP -> PUMP;
         };
     }
 

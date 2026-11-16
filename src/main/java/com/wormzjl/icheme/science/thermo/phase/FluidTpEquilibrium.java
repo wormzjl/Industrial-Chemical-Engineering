@@ -53,8 +53,9 @@ import java.util.Objects;
  * are {@link Classification#LIQUID_LIQUID}, the lighter first. An unresolved feed stability test is repeated once with
  * {@link #UNRESOLVED_STABILITY_BUDGET_FACTOR} times the per-trial budget.</p>
  *
- * <p>Declared critical band: a pure fluid (one component at least 0.95 of the amount) in the reduced boxes of
- * {@link #pureBandBox}; a split with {@code sum z_i (ln K_i)^2 <} {@link #BAND_TIE_LINE}; a single mixture phase whose
+ * <p>Declared critical band: a pure fluid (one component at least 0.95 of the amount) in the two reduced boxes of
+ * {@link #pureBandBox}, around and below its critical point (above {@code Tc} at {@code Pr} 1.5 and more a pure fluid has
+ * one root and cannot split, so no box lies there since batch 2026-11-15-supercritical-fluids, S1); a split with {@code sum z_i (ln K_i)^2 <} {@link #BAND_TIE_LINE}; a single mixture phase whose
  * stability test met a stationary point other than the feed within {@link #BAND_STATIONARY_DISTANCE}
  * ({@link TangentPlaneStability.Result#nearestStationaryDistance()}); a failed split whose last iterate or stability
  * seed was that short. Inside it a converged answer is graded {@link EquilibriumResult.CoverageGrade#RESEARCH_ONLY} and
@@ -873,14 +874,13 @@ public final class FluidTpEquilibrium {
      * The declared critical band of a pure fluid at reduced temperature {@code tr} and pressure {@code pr} (closed
      * intervals): the box it lies in, 0 outside. Box 1 {@code Tr 0.95-1.1 x Pr 0.8-1.5}; box 2 {@code Tr 0.90-0.95 x Pr
      * 0.58-0.74} widened by D15 (P3 WP7d) with {@code Tr 0.95-0.97 x Pr 0.58-0.8}, the liquid between boxes 1 and 2 below
-     * Pr 0.8; box 3 {@code Tr 1.05-1.2 x Pr 2-3}; box 4, D14's corner {@code Tr 1.0-1.1 x Pr 1.5-2} (P3 WP7d). Where boxes
-     * share an edge the lower number is reported. Inside the band an answer is research-only.
+     * Pr 0.8. Where boxes share an edge the lower number is reported. Inside the band an answer is research-only. The
+     * boxes 3 ({@code Tr 1.05-1.2 x Pr 2-3}) and 4 ({@code Tr 1.0-1.1 x Pr 1.5-2}, D14's corner) were removed by owner
+     * decision O3 B (batch 2026-11-15-supercritical-fluids, S1): a pure fluid there has one root and cannot split.
      */
     public static int pureBandBox(double tr, double pr) {
         if (tr >= 0.95 && tr <= 1.1 && pr >= 0.8 && pr <= 1.5) return 1;
         if (tr >= 0.90 && tr <= 0.95 && pr >= 0.58 && pr <= 0.74 || tr >= 0.95 && tr <= 0.97 && pr >= 0.58 && pr <= 0.8) return 2;
-        if (tr >= 1.05 && tr <= 1.2 && pr >= 2.0 && pr <= 3.0) return 3;
-        if (tr >= 1.0 && tr <= 1.1 && pr >= 1.5 && pr <= 2.0) return 4;
         return 0;
     }
 

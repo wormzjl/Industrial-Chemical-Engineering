@@ -100,6 +100,9 @@ public record SizingFacts(DesignBasis basis, JsonObject basisUnknown, Map<String
             return switch (size) {
                 case HeaterSizing.Size heater -> heater.type();
                 case CompressorSizing.Size compressor -> compressor.type();
+                // The Pump tile's two (batch 2026-11-15-supercritical-fluids, S8).
+                case PumpSizing.Size pump -> UnitType.CENTRIFUGAL_PUMP;
+                case PumpSizing.Plunger plunger -> UnitType.PLUNGER;
                 case DrumSizing.Size drum -> drum.type();
                 case TankSizing.Size tank -> tank.type();
                 case AirCoolerSizing.Size cooler -> UnitType.AIR_COOLER;

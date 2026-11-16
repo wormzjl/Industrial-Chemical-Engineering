@@ -84,7 +84,9 @@ final class FluidFacts {
      *  27 (batch 2026-11-15-fluid-interfaces): a device spec's {@code ambient}, after {@code breached} (absent: false, not the
      *  atmosphere), a gas intake's. A liquid hopper's converter facts (W4) use the schema-24 fields: its fill port is its own
      *  identity, with no drain. The control valve source {@code ON_OFF} (W7), an automated shutoff valve.
-     *  28 is batch 2026-11-15-supercritical-fluids' (FORMATS.md); this build has none of its fields and goes from 27 to 29.
+     *  28 (batch 2026-11-15-supercritical-fluids, S8): the {@code machine} control's law {@code plunger_pump}: its
+     *  displacement (m³/s) in the rated flow's place, its relief rise (Pa) in the head's, its efficiency, its rated speed
+     *  (rpm).
      *  29 (batch 2026-11-16-fouling-corrosion, WP2): a device spec's {@code metallurgy} by name, after {@code ambient}
      *  (absent: {@code CARBON_STEEL}); and a last section, the walls' facts ({@link IntegritySection}): per device identity
      *  its wall loss (mm), fouling deposit (m²K/W) and {@code wrecked}, an entry only for a device away from new and clean
@@ -413,6 +415,11 @@ final class FluidFacts {
             case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.VacuumPump law->
                 f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
                         .record(q->q.text("vacuum_pump").f64(law.capacity()).f64(0).f64(0).f64(law.ratedSpeed()).name(law.type()));
+            // Schema 28 (batch 2026-11-15-supercritical-fluids, S8): a plunger pump's law, before the generic case, which would
+            // save it as a centrifugal pump: its displacement, relief rise, efficiency and rated speed in the four fields.
+            case FlowControl.Machine machine when machine.law() instanceof com.wormzjl.icheme.science.machine.PlungerPump law->
+                f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
+                        .record(q->q.text("plunger_pump").f64(law.displacement()).f64(law.reliefRise()).f64(law.efficiency()).f64(law.ratedSpeed()));
             case FlowControl.Machine machine->{var law=machine.law();
                 f.text("machine").f64(machine.setFlow()).f64(machine.setPressure()).bool(machine.enabled()).f64(0)
                         .record(q->q.text(law.liquid()?"centrifugal_pump":"centrifugal_compressor").f64(law.ratedFlow()).f64(law.ratedHead()).f64(law.efficiency())
@@ -438,6 +445,7 @@ final class FluidFacts {
                         case "centrifugal_compressor"->new com.wormzjl.icheme.science.machine.CentrifugalCompressor(rated,head,efficiency);
                         case "vacuum_pump"->{var vacuum=q.name(com.wormzjl.icheme.science.machine.VacuumPump.Type.class,null);if(vacuum==null)throw q.invalid("a vacuum pump without its type");
                             yield new com.wormzjl.icheme.science.machine.VacuumPump(vacuum,rated,rpm);}
+                        case "plunger_pump"->new com.wormzjl.icheme.science.machine.PlungerPump(rated,head,rpm);
                         default->throw q.invalid("unknown machine law "+type);};});
                 if(law==null)throw f.invalid("a machine without its law");
                 yield new FlowControl.Machine(law,0,enabled,flow,limit);}

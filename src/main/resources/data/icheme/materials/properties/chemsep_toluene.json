@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "icheme:chemsep_toluene",
   "component": "Toluene",
-  "revision": "chemsep-8.3-dwsim-10.2.5-r1",
+  "revision": "chemsep-8.3-dwsim-10.2.5-r2",
   "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Toluene\" (ChemSep index 502, CAS 108-88-3). Molecular weight, normal boiling point, Tc, Pc and acentric factor as given; standard liquid density: eq. 105 saturated liquid at 288.7056 K (60 F), as the bundled light ends; ideal-gas Cp eq. 16 (A=47225, B=-565.85, C=12.856, D=0.000005535, E=-1.998e-8; data 150..1500 K) fitted by least squares as shifted_polynomial_5 over 178.18..900 K (30 points), largest deviation -0.408 % at 178.2 K, 0.133 % over 298.15..900 K; viscosity tables and freezing data in their entries. Imported by tools/compound-import.",
   "molecular_weight_kg_per_mol": 0.09213843,
   "normal_boiling_point_kelvin": 383.79,
@@ -15,8 +15,8 @@
     "temperature_min_kelvin": 178.18,
     "temperature_max_kelvin": 900,
     "pressure_min_pascal": 100,
-    "pressure_max_pascal": 2000000,
-    "evidence": "Fluid network only (not the column range): the ideal-gas Cp fit range, from max(ChemSep Cp data start, triple point) to 900 K; below it Cp is held and integrated, with a notice (a data-range end, never a validity floor). 100 Pa..2000000 Pa as the bundled light ends: PR78 from ChemSep critical constants, not qualified above that."
+    "pressure_max_pascal": 6190000,
+    "evidence": "Fluid network only (not the column range): the ideal-gas Cp fit range, from max(ChemSep Cp data start, triple point) to 900 K; below it Cp is held and integrated, with a notice (a data-range end, never a validity floor). 100 Pa..2000000 Pa as the bundled light ends: PR78 from ChemSep critical constants, not qualified above that. To 6.19 MPa since batch 2026-11-15-supercritical-fluids (S3, owner decision O4 A): against CoolProp's reference equation (G3F11SupercriticalRegionTest M5, M8), above Tc and outside the critical band density within 7 % and cp within 12 % to 6.19 MPa (the first state beyond: -8.09 % density at 603.6 K and 8.25 MPa), and the compressed liquid within G3F1's bounds to 30 MPa."
   },
   "estimated_heavy_residue": false,
   "ideal_gas_cp": {
@@ -88,6 +88,12 @@
       "source": "PPR78 group counts of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Toluene\" (ChemSep index 502, CAS 108-88-3), group numbers mapped to the names of the eppr78-2022 group_interactions record (eppr78-2022-si-table-s4-r2). Data for the pairs derived from group counts.",
       "revision": "chemsep-8.3-ppr78-r1"
     }
+  },
+  "critical_volume": {
+    "volume_m3_per_mol": 0.000316,
+    "estimated": false,
+    "source": "Critical volume 0.316 m3/kmol of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Toluene\" (ChemSep index 502, CAS 108-88-3). Read by the dense-fluid residual viscosity. Written by tools/compound-import/critical-volume.mjs.",
+    "revision": "chemsep-8.3-vc-r1"
   },
   "viscosity": {
     "liquid": {

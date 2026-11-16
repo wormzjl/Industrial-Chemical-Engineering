@@ -73,7 +73,7 @@ snapshot. The solver core's classes are mapped in [column-v3-solver.md](column-v
 | `V3AnchorTransformerInitializer` (pp, nested `NativeAnchor`) | The shipped Transformer and its material-closed input anchor; `supported` (formulation revision, topology, pressure window, global bounds, `Family.holds`); `propertyRevision` | 416 |
 | [`V3NeuralSeed`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3NeuralSeed.java), [`V3GeneralNeuralFeatures`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3GeneralNeuralFeatures.java), [`V3FactorizedNeuralFeatures`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3FactorizedNeuralFeatures.java) | The seed on the public axis (`stateFor`); the input encoding (`global`, `nodes`); the output side (`decode`, `targets`) | 109, 116, 156 |
 | **Acceptance and output** | | |
-| `V3AcceptanceAuditor` (pp), [`V3AcceptanceAudit`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3AcceptanceAudit.java) | A fresh physical audit of a candidate from its state, never a cached residual; checks and advisories (`Check`, `hasFamily`) | 1083, 69 |
+| `V3AcceptanceAuditor` (pp), [`V3AcceptanceAudit`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3AcceptanceAudit.java) | A fresh physical audit of a candidate from its state, never a cached residual; checks and advisories (`Check`, `hasFamily`) | 1093, 69 |
 | [`V3ConvergenceEvidence`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3ConvergenceEvidence.java) | The final Newton step's certificate | 95 |
 | [`V3TrayHydraulics`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulics.java), [`V3TrayHydraulicsSummary`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3TrayHydraulicsSummary.java) | Sieve-tray pressure drop, flooding and the entrainment limit on the accepted state; its bounded summary | 414, 70 |
 | [`V3ColumnResult`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnResult.java), [`V3ColumnOutcome`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnOutcome.java), [`V3SolverDiagnostics`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3SolverDiagnostics.java), [`V3SolverFailureCode`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/V3SolverFailureCode.java) | Accepted result (`accepted`); success or typed failure; bounded evidence; the eight failure codes | 136, 38, 57, 13 |
@@ -151,7 +151,7 @@ Test tree: `V3HollandExample32` with `IndependentHollandMeshOracle`, `HollandB12
   condenser split are bounded by `max(EQUILIBRIUM_LIMIT, closure)` (`closureLimit`). A dry tray below its water dew
   point passes with a warning; an invalid modelled wet tray fails. `INTERIOR_PHASE_IDENTITY` checks positive
   liquid/vapour pairs with almost identical compositions, roots and enthalpies; a combined-flow TP flash must support two
-  phases. `CARRY_OVER` always passes: under a drum that decants free water, tray 1's free water leaves with the vapour
+  phases; a failure names the tray as at or above its mixture's critical point (lower the pressure or change the cut). `CARRY_OVER` always passes: under a drum that decants free water, tray 1's free water leaves with the vapour
   and decants in the drum (tray 1 books its latent heat, the condenser duty falls by the same); above the entrainment
   limit (`V3TrayHydraulics.entrainmentLimitMolPerSecond`) the column publishes with a warning naming the tray; a
   carry-over seed is not warm-startable.
@@ -267,4 +267,4 @@ the task `v3HollandBenchmark`, which writes `build/reports/benchmarks/v3-holland
   the input.
 - The Holland facade is a benchmark only: no preset, template or simulator door builds its input.
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

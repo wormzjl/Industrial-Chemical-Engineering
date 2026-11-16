@@ -104,7 +104,9 @@ public final class ConstructorColumn {
         LIQUID_RING_PUMP(Category.VACUUM), DRY_SCREW_PUMP(Category.VACUUM),
         COMBUSTION_ENGINE(Category.POWER), GAS_TURBINE(Category.POWER),
         // The fluid converters (batch 2026-11-12-fluid-conversion).
-        FLUID_CONVERTER(Category.VESSELS), GAS_CONVERTER(Category.VESSELS);
+        FLUID_CONVERTER(Category.VESSELS), GAS_CONVERTER(Category.VESSELS),
+        // The plunger pump (batch 2026-11-15-supercritical-fluids, S8): a pump on a shaft, beside the centrifugal pump.
+        PLUNGER_PUMP(Category.MACHINES);
 
         public final Category category;
 

@@ -45,7 +45,7 @@ this chapter. Lines at the snapshot.
 | [`TwoPhaseFlash`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/TwoPhaseFlash.java) | The two-slot split: `twoPhase` (two attempts, the second from Wilson's K), substitution with Rachford-Rice in the minor phase's fraction (`split`), the Newton finish (`newtonFinish`, `shiftedSolve`), `finishSplit` (products, merge, product re-check, `ownSplit`); `lowerGibbsRoot`, `differentiatePhase` (shared with the three-slot system) | 691 |
 | [`ThreeSlotFlash`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/ThreeSlotFlash.java) | Three fluid phases as one system: `threeSlot` (seeds, the audit and its one reseed), `slotSubstitution`, `slotFractions` (Michelsen's multiphase Rachford-Rice), `slotNewton`, `slotOutcome`; nested `Slots` (the workspace's scratch) | 798 |
 | [`CarriedCrystals`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CarriedCrystals.java) | Carried crystals under `FLUID_CARRYING_CRYSTALS`: the trial filter `carriedTrial` with `crystalLean`, `supersaturated`, `crystalRich`; the restated split `carriedSplit`; the stand-in held out `beyondStandIn`; `CARRIED_SHARE` | 199 |
-| [`CriticalBand`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CriticalBand.java) | The declared critical band: `inBand`, `bandReason` | 41 |
+| [`CriticalBand`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/CriticalBand.java) | The declared critical band: `inBand`, `bandReason` | 42 |
 | [`EquilibriumRequest`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumRequest.java) | Record: `Specification` (TP, PH, UV), two values (K and Pa; Pa and J; J and m³), species (the contract basis), amounts, competition | 71 |
 | [`EquilibriumResult`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/EquilibriumResult.java) | The answer: `Status`, `UnsupportedReason`, `Classification`, `FailureKind`, `PhaseAmounts`, `coexisting`, `Coverage`, `CoverageGrade`, `Deposition`, `Diagnostics`; aggregates `enthalpy`, `internalEnergy`, `volume`, `conservationDefect` | 507 |
 | [`PhaseContract`](../../../src/main/java/com/wormzjl/icheme/science/thermo/phase/PhaseContract.java) | What a package promises: basis, `WaterParticipation`, qualified competitions, water-chemistry species, `PhaseDomain`, fluid coverage, `ThermoIdentity`; `resolve`, `qualifies`, `crystalCompetition`, `waterIndex` | 93 |
@@ -191,10 +191,12 @@ fixtures, warm starts and factorizations.
   liquid-like products denser than the cubic's critical volume, outside the band, are `LIQUID_LIQUID`. A one-root
   single phase is labelled by PIP; a pure component above its critical point is `SUPERCRITICAL_FLUID`. Phases are
   listed lightest first, then the crystals. Every fluid `PhaseAmounts` carries the `PhaseTraits` of its root
-  (`CubicPhaseEvaluator.fill` stores Z, a, b, da/dT through `PhaseState.setIdentification`); the label sites still call
+  (`CubicPhaseEvaluator.fill` stores Z, a, b, da/dT through `PhaseState.setIdentification`), with the attraction
+  `a/(b R T)`, `supercriticalIsotherm()` and `reducedDensity()` for the network's laws; the label sites still call
   the evaluation forms of `PhaseIdentification`.
-- **Critical band** (`CriticalBand`): a pure fluid (one component at least 0.95 of the amount) inside one of the four
-  reduced boxes of `pureBandBox`; a split with a tie line below `BAND_TIE_LINE`; a single mixture phase whose test met
+- **Critical band** (`CriticalBand`): a pure fluid (one component at least 0.95 of the amount) inside one of the two
+  reduced boxes of `pureBandBox` (box 1 `Tr 0.95-1.1 x Pr 0.8-1.5`, box 2 `Tr 0.90-0.95 x Pr 0.58-0.74` and
+  `Tr 0.95-0.97 x Pr 0.58-0.8`; nothing above `Tc` at `Pr` 1.5 and more, where a pure fluid has one root); a split with a tie line below `BAND_TIE_LINE`; a single mixture phase whose test met
   a stationary point within `BAND_STATIONARY_DISTANCE` of the feed; a failed split whose last iterate or seed was that
   short. No split is fabricated, and no single phase is reported stable when the test said unstable.
 - **`Settings.DEFAULT`**: lnKTolerance 1e-10, maximumIterations 1000, accelerationCycle 5, coexistenceTolerance 1e-9,
@@ -252,4 +254,4 @@ boundary). Qualification families `science/thermo/qualification` (G3F1..G3F10, G
 - `IdealGasFunction` states a formation datum, but a spine-less package's `CoefficientIdealGas` sits on the network's
   sensible datum; a crystal anchored to such a family (CO2-I and ice in `icheme:refinery`) is on that datum too.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.

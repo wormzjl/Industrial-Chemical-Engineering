@@ -34,12 +34,13 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/science/machine/`.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`MachineLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/MachineLaw.java) | Sealed (`CentrifugalPump`, `CentrifugalCompressor`, `VacuumPump`): `rise(flow, speed, ρ, P, k)`, `riseSlope`, `residual` (the `MOVER_LAW` row; a head form by default, a flow form for a vacuum pump), `fluidPower`, `shaftPower`, rated flow, head, efficiency | 39 |
+| [`MachineLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/MachineLaw.java) | Sealed (`CentrifugalPump`, `CentrifugalCompressor`, `VacuumPump`, `PlungerPump`): `rise(flow, speed, ρ, P, k)`, `riseSlope`, `residual` (the `MOVER_LAW` row; a head form by default, a flow form for a vacuum pump and a plunger pump), `fluidPower`, `shaftPower`, rated flow, head, efficiency | 39 |
 | [`CentrifugalPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/CentrifugalPump.java) | The pump's curve and shaft power; `rated(Q, H)` with `bestEfficiency(Q)` (Corripio); `ratedSpeed`; `npsh(speed)`; `withHeadShare` (gas) | 118 |
 | [`CentrifugalCompressor`](../../../src/main/java/com/wormzjl/icheme/science/machine/CentrifugalCompressor.java) | The polytropic head curve, `SURGE` (recycle below it), `DEFAULT_EFFICIENCY`; `ratio`, `pressureRise`, `polytropicHead`, `sigma`; `wetEfficiency` | 144 |
 | [`PositiveDisplacement`](../../../src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java) | Form F2e: slip line and relief line joined by a smooth minimum (`SLIP`, `RELIEF_SLOPE`, `ROUNDING`); `flow`, `rise`, `riseSlope`, `residual` | 88 |
 | [`VacuumPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/VacuumPump.java) | Liquid ring and dry screw: capacity by the suction, shaft power, heat to the gas; `maximumShaftPower` (for `Motor.ratingFor`); `liquidIntensity`, `liquidNoise`; the catalogue `Model`, `RINGS`, `SCREWS`, `model(models, number)`, `of(model, dryScrew, stages)` | 215 |
-| [`EjectorLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/EjectorLaw.java), [`SteamEjector`](../../../src/main/java/com/wormzjl/icheme/science/machine/SteamEjector.java) | The vacuum set's steam law (`K`, `asAir`, `motiveFactor`), read by the sheet's `EjectorUnit` and the world's `Ejectors`; the world's set: `speed(P)` (`SPEED`, `SPEED_EDGE`, `SPEED_EXPONENT`; the sheet's `Limit.VACUUM_SPEED` reads them), `RATED_MOTIVE`, `RATED_DISCHARGE`, `capacity`, `maximumDischarge` | 75, 75 |
+| [`PlungerPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/PlungerPump.java) | A triplex plunger pump on `PositiveDisplacement`: displacement times speed less the slip, to `RELIEF_RISE` (25 MPa); shaft power the swept volume times the rise over `MECHANICAL_EFFICIENCY` (0.88), none at a standing train; `maximumShaftPower` (for `Motor.ratingFor`); the catalogue `Model` (PP-3 to PP-100 m³/h at `SPEED`, 300 rpm), `model(number)`, `of(model)`; a liquid law with no NPSH design | 117 |
+| [`EjectorLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/EjectorLaw.java), [`SteamEjector`](../../../src/main/java/com/wormzjl/icheme/science/machine/SteamEjector.java) | The vacuum set's steam law (`K`, `asAir`, `motiveFactor`; at and above water's Tc, where its vapour pressure is +∞, the set lifts the water to the discharge as it does the gas), read by the sheet's `EjectorUnit` and the world's `Ejectors`; the world's set: `speed(P)` (`SPEED`, `SPEED_EDGE`, `SPEED_EXPONENT`; the sheet's `Limit.VACUUM_SPEED` reads them), `RATED_MOTIVE`, `RATED_DISCHARGE`, `capacity`, `maximumDischarge` | 77, 75 |
 | [`Npsh`](../../../src/main/java/com/wormzjl/icheme/science/machine/Npsh.java) | NPSH3 by flow and speed; `SUCTION_SPECIFIC_SPEED`; `BREAKDOWN` (`breakdownPressure`); `DUTY_NPSH3`, `dutySpeed`, `forDuty` (an in-line mover's design) | 82 |
 | [`GasEntrainment`](../../../src/main/java/com/wormzjl/icheme/science/machine/GasEntrainment.java) | Turpin's onset `α_T` from suction pressure; the head share; `churn` (`CHURN_PEAK`); the clean zone `CLEAN_ONSETS` and `cleanShare(p)` | 68 |
 | [`SteamTurbine`](../../../src/main/java/com/wormzjl/icheme/science/machine/SteamTurbine.java) | `isentropicDrop` from the inlet's real `P/ρ`; `work`; `typicalEfficiency` (single stage to multistage, a log blend by power) | 56 |
@@ -86,6 +87,15 @@ The laws are called, never call:
   status word, sound or cavitation count). A centrifugal compressor's efficiency reads `wetEfficiency` of its liquid
   share; a set-flow pump delivers `(1 − α)` of its displacement as liquid, a frame the displacement less the liquid's
   volume. Only a dry suction and, at a compressor, solids above the trace refuse.
+- One dense fluid (`State.dense()`) has no second phase. Whichever slot holds it (`InletPhase.measure`), a pump's `α`
+  is `1 − w_pump` on its own weight (`FluidThermodynamics.pumpLiquidLikeWeight`, a smoothstep between reduced densities
+  `GAS_LIKE_UNTIL` 0.5 and `PUMP_LIQUID_LIKE_FROM` 1.0: a pump keeps its full head from the critical density,
+  DENSE_PUMP_RESEARCH_REVIEW.md of batch 2026-11-15-supercritical-fluids), and a compressor's liquid share is `w` on the
+  film's (`liquidLikeWeight`, 0.5 to `LIQUID_LIKE_FROM` 1.5); each is the slot's own value to the bit outside its window. Its NPSH density is its own in either slot. What needs a second
+  phase does not occur in it: no vapour pressure, no droplet wear (`Supply.dropletMassShare` 0 feeds `Wear.wetGas`
+  and the `WET GAS` word), and a pump's suction edge only where its isenthalp really flashes. The compressor's
+  head-to-ratio law reads the ideal-gas `k` on the suction's real `P/ρ`, which loses accuracy on a dense suction
+  (`S4_MACHINES_REVIEW.md` of batch 2026-11-15-supercritical-fluids).
 
 **Vacuum pumps and ejectors.** `S = s·S_n·φ(P_s)`. Liquid ring: `φ = (1 − P_v/P_s)^n` (`n` 2 for one stage, 1 for two;
 `P_v` = `SEAL_VAPOUR_PRESSURE`, the ring's at `SEAL_TEMPERATURE`); shaft `friction·s³ + P_s·Q·ln(P_atm/P_s)/η_iso`
@@ -169,6 +179,7 @@ saved.
 | A driver's speed, trip, status, gear limit | `ShaftTrain.step` | `ShaftTrainTest` |
 | The wear rate over the fault table, bit for bit | `Wear` | `WearTest` |
 | A vacuum pump's capacity, power and wear | `VacuumPump` | `VacuumPumpTest` |
+| A plunger pump's delivery, slip, relief and power | `PlungerPump` | `PlungerPumpTest` |
 | A store's arithmetic | `ElectricStore` | `ElectricStoreTest` |
 | Create stress to watts | `CreateCoupling` | `CreateCouplingTest` |
 
@@ -184,4 +195,4 @@ All under `test`: `--tests 'com.wormzjl.icheme.science.machine.*'`.
 - `science/machine` may not import the equipment or the network: a law that needs a shape's number takes it as an
   argument (`science/plant/machine/MachineRatings` maps a shape to the law's inputs).
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `9195b5161`, 2026-11-16.
