@@ -101,7 +101,46 @@ public final class ColumnSolve {
     }
 
     /** A solve's answer. */
-    public sealed interface Outcome permits Solved, Failed {
+    public sealed interface Outcome permits Solved, Failed, Frozen {
+    }
+
+    /**
+     * A solve whose product holds a crystal at its solved state (section 13 of the 2026-11-16 fouling and corrosion plan, owner
+     * D6): {@code compound} solidifies in the column at {@code product}, the port's name in lower case. The column cannot
+     * carry a solid on its trays (a capability limit), so the solve gives no table.
+     */
+    public record Frozen(String product, String compound) implements Outcome {
+        public Frozen {
+            Objects.requireNonNull(product, "product");
+            Objects.requireNonNull(compound, "compound");
+        }
+
+        /** The finding in words, for the running column's status line. */
+        public String text() {
+            return compound + " solidifies in this column at its " + product;
+        }
+    }
+
+    /**
+     * The compound that solidifies in a product of moles {@code moles} (on {@code model}'s list, water last) at its solved
+     * temperature {@code t} and pressure {@code p}, whose fluid flash holds enthalpy {@code enthalpy} (J), or null where none
+     * does. A TP flash never books a crystal (owner decision D23), so where the package's crystals compete there
+     * ({@link FluidThermodynamics#crystalsCompete}) the product's crystal equilibrium at that enthalpy and pressure decides: a
+     * crystal phase in it is the finding. The temperature only selects whether the test runs; the stop comes from the
+     * equilibrium. An equilibrium the engine cannot answer is no finding: the product's fluid flash stands.
+     */
+    public static String frozen(FluidThermodynamics model, double t, double p, double[] moles, double enthalpy, Runnable checkpoint) {
+        if (!model.crystalsCompete(t, moles)) return null;
+        FluidThermodynamics.CrystalAnswer answer;
+        try {
+            answer = model.crystalsAtPressure(moles.clone(), enthalpy, p, true, checkpoint);
+        } catch (IllegalArgumentException | IllegalStateException noAnswer) {
+            return null;
+        }
+        double[] crystals = answer.crystalMoles();
+        var all = model.crystalSolids().all();
+        for (int k = 0; k < crystals.length; k++) if (crystals[k] > 0) return model.components().get(all.get(k).component());
+        return null;
     }
 
     /**
@@ -365,6 +404,9 @@ public final class ColumnSolve {
                 mass += own[i] * model.molecularWeight(i);
             }
             double whole = model.flashTP(product.temperature(), product.pressure(), own.clone(), checkpoint).enthalpy();
+            // A product that holds a crystal at its solved state: a compound solidifies in the column (owner D6), no table.
+            String solid = n > 0 ? frozen(model, product.temperature(), product.pressure(), own, whole, checkpoint) : null;
+            if (solid != null) return new Frozen(product.port().name().toLowerCase(java.util.Locale.ROOT), solid);
             enthalpy[k] = new double[world.size()];
             Arrays.fill(enthalpy[k], whole / held);
             for (int i = 0; i < m; i++) enthalpy[k][at[i]] = whole / mass * model.molecularWeight(i);

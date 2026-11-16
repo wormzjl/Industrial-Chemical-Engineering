@@ -585,4 +585,24 @@ class ColumnSolveTest {
         for (int i = 0; i < out.length; i++) out[i] *= s;
         return out;
     }
+
+    /**
+     * The frozen finding (owner D6 of batch 2026-11-16-fouling-corrosion): a product of water at 260 K holds ice at its
+     * enthalpy and pressure, so water solidifies there; at 300 K it holds none. The crystal equilibrium decides, not the
+     * temperature against the ice point.
+     */
+    @Test void aProductBelowTheIcePointHoldsIceAndOneAboveItNone() {
+        var catalog = MaterialCatalog.bundled();
+        String network = catalog.presets().network().packageId();
+        var model = com.wormzjl.icheme.science.material.MaterialRuntime.with(catalog, network, () -> FluidThermodynamics.forNetwork(catalog, network));
+        int m = model.componentCount();
+        double[] water = new double[m];
+        water[m - 1] = 10;
+        Runnable none = () -> {
+        };
+        double cold = model.flashTP(260, 101325, water.clone(), none).enthalpy();
+        assertEquals(model.components().get(m - 1), ColumnSolve.frozen(model, 260, 101325, water, cold, none));
+        double warm = model.flashTP(300, 101325, water.clone(), none).enthalpy();
+        assertNull(ColumnSolve.frozen(model, 300, 101325, water, warm, none));
+    }
 }

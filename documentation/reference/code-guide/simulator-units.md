@@ -29,7 +29,7 @@ snapshot. "pp" = package-private.
 | Class | Role | Lines |
 |---|---|---|
 | [`ColumnUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java) | The column as one block: its ports a pure function of its door (`FEED`, `OVERHEAD`, `DISTILLATE`, `WATER`, `BOTTOMS`, the draw, steam and pumparound ports: `drawPort`, `steamPort`, `pumparoundIn`, `pumparoundOut`), `add` (a mole fraction onto the axis; an id the axis lacks fails the column), `catalogFor(thermo, waterOnAxis)`, `SCREEN` (the liquid-supply screen ratio the sheet's column solves at: V3's default) | 194 |
-| `ColumnBlockSolve` (pp) | The block's own solve: the feed flashed to the feed tray's solved pressure (`FEED_ROUNDS`), water by `ColumnWater.onAxis`, the products back through the world's flash, the condenser duty as the closure on its own streams (`ColumnSolve.closure`), the steam CHECK; keeps the last state and leaves it on its report | 406 |
+| `ColumnBlockSolve` (pp) | The block's own solve: the feed flashed to the feed tray's solved pressure (`FEED_ROUNDS`), water by `ColumnWater.onAxis`, the products back through the world's flash, the condenser duty as the closure on its own streams (`ColumnSolve.closure`), the steam CHECK; the inlets' solids (particles to the bottoms, crystals melted), the frozen test; keeps the last state and leaves it on its report | 506 |
 | [`ColumnDoor`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnDoor.java) | The column's door as a sheet holds it (record; `of`): the calculator's Column page less the feed; nested `Draw`, `Steam`, `Pumparound`, the vacuum choice | 305 |
 | `ColumnSides` (pp) | The sheet sides of the column's heat pairs: the condenser's, the kettle's and each pumparound cooler's utility side, a regulated side's feed and its rules | 148 |
 | [`ExchangerUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ExchangerUnit.java) | An exchanger or a kettle reboiler, target Outlet, Duty or Area; an outlet or a duty names a side | 184 |
@@ -57,7 +57,9 @@ The column block, the one unit with more than one calculation:
 
 1. `ColumnUnit.calculations`: the BLOCK (`ColumnBlockSolve`), one calculation per heat side (`ColumnSides`), the
    utility feeds' calculations, the steam CHECK.
-2. `ColumnBlockSolve.solve` flashes the feed at its own enthalpy to the feed tray's solved pressure (V3 has no feed
+2. `ColumnBlockSolve.solve` takes the inlets' solids out (`Solids`): inert particles are held for the bottoms, a crystal
+   melts into its compound with its true energy (the stream holds only its stored part; the offset is booked as it
+   enters). It flashes the feed at its own enthalpy to the feed tray's solved pressure (V3 has no feed
    pressure); its `run` decides water by `ColumnWater.onAxis` on the flashed feed and builds the V3 input from the door and the feed.
 3. The running column's solve, `ColumnSolve.calculate(input, warm, catalog, ColumnUnit.SCREEN, ColdStart.LEARNED,
    checkpoint)` on `catalogFor(thermo, waterOnAxis)`: warm from the last seed where `ColumnSolve.warm` keeps it, else
@@ -65,7 +67,10 @@ The column block, the one unit with more than one calculation:
 4. The products come back through the world's flash at V3's temperature and pressure. The condenser's duty is
    `ColumnSolve.closure` on the block's own streams (the flashed feed, the steam supplies, the ejector's motive steam
    and its free water, the reboiler and the stage heats), so the block's heat balance closes; V3's own duty stays on the
-   display. The duty reaches its side by a link.
+   display. The duty reaches its side by a link. The held particles leave with the bottoms at its state; the heat that
+   takes them there from their inlets' is the reboiler's (its duty, or the kettle's link `reboiler heat`). A column with
+   particles and no bottoms fails `column.solids.no_bottoms`. A product that holds a crystal at its state
+   (`ColumnSolve.frozen`, the crystal equilibrium at its flash's enthalpy) fails `column.frozen`.
 5. The block leaves its seed on its report (`Report.Warm`), so the next run from this steady one starts there.
 
 ## Contracts
@@ -80,7 +85,7 @@ The column block, the one unit with more than one calculation:
   catalog; a warm seed on the other list is dropped, and `ColumnSolve.warm` drops a seed with a wet tray
   ([column-operation.md](column-operation.md)).
 - **Heat sides.** A pumparound or the reboiler has its duty on the door, so what passes through its cold side depends on
-  nothing the column solves; the condenser's duty is an answer. Each pair is checked once the sheet stands, for heat that
+  nothing the column solves but, for the reboiler, the inlets' particles' heat; the condenser's duty is an answer. Each pair is checked once the sheet stands, for heat that
   cannot flow that way. An air-then-water condenser has the exchanger's pair on its water trim: the water takes the
   trim's share (`ColumnSolve.trim`), the air the rest.
 - **Utility feeds.** A heat side whose inlet is a sheet feed of water alone sets that feed's flow: cooling water to carry

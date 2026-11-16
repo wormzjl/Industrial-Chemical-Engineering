@@ -44,7 +44,13 @@ public enum Condition {
      * The worst tray stands at {@link #HIGH_LOAD_FRACTION} of its flood limit or more at the feed taken (W3.2); the value is
      * that fraction, the index the tray. A sign before {@link #FLOODING} binds, with no alarm.
      */
-    HIGH_LOAD(Rank.NOTICE, "high load");
+    HIGH_LOAD(Rank.NOTICE, "high load"),
+    /**
+     * The solve of the state taken found a product holding a crystal: a compound solidifies inside the column (owner D6 of
+     * batch 2026-11-16-fouling-corrosion). The cycle takes nothing until a solve of the state taken shows none. The text names
+     * the compound and the product.
+     */
+    FROZEN(Rank.TRIP, "frozen");
 
     /** The flood fraction from which a cycle reports {@link #HIGH_LOAD}. */
     public static final double HIGH_LOAD_FRACTION = .85;

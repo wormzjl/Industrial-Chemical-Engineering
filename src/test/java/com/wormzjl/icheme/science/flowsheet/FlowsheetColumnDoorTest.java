@@ -79,10 +79,6 @@ final class FlowsheetColumnDoorTest {
     }
 
     @Test void itRefusesWhatV3CannotTake() {
-        var plain = crude(638.15, 2.7e5, 0);
-        var dusty = alone(new Flowsheet.Feed(plain.temperature(), plain.pressure(), plain.amounts(), List.of(new Flowsheet.Solid("icheme:demo_particle", "100", .5))));
-        assertEquals(FlowsheetRun.Status.FAILED, dusty.status());
-        assertEquals("column.solids", dusty.log().getFirst().key(), () -> "log " + dusty.log());
         var wet = alone(crude(330, 2.7e5, 2000));
         assertEquals(FlowsheetRun.Status.FAILED, wet.status());
         assertEquals("column.liquid_water", wet.log().getFirst().key(), () -> "liquid water has no place on V3's feed: log " + wet.log());

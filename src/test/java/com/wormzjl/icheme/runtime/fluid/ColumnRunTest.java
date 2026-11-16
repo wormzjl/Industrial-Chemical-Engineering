@@ -661,7 +661,7 @@ class ColumnRunTest {
         static final com.wormzjl.icheme.science.column.v3.V3ColumnInput DESIGN;
         static{var c=MaterialCatalog.bundled();DESIGN=com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(c.presets().column(c.presets().network().defaultColumnPreset()),c);}
         com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics model;EventPathWorld world;final long delay;
-        java.util.function.Predicate<ColumnSolve.Job> fail=j->false,unfinished=j->false;
+        java.util.function.Predicate<ColumnSolve.Job> fail=j->false,unfinished=j->false,frozen=j->false;
         /** The hydraulics each table carries (W3): none by default. */
         java.util.function.Function<ColumnSolve.Job,SplitTable.Flood> flood=j->SplitTable.Flood.NONE;
         /** The duties each table carries beyond the condenser's (W4), or null for none. */
@@ -677,7 +677,7 @@ class ColumnRunTest {
             if(now>=refuseFrom&&now<refuseUntil){refused++;return false;}
             jobs.add(job);asked.add(now);
             var taken=job.taken();var ratios=new double[taken.steam().size()];for(int j=0;j<ratios.length;j++)ratios[j]=taken.feedRate()>0?taken.steam().get(j).rate()/taken.feedRate():job.setpoints().steamPerFeed()[j];
-            ColumnSolve.Outcome o=fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
+            ColumnSolve.Outcome o=frozen.test(job)?new ColumnSolve.Frozen("distillate","Water"):fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
             if(o instanceof ColumnSolve.Solved s&&flood.apply(job).known())o=new ColumnSolve.Solved(s.table().withFlood(flood.apply(job)),s.enthalpy(),null,s.solvedCondenser(),"test","");
             if(o instanceof ColumnSolve.Solved s&&duties!=null)o=new ColumnSolve.Solved(duties.apply(s.table()),s.enthalpy(),null,s.solvedCondenser(),"test","");
             var answer=o;
@@ -804,6 +804,35 @@ class ColumnRunTest {
         assertEquals(2,asked.size(),"once more, then no more: "+asked);
         assertCycle(asked.get(0)+ColumnOperation.APPLY_TICKS+ColumnOperation.TRANSIENT_WAIT,asked.get(1),"30 s after the first applied");
         assertTrue(r.ops().status(r.unit()).contains("the throughput solve failed (DEADLINE)"),"the second refuses the state: "+r.ops().status(r.unit()));
+    }
+    /**
+     * A compound that solidifies in the column (owner D6 of batch 2026-11-16-fouling-corrosion): a solve whose product holds a
+     * crystal trips the column (FROZEN, UPSET, the alarm UPSET) and the cycle takes nothing; the same state is not asked again;
+     * a solve of a state that leaves its bands and finds no crystal clears the trip and installs its table.
+     */
+    @Test void aSolveThatFindsTheColumnFrozenTripsItUntilACleanSolve() {
+        var f=new Fake(0);var r=rig(0,f);f.world=r.world();var world=r.world();var ops=r.ops();long unit=r.unit();
+        f.runTo(1500);
+        assertTrue(ops.status(unit).startsWith("RUNNING")||ops.status(unit).startsWith("LIMITED"),ops.status(unit));
+        assertNull(Condition.find(ops.conditions(unit),Condition.FROZEN),"nothing froze yet");
+        var u=world.ledger.column(unit);
+        world.ledger.column(u.withSetpoints(u.setpoints().withFeedRate(.25)));
+        f.frozen=j->j.trigger()==DriftBands.Trigger.THROUGHPUT;
+        f.runTo(1600+ColumnOperation.APPLY_TICKS+50);
+        assertTrue(ops.status(unit).startsWith("UPSET: Water solidifies in this column at its distillate"),ops.status(unit));
+        assertEquals(Condition.FROZEN,Condition.binding(ops.conditions(unit)).condition());
+        assertTrue(EquipmentAlarm.column(ops.conditions(unit)).contains(EquipmentAlarm.UPSET));
+        double taken=sum(world.ledger.column(unit).totals().taken().moles());int asked=f.asked(DriftBands.Trigger.THROUGHPUT).size();
+        f.runTo(world.ledger.onlineTick()+3000);
+        assertEquals(taken,sum(world.ledger.column(unit).totals().taken().moles()),0,"a frozen column takes nothing");
+        assertEquals(asked,f.asked(DriftBands.Trigger.THROUGHPUT).size(),"the frozen state is not asked again inside its bands");
+        f.frozen=j->false;
+        u=world.ledger.column(unit);
+        world.ledger.column(u.withSetpoints(u.setpoints().withFeedRate(.4)));
+        f.runTo(world.ledger.onlineTick()+3000);
+        assertNull(Condition.find(ops.conditions(unit),Condition.FROZEN),ops.status(unit));
+        assertFalse(ops.status(unit).startsWith("UPSET"),ops.status(unit));
+        assertTrue(sum(world.ledger.column(unit).totals().taken().moles())>taken,"the clean solve's table runs");
     }
     /**
      * A trip (W1.7, F2): the cycle takes nothing and the column's channels still answer, its flows 0 and its pressures and

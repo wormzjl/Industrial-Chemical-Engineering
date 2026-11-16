@@ -148,6 +148,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         Refused refused;com.wormzjl.icheme.science.plant.column.Setpoints refusedSetpoints;Condition.Active setpointRefusal;
         /** The design had no operating point at the last request while no table stands: NOT READY, or null. */
         Condition.Active missing;
+        /** The last solve of the state taken found a compound solidifying in the column (FROZEN, owner D6): the cycle takes nothing until a solve of the state taken finds none. Memory only. */
+        Condition.Active frozen;
         /** Rule A in force (owner Q1, C1: rule B, with A where a solve fails): a solve of the short steam was refused, so every input is cut together until the steam is no longer short or its shortage leaves the refused state's bands. */
         boolean ruleA;
         /** The cycle that asked the table's solve and the cycle it applied at; V3's own condenser duty there, W; what the accepted solve said beyond its table (FEED_WATER_ROUTED), or null. */
@@ -462,6 +464,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(r.pending!=null)list.add(new Condition.Active(Condition.OFF_TABLE,r.pending.trigger.name().toLowerCase(Locale.ROOT)));
         if(r.table==null&&r.missing!=null)list.add(r.missing);
         if(r.refused!=null)list.add(r.refused.notice());
+        if(r.frozen!=null&&(r.refused==null||r.refused.notice()!=r.frozen))list.add(r.frozen);
         if(r.setpointRefusal!=null)list.add(r.setpointRefusal);
         if(r.routed!=null)list.add(r.routed);
         list.addAll(r.advisories);
@@ -553,12 +556,22 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(p.outcome==null)return false;
         r.pending=null;
         var u=topology.column(r.unit);
+        // A compound solidifies in the column (owner D6): no table is installed and the old one stops; the cycle takes nothing
+        // until a solve of the state taken finds none, a state inside this one's bands not asked again. Requested set points
+        // that would freeze it are refused as any set points whose solve fails: the accepted ones stay.
+        if(p.outcome instanceof ColumnSolve.Frozen f) {
+            r.retried=false;
+            if(p.trigger==DriftBands.Trigger.SETPOINT){r.refusedSetpoints=p.setpoints;r.setpointRefusal=new Condition.Active(Condition.SETPOINT_REFUSED,"the setpoint solve found "+f.text()+", the accepted set points kept");return true;}
+            r.frozen=new Condition.Active(Condition.FROZEN,f.text());
+            r.refused=new Refused(p.trigger,p.state,p.held,r.frozen);
+            return true;
+        }
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
             r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");
             r.routed=s.note().isEmpty()?null:new Condition.Active(Condition.FEED_WATER_ROUTED,s.note());
             r.advisories=s.advisories().stream().map(a->new Condition.Active(Condition.ADVISORY,a)).toList();
-            r.refused=null;r.retried=false;
+            r.refused=null;r.retried=false;r.frozen=null;
             // The requested set points are in force: no refusal of them stands.
             if(p.trigger==DriftBands.Trigger.SETPOINT||p.trigger==DriftBands.Trigger.START){r.refusedSetpoints=null;r.setpointRefusal=null;}
             // Only a solve of the short steam itself lifts rule A: one at A's own state says nothing of B's.
@@ -752,6 +765,19 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var energy=r.enthalpy;
         // The cycle runs on the accepted set points with the unit's feed rate (W2): a requested one waits for its solve.
         var set=running(u,t);double designDemand=time().seconds(u.setpoints().designFeedRate()*CYCLE_TICKS);
+        if(r.frozen!=null) {
+            // A compound solidifies in the column (FROZEN): the inlets close, as on a trip, and a solve of the state the column
+            // is given, or of requested set points the player moved, may lift it.
+            r.last=null;
+            if(r.refusedSetpoints!=null&&u.setpoints().intensivelyDiffers(r.refusedSetpoints)){r.refusedSetpoints=null;r.setpointRefusal=null;}
+            if(feedAvailable.total()>0) {
+                var given=attempted(set,feedAvailable,steam);
+                var trigger=r.refusedSetpoints==null&&u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
+                        :DriftBands.check(t.reference(),t.held(),given,designDemand).map(DriftBands.Crossing::trigger).orElse(DriftBands.Trigger.CLOSURE);
+                request(r,u,tick,trigger,given);
+            }
+            publish(r,List.of(),levels(r,u,set,available,tick,false));return;
+        }
         // Each duty passes no more than its utility has room for (C6b, W4): the heat owed as of the fence against its hold. An
         // air condenser holds at most what its built banks take with their fans at full speed (U2): past it, the column is limited.
         var pas=new double[t.pumparoundPerFeed().length];for(int j=0;j<pas.length;j++)pas[j]=room(r,u,t,Utility.pumparound(j),tick);

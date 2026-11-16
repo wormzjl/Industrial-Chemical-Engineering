@@ -103,6 +103,7 @@ final class ColumnBlockSolve implements Calculation.Law {
         var gives = new ArrayList<String>();
         if (u.wire(CONDENSER_IN) != null) gives.add(condenserHeat());
         for (var pumparound : door.pumparounds()) if (u.wire(pumparoundIn(pumparound)) != null) gives.add(drawTemperature(pumparound));
+        if (u.wire(REBOILER_IN) != null) gives.add(reboilerHeat());
         if (u.utilities().feeds().containsKey(REBOILER_IN)) gives.add(bottomsTemperature());
         for (var row : door.steam()) if (u.wire(steamPort(row)) != null) gives.add(steamStage(row));
         return new Calculation(u.id(), u.id(), reads, writes, List.of(), gives, Calculation.Kind.BLOCK, this);
@@ -112,15 +113,18 @@ final class ColumnBlockSolve implements Calculation.Law {
         var thermo = u.thermo();
         var feed = board.stream(u.wire(FEED));
         if (feed.empty()) {
-            write(board, report, null, null, 0, 0);
+            write(board, report, null, null, 0, 0, SolidInventory.EMPTY, 0);
             leave(report);
             return;
         }
-        if (!feed.solids().empty()) throw new FlowsheetFailure("column.solids");
+        // Inert particles ride the liquid to the bottoms and change no equilibrium; a crystal that arrives melts into the feed
+        // (section 13 of the 2026-11-16 fouling and corrosion plan, owner D6). The solve takes the fluid alone.
+        var inert = new Solids(thermo);
+        feed = inert.fluid(feed, report);
         double heatIn = 0;
         var supplies = new ArrayList<FlowStream>();
         for (var row : door.steam()) {
-            var stream = steamOf(row, board, report);
+            var stream = inert.fluid(steamOf(row, board, report), report);
             supplies.add(stream);
             heatIn += stream.enthalpy();
         }
@@ -145,6 +149,11 @@ final class ColumnBlockSolve implements Calculation.Law {
         } while (moved > FEED_TEMPERATURE && ++round < FEED_ROUNDS);
         if (feed.pressure() < feedTray) report.note(Note.warning(u.id(), "column.inlet_pressure", FEED));
         steamChecks(supplies, valved, report);
+        frozen(result);
+        var bottomsState = product("bottoms_liquid", result);
+        if (!inert.held().empty() && bottomsState.empty()) throw new FlowsheetFailure("column.solids.no_bottoms");
+        // The particles leave at the bottoms' state: the reboiler gives the heat that takes them there from their inlets'.
+        double sensible = inert.held().empty() ? 0 : inert.held().moments().enthalpy(bottomsState.temperature(), bottomsState.pressure()) - inert.enthalpy();
         var ejected = ejector(board, report, result);
         var ledger = result.dutyLedger().orElseThrow();
         // The condenser's duty is the running column's closure (ColumnSolve.closure) on the block's own streams, which are the
@@ -159,7 +168,7 @@ final class ColumnBlockSolve implements Calculation.Law {
             heatOut += ejected.water().enthalpy() - product(FREE_WATER, result).enthalpy();
         }
         double whole = ColumnSolve.closure(heatOut, heatIn, ledger.reboilerWatts(), ledger.stageHeatTotalWatts()), water = water(result, whole);
-        write(board, report, result, ejected, whole, water);
+        write(board, report, result, ejected, whole, water, inert.held(), sensible);
         report.display(display);
         leave(report);
         report.reading("condenser", -whole);
@@ -167,7 +176,7 @@ final class ColumnBlockSolve implements Calculation.Law {
         report.reading("condenser_water", -water);
         // A free condenser's coolant, air or tower water, comes in at 25 °C: a receiver there or below it cannot be held (C2).
         if (u.wire(CONDENSER_IN) == null && door.condenserTemperature() <= CoolerUnit.COOLANT) report.note(Note.warning(u.id(), "column.condenser_coolant"));
-        report.reading("reboiler", ledger.reboilerWatts());
+        report.reading("reboiler", ledger.reboilerWatts() + sensible);
         report.reading("feed_temperature", flashed.temperature());
     }
 
@@ -369,14 +378,17 @@ final class ColumnBlockSolve implements Calculation.Law {
     /**
      * The outlets and links of {@code result}, or of no flow. Free sides book their heat here, because only a solved column has any.
      * The condenser's duty is {@code condenser} (W, column sign, the closure); its water side takes {@code water} of it, and the air
-     * the rest.
+     * the rest. The bottoms carry {@code solids}, the inert particles of the inlets, and the reboiler's duty holds {@code sensible}
+     * (W), the heat that takes them from their inlets' state to the bottoms'.
      */
-    private void write(Board board, Report report, @Nullable V3ColumnResult result, @Nullable Ejected ejected, double condenser, double water) {
+    private void write(Board board, Report report, @Nullable V3ColumnResult result, @Nullable Ejected ejected, double condenser, double water,
+                       SolidInventory solids, double sensible) {
         u.write(board, report, OVERHEAD, product("overhead_vapor", result));
         u.write(board, report, DISTILLATE, product("distillate_liquid", result));
         u.write(board, report, WATER, ejected != null ? ejected.water() : product(FREE_WATER, result));
-        var bottoms = product("bottoms_liquid", result);
+        var bottoms = product("bottoms_liquid", result, solids);
         u.write(board, report, BOTTOMS, bottoms);
+        if (u.wire(REBOILER_IN) != null) board.link(reboilerHeat(), -(door.reboilerDuty() + sensible));
         if (u.utilities().feeds().containsKey(REBOILER_IN)) board.link(bottomsTemperature(), bottoms.empty() ? Double.NEGATIVE_INFINITY : bottoms.temperature());
         for (var row : door.steam()) if (u.wire(steamPort(row)) != null) board.link(steamStage(row), result == null ? Double.NEGATIVE_INFINITY : stages.getOrDefault(row.stage(), Double.NEGATIVE_INFINITY));
         for (var draw : door.draws()) u.write(board, report, drawPort(draw), product(String.format(Locale.ROOT, "side_liquid_tray_%02d", draw.tray()), result));
@@ -385,7 +397,7 @@ final class ColumnBlockSolve implements Calculation.Law {
             board.link(condenserHeat(), -water);
             if (ledger != null && condenser != water) report.duty(condenser - water);
         } else if (ledger != null) report.duty(condenser);
-        if (ledger != null && u.wire(REBOILER_IN) == null) report.duty(ledger.reboilerWatts());
+        if (ledger != null && u.wire(REBOILER_IN) == null) report.duty(ledger.reboilerWatts() + sensible);
         for (var pumparound : door.pumparounds()) {
             if (u.wire(pumparoundIn(pumparound)) != null) board.link(drawTemperature(pumparound), result == null ? Double.POSITIVE_INFINITY : result.inspection().orElseThrow().nodes().get(pumparound.drawTray()).temperatureKelvin());
             else if (ledger != null) report.duty(pumparound.duty());
@@ -394,13 +406,110 @@ final class ColumnBlockSolve implements Calculation.Law {
 
     /** A published stream through the world's flash, on the sheet's axis; a stream the column does not make carries no flow. */
     private FlowStream product(String id, @Nullable V3ColumnResult result) {
+        return product(id, result, SolidInventory.EMPTY);
+    }
+
+    /** {@link #product(String, V3ColumnResult)} carrying {@code solids} at its state. */
+    private FlowStream product(String id, @Nullable V3ColumnResult result, SolidInventory solids) {
         if (result != null) for (var stream : result.streams()) {
             if (!stream.streamId().equals(id)) continue;
-            var axis = u.thermo().axis();
-            double[] amounts = new double[components];
-            for (var fraction : stream.moleFractions()) add(amounts, axis, fraction.componentId(), fraction.moleFraction(), stream.molarFlowMolPerSecond());
-            return u.thermo().atTemperature(stream.temperatureKelvin(), stream.pressurePascal(), amounts, SolidInventory.EMPTY);
+            return u.thermo().atTemperature(stream.temperatureKelvin(), stream.pressurePascal(), amounts(u.thermo(), stream), solids);
         }
         return FlowStream.empty(components);
+    }
+
+    /** A V3 product's amounts on the sheet's axis. */
+    static double[] amounts(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, com.wormzjl.icheme.science.column.v3.V3ColumnStreamProperties stream) {
+        var axis = thermo.axis();
+        double[] amounts = new double[axis.size()];
+        for (var fraction : stream.moleFractions()) add(amounts, axis, fraction.componentId(), fraction.moleFraction(), stream.molarFlowMolPerSecond());
+        return amounts;
+    }
+
+    /** The heat the wired reboiler's side gives the column, W (side sign): the door's duty and the particles' sensible heat. */
+    String reboilerHeat() {
+        return u.part("reboiler heat");
+    }
+
+    /**
+     * Refuses a solve whose product holds a crystal at its solved state, on the sheet's thermo (owner D6): a compound
+     * solidifies in the column ({@link ColumnSolve#frozen}).
+     */
+    private void frozen(V3ColumnResult result) {
+        frozen(u.thermo(), result.streams(), this::port);
+    }
+
+    /** {@link #frozen(V3ColumnResult)} on {@code streams}, each named by the port {@code port} gives its V3 id. */
+    static void frozen(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, List<com.wormzjl.icheme.science.column.v3.V3ColumnStreamProperties> streams,
+                       java.util.function.UnaryOperator<String> port) {
+        for (var stream : streams) {
+            double[] amounts = amounts(thermo, stream);
+            if (java.util.Arrays.stream(amounts).sum() <= 0) continue;
+            var flashed = thermo.atTemperature(stream.temperatureKelvin(), stream.pressurePascal(), amounts, SolidInventory.EMPTY);
+            String compound = ColumnSolve.frozen(thermo.model(), flashed.temperature(), flashed.pressure(), amounts, flashed.enthalpy(), thermo.checkpoint());
+            if (compound != null) throw new FlowsheetFailure("column.frozen", compound, port.apply(stream.streamId()));
+        }
+    }
+
+    /** The sheet's port a V3 product leaves by. */
+    private String port(String streamId) {
+        return switch (streamId) {
+            case "overhead_vapor" -> OVERHEAD;
+            case "distillate_liquid" -> DISTILLATE;
+            case FREE_WATER -> WATER;
+            case "bottoms_liquid" -> BOTTOMS;
+            default -> {
+                for (var draw : door.draws()) if (streamId.equals(String.format(Locale.ROOT, "side_liquid_tray_%02d", draw.tray()))) yield drawPort(draw);
+                yield streamId;
+            }
+        };
+    }
+
+    /**
+     * The inert particles of the column's inlets and the crystals they melt (section 13 of the 2026-11-16 fouling and corrosion
+     * plan): what a stream's solids hold leaves it, the particles held for the bottoms with the enthalpy they came in with, each
+     * crystal's mass as its compound's moles. A crystal's true energy is its stored sensible enthalpy and its offset
+     * ({@code SolidMaterialCatalog.Crystal#energyOffset}); a stream's enthalpy holds only the stored part, so the offset is booked
+     * as it melts and the sheet's heat balance stands on the energy the solve takes.
+     */
+    static final class Solids {
+        private final com.wormzjl.icheme.science.flowsheet.FlowThermo thermo;
+        private SolidInventory held = SolidInventory.EMPTY;
+        private double enthalpy;
+
+        Solids(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo) {
+            this.thermo = thermo;
+        }
+
+        SolidInventory held() {
+            return held;
+        }
+
+        /** The enthalpy the held particles came in with, J/s. */
+        double enthalpy() {
+            return enthalpy;
+        }
+
+        /** {@code stream} without its solids: its particles held, its crystals melted into it. */
+        FlowStream fluid(FlowStream stream, Report report) {
+            var solids = stream.solids();
+            if (solids.empty()) return stream;
+            double t = stream.temperature(), p = stream.pressure();
+            var inert = solids.withoutCrystals();
+            held = held.plus(inert);
+            enthalpy += inert.moments().enthalpy(t, p);
+            double[] amounts = stream.amounts();
+            double energy = stream.enthalpy() - inert.moments().enthalpy(t, p), offset = 0;
+            for (var population : solids.crystals()) {
+                var crystal = population.material().crystal();
+                int c = thermo.axis().indexOf(crystal.component());
+                if (c < 0) c = thermo.place(crystal.component());
+                if (c < 0) throw new FlowsheetFailure("column.failed", crystal.component());
+                amounts[c] += population.massKg() / thermo.model().molecularWeight(c);
+                offset += population.massKg() * crystal.energyOffset();
+            }
+            if (offset != 0) report.enters(0, offset);
+            return thermo.atEnthalpy(p, energy + offset, amounts, t, SolidInventory.EMPTY);
+        }
     }
 }

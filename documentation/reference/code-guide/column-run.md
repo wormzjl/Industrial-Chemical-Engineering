@@ -37,7 +37,7 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`runtime/fluid/ColumnOperation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnOperation.java) | The runs, on the server thread, without Minecraft (`implements IslandCoordinator.Ports`): cycles, solves, plans, booking; one `Debt` per `Utility` (`CONDENSER`, `REBOILER`, `PUMPAROUND` j); `view`, `status`, `conditions`, `drop`, `feedRate`, `instrument`; the interfaces `Solves`, `Power`, `FeedPlans`; `compounds(device)`, `grow(submit)`; the constants `CYCLE_TICKS`, `FENCE_TICKS`, `INLET_AIM_CYCLES`, `BUFFER_CYCLES`, `CONDENSER_HOLD_CYCLES`, `SOLVE_SPACING`, `TRANSIENT_WAIT`, `APPLY_TICKS`, `KEEP_TICKS`, `APPROACH_KELVIN`, `TAKE_MARGIN`, `TRACE_KG`, `DIFFERENTIAL` | 1107 |
+| [`runtime/fluid/ColumnOperation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnOperation.java) | The runs, on the server thread, without Minecraft (`implements IslandCoordinator.Ports`): cycles, solves, plans, booking; one `Debt` per `Utility` (`CONDENSER`, `REBOILER`, `PUMPAROUND` j); `view`, `status`, `conditions`, `drop`, `feedRate`, `instrument`; the interfaces `Solves`, `Power`, `FeedPlans`; `compounds(device)`, `grow(submit)`; the constants `CYCLE_TICKS`, `FENCE_TICKS`, `INLET_AIM_CYCLES`, `BUFFER_CYCLES`, `CONDENSER_HOLD_CYCLES`, `SOLVE_SPACING`, `TRANSIENT_WAIT`, `APPLY_TICKS`, `KEEP_TICKS`, `APPROACH_KELVIN`, `TAKE_MARGIN`, `TRACE_KG`, `DIFFERENTIAL` | 1180 |
 | [`runtime/fluid/ColumnUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnUnit.java) | The facts of one column in the topology ledger: `Station`, `Totals`, `condensers`, `airSurface`, `Utilities`, `Members` (`NONE`, `CONDENSER`, `REFLUX_PUMP`, `pumparoundPump(j)`), `Probes`, `State`; `MAXIMUM_STATIONS`, `MAXIMUM_CONDENSERS`, `lost` | 195 |
 | [`runtime/fluid/ColumnFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnFacts.java) | The running columns' facts section (a `FactsSection`): the column units by identity | 79 |
 | [`runtime/fluid/ColumnPower`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnPower.java) | `ColumnOperation.Power` over `ElectricStores` and `ShaftTrains`: fan sides on their store (`ElectricStores.member`), a casing's rated shaft power on its train (`ShaftTrains.held`), an in-line pump on its own store; `undriven` | 68 |
@@ -123,7 +123,10 @@ after the fence (`Gift`, `givenSince`). Each utility's room, the air's most feed
 into `ColumnCycle.Rooms`. After the step: accounts move, every inert solid that arrived by the tick moves to the
 bottoms, a `Credit` is logged, totals grow, each utility is owed its duty (`owed`), new levels are logged, `publish` sets
 conditions, status and phase, and `save` writes the state. A trip asks a solve on the attempted take: STEAM_RATIO where
-rule B's steam is short, else the first band the state left, else CLOSURE.
+rule B's steam is short, else the first band the state left, else CLOSURE. A solve whose product holds a crystal
+(`ColumnSolve.Frozen`: a compound solidifies in the column) installs no table and raises `FROZEN` (`Run.frozen`, memory
+only): the cycle takes nothing and asks a solve of the attempted take, none inside the frozen state's bands, until a solve
+finds no crystal; a set-point solve that finds one is refused as `SETPOINT_REFUSED`. An arriving crystal never trips.
 
 **Plans** (`plans`, at an island's dispatch):
 

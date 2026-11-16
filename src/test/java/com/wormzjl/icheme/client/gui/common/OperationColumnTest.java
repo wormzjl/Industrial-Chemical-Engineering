@@ -78,9 +78,9 @@ public class OperationColumnTest {
     public static OperationView loaded(Setpoints s) {
         var base = running(s, Phase.LIMITED);
         var conditions = new ArrayList<Condition.Active>();
-        // Every condition but the trip, which would make the phase UPSET.
+        // Every condition but the trips, which would make the phase UPSET.
         for (var c : Condition.values())
-            if (c != Condition.CLOSURE) conditions.add(switch (c) {
+            if (c.rank != Condition.Rank.TRIP) conditions.add(switch (c) {
                 case FLOODING -> new Condition.Active(c, .8, 27, "");
                 case HIGH_LOAD -> new Condition.Active(c, 1, 27, "tray 28 at 100 % of flood");
                 case SETPOINT_REFUSED -> new Condition.Active(c, "the setpoint solve failed (no convergence), the table of 5 s ago kept");
@@ -304,7 +304,7 @@ public class OperationColumnTest {
         assertArrayEquals(new String[]{"Flood %, tray 28", "87", "125"}, duties.getLast());
         assertEquals(OperationColumn.duties(running(s, Phase.RUNNING), t).size(), OperationColumn.duties(running(s, Phase.RUNNING), u, t).size(), "no tray rows without hydraulics");
         var conditions = OperationColumn.conditions(view, t);
-        assertEquals(Condition.values().length, conditions.size(), "a header and every condition but the trip");
+        assertEquals(1 + java.util.Arrays.stream(Condition.values()).filter(c -> c.rank != Condition.Rank.TRIP).count(), conditions.size(), "a header and every condition but the trips");
         var byName = new HashMap<String, String[]>();
         for (var row : conditions) byName.put(row[0], row);
         assertArrayEquals(new String[]{"Condition", "Share", "At"}, conditions.getFirst());
