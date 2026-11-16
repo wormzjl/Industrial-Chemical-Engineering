@@ -76,9 +76,14 @@ public class OperationColumnTest {
 
     /** A column on {@code s} that ran and stands (WP8): its unit's trays fouled whole, a weeping stainless steel wall; Clean acts. */
     public static OperationView stopped(Setpoints s) {
+        return stopped(s, new OperationView.Wear(1, .07, 0, com.wormzjl.icheme.science.integrity.Metallurgy.STAINLESS_STEEL));
+    }
+
+    /** {@link #stopped(Setpoints)} with its unit's trays and wall at {@code wear}. */
+    public static OperationView stopped(Setpoints s, OperationView.Wear wear) {
         return new OperationView(Phase.STOPPED, List.of(new Condition.Active(Condition.TRAYS_FOULED, .6, -1, "trays fouled: 60 % of their clean capacity left"),
                 new Condition.Active(Condition.WEEPING, .93, -1, "weeping: 93 % of the corrosion allowance used")), 0, null, "STOPPED", false, true, s, null, List.of(), List.of(), null,
-                OperationView.Trays.NONE, new OperationView.Wear(1, .07, 0, com.wormzjl.icheme.science.integrity.Metallurgy.STAINLESS_STEEL));
+                OperationView.Trays.NONE, wear);
     }
 
     /**
@@ -146,7 +151,7 @@ public class OperationColumnTest {
                 setpoints(1, 1, 1, false), null, List.of(), List.of(), null), t);
         OperationColumn.solve(new OperationView(Phase.RUNNING, List.of(), 1, null, "", true, true, setpoints(1, 1, 1, false), null, List.of(), List.of(),
                 new OperationView.Solve(null, false, 30)), t);
-        OperationColumn.footerButtons(true, t);
+        for (var in : inputs()) OperationColumn.footerButtons(in, true, t);
         t.get("assembly.operation");
         assertEquals(Set.of(), t.missing);
         assertTrue(t.asked.size() > 60, "the cases ask for the tab's texts: " + t.asked.size());
@@ -180,8 +185,12 @@ public class OperationColumnTest {
                         int w = bar ? area.w() - ScrollView.BAR - 4 : area.w();
                         assertFits(Column.place(OperationColumn.rows(in, t), area.x(), area.y(), w, M, Column.Metrics.COMPACT), at + (bar ? " narrowed " : " ") + in.view().phase());
                     }
-                for (var in : inputs())
-                    for (var table : OperationColumn.tables(in.view(), in.units(), t)) {
+                // Every material's name in the integrity table's heading (layout B), beside the cases' tables.
+                var tables = new ArrayList<List<String[]>>();
+                for (var in : inputs()) tables.addAll(OperationColumn.tables(in.view(), in.units(), t));
+                for (var material : com.wormzjl.icheme.science.integrity.Metallurgy.values())
+                    tables.add(OperationColumn.wear(stopped(designs().get(1), new OperationView.Wear(.4, .07, 12.34, material)), t));
+                for (var table : tables) {
                         for (int room : new int[]{inside, inside - ScrollView.BAR - 2}) {
                             int[] widths = OperationColumn.widths(table, room, M);
                             assertEquals(room, java.util.Arrays.stream(widths).sum(), at + ": the table across the glass");
@@ -190,24 +199,30 @@ public class OperationColumnTest {
                     }
                 var status = AssemblyColumn.display(width);
                 for (var in : inputs()) assertTrue(M.width(OperationColumn.status(in.view(), t).text()) <= status.w(), at + ": the status cut: " + OperationColumn.status(in.view(), t).text());
-                var footer = AssemblyColumn.footer(width, height);
-                var keys = OperationColumn.footerButtons(true, t);
-                for (int i = 0; i < keys.size(); i++) assertTrue(M.width(keys.get(i).text()) <= footer.get(i).w() - 6, at + ": a footer key");
+                // The footer: Close, Clean, Apply where the column has a unit (layout B), Close and Apply where it has none.
+                for (var in : List.of(new OperationColumn.Input(stopped(designs().get(1)), false, UNITS.getFirst()),
+                        new OperationColumn.Input(OperationView.idle(Phase.STOPPED, "STOPPED", designs().get(1), true), false, UNITS.getFirst()))) {
+                    var keys = OperationColumn.footerButtons(in, true, t);
+                    var footer = AssemblyColumn.footer(width, height, keys.size());
+                    for (int i = 0; i < keys.size(); i++) assertTrue(M.width(keys.get(i).text()) <= footer.get(i).w() - 6, at + ": a footer key " + keys.get(i).key());
+                }
             }
         // At 1920 by 1080 and 2560 by 1440 (scale 3 and 4: 640 by 360 GUI px, the image 624 by 344) the usual column's door and tables fit: no bar.
         var usual = new OperationColumn.Input(running(designs().get(1), Phase.LIMITED), false, UNITS.getFirst());
         var area = AssemblyColumn.area(624, 344);
-        // The door of before (Control and the set points) in one view; the Integrity group (WP8) follows under it, where the door
-        // scrolls, as the glass's later tables do.
+        // The door (Control and the set points; the integrity on the glass, layout B) in one view.
         var doorRows = OperationColumn.rows(usual, t);
-        assertEquals("Integrity", ((Column.Group) doorRows.getLast()).title());
-        int tall = Column.place(doorRows.subList(0, doorRows.size() - 1), area.x(), area.y(), area.w(), M, Column.Metrics.COMPACT).bounds().h();
+        assertEquals(2, doorRows.size(), "Control and the set points only");
+        int tall = Column.place(doorRows, area.x(), area.y(), area.w(), M, Column.Metrics.COMPACT).bounds().h();
         assertTrue(tall <= area.h(), "the usual door in one view: " + tall + " in " + area.h());
         // The tables of before (the ports, the duties, the last solve) stay in one view; the conditions and the set points'
         // absolute values (W7) follow under them, where the glass scrolls.
         var before = OperationColumn.tables(usual.view(), UNITS.getFirst(), t).subList(0, 3);
         int first = OperationColumn.PITCH * before.stream().mapToInt(List::size).sum() + 2 * OperationColumn.TABLE_GAP + 3 * 2;
         assertTrue(first <= AssemblyColumn.glass(624, 344, true).h() - 4, "the usual tables on the glass: " + first);
+        // The integrity table (layout B, 2026-11-16) comes fourth, under the last solve, where the glass scrolls: the usual
+        // column's first four tables take 272 px of a 231 px glass (measured 2026-11-16; the three take 214).
+        assertEquals("Integrity", OperationColumn.tables(usual.view(), UNITS.getFirst(), t).get(3).getFirst()[0]);
     }
 
     private static Map<String, Column.Button> buttons(List<Column.Row> rows) {
@@ -377,34 +392,43 @@ public class OperationColumnTest {
         assertFalse(OperationColumn.applies(vacuum, Map.of()));
     }
 
+    private static Map<String, Column.Button> footer(OperationColumn.Input in, HeatControlColumn.Texts t) {
+        var out = new LinkedHashMap<String, Column.Button>();
+        for (var b : OperationColumn.footerButtons(in, true, t)) out.put(b.key(), b);
+        return out;
+    }
+
     /**
-     * WP8 of batch 2026-11-16-fouling-corrosion: the Integrity group after the set points, its Clean key first (a widget before
-     * the readings), acting only while the column stands and no command waits; the trays' capacity and the wall left in %, the
-     * rate in mm/y, the material named. A column with no unit has no group.
+     * WP8 of batch 2026-11-16-fouling-corrosion, layout B (owner, 2026-11-16): the integrity as a table on the glass after the
+     * last solve, the material in its heading, the trays' capacity and the wall left in %, the rate in mm/y; Clean on the
+     * footer between Close and Apply, acting only while the column stands and no command waits. The door holds neither. A
+     * column with no unit has no table and no Clean.
      */
     @Test
     void theIntegrityGroupShowsTheWearAndCleanActsOnlyWhileTheColumnStands() {
         var t = new HeatControlColumnTest.Recording("gui.icheme.");
         var u = UNITS.getFirst();
         var s = designs().get(1);
-        var run = OperationColumn.rows(new OperationColumn.Input(running(s, Phase.RUNNING), false, u), t);
-        var group = (Column.Group) run.getLast();
-        assertEquals("Integrity", group.title());
-        assertFalse(buttons(run).get("clean").active(), "a running column is not cleaned");
-        assertInstanceOf(Column.Buttons.class, group.rows().getFirst(), "the key before the readings");
-        var readings = new LinkedHashMap<String, Column.Reading>();
-        for (var r : group.rows()) if (r instanceof Column.Reading reading) readings.put(reading.key(), reading);
-        assertEquals(List.of("wear:trays", "wear:wall", "wear:rate"), List.copyOf(readings.keySet()));
-        assertEquals("86", readings.get("wear:trays").value());
-        assertEquals("72", readings.get("wear:wall").value());
-        assertEquals("0.42", readings.get("wear:rate").value());
-        assertEquals("mm/y", readings.get("wear:rate").unit());
-        assertTrue(group.rows().stream().anyMatch(r -> r instanceof Column.Paragraph p && p.text().equals("Material: Carbon steel")));
-        var standing = OperationColumn.rows(new OperationColumn.Input(stopped(s), false, u), t);
-        assertTrue(buttons(standing).get("clean").active(), "a column that stands is cleaned");
-        assertFalse(buttons(OperationColumn.rows(new OperationColumn.Input(stopped(s), true, u), t)).get("clean").active(), "not while a command waits");
-        assertFalse(buttons(OperationColumn.rows(new OperationColumn.Input(OperationView.idle(Phase.STOPPED, "STOPPED", s, true), false, u), t)).containsKey("clean"),
-                "a column with no unit has nothing to clean");
+        var running = new OperationColumn.Input(running(s, Phase.RUNNING), false, u);
+        var wear = OperationColumn.wear(running.view(), t);
+        assertArrayEquals(new String[]{"Integrity", "Carbon steel"}, wear.get(0));
+        assertArrayEquals(new String[]{"Tray capacity", "86 %"}, wear.get(1));
+        assertArrayEquals(new String[]{"Wall left", "72 %"}, wear.get(2));
+        assertArrayEquals(new String[]{"Wall rate", "0.42 mm/y"}, wear.get(3));
+        assertSame(wear.getFirst()[0], OperationColumn.tables(running.view(), u, t).get(3).getFirst()[0], "the integrity fourth, after the last solve");
+        assertArrayEquals(wear.get(1), OperationColumn.tables(running.view(), u, t).get(3).get(1));
+        var idle = new OperationColumn.Input(OperationView.idle(Phase.STOPPED, "STOPPED", s, true), false, u);
+        assertEquals(List.of(), OperationColumn.wear(idle.view(), t), "a column with no unit has no table");
+        // The door: Control and the set points only.
+        var run = OperationColumn.rows(running, t);
+        assertFalse(buttons(run).containsKey("clean"), "no Clean on the door");
+        assertTrue(run.stream().noneMatch(r -> r instanceof Column.Group g && g.title().equals("Integrity")), "no Integrity group on the door");
+        // The footer: Close, Clean, Apply.
+        assertEquals(List.of("close", "clean", "apply"), List.copyOf(footer(running, t).keySet()));
+        assertFalse(footer(running, t).get("clean").active(), "a running column is not cleaned");
+        assertTrue(footer(new OperationColumn.Input(stopped(s), false, u), t).get("clean").active(), "a column that stands is cleaned");
+        assertFalse(footer(new OperationColumn.Input(stopped(s), true, u), t).get("clean").active(), "not while a command waits");
+        assertEquals(List.of("close", "apply"), List.copyOf(footer(idle, t).keySet()), "a column with no unit has nothing to clean");
         var conditions = OperationColumn.conditions(stopped(s), t);
         assertEquals("Trays fouled", conditions.get(1)[0]);
         assertEquals("60 %", conditions.get(1)[1], "the trays' capacity left");
