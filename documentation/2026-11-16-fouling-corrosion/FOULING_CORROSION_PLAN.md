@@ -1,6 +1,8 @@
-# Fouling, corrosion and erosion system: plan (revision 2)
+# Fouling, corrosion and erosion system: plan (revision 3)
 
 Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0). Status: plan, no code.
+
+Revision 3 (owner, 2026-11-16): a column stops only when a compound solidifies inside it; a frozen feed melts as today (section 13, WP7).
 
 Revision 2 (owner, 2026-11-16): four materials instead of eight, one per structure; particulate erosion, with control valves; columns pass inert particles to the bottoms and stop only for freezing. Changed sections: 1, 4, 5, 6.3, 7, 9, 12 to 18.
 
@@ -283,11 +285,11 @@ Today (section 2): the running column does the first part. The simulator's colum
 Proposal:
 
 1. **Simulator column** (`ColumnBlockSolve.solve`): the feed's inert solids (`solids().withoutCrystals()`) go to the bottoms stream unchanged in amount; they enter at the feed temperature and leave at the bottoms temperature, and that sensible heat (`Σ m c_p (T_bottoms − T_feed)`) is added to the reboiler duty. A column with no bottoms product refuses as today. The same holds for a steam row's and a pumparound return's solids.
-2. **Freezing, simulator**: a feed (or steam row) that carries crystals is refused with `column.frozen` ("Something is frozen in this column's feed: <compound>."). After the solve, each product is flashed on the network's thermo already (`ColumnSolve`, one flash per product); a product whose flash holds a crystal phase refuses the solve with `column.frozen`, naming the product and the compound. The top product is the coldest liquid of the column, so this covers its trays.
-3. **Running column** (`ColumnOperation.credit`): an arriving crystal is still booked as today (melted into the account with its true energy: conservation), and it now raises a new `Condition.FROZEN` of rank `TRIP`: the cycle takes nothing, as `CLOSURE` does, until the inlet delivers no crystal for one cycle and the player starts the column again. The same condition comes from the solve's product flash (point 2), through `SOLVE_REFUSED`'s path with the text "frozen".
+2. **A frozen feed is not a stop.** A crystal that arrives melts into the feed, in both columns: the running column as today (`ColumnOperation.melted`), the simulator column the same way (the crystal's moles join its compound, the stream's enthalpy already holds the crystal's).
+3. **Solidification inside the column is the stop.** After a solve, each product is flashed on the network's thermo already (`ColumnSolve`, one flash per product). A product whose flash holds a crystal phase means a compound solidifies in the column: the top product is its coldest liquid, the bottoms its heaviest. The simulator refuses the run with `column.frozen` ("<compound> solidifies in this column at its <product>."). The running column raises a new `Condition.FROZEN` of rank `TRIP`: the cycle takes nothing, as `CLOSURE` does, until a solve of the state taken shows no crystal.
 4. `column.solids` and its lang line are removed.
 
-**Reading taken (D6).** "Only stop when something freezes" is read as: freezing is now a stop, in the simulator and in the running column. The other reading (the running column keeps melting crystals silently and only the simulator refuses them) changes point 3 alone.
+**Decided (D6, owner 2026-11-16: "only when solidification happens inside column").** A column stops for solids only when a compound solidifies inside it. Arriving crystals and inert particles never stop it.
 
 Nothing in the V3 solver changes: particles are not on its axis.
 
@@ -300,7 +302,7 @@ Nothing in the V3 solver changes: particles are not on its axis.
 
 ## 15. Decisions
 
-Taken by the agent (reversible until the first code commit that uses them): D1 constructed equipment, and control valves for erosion; D2 one material per structure; D3 the time scale; D4 failure by the existing failures; D5 a failed trim fails open; D6 freezing stops a column, in the simulator and running; the matrix and erosion numbers; repair and cleaning rules as section 10.
+Taken by the agent (reversible until the first code commit that uses them): D1 constructed equipment, and control valves for erosion; D2 one material per structure; D3 the time scale; D4 failure by the existing failures; D5 a failed trim fails open; D6 (the owner's) a column stops only when a compound solidifies inside it; the matrix and erosion numbers; repair and cleaning rules as section 10.
 
 The owner's, 2026-11-16:
 
@@ -326,7 +328,7 @@ The owner's, 2026-11-16:
 | Format | Now | This batch |
 |---|---|---|
 | Fluid facts schema | 26 | 27: per device `wallLoss`, `fouling`, `wrecked` in `MachineFacts`, each written only when not at its default; a control valve's trim health in the health map that exists |
-| Column facts | in schema 26 | no new field: `FROZEN` is a condition, state |
+| Column facts | in schema 26 | no new field: `FROZEN` is a condition, state, set again by the next solve |
 | Equipment shape fields | 12 | 13: `material` |
 | Wire protocol | `icheme-2` | `icheme-3`: views carry integrity and trim; the constructor payload carries the material |
 | Simulator sheet file | 2 | 3 |
@@ -350,7 +352,7 @@ About 4 500 lines of production code: four stages, each leaving `main` working (
 | A | WP4 | Integrity group and Trim meter on the device pages, status words, drip particles, the weep loop | client; runtime presentation | WP2, WP3 |
 | B | WP5 | Fouling: `Films.fouled`, the passage diameter, the level steps, cleaning, the heat page, sizing on design `Rf` | fluid laws, flowsheet: `SheetSizing` | stage A |
 | C | WP6 | Simulator `METALLURGY` tab, Auto and Manual, Send to block, sheet file 3, the tour and guide page | flowsheet, client | WP1, WP3 |
-| D | WP7 | Columns and particles (section 13): `ColumnBlockSolve`, `ColumnSolve`'s product flash, `Condition.FROZEN`, `ColumnOperation.credit`; tests and one GameTest | plant, flowsheet: `ColumnOperation` | none: it can run first, beside WP1 |
+| D | WP7 | Columns and particles (section 13): `ColumnBlockSolve`, `ColumnSolve`'s product flash, `Condition.FROZEN` in `ColumnOperation`'s solve handling; tests | plant, flowsheet: `ColumnOperation` | none: it can run first, beside WP1 |
 | each | | Code guide chapter `integrity.md`, `FORMATS.md` rows, README history, final lane, translation commit at the merge | documents | |
 
 WP7 touches no file of the others and no format, so it can merge on its own as a small batch. WP2 and WP3 write disjoint files and can run as two threads at once; so can WP5 and WP6. Each work package gets a full brief (files, methods, numbers, tests, pitfalls) when it starts.
@@ -375,14 +377,14 @@ New package `src/main/java/com/wormzjl/icheme/science/integrity/`, pure (no Mine
 
 ### WP7 in detail
 
-- `science/flowsheet/unit/ColumnBlockSolve.solve`: replace line 119's refusal by: `var inert = feed.solids().withoutCrystals(); if (!feed.solids().crystals().isEmpty()) throw new FlowsheetFailure("column.frozen", <compound>)`. Carry `inert` (plus the steam rows' and returns') to the bottoms stream where the products are written (`write`), with `thermo.atTemperature(..., solids)` at the bottoms' state so the stream's enthalpy includes them; add `Σ m c_p (T_bottoms − T_in)` to the reboiler duty the unit reports. A column with no bottoms keeps a refusal (`column.solids.no_bottoms`).
-- `science/plant/column/ColumnSolve` (the one flash per product, about line 360): when a product's flash holds a crystal phase, the solve fails with a typed reason "frozen" naming product and compound. The simulator maps it to `column.frozen`; the running column to `SOLVE_REFUSED` with that text.
+- `science/flowsheet/unit/ColumnBlockSolve.solve`: replace line 119's refusal by: `var inert = feed.solids().withoutCrystals();` and the feed's crystals melted into its amounts (each population's mass over its compound's molar mass, as `ColumnOperation.melted` does; the feed's enthalpy is the stream's own, crystals included). Carry `inert` (plus the steam rows' and returns') to the bottoms stream where the products are written (`write`), with `thermo.atTemperature(..., solids)` at the bottoms' state so the stream's enthalpy includes them; add `Σ m c_p (T_bottoms − T_in)` to the reboiler duty the unit reports. A column with no bottoms keeps a refusal (`column.solids.no_bottoms`).
+- `science/plant/column/ColumnSolve` (the one flash per product, about line 360): when a product's flash holds a crystal phase, the result carries a typed finding "frozen" naming product and compound. The simulator maps it to `column.frozen`; the running column to `Condition.FROZEN`.
 - `science/plant/column/Condition`: `FROZEN(Rank.TRIP, "frozen")`, appended. `ColumnStatus` words it as a trip.
-- `runtime/fluid/ColumnOperation.credit` (about line 988): where `solid.crystals()` is not empty, after the booking that exists, mark the unit's cycle state frozen for that inlet; `cycle` takes nothing while any inlet is marked (the path `CLOSURE` uses); the mark clears after one booking span with no crystal at that inlet. State, not a fact.
+- `runtime/fluid/ColumnOperation`, where a finished solve is taken (`refresh` and the path that sets `SOLVE_REFUSED`): a frozen finding sets `FROZEN` on the unit's cycle state instead of installing the table or keeping the old one running; `cycle` takes nothing while it stands (the path `CLOSURE` uses); the next solve of the state taken without a finding clears it and installs its table. `credit` and `melted` do not change. State, not a fact.
 - Lang (`en_us.json` only): `column.frozen`, `column.solids.no_bottoms`; remove `column.solids`.
-- Tests: `ColumnBlockSolveTest` or the class that holds the unit's refusals (a feed with inert particles gives them at the bottoms, mass exact, duty higher by the sensible heat; a feed with ice refuses); `ColumnCycle` or `ColumnOperation` runtime test (a crystal span trips, a clean span clears); the existing solids-to-bottoms GameTest still passes; one new GameTest for the trip only if the runtime test cannot reach `credit`.
+- Tests: `ColumnBlockSolveTest` or the class that holds the unit's refusals (a feed with inert particles gives them at the bottoms, mass exact, duty higher by the sensible heat; a feed with ice runs, its ice counted as its compound, energy exact; a column whose top product is below a compound's freezing line refuses with `column.frozen`); a `ColumnOperation` runtime test (a solve with a frozen finding trips, a later clean solve clears; an arriving crystal alone trips nothing); the existing solids-to-bottoms GameTest still passes.
 - Selection of test classes: `node tools/merge-lane/affected.mjs` on the changed files (a column change reaches `FlowsheetExamplesTest` and `ColumnSolveTest` indirectly).
-- Pitfalls: a slurry line slower than its deposition speed plugs, so a test's lines are sized; crystals melt on arrival in a junction above their melting point, so a test's ice must reach the inlet cold; the product flash already runs, so no extra flash is added; the code guide says the column takes only package views without crystals, so the feed check uses the stream's own solids, never the column's package.
+- Pitfalls: a slurry line slower than its deposition speed plugs, so a test's lines are sized; the frozen case needs a package view with a crystal (water ice or CO2) and a top product cold enough, for example a CO2-rich overhead below 216 K; the product flash already runs, so no extra flash is added; the code guide says the column takes only package views without crystals, so the finding comes from the network thermo's product flash, never from the column's package; trays between the products are not flashed (no added cost), which can miss a solid that forms only mid-column.
 
 ## 19. Risks
 
@@ -390,5 +392,5 @@ New package `src/main/java/com/wormzjl/icheme/science/integrity/`, pure (no Mine
 - A heat side closed by a failure must not be reopened by its own built-in control or by a layout refresh (`StructureRegistration` must carry it, as it carries `breached`).
 - A repair-rule change is visible to existing worlds: a worn pump must now be stopped before its kit is accepted.
 - A trim that fails open can overfill or depressure what its loop held. That is the intended consequence; the status line and the DCS alarm name the valve.
-- D6 makes a running column trip where it ran on before (a feed with ice or dry ice). Worlds with such a column see the trip at their first crystal after the update.
+- D6 makes a running column trip where it ran on before, when a product of its solve would hold a crystal. A feed with ice or dry ice alone changes nothing.
 - The matrix and erosion numbers are fits. A change of a factor is a data edit in one table and moves no solver reference.

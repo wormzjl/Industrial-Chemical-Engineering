@@ -14,6 +14,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 - 2026-11-16, owner, after the plan: "Need a smaller list of materials, keep in mind this is not for full realism"; "Allow distillation column to handle inert particles and pass particulates to bottom output, only stop when something freezes"; "Add particulate erosion to equipment, especially control valves". Plan revision 2: four materials (carbon steel, chrome steel, stainless steel, nickel alloy), one per structure (D2 changed); erosion by `φ v^2.6` on heat-side walls, a `SOLIDS` wear fault for pumps and a trim health for control valves that fails open (D5, section 8); columns (section 13, WP7). Survey for it: the running column already moves inert solids to the bottoms and melts arriving crystals (`ColumnOperation`); the simulator column refuses every solid (`ColumnBlockSolve` line 119); nothing stops for freezing. Reading taken (D6): freezing becomes a stop in the simulator and a trip in the running column. No code, no test run.
 
+- 2026-11-16, owner, on D6: "only when solidification happens inside column". Plan revision 3: an arriving crystal melts into the feed in both columns and stops nothing; a product flash of the solve that holds a crystal phase refuses the simulator's run (`column.frozen`) and trips the running column (`Condition.FROZEN`). `ColumnOperation.credit` and `melted` stay as they are.
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.
@@ -25,6 +27,5 @@ None yet.
 ## Open items
 
 - The owner's review of the plan; then O4: the format reservation on `main` and the approval of WP1 (sub-thread, Opus medium).
-- D6: the owner may prefer that the running column keeps melting arriving crystals and only the simulator refuses them.
 - `wall_weep` candidates (three, synthesised) once the build starts.
 - Whether another live batch holds the hot files named above.
