@@ -1,6 +1,6 @@
 # 2026-11-16 solute and reaction system
 
-Status: Planned (design, 2026-11-16). No code. Branch `claude/solute-reaction-system-01ef6c`, cut from `main` at `adb413b4d` (0.34.0). It builds on batch `2026-11-16-fouling-corrosion`, which is not on `main` yet; no work package starts before that batch merges.
+Status: Planned (design, 2026-11-16). No code. Branch `claude/solute-reaction-system-01ef6c`, cut from `main` at `adb413b4d` (0.34.0). It builds on batch `2026-11-16-fouling-corrosion`, on `main` since 0.34.3 (`228443411`, 2026-11-16); this branch does not hold that merge yet, so the build starts from a merge of `main` into it.
 
 Purpose: solutes as tags on the pseudocomponents and on water (salt, sulfur, nitrogen, metals, resins, asphaltenes and ordinary solutes), carried with the flow without touching the solver; transformations of tags under stated conditions in equipment (desalting, chloride hydrolysis to HCl, acid water corrosion, coking as fouling and fines); an electric desalter; corrosion evaluated per part of a column and its exchangers; the frame and the model requirements for the later catalytic units.
 
@@ -35,7 +35,7 @@ None yet.
 - Papers to read (review 7.5; the owner offered to fetch them): for this batch Gray, Eaton and Le 2008, API RP 581's acid tables, Wiehe 1993, Bromley 1973, Polley 2002; ten more for the reactor design.
 - Before WP4b: Bromley's `B` for hydrogen chloride is still recalled; the other constants of the law are read.
 - Before the amine and sour water design: read the fitted constants (Kent–Eisenberg, SWEQ), and decide the bound gas as a compound (review 4.5).
-- The start of the build: after the fouling-corrosion merge; then the format numbers are reserved on `main` (facts schema 30, state format 53, `icheme-6`, the next sheet file number) on the owner's word, and each work package's delegation is approved one by one.
+- The start of the build: the fouling-corrosion batch is on `main` (0.34.3), so the build can start on the owner's word. First merge `main` into this branch, read the format numbers again from `main` (the plan's facts schema 30, state format 53, `icheme-6` and sheet file number were written before that merge) and reserve them; each work package's delegation is approved one by one.
 - Before WP5: read the hydrochloric acid table of API RP 581 Part 2 Annex B against M12's anchors.
 - Before WP6: the desalter's table on the mod's own oil viscosities; fit the drop size once.
 - The next design task: the catalytic and thermal units (review sections 3 and 4), starting with the inputs lacking: hydrocarbon type tags, entropy on `thermochemistry`, heat capacity above 900 K.
