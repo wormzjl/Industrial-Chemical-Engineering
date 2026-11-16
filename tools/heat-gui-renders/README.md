@@ -1,5 +1,7 @@
 # heat-gui-renders
 
+2026-11-16, batch `2026-11-16-fouling-corrosion`, layout B of the column's Operation page: `OperationPrototypes` draws the integrity table on the glass and the footer from `OperationColumn.footerButtons` (Close, Clean, Apply; an inactive key drawn off); `operation-integrity-stopped` is unscrolled. Run `GuiPrototypes` with `-Donly=operation`, the class path `build/classes/java/main;build/classes/java/test;build/resources/main;<gson-2.10.1.jar>`.
+
 The 0.22.0 equipment-protection follow-up (`efa22cfe`, 2026-11-07) adds `equipment-constructor-removal` to `GuiPrototypes.java`: the shared constructor builder with its physical target and Deconstruct action, in both themes and at both scroll positions. Use `-Donly=equipment-constructor-removal` with the existing prototype recipe; output belongs in an indexed worktree `tmp/` folder.
 
 Purpose: software renders of the heat units' Control-tab flowsheet, so its layout is judged without a game client (owner: enough client testing).

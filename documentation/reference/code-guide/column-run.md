@@ -45,7 +45,7 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | `runtime/fluid/FluidWorldAuthority` (`startColumn`, `stopColumn`, `editColumn`, `columnRemoved`, `columnView`, `columnCondenser`, `columnAlarms`, `columnLoop`, `columnInstrument`) | Start and Stop as one queued ledger event each; utility sides (`utilitySides`), held members; [runtime-registry.md](runtime-registry.md) | |
 | [`science/fluid/network/PortPlan`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/PortPlan.java), `PassiveStepSolver.ports` | One slice's mass target on a port's valve; an outlet's generator stated at its product | 32 |
 | [`science/equipment/ColumnOperatingPoint`](../../../src/main/java/com/wormzjl/icheme/science/equipment/ColumnOperatingPoint.java) | The design's solved input, a shape field of `ColumnTrays` (`operating`): package, assay, components, feed, pressures, condenser, reflux, reboiler, steam, draws, pumparounds; `of(input)`, `fits`, `input(trays, diameter)` | 123 |
-| [`client/gui/common/OperationColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/OperationColumn.java) | The Operation page ([client-equipment-screens.md](client-equipment-screens.md)) | 465 |
+| [`client/gui/common/OperationColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/OperationColumn.java) | The Operation page ([client-equipment-screens.md](client-equipment-screens.md)) | 493 |
 
 ## Main flow
 
