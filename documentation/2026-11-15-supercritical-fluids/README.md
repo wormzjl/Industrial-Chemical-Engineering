@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1, S2, S3, S4, S4b, S5 and S8 done; main 0.33.0 merged in 2026-11-16). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0), main merged at `66a87f9d5` (0.33.0).
+Status: **Implemented** 2026-11-16 (0.34.0): S0, S1, S2, S3, S4, S4b, S5, the column feed item and S8; one final lane; main 0.33.0 merged in 2026-11-16. Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0), main merged at `66a87f9d5` (0.33.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -157,6 +157,9 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   by one step-path split onto main 0.31.0's own path, each inside `NEWTON_TOLERANCE` or `STATE_CAP`. No defect found;
   owner options A (accept, recommended) and B (an instrumented trace, then B1).
   [MOVED_RESULTS_TRACE_REVIEW.md](MOVED_RESULTS_TRACE_REVIEW.md).
+- 2026-11-16: the owner's decisions on the final lane ("Trace first", then "Accept and merge"); version 0.34.0 (the
+  CHANGELOG heading, `mod_version`, this status, the index row) and the merge to `main`, by the main thread. The plan's
+  section 2b, point 22.
 
 ## Documents
 

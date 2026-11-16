@@ -110,3 +110,16 @@ column's rule, option (C) of 2026-10-27; the design-pipe cap if that rule does n
 Asked "Approve the merge-preparation and final-lane threads, with version 0.34.0?" the owner answered "Approve all". So: a
 sub-thread for merge preparation (Opus medium, new, this worktree); after it a sub-thread for the final lane (Opus medium,
 new, this worktree); version 0.34.0. A clean lane merges to main without a further question (the earlier standing answer).
+
+## The final lane: four unannounced moved printed results (2026-11-16)
+
+The lane passed every test with no hold, but four printed values moved that no stage announced; the merge stopped. Asked
+"Trace the three unexplained moved values before merging?" the owner answered "Trace first". So: a sub-thread (Opus high,
+new, a scratch worktree of its own for the runs, at most five filtered runs, no code change) found the stage and the
+cause of each.
+
+## The moved values accepted, the merge (2026-11-16)
+
+Asked "Accept the three moved values and merge to main as 0.34.0?" the owner answered "Accept and merge". So: the four
+printed lines stand as moved (MOVED_RESULTS_TRACE_REVIEW.md, FINAL_LANE_REVIEW.md), nothing is re-recorded, the version
+is 0.34.0 and the batch merges to main. Not pushed.

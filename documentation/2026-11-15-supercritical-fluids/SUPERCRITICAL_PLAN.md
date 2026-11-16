@@ -210,6 +210,19 @@ Decisions after S2b's stop conditions (2026-11-15):
 21. **Main moved once more** (`ab6298d03`: the fouling and corrosion batch reserved facts schema 29, shape fields 13,
    sheet file 3 and `icheme-5`; documents only). Merged into the branch by the main thread. `icheme-4`, reserved for
    S8, was not needed and its row is gone; main's row goes with this batch's merge.
+22. **The final lane, its four moved printed lines, and the merge** ([FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md),
+   [MOVED_RESULTS_TRACE_REVIEW.md](MOVED_RESULTS_TRACE_REVIEW.md)). The lane, once at `a599419dd`: 3,938 tests with no
+   failure, chain-100 exact, 114 of 114 GameTests, 33 of 33 junction lines, the campaign 993 / 995 after one replay /
+   1000 with no new hold left; the digest's line 313 re-recorded. Four printed lines that no test asserts moved with no
+   stage naming them, so the merge stopped. One is S1's removed band (five frost-point rows, the grade label). Owner,
+   2026-11-16, asked "Trace the three unexplained moved values before merging?": "Trace first". The trace (five runs by
+   stage): S2b or S2c moved all three; the pump drain's trace amount by rounding, the melt gate's creep by 2.1e-9
+   inside the Newton tolerance, and the cryogenic methane vessel's sixth interval onto the other of two step paths (the
+   one main 0.31.0 printed), inside the 5 % step cap. The main thread checked the two branches in the code: the residual
+   is exactly zero at or below a quarter of the critical density, and a liquid slot takes the dense law only on a
+   supercritical isotherm, so a settled ordinary state is bit for bit. That the new branches are reached only by trial
+   states in two of the three cases is read from the code, not traced. Owner, asked "Accept the three moved values and
+   merge to main as 0.34.0?": "Accept and merge".
 
 ## 3. Stages
 

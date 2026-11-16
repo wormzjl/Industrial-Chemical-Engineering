@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-11-16
+
 ### Added
 
 - Supercritical and dense fluids (`2026-11-15-supercritical-fluids`; stages S0 to S5, the column feed item, S8; on `claude/supercritical-fluid-support-d0ffa4`):
@@ -32,7 +34,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
   - Data: nine datasets widen their pressure range (carbon dioxide, nitrogen, methane, ethane, propane and hydrogen to 30 MPa, ethylene 20 MPa, n-hexane 4.57 MPa, toluene 6.19 MPa) with their evidence and revisions; every dataset has a `critical_volume` sub-record, the five rare gases included (S3 `ceefe0904`, `6190ca76f`, `0f4230144`). The three packages' scientific revision, every `fluidRevision` and the viscosity revision moved; the simulator examples are stamped on the new identity (`acd894c93`); the identity bound is 21000 (`1b0fc7770`).
   - The phase band boxes 3 and 4 are removed; `PhaseTraits` carries the attraction a/(bRT), `supercriticalIsotherm()` and `reducedDensity()` (S1 `304808f9d`).
   - Formats (`documentation/reference/FORMATS.md`): fluid facts schema 28 and checkpoint state format 51 (a plunger pump's law; corpus `schema-28`); equipment kind `PLUNGER_PUMP`.
-  - Results that moved: the engine digest 2 of 429 lines in S1 (pure nitrogen in the old box 4); S3's 30 MPa ranges change the grade of states between 10 and 30 MPa from `EXTRAPOLATED` to `ESTIMATED_DECLARED_ERROR` with every number the same (three test cases moved to 36 MPa, `137e05542`; the digest's line 313 is re-recorded by the final lane); the Tia Juana crude at 901 K and 250 kPa, refused before, is a vapour. No value of a non-dense state moved in S4b or S5.
+  - Results that moved: the engine digest 2 of 429 lines in S1 (pure nitrogen in the old box 4); S3's 30 MPa ranges change the grade of states between 10 and 30 MPa from `EXTRAPOLATED` to `ESTIMATED_DECLARED_ERROR` with every number the same (three test cases moved to 36 MPa, `137e05542`; the digest's line 313 re-recorded by the final lane, `a599419dd`); the Tia Juana crude at 901 K and 250 kPa, refused before, is a vapour. No value of a non-dense state moved in S4b or S5. Four printed, unasserted lines moved in the final lane and were accepted by the owner: `WaterIntoCryogenicMethaneTest` interval 6 takes main 0.31.0's step path (7 substeps for 8; water 1,320.8 to 1,316.3 mol, ice 18.452 to 18.526 kg), `HoldClassWorldsTest` melt gate 778's creep by 2.1e-9, `PumpBottomPortDrainTest`'s trace condensed by 4e-13 (S2b or S2c, inside the step cap and the Newton tolerance: `MOVED_RESULTS_TRACE_REVIEW.md`), and five dense-carrier rows of `G4F2CarbonDioxideNitrogenFrostPointHoldoutTest` read `ESTIMATED_DECLARED_ERROR` for `RESEARCH_ONLY` (S1's removed band).
 
 ## [0.33.0] - 2026-11-16
 
