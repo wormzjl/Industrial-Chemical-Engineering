@@ -62,6 +62,48 @@ final class NetworkStreams {
         cp/=moles;
         return cp/(cp-R);
     }
+    /** The least isentropic exponent {@link #isentropicExponent} gives, and its value for a state it cannot read. */
+    static final double LEAST_EXPONENT=1.05,NO_EXPONENT=1.4;
+    /**
+     * The isentropic exponent {@code n = K_s/P} of the phase a plunger pump draws from {@code state} (batch
+     * 2026-11-16-supercritical-followups, P1): {@code K_s = −v/(∂v/∂P)_s}, {@code (∂v/∂P)_s = (∂v/∂P)_T + T (∂v/∂T)_P²/c_p}.
+     * The phase: the liquid slot's where the state holds liquid, the aqueous slot's where it holds only that, else the slot
+     * of its one fluid ({@link State#oneFluidSlot()}), else the vapour's. {@code v} and {@code (∂v/∂P)_T} are the state's
+     * own phase's; {@code (∂v/∂T)_P} and the real {@code c_p = (∂h/∂T)_P} the central differences of that phase evaluated
+     * again at {@code T (1 ± 10⁻⁴)} on its root and amounts (the phase record carries neither). An ideal gas gives γ;
+     * water at 300 K and 1 MPa about 2,200. Where either evaluation is refused or lands on another root (another
+     * vapour-like flag, or a volume a twentieth away), or {@code c_p} is not positive or {@code (∂v/∂P)_s} not negative, the
+     * isothermal exponent {@code 1/(κ_T P)} of the phase's own compressibility stands in: at most the isentropic one, so the
+     * clearance loss errs high and a liquid never reads as a gas. {@link #NO_EXPONENT} only where that is not finite and
+     * positive, or the state holds no fluid. At least {@link #LEAST_EXPONENT}.
+     */
+    public double isentropicExponent(State state) {
+        int slot=state.slotVolume(State.LIQUID)>0?State.LIQUID:state.slotVolume(State.AQUEOUS)>0?State.AQUEOUS
+                :state.oneFluidSlot()>=0?state.oneFluidSlot():state.vaporVolume()>0?State.VAPOR:-1;
+        var phase=slot<0?null:state.phase(slot);
+        if(phase==null)return NO_EXPONENT;
+        double t=state.temperature(),p=state.pressure(),h=1e-4*t,v=phase.molarVolume(),dvdp=phase.volumePressureDerivative();
+        double n=isentropic(phase,t,p,h,state.amountsView(slot),slot==State.VAPOR?com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root.VAPOR
+                :com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root.LIQUID,slot!=State.VAPOR&&state.vaporVolume()>0);
+        if(!(n>0&&Double.isFinite(n)))n=-v/(dvdp*p);
+        return n>0&&Double.isFinite(n)?Math.max(LEAST_EXPONENT,n):NO_EXPONENT;
+    }
+    /** {@link #isentropicExponent} by its differences, NaN where they cannot be read. */
+    private double isentropic(HydrocarbonModel.Phase phase,double t,double p,double h,double[] amounts,com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root root,boolean beside) {
+        HydrocarbonModel.Phase up,down;
+        try {
+            up=model.hydrocarbon.phase(t+h,p,amounts,root,model.hydrocarbon.prepare(t+h),beside);
+            down=model.hydrocarbon.phase(t-h,p,amounts,root,model.hydrocarbon.prepare(t-h),beside);
+        } catch(IllegalArgumentException lost) {
+            return Double.NaN;
+        }
+        double v=phase.molarVolume(),dvdp=phase.volumePressureDerivative();
+        for(var other:new HydrocarbonModel.Phase[]{up,down})if(other.vaporLike()!=phase.vaporLike()||!(Math.abs(other.molarVolume()-v)<.05*v))return Double.NaN;
+        double dvdt=(up.molarVolume()-down.molarVolume())/(2*h),cp=(up.molarEnthalpy()-down.molarEnthalpy())/(2*h);
+        double isentropicSlope=dvdp+t*dvdt*dvdt/cp;
+        if(!(cp>0)||!Double.isFinite(cp)||!(isentropicSlope<0))return Double.NaN;
+        return -v/(isentropicSlope*p);
+    }
     /**
      * The reduced densities {@code v_c / v} between which one fluid goes from gas-like to liquid-like (S2b and S4 of batch
      * 2026-11-15-supercritical-fluids): gas-like at or below {@link #GAS_LIKE_UNTIL}, liquid-like from

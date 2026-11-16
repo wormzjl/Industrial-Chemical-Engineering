@@ -352,7 +352,9 @@ public final class SimulatorPage {
             case SIZING -> {
                 sizing(c, skin, x, sizing, frame, w);
                 kit.place(SizingPage.rows(x, sizing), x.m());
-                return kit.draw(c, skin, mouseX, mouseY);
+                String hover = kit.draw(c, skin, mouseX, mouseY);
+                // A limits row's advice (P2 of batch 2026-11-16-supercritical-followups, item 11), where the door has none.
+                return hover != null ? hover : SizingGlass.hover(x, sizing, c.measure(), SimulatorFrame.inner(glass(frame, w)), mouseX, mouseY);
             }
             case BASIS -> {
                 basis(c, skin, x, frame, w);

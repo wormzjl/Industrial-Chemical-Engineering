@@ -27,6 +27,16 @@ interface V3PropertyPackage {
         return null;
     }
 
+    /**
+     * The equilibrium engine on the column's own kernel ({@link V3FeedEngine}), built on first use; null where the kernel
+     * is not the derived one (a package built outside a catalog, a learned model's lens), so no engine evaluates it.
+     *
+     * @throws IllegalArgumentException where the engine cannot be built on this package
+     */
+    default V3FeedEngine feedEngine() {
+        return null;
+    }
+
     /** Non-blocking, dataset-owned evidence copied into every calculation's audit and diagnostics. */
     default List<String> advisoryEvidence() {
         return List.of();

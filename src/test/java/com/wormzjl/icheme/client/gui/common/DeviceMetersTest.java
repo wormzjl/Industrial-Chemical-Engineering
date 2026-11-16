@@ -106,9 +106,11 @@ class DeviceMetersTest {
         var view = new FluidView(3, 1, 0, 0, "STEADY: flowing", gas, 5.0, List.of(), 2e5, 1, List.of(), null, null, List.of(), null, null, null, null, null, pump, null, null, null, null);
         var m = new DeviceMeters(new DeviceMeters.Data(Kind.PUMP, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MASS,
                 TemperatureUnit.CELSIUS, PressureUnit.BAR, FlowRateUnit.PER_MINUTE, false, T);
-        assertEquals(new DeviceColumn.Suction("—", "—", "89.6", "100.0", "—"), m.suction(), "two-phase or unknown: the gas share");
         double head = com.wormzjl.icheme.science.machine.GasEntrainment.headShare(.896, 7.405e6);
         assertEquals(.596, head, .001);
+        // Two-phase or unknown: the gas share, and with a centrifugal curve the head share beside it (P2 of batch
+        // 2026-11-16-supercritical-followups, item 10; before P2 the page showed the gas share alone).
+        assertEquals(new DeviceColumn.Suction("—", "—", "89.6", "100.0", "—", false, DeviceMeters.value(100 * head)), m.suction(), "two-phase or unknown: the gas share and the head share");
         assertEquals(new DeviceColumn.Suction("—", "—", DeviceMeters.value(100 * head), "100.0", "—", true), m.withDense(2).suction());
         // A pump with no centrifugal curve (a plunger pump, a set-flow pump) loses no head on one dense fluid: no reading (S8).
         var plunger = new FluidView.Pump(null, null, .896, 1, null, null);
@@ -116,6 +118,34 @@ class DeviceMetersTest {
                 AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MASS, TemperatureUnit.CELSIUS, PressureUnit.BAR, FlowRateUnit.PER_MINUTE, false, T);
         assertEquals(new DeviceColumn.Suction("—", "—", "89.6", "100.0", "—"), other.suction(), "two-phase or unknown: the gas share, as before");
         assertEquals(new DeviceColumn.Suction("—", "—", "—", "100.0", "—"), other.withDense(2).suction());
+    }
+
+    /**
+     * P2 of batch 2026-11-16-supercritical-followups, item 12: the "Dense" share's colour is the vapour's blended to the oil's
+     * by the client's weight (0.648 at reduced density 0.8), the oil's own from 1; unknown weight or no dense row keeps the
+     * row's colour; a pump on a gas-only or liquid-only supply shows no head share beside its gas.
+     */
+    @Test
+    void theDenseSharesColourFollowsItsWeight() {
+        var gas = state(7.405e6, 310, 1.0, 270, new double[]{0, 0, 1.0}, new double[][]{{6000, 0}, {0, 0}, {6000, 0}}, 1.0);
+        var tank = new FluidView.Tank(2, false, 0, 0, 1.0, 7.405e6, 7.41e6);
+        var vessel = new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR, new FluidView(2, 1, 0, 0, "FULL", gas, 0, List.of(), null, 1, List.of(), null, null, List.of(), tank), AXIS, WEIGHTS, true, null, false, List.of()),
+                null, PhaseRatioBasis.VOLUME, TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_HOUR, true, T);
+        assertEquals(0, vessel.phases().denseColour(), "no dense row");
+        assertEquals(0, vessel.withDense(2).phases().denseColour(), "a weight the client did not read");
+        int vapour = DeviceColumn.PHASE_COLOURS[2], oil = DeviceColumn.PHASE_COLOURS[0];
+        assertEquals(DenseLabel.blend(vapour, oil, .648), vessel.withDense(new DenseLabel.Reading(2, .648)).phases().denseColour());
+        assertEquals(oil, vessel.withDense(new DenseLabel.Reading(0, 1)).phases().denseColour(), "from reduced density 1, the oil's own");
+        var split = (com.wormzjl.icheme.client.gui.common.kit.Column.Split) ((com.wormzjl.icheme.client.gui.common.kit.Column.Group) DeviceColumn.phases(vessel.withDense(new DenseLabel.Reading(2, .648)).phases(), T)).rows().get(1);
+        assertEquals(DenseLabel.blend(vapour, oil, .648), split.shares().get(2).colour(), "the share drawn");
+        assertEquals(oil, split.shares().get(0).colour(), "the other rows keep theirs");
+        for (double alpha : new double[]{0, 1}) {
+            var pump = new FluidView.Pump(null, null, alpha, 1, new FluidView.Curve(100 / 3600.0, 80, .70, 2950), null);
+            var view = new FluidView(3, 1, 0, 0, "STEADY: flowing", gas, 5.0, List.of(), 2e5, 1, List.of(), null, null, List.of(), null, null, null, null, null, pump, null, null, null, null);
+            var m = new DeviceMeters(new DeviceMeters.Data(Kind.PUMP, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MASS,
+                    TemperatureUnit.CELSIUS, PressureUnit.BAR, FlowRateUnit.PER_MINUTE, false, T);
+            assertNull(m.suction().headShare(), "one phase at the suction (α " + alpha + "): no head share");
+        }
     }
 
     @Test

@@ -55,14 +55,29 @@ public final class DenseLabel {
      * @param moles   the view's phase amounts, 3 rows on {@code axis}
      */
     public static int row(@Nullable FluidThermodynamics model, List<String> axis, double t, double p, double[] volumes, double[][] moles) {
-        if (model == null || volumes == null || volumes.length != 3 || moles == null || moles.length != 3 || !(t > 0) || !(p > 0)) return -1;
+        return read(model, axis, t, p, volumes, moles).row();
+    }
+
+    /**
+     * What the client's evaluation reads of a view's contents: the row that holds one dense fluid ({@link #row(FluidThermodynamics,
+     * List, double, double, double[], double[][])}) and its liquid-like weight {@code w} (the server's
+     * {@link FluidThermodynamics#pumpLiquidLikeWeight} of the same root's reduced density, {@link #weight(double)}); {@link #NONE}
+     * for contents that do not read "Dense fluid". P2 of batch 2026-11-16-supercritical-followups: the "Dense" share's colour.
+     */
+    public record Reading(int row, double weight) {
+        public static final Reading NONE = new Reading(-1, Double.NaN);
+    }
+
+    /** The row and weight of a view's contents on {@code model} ({@link Reading}); the same one cubic root as {@link #row}. */
+    public static Reading read(@Nullable FluidThermodynamics model, List<String> axis, double t, double p, double[] volumes, double[][] moles) {
+        if (model == null || volumes == null || volumes.length != 3 || moles == null || moles.length != 3 || !(t > 0) || !(p > 0)) return Reading.NONE;
         int row = -1;
         for (int i = 0; i < 3; i++) {
             if (!(volumes[i] > 0)) continue;
-            if (row >= 0) return -1;
+            if (row >= 0) return Reading.NONE;
             row = i;
         }
-        if (row < 0 || moles[row].length != axis.size()) return -1;
+        if (row < 0 || moles[row].length != axis.size()) return Reading.NONE;
         var components = model.components();
         double[] amounts = new double[components.size()];
         double total = 0;
@@ -70,17 +85,44 @@ public final class DenseLabel {
             double n = moles[row][c];
             if (!(n > 0)) continue;
             int at = components.indexOf(axis.get(c));
-            if (at < 0) return -1;
+            if (at < 0) return Reading.NONE;
             amounts[at] = n;
             total += n;
         }
-        if (!(total > 0)) return -1;
+        if (!(total > 0)) return Reading.NONE;
         try {
             var traits = model.hydrocarbon.phase(t, p, amounts, PengRobinsonKernel.Root.VAPOR).traits();
-            return traits != null && traits.supercriticalIsotherm() && traits.reducedDensity() > FluidThermodynamics.GAS_LIKE_UNTIL ? row : -1;
+            return traits != null && traits.supercriticalIsotherm() && traits.reducedDensity() > FluidThermodynamics.GAS_LIKE_UNTIL
+                    ? new Reading(row, weight(traits.reducedDensity())) : Reading.NONE;
         } catch (IllegalArgumentException | ArithmeticException refused) {
-            return -1;
+            return Reading.NONE;
         }
+    }
+
+    /**
+     * The liquid-like weight of one fluid at reduced density {@code reducedDensity}: the server's
+     * {@link FluidThermodynamics#pumpLiquidLikeWeight} law (0 at or below {@link FluidThermodynamics#GAS_LIKE_UNTIL}, 1 from
+     * {@link FluidThermodynamics#PUMP_LIQUID_LIKE_FROM}, a smoothstep between) on a density the client evaluated.
+     */
+    public static double weight(double reducedDensity) {
+        return com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.smoothstep((reducedDensity - FluidThermodynamics.GAS_LIKE_UNTIL)
+                / (FluidThermodynamics.PUMP_LIQUID_LIKE_FROM - FluidThermodynamics.GAS_LIKE_UNTIL));
+    }
+
+    /** The liquid-like weight of a model state that reads "Dense fluid" ({@link #dense}); NaN for any other. */
+    public static double weight(@Nullable FluidThermodynamics.State state) {
+        return dense(state) ? FluidThermodynamics.pumpLiquidLikeWeight(state) : Double.NaN;
+    }
+
+    /** The phases' colours where a "Dense" share is drawn: the vapour's {@code vapour} blended to the liquid's {@code liquid} by {@code w} (ARGB, each channel). */
+    public static int blend(int vapour, int liquid, double w) {
+        double s = w > 0 ? Math.min(w, 1) : 0;
+        int out = 0;
+        for (int shift = 0; shift < 32; shift += 8) {
+            int a = vapour >>> shift & 255, b = liquid >>> shift & 255;
+            out |= (int) Math.round(a + (b - a) * s) << shift;
+        }
+        return out;
     }
 
     /** The client's network model, built once per catalog and kept: {@link #models()} counts the builds. */

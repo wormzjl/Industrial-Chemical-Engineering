@@ -3,7 +3,6 @@ package com.wormzjl.icheme.science.column.v3.thermo;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.wormzjl.icheme.science.thermo.PengRobinsonKernel.Root;
@@ -12,8 +11,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The feed flash answers a feed with no two-phase solution as one phase (batch 2026-11-15-supercritical-fluids, D1,
- * COLUMN_FEED_REVIEW.md): its label by reduced density on both sides of 1, its enthalpy on its own root, every feed the
- * frozen flash answered unchanged to the bit, and a refusal that is no collapse kept.
+ * COLUMN_FEED_REVIEW.md), a feed classified by the stability test since batch 2026-11-16-supercritical-followups (P3): its
+ * label by reduced density on both sides of 1, its enthalpy on its own root, every feed the frozen flash answered
+ * unchanged to the bit but the real splits it called one liquid, and a stalled real split given the engine's split.
  */
 class V3FeedFlashOnePhaseTest {
     private static final String PACKAGE = "icheme:tjl20_methane_nitrogen";
@@ -48,28 +48,35 @@ class V3FeedFlashOnePhaseTest {
     }
 
     @Test
-    void aRealSplitThatDoesNotConvergeStaysRefused() {
+    void aStalledRealSplitTakesTheEnginesSplit() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE);
-        // The equilibrium engine splits this feed (vapour fraction 0.125); successive substitution stalls near the
-        // critical point with |ln K| at 0.48. It is no collapse, and stays the typed refusal it was.
-        V3ThermoException refusal = assertThrows(V3ThermoException.class,
-                () -> thermo.flashTP(250.0, 6.0e6, feed(thermo, METHANE_ETHANE), thermo.newWorkspace()));
-        assertEquals(V3ThermoException.Code.FLASH_NONCONVERGENCE, refusal.code());
-        assertEquals("V3 feed flash did not converge within 64 iterations", refusal.getMessage());
-        // Methane with a heavy cut at 300 K and 20 MPa: a real split the engine finds; stalled at |ln K| 4.2.
-        assertThrows(V3ThermoException.class,
-                () -> thermo.flashTP(300.0, 20.0e6, feed(thermo, METHANE_CUT), thermo.newWorkspace()));
+        // The equilibrium engine splits this feed (vapour fraction 0.125210); successive substitution stalls near the
+        // critical point with |ln K| at 0.48, from Wilson's K and again from the stability test's stationary phase.
+        assertEngineSplit(thermo, feed(thermo, METHANE_ETHANE), 250.0, 6.0e6, 0.125210);
+        // Methane with a heavy cut at 300 K and 20 MPa: two liquids (the lighter one methane-rich), stalled at |ln K| 4.2.
+        assertEngineSplit(thermo, feed(thermo, METHANE_CUT), 300.0, 20.0e6, 0.791758);
+    }
+
+    private static void assertEngineSplit(V3PengRobinsonThermo thermo, double[] z, double t, double p, double vaporFraction) {
+        V3FlashResult flash = thermo.flashTP(t, p, z, thermo.newWorkspace());
+        assertEquals(V3FeedPhase.TWO_PHASE, flash.phase(), flash::detail);
+        assertEquals(V3FeedFlash.ENGINE_SPLIT, flash.detail());
+        assertEquals(vaporFraction, flash.vaporFraction(), 1.0e-6);
+        double[] x = flash.liquidComposition();
+        double[] y = flash.vaporComposition();
+        for (int i = 0; i < z.length; i++) assertEquals(z[i], (1.0 - flash.vaporFraction()) * x[i] + flash.vaporFraction() * y[i], 1.0e-12);
     }
 
     /**
      * The review's grid on the production package: every feed the frozen flash ({@code V3FeedFlashReference}) answers
-     * is answered to the bit, including every real two-phase feed; a frozen refusal is either the same refusal or a
-     * one-phase answer of the rule. The counts are the review's.
+     * is answered to the bit, including every real two-phase feed, but the real splits it answered as one liquid at the
+     * Wilson endpoint (five methane/heavy-cut feeds, now split); a frozen refusal is a one-phase answer of a stable feed
+     * or a split of an unstable one. The counts are the review's and P3's.
      */
     @Test
     void everyFeedAnsweredBeforeIsUnchangedToTheBit() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE);
-        int[] answeredBefore = new int[3], twoPhase = new int[3], answeredNow = new int[3], refused = new int[3];
+        int[] answeredBefore = new int[3], twoPhase = new int[3], answeredNow = new int[3], splitNow = new int[3], moved = new int[3];
         Map<String, Double>[] mixtures = new Map[] {METHANE_ETHANE, NATURAL_GAS, METHANE_CUT};
         for (int m = 0; m < mixtures.length; m++) {
             double[] z = feed(thermo, mixtures[m]);
@@ -85,18 +92,21 @@ class V3FeedFlashOnePhaseTest {
                     try {
                         expected = V3FeedFlashEquivalenceTest.V3FeedFlashReference.resolve(thermo, t, p, oldWorkspace);
                     } catch (V3ThermoException failure) {
-                        try {
-                            V3FlashResult answered = V3FeedFlash.resolve(thermo, t, p, newWorkspace);
+                        V3FlashResult answered = V3FeedFlash.resolve(thermo, t, p, newWorkspace);
+                        if (answered.phase() == V3FeedPhase.TWO_PHASE) splitNow[m]++;
+                        else {
                             assertTrue(isOnePhaseRule(answered), at + ": " + answered.detail());
                             answeredNow[m]++;
-                        } catch (V3ThermoException actual) {
-                            assertEquals(failure.getMessage(), actual.getMessage(), at);
-                            assertEquals(failure.code(), actual.code(), at);
-                            refused[m]++;
                         }
                         continue;
                     }
                     V3FlashResult actual = V3FeedFlash.resolve(thermo, t, p, newWorkspace);
+                    if (expected.phase() == V3FeedPhase.LIQUID && actual.phase() == V3FeedPhase.TWO_PHASE) {
+                        // A real split the Wilson endpoint called one liquid; the stability test proves the second phase.
+                        assertEquals("all-liquid Wilson endpoint classification", expected.detail(), at);
+                        moved[m]++;
+                        continue;
+                    }
                     assertEquals(expected.phase(), actual.phase(), at);
                     assertEquals(expected.iterations(), actual.iterations(), at);
                     assertEquals(expected.detail(), actual.detail(), at);
@@ -112,12 +122,14 @@ class V3FeedFlashOnePhaseTest {
                 }
             }
         }
-        // Methane/ethane: 56 answered (2 of them two-phase), 13 refusals now answered, the stalled real split kept.
-        // Natural gas: 57 answered, 13 now answered. Methane with the cut: 54 answered (49 two-phase), 16 real splits kept.
-        assertArrayEquals(new int[] {56, 57, 54}, answeredBefore);
+        // Methane/ethane: 56 answered (1 of them two-phase), 13 refusals now one phase, the stalled real split now split.
+        // Natural gas: 57 answered, 13 now one phase. Methane with the cut: 49 answered unchanged (all two-phase), 5 real
+        // splits moved from one liquid to two phases, 16 stalled real splits now split.
+        assertArrayEquals(new int[] {56, 57, 49}, answeredBefore);
         assertArrayEquals(new int[] {1, 0, 49}, twoPhase);
+        assertArrayEquals(new int[] {0, 0, 5}, moved);
         assertArrayEquals(new int[] {13, 13, 0}, answeredNow);
-        assertArrayEquals(new int[] {1, 0, 16}, refused);
+        assertArrayEquals(new int[] {1, 0, 16}, splitNow);
     }
 
     private static void assertOnePhase(V3PengRobinsonThermo thermo, double[] z, double t, double p, V3FeedPhase phase,

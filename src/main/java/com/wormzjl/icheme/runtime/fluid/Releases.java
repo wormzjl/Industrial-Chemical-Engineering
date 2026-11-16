@@ -242,7 +242,7 @@ public final class Releases {
         return out;
     }
 
-    /** What a destroyed device held (WP6a): its gas and its liquid, kg. */
+    /** What a destroyed device held (WP6a): its gas and its liquid, kg; a dense fluid's liquid-like part that flashes to the air counts as gas (P2, {@code FluidWorldAuthority.releaseContents}). */
     public record Spilled(double gasKilograms, double liquidKilograms) {
         public static final Spilled NONE = new Spilled(0, 0);
     }
@@ -257,6 +257,11 @@ public final class Releases {
             throw new IllegalArgumentException("Releases: contents of " + gasMoles.length + " and " + liquidMoles.length + " compounds on an axis of " + axis.size());
         gas(at, gasMoles);
         gas(at, standard.volatileMoles(liquidMoles));
+    }
+
+    /** What liquid {@code liquidMoles} (world axis) gives the air as a spill ({@link HazardStandard#volatileMoles}): a new array. */
+    public double[] volatileMoles(double[] liquidMoles) {
+        return standard.volatileMoles(liquidMoles);
     }
 
     /** The gas {@code moles} (world axis) through the standard's three gas channels, at {@code at}. */

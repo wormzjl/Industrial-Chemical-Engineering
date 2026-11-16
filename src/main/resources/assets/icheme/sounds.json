@@ -7,6 +7,10 @@
     "subtitle": "subtitles.icheme.compressor_running",
     "sounds": [{ "name": "icheme:compressor_running", "stream": false }]
   },
+  "plunger_pump_running": {
+    "subtitle": "subtitles.icheme.pump_running",
+    "sounds": [{ "name": "icheme:plunger_pump_running", "stream": false }]
+  },
   "pump_cavitation": {
     "subtitle": "subtitles.icheme.pump_cavitation",
     "sounds": [{ "name": "icheme:pump_cavitation", "stream": false }]

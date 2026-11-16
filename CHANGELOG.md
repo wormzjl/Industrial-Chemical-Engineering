@@ -15,6 +15,22 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-11-16
+
+### Changed
+
+- Supercritical follow-ups (`2026-11-16-supercritical-followups`; packages P1 to P4 of `FOLLOWUPS_PLAN.md`, joined on `claude/supercritical-fluid-support-d0ffa4`, `074fa4119`, `2fab7e561`, `ff38d37a6`, `2d3127faf`):
+  - The plunger pump loses its clearance volume's re-expansion and does isentropic work on a compressible fluid: it delivers `1 − c (ρ_d/ρ_s − 1)` of its displacement (c 0.10; about 0.999 on water, 0.97 on dense carbon dioxide, 0.83 to 0.86 on a gas) and puts `Q w_s` into the fluid, on the suction's own isentropic exponent (`NetworkStreams.isentropicExponent`). In the simulator a Pump tile typed or sized as a plunger runs and sizes as one, efficiency 0.88; a pump with no type runs centrifugal, as before (P1 `f383eff42`).
+  - One dense fluid reads by its liquid-like weight (the smoothstep of reduced density 0.5 to 1) in the level (the level transmitter, the level meter, both level loops), the sight glass and a burst (split by the weight; dense carbon dioxide is heard as gas, a dense heavy cut spills), with no solve and no wire field; the simulator's line service takes the liquid rows for it; a centrifugal pump on a two-phase supply shows its head share; the limits table's suction density row has its advice on hover; the "Dense" share's colour blends from vapour to liquid; the Sizing tab's Model box reads the capacity (P2 `c6d0b717e`, `410c37fcb`).
+  - The column's feed flash classifies a feed by a tangent-plane stability test where its iteration has no answer of its own (form D): an unstable feed splits, from the test's phase or by the equilibrium engine's split (`V3FeedEngine`), when its lighter phase is the column's vapour; a feed unstable only towards a second liquid (neither the test's phase nor the feed a vapour) is one liquid everywhere, with no restart, and the trays' notes report the liquid that would settle; a feed at the Wilson endpoint is never refused (P3 `322144b96`, `d5662d4f6`; lane fixes, LANE_FIXES_REVIEW.md).
+  - The plunger pump has its own running loop, `plunger_pump_running` (valve knocks over a 15 Hz delivery ripple and a crank and gearbox rumble, at 300 rpm), picked by `MoverSounds.casingLoop`; the pitch law and the subtitle are kept (P4 `d6f2a817a`).
+  - Tools: `tools/supercritical-probes/p3` (the feed-flash grids), `tools/machine-sounds/plunger_candidates.py` (the loop's three candidates).
+  - Formats: none moved. No facts schema, checkpoint state, wire protocol or sheet format changed.
+  - Results that moved:
+    - P1: the S8 probe (PP-30, carbon dioxide at 310 K, 10 MPa rise) delivers 0.877 to 0.989 of its displacement for 0.998 at reduced density 0.30 to 1.60 (29.951 to 26.306 to 29.673 m³/h), its work 0.763 to 0.952 of `Q ΔP`; the simulator's plunger on carbon dioxide at 310 K, 8.5 to 25 MPa reads hydraulic 158.6 to 134.6 kW, power 269.7 to 152.9 kW, efficiency 0.588 to 0.880; the dense GameTest's plunger expectation is about 5 % lower. Six reference rows lie within 0.35 % of their η_v. No other mover's value moved.
+    - P2: the level, sight glass, burst and line service of one dense fluid (carbon dioxide at 310 K reads 0, 0.104, 0.648, 1, 1 of its vapour volume at reduced density 0.4, 0.6, 0.8, 1.0005, 1.6); one assertion moved (a two-phase pump at α 0.896 gains a head share of 59.6 %). Every other content reads bit for bit as before; no solved value moved.
+    - P3: on the dense grid, 181 feeds answered one liquid now split; 102 refused stable feeds are one phase (101 liquid, 1 vapour); 721 refused splits are answered (441 two phases with a dense supercritical lighter phase, 273 vapour-liquid by the engine, 7 by the column's iteration); two Tia Juana crude feeds at 900 K, refused before, are vapour. The cold crude is unchanged. The aqueous W5 wash feed (ethanol 10, water 90 at 359.84 K, 1 atm), answered all liquid before, takes a vapour fraction of 7.67e-5 (+3.1 J/mol): the W5 sheet's wash distillate 10.495 to 10.496 mol/s, the W6 example's spirit 10.4945 to 10.4963 mol/s, the running wash column's ethanol to distillate 0.8474 to 0.8475. The ethanol, water and hexane column keeps its 0.34.0 answers and notes.
+
 ## [0.34.0] - 2026-11-16
 
 ### Added

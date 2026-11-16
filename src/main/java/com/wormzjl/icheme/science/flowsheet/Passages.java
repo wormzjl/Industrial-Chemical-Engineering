@@ -14,6 +14,10 @@ public interface Passages {
     /** The law of the passage named, null where the unit has no size for it. */
     @Nullable Law passage(String name);
     default com.wormzjl.icheme.science.equipment.ExchangerType exchangerType(){return com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD;}
+    /** {@code PLUNGER} for a Pump tile whose sizing holds the plunger pump, the player's type or its kept size's, which its run
+     * reads (its work and efficiency, batch 2026-11-16-supercritical-followups, P1); null for any other pump (its run is a
+     * centrifugal pump's) and every other tile. */
+    default com.wormzjl.icheme.science.flowsheet.sizing.@Nullable UnitType pumpType(){return null;}
 
     /** One passage's law. */
     interface Law {

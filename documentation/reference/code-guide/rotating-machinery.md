@@ -37,9 +37,9 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/science/machine/`.
 | [`MachineLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/MachineLaw.java) | Sealed (`CentrifugalPump`, `CentrifugalCompressor`, `VacuumPump`, `PlungerPump`): `rise(flow, speed, ρ, P, k)`, `riseSlope`, `residual` (the `MOVER_LAW` row; a head form by default, a flow form for a vacuum pump and a plunger pump), `fluidPower`, `shaftPower`, rated flow, head, efficiency | 39 |
 | [`CentrifugalPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/CentrifugalPump.java) | The pump's curve and shaft power; `rated(Q, H)` with `bestEfficiency(Q)` (Corripio); `ratedSpeed`; `npsh(speed)`; `withHeadShare` (gas) | 118 |
 | [`CentrifugalCompressor`](../../../src/main/java/com/wormzjl/icheme/science/machine/CentrifugalCompressor.java) | The polytropic head curve, `SURGE` (recycle below it), `DEFAULT_EFFICIENCY`; `ratio`, `pressureRise`, `polytropicHead`, `sigma`; `wetEfficiency` | 144 |
-| [`PositiveDisplacement`](../../../src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java) | Form F2e: slip line and relief line joined by a smooth minimum (`SLIP`, `RELIEF_SLOPE`, `ROUNDING`); `flow`, `rise`, `riseSlope`, `residual` | 88 |
+| [`PositiveDisplacement`](../../../src/main/java/com/wormzjl/icheme/science/machine/PositiveDisplacement.java) | Form F2e: slip line and relief line joined by a smooth minimum (`SLIP`, `RELIEF_SLOPE`, `ROUNDING`); `flow`, `rise`, `riseSlope`, `residual`; `share`, `shareSlope` for the plunger pump | 95 |
 | [`VacuumPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/VacuumPump.java) | Liquid ring and dry screw: capacity by the suction, shaft power, heat to the gas; `maximumShaftPower` (for `Motor.ratingFor`); `liquidIntensity`, `liquidNoise`; the catalogue `Model`, `RINGS`, `SCREWS`, `model(models, number)`, `of(model, dryScrew, stages)` | 215 |
-| [`PlungerPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/PlungerPump.java) | A triplex plunger pump on `PositiveDisplacement`: displacement times speed less the slip, to `RELIEF_RISE` (25 MPa); shaft power the swept volume times the rise over `MECHANICAL_EFFICIENCY` (0.88), none at a standing train; `maximumShaftPower` (for `Motor.ratingFor`); the catalogue `Model` (PP-3 to PP-100 m³/h at `SPEED`, 300 rpm), `model(number)`, `of(model)`; a liquid law with no NPSH design | 117 |
+| [`PlungerPump`](../../../src/main/java/com/wormzjl/icheme/science/machine/PlungerPump.java) | A triplex plunger pump on `PositiveDisplacement`'s share (`share`, `shareSlope`): displacement times speed less the slip and the clearance loss `CLEARANCE (r − 1)`, `r = ((p + ΔP)/p)^(1/n)` on the suction's isentropic exponent in the law's `k` (`volumetricEfficiency`, `flow`; `rise` its safeguarded Newton inverse), to `RELIEF_RISE` (25 MPa); the fluid takes `Q isentropicWork`, the shaft the drawn volume times that work over `MECHANICAL_EFFICIENCY` (0.88), none at a standing train; `maximumShaftPower` (the liquid bound, for `Motor.ratingFor`); the catalogue `Model` (PP-3 to PP-100 m³/h at `SPEED`, 300 rpm), `model(number)`, `of(model)`; a liquid law with no NPSH design | 214 |
 | [`EjectorLaw`](../../../src/main/java/com/wormzjl/icheme/science/machine/EjectorLaw.java), [`SteamEjector`](../../../src/main/java/com/wormzjl/icheme/science/machine/SteamEjector.java) | The vacuum set's steam law (`K`, `asAir`, `motiveFactor`; at and above water's Tc, where its vapour pressure is +∞, the set lifts the water to the discharge as it does the gas), read by the sheet's `EjectorUnit` and the world's `Ejectors`; the world's set: `speed(P)` (`SPEED`, `SPEED_EDGE`, `SPEED_EXPONENT`; the sheet's `Limit.VACUUM_SPEED` reads them), `RATED_MOTIVE`, `RATED_DISCHARGE`, `capacity`, `maximumDischarge` | 77, 75 |
 | [`Npsh`](../../../src/main/java/com/wormzjl/icheme/science/machine/Npsh.java) | NPSH3 by flow and speed; `SUCTION_SPECIFIC_SPEED`; `BREAKDOWN` (`breakdownPressure`); `DUTY_NPSH3`, `dutySpeed`, `forDuty` (an in-line mover's design) | 82 |
 | [`GasEntrainment`](../../../src/main/java/com/wormzjl/icheme/science/machine/GasEntrainment.java) | Turpin's onset `α_T` from suction pressure; the head share; `churn` (`CHURN_PEAK`); the clean zone `CLEAN_ONSETS` and `cleanShare(p)` | 68 |
@@ -179,7 +179,8 @@ saved.
 | A driver's speed, trip, status, gear limit | `ShaftTrain.step` | `ShaftTrainTest` |
 | The wear rate over the fault table, bit for bit | `Wear` | `WearTest` |
 | A vacuum pump's capacity, power and wear | `VacuumPump` | `VacuumPumpTest` |
-| A plunger pump's delivery, slip, relief and power | `PlungerPump` | `PlungerPumpTest` |
+| A plunger pump's delivery, slip, clearance, relief and power; its inverse and slope | `PlungerPump` | `PlungerPumpTest` |
+| A plunger pump's exponent, the reference rows and its row in the network | `NetworkStreams.isentropicExponent`, `PassiveStepSolver.suctionKappa` | `PlungerPumpMoverTest` |
 | A store's arithmetic | `ElectricStore` | `ElectricStoreTest` |
 | Create stress to watts | `CreateCoupling` | `CreateCouplingTest` |
 
@@ -195,4 +196,4 @@ All under `test`: `--tests 'com.wormzjl.icheme.science.machine.*'`.
 - `science/machine` may not import the equipment or the network: a law that needs a shape's number takes it as an
   argument (`science/plant/machine/MachineRatings` maps a shape to the law's inputs).
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `410c37fcb`, 2026-11-16.

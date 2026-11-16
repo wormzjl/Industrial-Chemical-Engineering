@@ -24,7 +24,7 @@ Under `src/main/java/com/wormzjl/icheme/runtime/fluid/`. Lines at `d6f721b94`.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`FluidWorldAuthority`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidWorldAuthority.java) | The façade: `find`, `tick`, `model()` (the world list), `diagnosticModel`, `time`; the public entry points of placement, fittings, watches, views, columns, heat units, converters, chimneys, prime movers, blanket and relief valves, `resizeLine`, `listen`, `capture`, `published`; nested `ViewIndex`, `Watchers`, `RegistryHost`, `PresentationHost`, `ColumnStart`, `Lines` | 1959 |
+| [`FluidWorldAuthority`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidWorldAuthority.java) | The façade: `find`, `tick`, `model()` (the world list), `diagnosticModel`, `time`; the public entry points of placement, fittings, watches, views, columns, heat units, converters, chimneys, prime movers, blanket and relief valves, `resizeLine`, `listen`, `capture`, `published`; nested `ViewIndex`, `Watchers`, `RegistryHost`, `PresentationHost`, `ColumnStart`, `Lines` | 2142 |
 | [`Placement`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/Placement.java) | Package-private: what a placed, changed or removed device queues: `drawnFaces`, `placedFaces`, `place`, `lay`, `placeLane`, `placeMover`, `placeVessel`, `edit`, `fittedRelief`, a diverter's outlet, `remove`, `hold`, `held`, `heldCount`, `drop`, `recoverFilter` | 256 |
 | [`ChunkBinding`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ChunkBinding.java) | Package-private: a chunk load's body, the two re-alignment queues (`nextRealignment`, `nextShaftRealignment`), the structures' chunk index, the hold of registrations whose dimension has no level (`holdWithoutLevel`) | 123 |
 | [`PhysicalRegistry`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/PhysicalRegistry.java) | Device to island owner, chunk membership: `submit` (fences), `applyPending`, `apply`, `load`, the flowmeter taps, the fitting edits, `pipeViews`, `resizeLine`, `reliefs`, `heldBeside`; `Host` | 648 |
@@ -125,4 +125,4 @@ The registrations, specs, joints, lanes, heat units, held identities and build f
 - **`UNBOUND: saved inventory retained`** is a live consistency status, not compatibility: the registry holds a device where the world now has another block.
 - **The pump, compressor and filter blocks have no block item**: their item ids belong to the pipe fittings.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `410c37fcb`, 2026-11-16.

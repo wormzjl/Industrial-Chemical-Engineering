@@ -26,14 +26,16 @@ import org.jetbrains.annotations.Nullable;
 public record StreamProps(double temperature, double pressure, double vapour, double moles, double mass, double liquidVolume, double density, double liquidMu, double gasMu, double weight, double enthalpy, Phases phases) {
     /**
      * Mole % in each phase, and the share that holds one dense fluid ({@link DenseLabel#row}: 0 organic, 1 aqueous, 2 gas), which
-     * reads "Dense"; -1 for any other stream.
+     * reads "Dense"; -1 for any other stream. {@code weight} is that fluid's liquid-like weight ({@link DenseLabel#weight(
+     * FluidThermodynamics.State)}, NaN for none) and {@code water} whether it is at least half water (the slot rule's aqueous
+     * label): the share's colour blends from the gas's to that liquid's by it (P2 of batch 2026-11-16-supercritical-followups).
      */
-    public record Phases(double organic, double aqueous, double gas, double solid, int dense) {
+    public record Phases(double organic, double aqueous, double gas, double solid, int dense, double weight, boolean water) {
         public static final Phases NONE = new Phases(0, 0, 0, 0);
 
         /** The phases of a stream that is no dense fluid. */
         public Phases(double organic, double aqueous, double gas, double solid) {
-            this(organic, aqueous, gas, solid, -1);
+            this(organic, aqueous, gas, solid, -1, Double.NaN, false);
         }
 
         /** Whether the stream reads "Dense fluid" ({@link DenseLabel#dense}). */
@@ -83,7 +85,8 @@ public record StreamProps(double temperature, double pressure, double vapour, do
         double total = Math.max(all, Double.MIN_NORMAL);
         // One dense fluid (S5): its share reads "Dense", and it has no vapour share: the slot it sits in is the network's slot
         // rule, which moves it at reduced density 1.
-        var phases = new Phases(100 * oil / total, 100 * aqueous / total, 100 * vapour / total, 0, DenseLabel.row(s));
+        int dense = DenseLabel.row(s);
+        var phases = new Phases(100 * oil / total, 100 * aqueous / total, 100 * vapour / total, 0, dense, DenseLabel.weight(s), dense >= 0 && s.waterFraction(s.oneFluidSlot()) >= .5);
         return new StreamProps(s.temperature(), s.pressure(), phases.denseFluid() ? Double.NaN : 100 * vapour / total, all, s.mass(), volume, s.volume() > 0 ? s.mass() / s.volume() : Double.NaN, mu, gas, all == 0 ? 0 : s.mass() / all * 1000, s.mass() == 0 ? 0 : s.enthalpy() / s.mass(), phases);
     }
 

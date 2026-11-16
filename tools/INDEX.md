@@ -9,7 +9,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
 | [code-guide/](code-guide/README.md) | Code map: files and lines per package, the layer import matrix, the guide README's module counts (`--readme`, `--check`) | `2026-11-13-codebase-review` | In use since 2026-11-13 |
-| [supercritical-probes/](supercritical-probes/README.md) | Dense and supercritical fluid probes per stage: laws, slot rule, machine shares and E, plunger geometry, CoolProp numbers | `2026-11-15-supercritical-fluids` | Kept for reference since 2026-11-16 |
+| [supercritical-probes/](supercritical-probes/README.md) | Dense and supercritical fluid probes per stage: laws, slot rule, machine shares and E, plunger geometry, CoolProp numbers; the column feed flash forms and its wet grid (p3) | `2026-11-15-supercritical-fluids`, `2026-11-16-supercritical-followups` | Kept for reference since 2026-11-16 |
 | [plunger-forms/](plunger-forms/README.md) | Candidate forms of an equipment model drawn with the kit, and their option sheets | `2026-11-15-supercritical-fluids` | Kept for reference since 2026-11-16 |
 | [fluid-step-cost/](fluid-step-cost/README.md) | Fluid step cost: the Jacobian pattern census, CPU by stack from a JFR, the bench scripts and readers | `2026-11-15-fluid-step-cost` | Kept for reference since 2026-11-15 |
 | [codebase-review-bench/](codebase-review-bench/README.md) | B1 CPU, allocation and heap profile of the fluid step, the column and 20 shaft trains, with JFR; the after-wave-B and Rust band solve measurements | `2026-11-13-codebase-review` | In use since 2026-11-13 |
@@ -43,7 +43,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [still-sprites/](still-sprites/README.md) | Batch still sprites and textured still renders | `2026-11-09-batch-distiller` | In use since 2026-11-09 |
 | [batch-still-column/](batch-still-column/README.md) | B3 measurement: the bubble-point column candidate against V3 | `2026-11-09-batch-distiller` | Kept for reference since 2026-11-10 |
 | [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit, the pollution meter) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
-| [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops, the plunger pump loop (authoring only) | `2026-11-03-rotating-machinery`, `2026-11-16-supercritical-followups` | In use since 2026-11-04 |
 | [process-sounds/](process-sounds/README.md) | Original flare, burner, firebox, boiling-pot, valve, steam ejector, valve turn, prime mover and pollution meter click sounds (authoring only) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [pbr-textures/](pbr-textures/README.md) | Instrument wiring textures and equipment relief sprites (baked and flat variants) with LabPBR 1.3 maps (stdlib Python) | `2026-11-10-custom-shader-system`, `2026-11-15-equipment-visual-design` | In use since 2026-11-10 |
 | [fx-textures/](fx-textures/README.md) | Effects textures: flame flipbook with LabPBR `_s`, smoke, plume (stdlib Python) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |

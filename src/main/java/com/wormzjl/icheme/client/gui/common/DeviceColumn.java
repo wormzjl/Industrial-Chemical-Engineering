@@ -42,9 +42,15 @@ public final class DeviceColumn {
     /**
      * The phases' split: its basis (volume, mole or mass), the four phases' amounts, whether custom solids are left out, its
      * hover, whether the aqueous liquid is named water ({@link #aqueousIsWater}), and the phase that holds one dense fluid
-     * ({@link DenseLabel#row}: 0, 1 or 2; -1 for none), which reads "Dense fluid".
+     * ({@link DenseLabel#row}: 0, 1 or 2; -1 for none), which reads "Dense fluid", and that share's colour (ARGB; 0 for its
+     * phase's own, {@link #PHASE_COLOURS}): the vapour's blended to the liquid's by the fluid's liquid-like weight (P2 of batch
+     * 2026-11-16-supercritical-followups, item 12), one colour on both sides of the slot rule's reduced density 1.
      */
-    public record Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint, boolean aqueousWater, int dense) {
+    public record Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint, boolean aqueousWater, int dense, int denseColour) {
+        public Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint, boolean aqueousWater, int dense) {
+            this(basis, amounts, customSolidsExcluded, hint, aqueousWater, dense, 0);
+        }
+
         public Phases(String basis, double[] amounts, boolean customSolidsExcluded, String hint) {
             this(basis, amounts, customSolidsExcluded, hint, false);
         }
@@ -149,15 +155,21 @@ public final class DeviceColumn {
      * required (m; an in-line pump's NPSH3 at its D21 duty speed), the suction's gas (% by volume; with {@code head}, on one
      * dense fluid, the head share the pump keeps, %), the health left (%) and
      * its life, minutes of play until it fails at its present wear (— while it does not wear; batch 2026-11-11-minecraft-time-delta).
-     * The status words (FAILED, CAVITATION, GAS) stay on the message display.
+     * The status words (FAILED, CAVITATION, GAS) stay on the message display. {@code headShare} (%, null for none) is the share
+     * of its head a centrifugal pump keeps on a two-phase supply, shown beside the gas (P2 of batch
+     * 2026-11-16-supercritical-followups, item 10).
      */
-    public record Suction(String available, String required, String gas, String health, String life, boolean head) {
+    public record Suction(String available, String required, String gas, String health, String life, boolean head, @Nullable String headShare) {
         public Suction(String available, String required, String gas, String health) {
             this(available, required, gas, health, "—");
         }
 
         public Suction(String available, String required, String gas, String health, String life) {
             this(available, required, gas, health, life, false);
+        }
+
+        public Suction(String available, String required, String gas, String health, String life, boolean head) {
+            this(available, required, gas, health, life, head, null);
         }
     }
 
@@ -167,11 +179,14 @@ public final class DeviceColumn {
      * pump keeps on that density: the fluid holds no gas.
      */
     public static List<Column.Row> suction(Suction s, HeatControlColumn.Texts t) {
+        var meters = new ArrayList<Column.Row>(List.of(
+                new Column.Reading("npsh:available", t.get("npsh_available"), s.available(), "m", t.get("npsh_available.hint")),
+                new Column.Reading("npsh:required", t.get("npsh_required"), s.required(), "m", t.get("npsh_required.hint")),
+                new Column.Reading("npsh:gas", t.get(s.head() ? "head_share" : "gas_share"), s.gas(), "%", t.get(s.head() ? "head_share.hint" : "gas_share.hint"))));
+        // A two-phase supply (item 10): the head share beside the gas, on the same law the dense supply's meter reads.
+        if (s.headShare() != null) meters.add(new Column.Reading("npsh:head", t.get("head_share"), s.headShare(), "%", t.get("head_share.gas_hint")));
         return List.of(
-                new Column.Group(t.get("device_group.suction"), t.get("device_group.suction.hint"), List.of(
-                        new Column.Reading("npsh:available", t.get("npsh_available"), s.available(), "m", t.get("npsh_available.hint")),
-                        new Column.Reading("npsh:required", t.get("npsh_required"), s.required(), "m", t.get("npsh_required.hint")),
-                        new Column.Reading("npsh:gas", t.get(s.head() ? "head_share" : "gas_share"), s.gas(), "%", t.get(s.head() ? "head_share.hint" : "gas_share.hint")))),
+                new Column.Group(t.get("device_group.suction"), t.get("device_group.suction.hint"), meters),
                 new Column.Group(t.get("device_group.health"), t.get("device_group.health.hint"), List.of(
                         new Column.Reading("health", t.get("health_left"), s.health(), "%", t.get("health_left.hint")),
                         new Column.Reading("life", t.get("life_left"), s.life(), "min", t.get("life_left.hint")))));
@@ -321,7 +336,7 @@ public final class DeviceColumn {
         var shares = new ArrayList<Column.Share>();
         for (int i = 0; i < 4; i++) {
             String label = i == 3 && ph.basis().equals("mole") ? t.get("phase_ratio.crystals") : t.get("phase_short." + phaseKey(i, ph.aqueousWater(), ph.dense()));
-            shares.add(new Column.Share(label, total > 0 ? Format.number(100 * ph.amounts()[i] / total) + " %" : "—", ph.amounts()[i], PHASE_COLOURS[i]));
+            shares.add(new Column.Share(label, total > 0 ? Format.number(100 * ph.amounts()[i] / total) + " %" : "—", ph.amounts()[i], i == ph.dense() && ph.denseColour() != 0 ? ph.denseColour() : PHASE_COLOURS[i]));
         }
         var rows = new ArrayList<Column.Row>();
         rows.add(new Column.Buttons(List.of(new Column.Button("phase_basis", t.get("phase_ratio." + ph.basis() + "_basis"), true, t.get("phase_ratio.basis_hint"), false, true))));

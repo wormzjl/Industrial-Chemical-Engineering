@@ -711,15 +711,15 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var data=menu.clientData();
         var meters=new DeviceMeters(new DeviceMeters.Data(data.kind(),data.view(),data.components(),data.molecularWeights(),data.controls().power()==FluidNetwork.Power.ON,data.controls().heat(),data.controls().tower()!=null,data.sensors()),
             selectedPort(),phaseBasis,temperatureUnit,pressureUnit,flowRateUnit,mass,FluidDeviceScreen::tr);
-        return meters.withDense(denseRow(meters));
+        return meters.withDense(dense(meters));
     }
-    /** The view and stream the dense label was evaluated on, and its row (S5 of batch 2026-11-15-supercritical-fluids, DenseLabel). */
-    private com.wormzjl.icheme.runtime.fluid.FluidView denseView;private com.wormzjl.icheme.runtime.fluid.FluidView.Port denseStream;private int denseRow=-1;private boolean denseRead;
+    /** The view and stream the dense label was evaluated on, and its row and weight (S5 of batch 2026-11-15-supercritical-fluids, DenseLabel; the weight colours the share, P2 of 2026-11-16-supercritical-followups). */
+    private com.wormzjl.icheme.runtime.fluid.FluidView denseView;private com.wormzjl.icheme.runtime.fluid.FluidView.Port denseStream;private com.wormzjl.icheme.client.gui.common.DenseLabel.Reading dense=com.wormzjl.icheme.client.gui.common.DenseLabel.Reading.NONE;private boolean denseRead;
     /** The shown contents' dense row: one cubic root on the client's catalog when a new view is published or another stream is shown, kept until then. */
-    private int denseRow(DeviceMeters meters){
+    private com.wormzjl.icheme.client.gui.common.DenseLabel.Reading dense(DeviceMeters meters){
         var view=menu.clientData().view();var port=selectedPort();
-        if(!denseRead||view!=denseView||port!=denseStream){denseRead=true;denseView=view;denseStream=port;denseRow=meters.denseRow(com.wormzjl.icheme.client.gui.common.DenseLabel.model(com.wormzjl.icheme.science.material.MaterialRuntime.active()));}
-        return denseRow;
+        if(!denseRead||view!=denseView||port!=denseStream){denseRead=true;denseView=view;denseStream=port;dense=meters.dense(com.wormzjl.icheme.client.gui.common.DenseLabel.model(com.wormzjl.icheme.science.material.MaterialRuntime.active()));}
+        return dense;
     }
     /** What the door column reads on a device's page (DeviceColumn): this device's view and drafts, the player's units. */
     private DeviceColumn.Input deviceInput(){
