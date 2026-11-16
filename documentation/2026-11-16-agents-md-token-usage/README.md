@@ -1,6 +1,6 @@
 # 2026-11-16 AGENTS.md token usage
 
-Status: In progress since 2026-11-16. Branch `claude/agent-md-token-usage-6f4893`, from `main` at `5d4b498f0`. `AGENTS.md` and documents only: a documentation-only merge.
+Status: Implemented 2026-11-16 (a documentation-only merge into `main` after 0.34.3; owner: "Yes, merge"). Open items below stay open. Branch `claude/agent-md-token-usage-6f4893`, from `main` at `5d4b498f0`. `AGENTS.md` and documents only: a documentation-only merge.
 
 Purpose: `AGENTS.md` is loaded into every session of every agent. Owner, 2026-11-16: "minimize agent.md token usage".
 
@@ -18,6 +18,7 @@ Lane: `AGENTS.md`. No source, no test, no format, no tool.
   - The full sections, word for word as step 1 left them, are in `documentation/reference/rules/`: `saves.md`, `engine-schedule.md`, `physics.md`, `measurement.md`, `in-game-checks.md`, `equipment.md`, `documentation.md`, `native.md`. They have the same force as `AGENTS.md`.
   - Whole in `AGENTS.md` still: translations, skills and hooks, git and worktrees, the code guide, parallel batches, merging to main, and of the test rules what every run needs (`--tests` from `affected.mjs`, what to run for which change, no forced result, one lane per batch).
   - Section names are unchanged, so the citations in Java comments, skills and tool READMEs still resolve.
+- 2026-11-16: merged into `main` on the owner's word, as a documentation-only merge (no version, no CHANGELOG entry). No scratch folder was made.
 
 ## Documents
 
