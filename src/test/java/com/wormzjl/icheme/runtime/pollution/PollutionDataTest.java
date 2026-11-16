@@ -255,7 +255,7 @@ class PollutionDataTest {
     @Test
     void breachLinesAreInEnglish() throws IOException {
         var english = read(ASSETS.resolve("lang/en_us.json"));
-        for (var key : List.of("chat.icheme.breach", "chat.icheme.breach.unnamed", "chat.icheme.repair_kit.breach_repaired")) {
+        for (var key : List.of("chat.icheme.breach", "chat.icheme.breach.unnamed", com.wormzjl.icheme.world.item.RepairKitItem.USE_CONSTRUCTOR)) {
             assertTrue(english.has(key), key);
         }
         assertTrue(english.get("chat.icheme.breach").getAsString().contains("%s"), "the line names the equipment");
@@ -264,6 +264,20 @@ class PollutionDataTest {
         for (var outcome : com.wormzjl.icheme.runtime.fluid.MachineHealth.Outcome.values()) {
             String key = "chat.icheme.repair_kit." + outcome.name().toLowerCase(java.util.Locale.ROOT);
             assertTrue(english.has(key), key);
+            assertEquals(key, com.wormzjl.icheme.world.item.RepairKitItem.key(outcome));
         }
+        assertFalse(english.has("chat.icheme.repair_kit.breach_repaired"), "the kit no longer mends a breach");
+    }
+
+    /**
+     * The repair kit's rule (batch 2026-11-16-fouling-corrosion, plan section 10): refused and kept on a cell of constructed
+     * equipment, whatever device it holds; a repair queued for a pipe block's device; any other block keeps its own use.
+     */
+    @Test
+    void theRepairKitIsForPipeBlockDevicesOnly() {
+        assertEquals(com.wormzjl.icheme.world.item.RepairKitItem.Use.CONSTRUCTOR, com.wormzjl.icheme.world.item.RepairKitItem.use(true, 12));
+        assertEquals(com.wormzjl.icheme.world.item.RepairKitItem.Use.CONSTRUCTOR, com.wormzjl.icheme.world.item.RepairKitItem.use(true, 0));
+        assertEquals(com.wormzjl.icheme.world.item.RepairKitItem.Use.REPAIR, com.wormzjl.icheme.world.item.RepairKitItem.use(false, 12));
+        assertEquals(com.wormzjl.icheme.world.item.RepairKitItem.Use.PASS, com.wormzjl.icheme.world.item.RepairKitItem.use(false, 0));
     }
 }

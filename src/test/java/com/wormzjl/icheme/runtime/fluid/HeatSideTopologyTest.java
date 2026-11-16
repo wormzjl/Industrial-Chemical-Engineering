@@ -64,6 +64,29 @@ class HeatSideTopologyTest {
      * exponential approach to the air for the flow the line carries:
      * T_out = 25 °C + 60 K × exp(−h A / (ṁ c_p)). Still fans cool by natural draught, less.
      */
+    /**
+     * A heat side whose wall failed (batch 2026-11-16-fouling-corrosion, WP2: its spec breached) compiles with its passage
+     * closed both ways, the fitting mask a blocked flare line takes: the same line carries nothing, the open one carries flow.
+     */
+    @Test void aClosedSidesPassageCarriesNothing() {
+        var passage=HeatSides.tubePassage(.5,2);
+        var ports=List.of(port(at(10,0,10),WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(at(0,2,0),EAST,PhysicalFluidTopology.ConnectionRole.OUTLET));
+        var devices=List.of(plain(1,8,0,10,Kind.GENERATOR),plain(20,9,0,10,Kind.PIPE),side(10,ports,passage,TUBE),plain(30,1,2,0,Kind.PIPE),plain(2,2,2,0,Kind.VOID));
+        var states=Map.of(1L,nitrogenAt(1,0,PassiveNetwork.NodeKind.GENERATOR,150000),2L,nitrogenAt(2,2,PassiveNetwork.NodeKind.VOID,101325));
+        var seed=states.get(1L).state();
+        for(boolean closed:new boolean[]{false,true}) {
+            var compiled=PhysicalFluidTopology.compile(devices,states,Map.of(),seed,Set.of(),Map.of(),closed?Set.of(10L):Set.of());
+            var graph=compiled.islands().getFirst().graph();
+            var own=graph.pipes().stream().filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
+            assertEquals(closed?3:0,own.forbiddenDirections());
+            var result=new PassiveIntervalSolver(model).solve(graph,.05,PassiveIntervalSolver.Settings.defaults(),()->{});
+            double q=result.averageMassFlows()[graph.pipes().indexOf(own)];
+            if(closed)assertEquals(0,q,1e-12,"the closed passage carries nothing");else assertTrue(q>0);
+        }
+        var breached=new WorldTopologyLedger.Registration(side(10,ports,passage,TUBE),FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG).withBreached(true),0);
+        var whole=new WorldTopologyLedger.Registration(side(11,ports,passage,TUBE),FluidDeviceSpec.nitrogen(EventPathWorld.CATALOG),0);
+        assertEquals(Set.of(10L),PhysicalRegistry.closedSides(List.of(breached,whole)));
+    }
     @Test void anAirCoolersOutletApproachesItsAirWithTheFansOnAndOff() {
         var shape=com.wormzjl.icheme.science.equipment.EquipmentShape.unit(com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.AIR_COOLER,3,6,
                 com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.SOUTH,4);

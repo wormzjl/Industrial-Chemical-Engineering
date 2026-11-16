@@ -369,6 +369,14 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         health = Objects.requireNonNull(value);
     }
 
+    /** The walls of constructed equipment (batch 2026-11-16-fouling-corrosion): told of each booked span's result. */
+    private Integrity integrity;
+
+    /** Installs the walls (batch 2026-11-16-fouling-corrosion, WP2). */
+    public void integrity(Integrity value) {
+        integrity = Objects.requireNonNull(value);
+    }
+
     /** Installs the Create stress rate (W6b): stress units one FE per tick trades for. */
     public void stressPerFE(java.util.function.DoubleSupplier value) {
         stressPerFE = Objects.requireNonNull(value);
@@ -736,6 +744,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (releases != null) releases.booked(island, start, end, result);
         // The pumps' wear over the span (W10b).
         if (health != null) health.booked(island, start, end, result);
+        // The walls keep the island's last result for their next cadence (batch 2026-11-16-fouling-corrosion): no arithmetic here.
+        if (integrity != null) integrity.booked(island, start, end, result);
         if (unitOfDevice.isEmpty()) return;
         var solved = result.graph();
         var flows = result.endpointFlows();

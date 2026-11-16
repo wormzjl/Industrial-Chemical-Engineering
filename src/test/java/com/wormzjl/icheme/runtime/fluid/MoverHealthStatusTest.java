@@ -25,8 +25,6 @@ class MoverHealthStatusTest {
         assertEquals("RUNNING / CAVITATION",FluidWorldAuthority.withHealth("RUNNING",PUMP,"CAVITATION"));
     }
     @Test void aMoverThatDoesNotWearKeepsItsLine() {
-        assertFalse(MachineHealth.worn(LIQUID_RING));
-        assertEquals("RUNNING / NORMAL",FluidWorldAuthority.withHealth("RUNNING / NORMAL",LIQUID_RING,"FAILED"));
         assertFalse(MachineHealth.worn(FRAME),"a reciprocating frame has no wear mode");
         assertEquals("RUNNING / NORMAL",FluidWorldAuthority.withHealth("RUNNING / NORMAL",FRAME,"FAILED"));
     }
@@ -47,5 +45,21 @@ class MoverHealthStatusTest {
         assertEquals("RUNNING / VALVE_OPEN / WET EXHAUST",FluidWorldAuthority.withHealth("RUNNING / VALVE_OPEN",turbine,"WET EXHAUST"));
         assertEquals("FAILED: use a repair kit / RUNNING / VALVE_OPEN",FluidWorldAuthority.withHealth("RUNNING / VALVE_OPEN",turbine,"FAILED"));
         assertFalse(MachineHealth.worn(new FlowControl.Passive()),"a pipe does not wear");
+    }
+    /**
+     * Batch 2026-11-16-fouling-corrosion, WP2: solids in the stream wear every liquid mover and a liquid ring vacuum pump
+     * (the erosion class); a dry screw and a gas machine do not read them. A failed machine of constructed equipment is
+     * repaired with the Equipment Constructor, not a kit.
+     */
+    @Test void solidsWearLiquidMoversAndALiquidRing() {
+        var solids=com.wormzjl.icheme.science.machine.Wear.Fault.SOLIDS;
+        assertTrue(MachineHealth.faults(PUMP).contains(solids));
+        assertTrue(MachineHealth.faults(new FlowControl.Machine(new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7),1,true)).contains(solids));
+        assertEquals(java.util.List.of(solids),MachineHealth.faults(LIQUID_RING));
+        assertTrue(MachineHealth.worn(LIQUID_RING));
+        assertFalse(MachineHealth.faults(DRY_SCREW).contains(solids));
+        assertFalse(MachineHealth.faults(CENTRIFUGAL_COMPRESSOR).contains(solids));
+        assertEquals("FAILED: use a repair kit / RUNNING / NORMAL",FluidWorldAuthority.withHealth("RUNNING / NORMAL",LIQUID_RING,"FAILED"));
+        assertEquals("FAILED: repair with the Equipment Constructor / RUNNING",FluidWorldAuthority.withHealth("RUNNING",PUMP,"FAILED",true));
     }
 }

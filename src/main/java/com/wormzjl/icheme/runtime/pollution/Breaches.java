@@ -31,8 +31,10 @@ import java.util.Map;
  * (TNT, a creeper, a burning cube's blast) whose strength at a cell of a structure is at least
  * {@link ExplosionLaw#BREACH_POWER} breaches it, and no block of it is removed. Its closed vessels stand open to the air
  * ({@link FluidWorldAuthority#breach}: they vent and spill by the open-vessel law, and the releases reach the field as an
- * open tank's do), and its pumps, compressors and turbines fail ({@link MachineHealth#breach}), until a player repairs them
- * with the repair kit.
+ * open tank's do), its heat sides close and let their holdup out once, and its pumps, compressors and turbines fail
+ * ({@link MachineHealth#breach}). Blast damage is final (batch 2026-11-16-fouling-corrosion, plan section 9): every device
+ * of the structure is wrecked ({@code Integrity#wreck}), refuses the Equipment Constructor's repair and is removed only by
+ * its deconstruction. A device breached before facts schema 29 has no {@code wrecked} and stays repairable.
  *
  * <p>The strength at a cell is {@link ExplosionLaw#strengthAt} at the distance from the blast's centre to the cell's centre,
  * the cell's walls in between ignored. The equipment's cells resist every blast (vanilla's rays never reach them), so the
@@ -230,8 +232,16 @@ public final class Breaches {
                 continue;
             }
             long id = record.device().id();
-            if (FluidWorldAuthority.breachable(record)) {
-                breached |= world.breach(id);
+            // Blast damage is final (batch 2026-11-16-fouling-corrosion, plan section 9): every device of the structure is
+            // wrecked, deconstructed and rebuilt, never repaired.
+            boolean wrecked = !world.integrity().wrecked(id);
+            world.integrity().wreck(id);
+            breached |= wrecked;
+            if (FluidWorldAuthority.breachable(record) || FluidWorldAuthority.closable(record)) {
+                // A heat side so breached stands closed and lets its holdup out once, as a wall corroded through does.
+                boolean side = FluidWorldAuthority.closable(record), done = world.breach(id);
+                if (done && side) world.releaseContents(id);
+                breached |= done;
             } else if (wear && MachineHealth.pump(record) && !world.health().failed(id)) {
                 world.health().breach(id);
                 breached = true;
