@@ -54,7 +54,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `runtime/pollution/Breaches` | Wrecks every device of a blasted structure; heat sides close and release once |
 | `runtime/pollution/IntegrityCommands` | `/icheme integrity get`, `set <loss> <fouling> <wrecked>`, `clear`, by `id <device>` or `at <pos>` |
 | `world/item/RepairKitItem` | Refused on constructed equipment (`USE_CONSTRUCTOR`); queues a `MachineHealth.Repair` on an in-line pump's, compressor's or control valve's pipe block |
-| `world/level/block/EquipmentRepair` | The constructor's repair of the structure on its line: `repair` (its node devices to `queueStructureRepair`; a structure with no fluid device answers `NOTHING_TO_REPAIR`, the seam for a column's repair), `key` (answer text), `state` and `words` (worst used allowance and `THIN WALL`, `WEEPING`, `LEAKING`, `FAILED`, `WRECKED`) |
+| `world/level/block/EquipmentRepair` | The constructor's repair of the structure on its line: `repair` (its node devices to `queueStructureRepair`; a column to `FluidWorldAuthority.queueColumnRepair`, WP8; another structure with no fluid device answers `NOTHING_TO_REPAIR`), `key` (answer text), `state`, `column` and `words` (worst used allowance and `THIN WALL`, `WEEPING`, `LEAKING`, `FAILED`, `WRECKED`, a column's `TRAYS FOULED`) |
+| `science/integrity/ColumnWear`, `runtime/fluid/ColumnOperation` | A running column's trays and wall (WP8): see [Columns](#columns-wp8) |
 | `world/level/block/EquipmentDeconstruction.checked` | The removal group's shared check (reach, build rights, target origin and stamp, loaded and interactable cells; break events only for a removal) |
 | `network/EquipmentNetwork.Repair`, `RepairAnswer`, `StructureState`, `StructureStateAnswer` | The Repair key's request and its answer from the event's reply (dropped when the player left); the state, a read answered at once |
 | `client/gui/common/ConstructorColumn.Removal`, `EquipmentConstructorScreen` | Repair beside Deconstruct; the state line after the keys; asks the state when the target changes and after a repair's answer |
@@ -85,6 +86,31 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
    of the structure's node devices. `ViewBuilder` adds `FluidView.integrity` and `trim` to every view it builds; their words
    stay on the status line, said once. At each cadence and after a repair, `Integrity.weeps` tells the host each weeping
    wall; the shell cell carries `Weeping` on its update tag to the clients that track it, and `WallWeeps` drips and plays.
+
+## Columns (WP8)
+
+A distillation column is no fluid device: its `ColumnUnit` carries its own wear as facts (`trayFouling` 0 to 1,
+`wallLoss` mm, `material`, taken from its shape at Start by `ColumnStarts`), and `ColumnOperation` books them in the
+cycle's own ledger update, beside the totals (plan section 13.1, decision D10; numbers in `ColumnWear`).
+
+1. `φ` = the inert solids the cycle moved to the bottoms over the feed mass it took plus those solids.
+2. Fouling: `f` approaches `min(1, φ/0.02)` with `fouling.asymptoteProcessHours`; it never falls by itself. The cycle's
+   `Rooms.trays` is `1 − 0.4 f`: `ColumnCycle.step` divides both flood fractions (the FLOODING share and HIGH LOAD) by it;
+   1 leaves the cycle as before, bit for bit. `TRAYS_FOULED` (notice) from `f` ≥ 0.5.
+3. Wall: rate = corrosion part (`CorrosionLaw.inside` on the bottoms of the installed table: the bottoms' recoveries of the
+   table's feed, its temperature, the bottom pressure; water in the aqueous slot, the rest oil; computed once per installed
+   table, `Run.corroded`) + solids part (`min(5, 0.5 φ/0.01)` × the erosion factor). Booked as `rate × dt / year` for
+   each cycle that ran. Stages by `WallState`: `THIN_WALL`, `WEEPING` (notices); through, `LEAKING` (TRIP, derived
+   from the saved loss at every cycle while corrosion or erosion is on): the inlets close and no solve is asked.
+4. Repair (the constructor) and Clean (the Operation tab's key, `AssemblyNetwork.Action.CLEAN`) are queued on
+   `ColumnOperation` (`queueRepair`, `queueClean`, `apply` at the tick drain): `NOT_IDLE` while the unit runs, else
+   wall 0 (`REPAIRED`) or fouling 0 (`CLEANED`), or `NOTHING_TO_REPAIR`. A stopped unit keeps its record, so the facts
+   survive a Stop. The view (`OperationView.Wear`) carries the wear; `OperationColumn.integrity` draws it.
+
+Tests: `ColumnWearTest` (the numbers), `ColumnCycleTest` (capacity 1 exact, 0.8 floods at 80 %), `ColumnRunTest`
+(solids foul and limit the feed; corrosion alone without solids; LEAKING, repair and clean refused running, accepted
+stopped, the column runs again), `FluidFactsCompatTest` (the facts, older images, an unknown material refused),
+`OperationColumnTest`, `ConstructorColumnTest`. Not built: a leaking column's release to the air; blasts on columns.
 
 ## Formats
 
@@ -151,4 +177,4 @@ and their JSON; `DeviceColumnTest` and `ConstructorColumnTest` the groups and th
 2026-11-16, WP2: the laws (WP1) booked on vessels, heat sides and machines of constructed equipment, trims and `SOLIDS`
 on machine health, wrecked blasts, the structure repair and cleaning events, the config and the command. The pages
 (WP4: the constructor's Repair key and structure state, the Integrity and Trim groups, weeping walls) read them; the
-films' fouling (WP5) and a column's repair (WP8, at `EquipmentRepair.repair`) come next.
+films' fouling (WP5) comes next. WP8: a column's trays and wall, its repair and cleaning, on its unit.

@@ -88,7 +88,9 @@ final class FluidFacts {
      *  29 (batch 2026-11-16-fouling-corrosion, WP2): a device spec's {@code metallurgy} by name, after {@code ambient}
      *  (absent: {@code CARBON_STEEL}); and a last section, the walls' facts ({@link IntegritySection}): per device identity
      *  its wall loss (mm), fouling deposit (m²K/W) and {@code wrecked}, an entry only for a device away from new and clean
-     *  (absent: every wall new and clean, none wrecked). A control valve's trim health is in the schema-12 health list. */
+     *  (absent: every wall new and clean, none wrecked). A control valve's trim health is in the schema-12 health list.
+     *  WP8 of the same batch, under the same unreleased schema: a column unit's tray fouling (0 to 1), wall loss (mm) and
+     *  material of construction by name, after its members (absent: a clean, new carbon steel column). */
     static final int SCHEMA=29;
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 29. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
@@ -753,7 +755,7 @@ final class FluidFacts {
                 }
                 var totals=new ColumnUnit.Totals(new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(axis.map(u.totals().taken().moles(),null),u.totals().taken().energy()),
                         new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(axis.map(u.totals().produced().moles(),null),u.totals().produced().energy()),u.totals().reboiler(),u.totals().condenser(),u.totals().pumparounds());
-                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving(),u.airSurface(),u.utilities(),u.members());
+                u=new ColumnUnit(u.id(),u.master(),u.running(),u.setpoints(),stations,totals,u.condensers(),null,u.leaving(),u.airSurface(),u.utilities(),u.members(),u.trayFouling(),u.wallLoss(),u.material());
             }
             columns.put(u.id(),settled(u,registrations));
         }

@@ -179,10 +179,10 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
             return shape(diameter, tangentLength, form, support, trays, connections, bank, boot, outlet, column, turns, duty, form.front(facing.getStepX(), facing.getStepZ())).withTowerBank(form.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?towerBank:com.wormzjl.icheme.science.equipment.TowerBank.ONE).withExchangerType(form.kind()==EquipmentShape.Kind.EXCHANGER?exchangerType:com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD).withStill(form.kind()==EquipmentShape.Kind.BATCH_STILL?still:com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT);
         }
 
-        /** The shape built facing {@code facing}: as {@link #shape(Direction)} built, of this design's material where it registers a fluid device, else carbon steel. */
+        /** The shape built facing {@code facing}: as {@link #shape(Direction)} built, of this design's material where it carries one (a fluid device, a column), else carbon steel. */
         public EquipmentShape shape(Direction facing) {
             var built = layoutShape(facing);
-            return built.withMaterial(built.fluidDevice() ? material : com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);
+            return built.withMaterial(built.hasMaterial() ? material : com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);
         }
 
         /** This design with the column's side nozzles turned as {@code next}. */

@@ -24,8 +24,10 @@ public final class ColumnStatus {
         return binding.condition().rank == Condition.Rank.TRIP ? OperationView.Phase.UPSET : OperationView.Phase.LIMITED;
     }
 
-    /** What keeps a column with no table NOT READY: a solve that found it frozen, else a refused solve; null for neither. */
+    /** What keeps a column with no table NOT READY: a wall that is through, a solve that found it frozen, else a refused solve; null for none. */
     private static Condition.Active notReady(List<Condition.Active> conditions) {
+        var leaking = Condition.find(conditions, Condition.LEAKING);
+        if (leaking != null) return leaking;
         var frozen = Condition.find(conditions, Condition.FROZEN);
         return frozen != null ? frozen : Condition.find(conditions, Condition.SOLVE_REFUSED);
     }
@@ -59,7 +61,8 @@ public final class ColumnStatus {
         String line = pending == null ? out.toString() : "RE-SOLVING: " + pending.text() + "; " + out;
         var notes = new StringBuilder(line);
         // The notices and refusals, after the line, in the order they matter: a refusal, then what the solve or the plan said.
-        for (var c : List.of(Condition.SOLVE_REFUSED, Condition.SETPOINT_REFUSED, Condition.HIGH_LOAD, Condition.FEED_WATER_ROUTED, Condition.ADVISORY, Condition.UNMETERED))
+        for (var c : List.of(Condition.SOLVE_REFUSED, Condition.SETPOINT_REFUSED, Condition.HIGH_LOAD, Condition.WEEPING, Condition.THIN_WALL, Condition.TRAYS_FOULED,
+                Condition.FEED_WATER_ROUTED, Condition.ADVISORY, Condition.UNMETERED))
             for (var a : conditions)
                 if (a.condition() == c && !a.text().isEmpty()) notes.append("; ").append(a.text());
         return notes.toString();

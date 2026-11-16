@@ -27,7 +27,7 @@ Under `src/main/java/com/wormzjl/icheme/runtime/fluid/`. Lines at `d6f721b94`.
 | [`FluidFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidFacts.java) | Package-private: facts `SCHEMA`, `ALIASES`; `world` and `island` (the units' facts), `events` (the topology unit's state), `topologyState`, `disagreement`, `rebuild` (`Placed.restate`), `REBUILT_CADENCE`; the records the sections share (registration, account, set points, solids); `World` with its builder, `Vessel`, `Drift` | 904 |
 | [`FactsSection`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FactsSection.java) | Package-private: one subsystem's run of fields in the topology unit's facts record; `ALL` in stream order | 28 |
 | [`RegistryFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/RegistryFacts.java) | The identity counter, basis, registrations, the two totals, recoveries, `Restated` | 64 |
-| [`ColumnFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnFacts.java) | The running column units | 79 |
+| [`ColumnFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnFacts.java) | The column units (schema 29 appends each unit's tray fouling, wall loss and material by name) | 79 |
 | [`MachineFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineFacts.java) | Shaft units, electric stores, pump health | 67 |
 | [`BuildFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/BuildFacts.java) | Line paints, structure records, rack lane frames, device names | 76 |
 | [`StillFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/StillFacts.java) | The batch stills | 47 |

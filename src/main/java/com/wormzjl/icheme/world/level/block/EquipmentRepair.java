@@ -1,7 +1,10 @@
 package com.wormzjl.icheme.world.level.block;
 
+import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.Integrity;
+import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.science.integrity.ColumnWear;
 import com.wormzjl.icheme.science.integrity.WallState;
 
 import net.minecraft.server.level.ServerLevel;
@@ -9,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * The Equipment Constructor's repair of the structure on its line (batch 2026-11-16-fouling-corrosion, WP4, plan section
@@ -23,11 +27,15 @@ public final class EquipmentRepair {
     public static final float NO_WALL = -1;
 
     /**
-     * The repair of {@code vessel}: one queued event for every device registered at its nodes. A structure that registers
-     * no fluid device (a column, a motor) answers {@link Integrity.Outcome#NOTHING_TO_REPAIR} at once: a column's repair
-     * (plan section 13.1, WP8) belongs here when it is built.
+     * The repair of {@code vessel}: one queued event for every device registered at its nodes; a column's, one queued event on
+     * its unit (WP8, plan section 13.1), accepted while it is stopped. Another structure that registers no fluid device (a
+     * motor) answers {@link Integrity.Outcome#NOTHING_TO_REPAIR} at once.
      */
     public static void repair(FluidWorldAuthority world, ServerLevel level, EquipmentStructure.Vessel vessel, Consumer<Integrity.Outcome> reply) {
+        if (vessel.shape().column()) {
+            world.queueColumnRepair(master(level, vessel), reply);
+            return;
+        }
         if (!vessel.shape().fluidDevice()) {
             reply.accept(Integrity.Outcome.NOTHING_TO_REPAIR);
             return;
@@ -46,8 +54,29 @@ public final class EquipmentRepair {
 
     /** {@code vessel}'s state, read from the walls and the machine health as last booked. */
     public static State state(FluidWorldAuthority world, ServerLevel level, EquipmentStructure.Vessel vessel) {
+        if (vessel.shape().column()) return column(world.column(master(level, vessel)));
         if (!vessel.shape().fluidDevice()) return new State(NO_WALL, "");
         return state(world, EquipmentStructure.heldAtNodes(world, level, vessel));
+    }
+
+    /** A column's origin as its unit names it ({@code ColumnUnit.master}). */
+    private static PhysicalFluidTopology.Position master(ServerLevel level, EquipmentStructure.Vessel vessel) {
+        var o = vessel.origin();
+        return new PhysicalFluidTopology.Position(level.dimension().location().toString(), o.getX(), o.getY(), o.getZ());
+    }
+
+    /**
+     * A column's state, read from its unit's facts (WP8): the allowance its wall used and its words, LEAKING (through),
+     * WEEPING or THIN WALL, then TRAYS FOULED. A column that never ran shows no wall share.
+     */
+    public static State column(@Nullable ColumnUnit unit) {
+        if (unit == null) return new State(NO_WALL, "");
+        double allowance = unit.material().allowance();
+        float used = allowance > 0 ? (float) Math.clamp(unit.wallLoss() / allowance, 0, 1) : 0;
+        var stage = WallState.stage(unit.wallLoss(), allowance);
+        String words = words(false, stage == WallState.Stage.THROUGH, false, stage == WallState.Stage.THROUGH ? WallState.Stage.SOUND : stage);
+        if (ColumnWear.fouled(unit.trayFouling())) words = words.isEmpty() ? "TRAYS FOULED" : words + " · TRAYS FOULED";
+        return new State(used, words);
     }
 
     /** The state of the structure that holds {@code devices}. */

@@ -354,6 +354,7 @@ public final class AssemblyScreen extends AbstractContainerScreen<AssemblyMenu> 
             case "tab:operation" -> structureTab = false;
             case "start" -> command(AssemblyNetwork.Action.START, List.of());
             case "stop" -> command(AssemblyNetwork.Action.STOP, List.of());
+            case "clean" -> command(AssemblyNetwork.Action.CLEAN, List.of());
             case "apply" -> {
                 // Apply sends the name typed in the title strip (N1), and on the Operation page the set points.
                 saveName();

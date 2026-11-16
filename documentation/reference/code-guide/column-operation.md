@@ -38,7 +38,7 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
 | [`Setpoints`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Setpoints.java) | The player's numbers, a fact: design and set feed rate, condenser temperature, reflux ratio; reboiler, steam, draws and pumparounds per mole of feed; `of(point)`, `withFeedRate` (capped at the design rate), `intensivelyDiffers`, `compatible` | 78 |
 | [`PortConditions`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/PortConditions.java) | A port's pressure and temperature estimated from the design (`estimate`) | 35 |
 | [`SplitTable`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/SplitTable.java) | The table: `axis`, `products` (`Product`: port, index, recovery by component, temperature, pressure), `reboilerPerFeed`, `pumparoundPerFeed`, `condenserPerFeed`, `reference` (`Reference`), `held`, `condenserWaterPerFeed`, `waterBelow`, `airArea` (`FAN_STEPS` fan speeds), `flood` (`Flood`, `NONE`), `pumparoundDraw`; `of`, `split`, `perFeed`, `product`, `waterShare`, `waterTakes`, `airFeed`, `fans`, `withFlood`, `withPumparoundDraw`, `drawTemperature`, `bottomsTemperature`; `WATER_ALWAYS`, `WATER_NEVER` | 463 |
-| [`ColumnCycle`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnCycle.java) | One cycle as arithmetic: `Account`, `Rooms` (what each utility can still pass, the air's most feed, unpowered fans and pumps; `NONE`), `Step` (`conditions`, `binding`, `tripped`), `step`; `TRIP_DEPARTURE` | 367 |
+| [`ColumnCycle`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnCycle.java) | One cycle as arithmetic: `Account`, `Rooms` (what each utility can still pass, the air's most feed, unpowered fans and pumps, the trays' capacity left `trays`, 1 clean; `NONE`, `withTrays`), `Step` (`conditions`, `binding`, `tripped`), `step`; `TRIP_DEPARTURE` | 367 |
 | [`Condition`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Condition.java) | One constant per failure, each in one `Rank` (`NOT_READY`, `NOTICE`, `LIMIT`, `OFF_TABLE`, `TRIP`) with its status word; `Active` (condition, value, index, text); `binding`, `find`; `HIGH_LOAD_FRACTION`, `MAX_TEXT`, `RULE_A` | 119 |
 | [`ColumnStatus`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnStatus.java) | `phase` and `line` from a condition list: one pure formatter | 67 |
 | [`Refusal`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Refusal.java) | Every Start and first-solve refusal as a constant with its text (`text(parameters)`): `FIRST_SOLVE`, `NO_NOZZLE`, `TOO_MANY_UTILITY_UNITS`, `NO_DRIVER` among them | 48 |
@@ -119,8 +119,10 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
 - **Conditions.** One list of `Condition.Active` per cycle and solve; the status line, the Operation tab and the
   column's alarm channels all read it. LIMITs: `FEED_SHORT`, `STEAM_SHORT`, `PRODUCT_FULL`, `COOLING_SHORT`,
   `HEATING_SHORT`, `PUMPAROUND_SHORT`, `FLOODING`, `NO_POWER`. OFF_TABLE: `OFF_TABLE` (a solve pending, its trigger as
-  text), `SOLVE_REFUSED`. TRIPs: `CLOSURE`, `FROZEN` (a product of the solve holds a crystal, `ColumnSolve.frozen`). NOTICEs: `SETPOINT_REFUSED`, `ADVISORY` (V3's advisory texts, at most
-  `MAX_ADVISORIES`), `FEED_WATER_ROUTED`, `UNMETERED`, `HIGH_LOAD`. `Condition.binding` takes the TRIP, else the LIMIT
+  text), `SOLVE_REFUSED`. TRIPs: `CLOSURE`, `FROZEN` (a product of the solve holds a crystal, `ColumnSolve.frozen`), `LEAKING`
+  (the unit's wall is through, [integrity.md](integrity.md)). NOTICEs: `SETPOINT_REFUSED`, `ADVISORY` (V3's advisory texts, at most
+  `MAX_ADVISORIES`), `FEED_WATER_ROUTED`, `UNMETERED`, `HIGH_LOAD`, `TRAYS_FOULED`, `THIN_WALL`, `WEEPING`. Fouled trays
+  divide both flood fractions by `Rooms.trays`, so HIGH LOAD and FLOODING come earlier. `Condition.binding` takes the TRIP, else the LIMIT
   with the lowest share (the first of equal ones). No limit asks a solve. Engine state, saved nowhere.
 - **Status words** (`ColumnStatus`): STARTING or NOT READY before a table; UPSET for a TRIP, LIMITED for a LIMIT, else
   RUNNING; `LIMITED: <word>, N %` (the binding condition's word: `condenser`, `reboiler`, `flooding`, `power`, …),

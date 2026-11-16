@@ -161,7 +161,7 @@ public final class ColumnCycle {
      * has none). {@link Double#POSITIVE_INFINITY} where a duty has no utility side: it is free, as every duty but the
      * condenser's was before W4.
      */
-    public record Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed, boolean airUnpowered, int[] unpowered) {
+    public record Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed, boolean airUnpowered, int[] unpowered, double trays) {
         /** Every duty free. */
         public static final Rooms NONE = free(Double.POSITIVE_INFINITY);
 
@@ -169,6 +169,8 @@ public final class ColumnCycle {
          * @param airUnpowered whether some of the air condenser's banks have no power (W5): {@code airFeed} then holds them at
          *                     natural draught, and the air's limit is {@code NO_POWER} of the condenser (member 0)
          * @param unpowered    the members that have no power for the cycle and stop it (W5: a pump's share is 0), by index
+         * @param trays        the trays' capacity left, 0 to 1 (plan section 13.1, WP8: {@code ColumnWear.capacity}): the flood
+         *                     fraction the cycle reads is divided by it; 1 for clean trays, which leaves the cycle as before
          */
         public Rooms {
             pumparounds = pumparounds.clone();
@@ -176,6 +178,12 @@ public final class ColumnCycle {
             if (Double.isNaN(condenser) || Double.isNaN(reboiler) || Double.isNaN(airFeed)) throw new IllegalArgumentException("Invalid duty room");
             for (double r : pumparounds) if (Double.isNaN(r)) throw new IllegalArgumentException("Invalid duty room");
             for (int i : unpowered) if (i < 0) throw new IllegalArgumentException("Invalid member index");
+            if (!(trays > 0 && trays <= 1)) throw new IllegalArgumentException("Invalid tray capacity " + trays);
+        }
+
+        /** Clean trays. */
+        public Rooms(double condenser, double reboiler, double[] pumparounds, double airFeed, boolean airUnpowered, int[] unpowered) {
+            this(condenser, reboiler, pumparounds, airFeed, airUnpowered, unpowered, 1);
         }
 
         /** Every member powered. */
@@ -185,7 +193,12 @@ public final class ColumnCycle {
 
         /** These rooms with the members' power (W5). */
         public Rooms withPower(double airFeed, boolean airUnpowered, int[] unpowered) {
-            return new Rooms(condenser, reboiler, pumparounds, airFeed, airUnpowered, unpowered);
+            return new Rooms(condenser, reboiler, pumparounds, airFeed, airUnpowered, unpowered, trays);
+        }
+
+        /** These rooms with the trays' capacity left {@code value} (WP8). */
+        public Rooms withTrays(double value) {
+            return new Rooms(condenser, reboiler, pumparounds, airFeed, airUnpowered, unpowered, value);
         }
 
         @Override
@@ -199,15 +212,15 @@ public final class ColumnCycle {
         }
 
         public Rooms withCondenser(double value) {
-            return new Rooms(value, reboiler, pumparounds, airFeed, airUnpowered, unpowered);
+            return new Rooms(value, reboiler, pumparounds, airFeed, airUnpowered, unpowered, trays);
         }
 
         public Rooms withReboiler(double value) {
-            return new Rooms(condenser, value, pumparounds, airFeed, airUnpowered, unpowered);
+            return new Rooms(condenser, value, pumparounds, airFeed, airUnpowered, unpowered, trays);
         }
 
         public Rooms withPumparounds(double[] value) {
-            return new Rooms(condenser, reboiler, value, airFeed, airUnpowered, unpowered);
+            return new Rooms(condenser, reboiler, value, airFeed, airUnpowered, unpowered, trays);
         }
 
         @Override
@@ -292,9 +305,11 @@ public final class ColumnCycle {
             if (alphaCooling < 1) conditions.add(new Condition.Active(Condition.PUMPAROUND_SHORT, alphaCooling, j, ""));
         }
         // Flooding (W3.1, decision D2): at one table the worst tray's flood fraction is proportional to the feed taken, so the
-        // share that keeps it at its limit is the inverse of its fraction at the set feed.
+        // share that keeps it at its limit is the inverse of its fraction at the set feed. Fouled trays (WP8) flood at their
+        // capacity left: the fraction is divided by it (1 for clean trays, so the cycle is as before bit for bit).
         var flood = table.flood();
-        double atSet = flood.fraction(setpoints.feedRate());
+        double trays = rooms.trays();
+        double atSet = flood.fraction(setpoints.feedRate()) / trays;
         if (atSet > 1) conditions.add(new Condition.Active(Condition.FLOODING, 1 / atSet, flood.tray(), ""));
         if (ruleA)
             for (int j = 0; j < steam.size(); j++) {
@@ -351,7 +366,7 @@ public final class ColumnCycle {
             return idle(table, steam.size(), tripped);
         }
         // A sign before the limit binds (W3.2): the worst tray near its flood at the feed taken.
-        double loaded = flood.fraction(fed / seconds);
+        double loaded = flood.fraction(fed / seconds) / trays;
         if (loaded >= Condition.HIGH_LOAD_FRACTION)
             conditions.add(new Condition.Active(Condition.HIGH_LOAD, loaded, flood.tray(),
                     String.format(java.util.Locale.ROOT, "tray %d at %.0f %% of flood", flood.tray() + 1, 100 * Math.min(loaded, 1))));

@@ -879,6 +879,19 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         return fluidDevice(kind);
     }
 
+    /** Whether this structure carries a material of construction ({@link #hasMaterial(Kind)}). */
+    public boolean hasMaterial() {
+        return hasMaterial(kind);
+    }
+
+    /**
+     * Whether a structure of {@code kind} carries a material of construction (shape fields 13): every kind that registers a
+     * fluid device, and a column, whose unit's wall corrodes and wears as it (WP8 of batch 2026-11-16-fouling-corrosion).
+     */
+    public static boolean hasMaterial(Kind kind) {
+        return fluidDevice(kind) || kind == Kind.COLUMN;
+    }
+
     /** Whether a structure of {@code kind} registers with the fluid engine ({@link #fluidDevice()}): the kinds whose material of construction matters (shape fields 13). */
     public static boolean fluidDevice(Kind kind) {
         return kind.reservoir() || kind.mover() || kind == Kind.STEAM_TURBINE || kind.primeMover() || kind == Kind.EJECTOR || kind == Kind.FLARE_STACK || kind == Kind.BATCH_STILL || kind.chimney() || kind.converter() || HeatSides.unit(kind) != null;

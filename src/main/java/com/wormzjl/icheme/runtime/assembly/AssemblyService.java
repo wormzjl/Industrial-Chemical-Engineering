@@ -312,6 +312,22 @@ public final class AssemblyService {
         return built.request() == null ? built.refusal() : world.startColumn(built.request());
     }
 
+    /**
+     * The Clean of the column at {@code origin} (WP8 of batch 2026-11-16-fouling-corrosion, plan section 13.1): one queued
+     * engine event, accepted while the column is stopped; then its trays are clean. {@code reply} hears the outcome at the
+     * engine's tick drain ({@code NOTHING_TO_REPAIR} at once where the fluid world is not running or the column never ran).
+     */
+    public static void clean(ServerLevel level, BlockPos origin, java.util.function.Consumer<com.wormzjl.icheme.runtime.fluid.Integrity.Outcome> reply) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (world == null) reply.accept(com.wormzjl.icheme.runtime.fluid.Integrity.Outcome.NOTHING_TO_REPAIR);
+        else world.queueColumnClean(position(level, origin.asLong()), reply);
+    }
+
+    /** A Clean's answer text key: {@code message.icheme.column.clean.<outcome>}. */
+    public static String cleanKey(com.wormzjl.icheme.runtime.fluid.Integrity.Outcome outcome) {
+        return "message.icheme.column.clean." + outcome.name().toLowerCase(java.util.Locale.ROOT);
+    }
+
     /** The Stop of the column at {@code origin} (C7): nothing where it does not run. */
     public static void stop(ServerLevel level, BlockPos origin) {
         stopColumn(level, origin.asLong());
