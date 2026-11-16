@@ -420,8 +420,9 @@ class FluidTpEquilibriumPhUvTest {
         assertTrue(typed > 0, "no budget ended inside the band");
 
         // Beyond the data (owner rule of 2026-10-16: answered, graded extrapolated): methane's 293.15 K ideal-gas fit (an
-        // enthalpy only a colder state has), the 10 MPa envelope (WP7 widened methane, nitrogen and the network envelope
-        // from 2 MPa), a volume only a pressure above the envelope gives.
+        // enthalpy only a colder state has), the 30 MPa envelope (WP7 widened methane, nitrogen and the network envelope
+        // from 2 to 10 MPa, S3 of batch 2026-11-15-supercritical-fluids to 30 MPa), a volume only a pressure above the envelope
+        // gives.
         double[] methane = new double[species.size()];
         methane[contract.index("Methane")] = 1.0;
         var reference = service.tp(EquilibriumRequest.tp(300.0, 1.0e6, species, methane, PhaseCompetition.FLUID_ONLY), workspace);
@@ -439,14 +440,14 @@ class FluidTpEquilibriumPhUvTest {
         var insideUv = service.uv(EquilibriumRequest.uv(reference.internalEnergy(), 0.2 * reference.volume(), species, methane,
                 PhaseCompetition.FLUID_ONLY), workspace);
         assertEquals(Status.CONVERGED, insideUv.status(), insideUv.toString());
-        var dense = service.ph(EquilibriumRequest.ph(12.0e6, reference.enthalpy(), species, methane, PhaseCompetition.FLUID_ONLY),
+        var dense = service.ph(EquilibriumRequest.ph(36.0e6, reference.enthalpy(), species, methane, PhaseCompetition.FLUID_ONLY),
                 workspace);
         assertEquals(Status.CONVERGED, dense.status(), dense.toString());
         assertEquals(CoverageGrade.EXTRAPOLATED, dense.coverage().grade(), dense.toString());
-        var small = service.uv(EquilibriumRequest.uv(reference.internalEnergy(), 0.05 * reference.volume(), species, methane,
+        var small = service.uv(EquilibriumRequest.uv(reference.internalEnergy(), 0.025 * reference.volume(), species, methane,
                 PhaseCompetition.FLUID_ONLY), workspace);
         assertEquals(Status.CONVERGED, small.status(), small.toString());
-        assertTrue(pressure(small) > 1.0e7, "above the envelope: " + pressure(small));
+        assertTrue(pressure(small) > 3.0e7, "above the envelope: " + pressure(small));
         assertEquals(CoverageGrade.EXTRAPOLATED, small.coverage().grade());
 
         // Outside the contract: before any search.

@@ -173,11 +173,12 @@ class FluidTpEquilibriumTest {
         assertEquals(Status.CONVERGED, network.status(), network.toString());
         assertEquals(Classification.SUPERCRITICAL_FLUID, network.classification());
         assertEquals(PhaseKind.FLUID, network.phases().get(0).kind());
-        // Above the 10 MPa envelope the open contract answers, and the network contract answers the same state graded
-        // extrapolated, the envelope named (owner rule of 2026-10-16; it refused the state before).
-        var beyond = open.tp(EquilibriumRequest.tp(150.0, 12.0e6, BINARY, new double[] {0.0, 1.0}, PhaseCompetition.FLUID_ONLY));
+        // Above the 30 MPa envelope (10 MPa before S3 of batch 2026-11-15-supercritical-fluids) the open contract answers, and
+        // the network contract answers the same state graded extrapolated, the envelope named (owner rule of 2026-10-16; it
+        // refused the state before).
+        var beyond = open.tp(EquilibriumRequest.tp(150.0, 36.0e6, BINARY, new double[] {0.0, 1.0}, PhaseCompetition.FLUID_ONLY));
         assertEquals(Classification.SUPERCRITICAL_FLUID, beyond.classification());
-        var extrapolated = service.tp(EquilibriumRequest.tp(150.0, 12.0e6, contract.components(), pure, PhaseCompetition.FLUID_ONLY));
+        var extrapolated = service.tp(EquilibriumRequest.tp(150.0, 36.0e6, contract.components(), pure, PhaseCompetition.FLUID_ONLY));
         assertEquals(Status.CONVERGED, extrapolated.status(), extrapolated.toString());
         assertEquals(Classification.SUPERCRITICAL_FLUID, extrapolated.classification());
         assertEquals(CoverageGrade.EXTRAPOLATED, extrapolated.coverage().grade());
@@ -275,7 +276,8 @@ class FluidTpEquilibriumTest {
         refused.add(crystal);
 
         // Outside a data range nothing is refused (owner rule of 2026-10-16): methane below its 293.15 K ideal-gas fit and
-        // above the 10 MPa envelope are answered, graded extrapolated with the range named.
+        // above the 30 MPa envelope (10 MPa before S3 of batch 2026-11-15-supercritical-fluids; 12 MPa now lies inside it) are
+        // answered, graded extrapolated with the range named.
         var cold = service.tp(EquilibriumRequest.tp(200.0, 1.0e6, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0, "Nitrogen", 1.0),
                 PhaseCompetition.FLUID_ONLY));
         assertEquals(Status.CONVERGED, cold.status(), cold.toString());
@@ -284,7 +286,10 @@ class FluidTpEquilibriumTest {
         var inside = service.tp(EquilibriumRequest.tp(350.0, 3.0e6, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0), PhaseCompetition.FLUID_ONLY));
         assertEquals(Status.CONVERGED, inside.status(), inside.toString());
         assertNotEquals(CoverageGrade.EXTRAPOLATED, inside.coverage().grade());
-        var dense = service.tp(EquilibriumRequest.tp(350.0, 12.0e6, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0), PhaseCompetition.FLUID_ONLY));
+        var raised = service.tp(EquilibriumRequest.tp(350.0, 12.0e6, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0), PhaseCompetition.FLUID_ONLY));
+        assertEquals(Status.CONVERGED, raised.status(), raised.toString());
+        assertNotEquals(CoverageGrade.EXTRAPOLATED, raised.coverage().grade());
+        var dense = service.tp(EquilibriumRequest.tp(350.0, 36.0e6, contract.components(), PhaseTestSupport.over(contract, "Methane", 1.0), PhaseCompetition.FLUID_ONLY));
         assertEquals(Status.CONVERGED, dense.status(), dense.toString());
         assertEquals(CoverageGrade.EXTRAPOLATED, dense.coverage().grade());
         // PH and UV (P3 WP6b) run the same contract checks first.
