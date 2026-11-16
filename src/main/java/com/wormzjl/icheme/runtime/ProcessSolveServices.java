@@ -10,6 +10,8 @@ import com.wormzjl.icheme.runtime.ProcessSolveJobs.ColumnUnitCommand;
 import com.wormzjl.icheme.runtime.ProcessSolveJobs.ColumnUnitSolveResult;
 import com.wormzjl.icheme.runtime.ProcessSolveJobs.FluidIslandCommand;
 import com.wormzjl.icheme.runtime.ProcessSolveJobs.FluidIslandSolveResult;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.PollutionCommand;
+import com.wormzjl.icheme.runtime.ProcessSolveJobs.PollutionSolveResult;
 import com.wormzjl.icheme.runtime.ProcessSolveJobs.ProcessSolveCommand;
 import com.wormzjl.icheme.runtime.ProcessSolveJobs.ProcessSolveResult;
 import com.wormzjl.icheme.runtime.ProcessSolveJobs.StillCommand;
@@ -29,8 +31,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Every method is server-thread confined. The worker receives only a deeply immutable
  * {@link ProcessSolveCommand}; Minecraft objects and request-delivery metadata stay in the server-thread context
- * map. Three job families enter the one owned bounded service through this sealed envelope: a fluid island's slice,
- * a running column unit's solve and a batch still's column solve.</p>
+ * map. Four job families enter the one owned bounded service through this sealed envelope: a fluid island's slice,
+ * a running column unit's solve, a batch still's column solve and a dimension's pollution pass.</p>
  */
 public final class ProcessSolveServices {
     public static final int MAXIMUM_COMPLETIONS_PER_TICK = 64;
@@ -100,6 +102,14 @@ public final class ProcessSolveServices {
         requireServerThread(server);Objects.requireNonNull(request);Objects.requireNonNull(command);
         return submit(server,request,command,command.model().hydrocarbon.revision());
     }
+
+    /** A dimension's pollution pass (batch 2026-11-15-pollution-system, WP3): {@link com.wormzjl.icheme.science.pollution.PollutionField#step} under the solve deadline. */
+    public static AdmissionResult submitPollution(MinecraftServer server,PollutionRequest request,PollutionCommand command) {
+        requireServerThread(server);Objects.requireNonNull(request);Objects.requireNonNull(command);
+        return submit(server,request,command,POLLUTION_DATASET);
+    }
+    /** The dataset stamp of a pollution pass: the field reads no material data. */
+    private static final String POLLUTION_DATASET="pollution";
 
     /**
      * Fluid islands share the workers and the queue with the column and still jobs; their wall budget starts on the worker.
@@ -314,6 +324,10 @@ public final class ProcessSolveServices {
                 var outcome=completion.result().map(value->{if(!(value instanceof StillSolveResult still))throw new IllegalStateException("Still request completed with a different result family");return still.outcome();})
                         .orElseGet(()->new com.wormzjl.icheme.science.plant.still.StillHead.Failed(completion.status().name()+(completion.detail()==null?"":": "+completion.detail())));
                 result.add(new StillCompletion(stillRequest,outcome));
+            } else if(context.request() instanceof PollutionRequest pollutionRequest) {
+                var outcome=completion.result().map(value->{if(!(value instanceof PollutionSolveResult pollution))throw new IllegalStateException("Pollution request completed with a different result family");return pollution;})
+                        .orElseGet(()->new PollutionSolveResult(java.util.Optional.empty(),completion.status().name()+(completion.detail()==null?"":": "+completion.detail())));
+                result.add(new PollutionCompletion(pollutionRequest,outcome));
             } else {
                 throw new IllegalStateException("Unknown process-solve request family");
             }
@@ -356,7 +370,7 @@ public final class ProcessSolveServices {
     }
 
     /** Stable block identity; no loaded level or block entity is retained. */
-    public sealed interface SolveTarget permits FluidIslandTarget,ColumnUnitTarget,StillTarget {}
+    public sealed interface SolveTarget permits FluidIslandTarget,ColumnUnitTarget,StillTarget,PollutionTarget {}
 
     /** A running column unit, by its identity (batch 2026-10-28-column-operation). */
     public record ColumnUnitTarget(ResourceKey<Level> dimension,long unit) implements SolveTarget {
@@ -382,12 +396,24 @@ public final class ProcessSolveServices {
         public StillCompletion {Objects.requireNonNull(request);Objects.requireNonNull(outcome);}
     }
 
+    /** A dimension's pollution field (batch 2026-11-15-pollution-system, WP3): one pass at a time per dimension. */
+    public record PollutionTarget(ResourceKey<Level> dimension) implements SolveTarget {
+        public PollutionTarget {Objects.requireNonNull(dimension);}
+    }
+    /** Server-only delivery context of a pollution pass; the handler gets the result, an empty one for a worker failure or a shutdown. */
+    public record PollutionRequest(long requestId,PollutionTarget target,long inputRevision,java.util.function.Consumer<PollutionSolveResult> handler) implements ProcessSolveRequest {
+        public PollutionRequest {Objects.requireNonNull(target);Objects.requireNonNull(handler);if(requestId<=0||inputRevision<0)throw new IllegalArgumentException("Invalid pollution request stamp");}
+    }
+    public record PollutionCompletion(PollutionRequest request,PollutionSolveResult result) implements ProcessSolveCompletion {
+        public PollutionCompletion {Objects.requireNonNull(request);Objects.requireNonNull(result);}
+    }
+
     public record FluidIslandTarget(ResourceKey<Level> dimension,long islandId) implements SolveTarget {
         public FluidIslandTarget {Objects.requireNonNull(dimension);if(islandId<=0)throw new IllegalArgumentException("Invalid island identity");}
     }
 
     /** Immutable server-thread request context retained until exactly one terminal completion is drained. */
-    public sealed interface ProcessSolveRequest permits FluidIslandRequest,ColumnUnitRequest,StillRequest {
+    public sealed interface ProcessSolveRequest permits FluidIslandRequest,ColumnUnitRequest,StillRequest,PollutionRequest {
         long requestId();
 
         SolveTarget target();
@@ -412,7 +438,7 @@ public final class ProcessSolveServices {
     }
 
     /** Marker for the central router; only it may drain the shared completion queue. */
-    public sealed interface ProcessSolveCompletion permits FluidIslandCompletion,ColumnUnitCompletion,StillCompletion {}
+    public sealed interface ProcessSolveCompletion permits FluidIslandCompletion,ColumnUnitCompletion,StillCompletion,PollutionCompletion {}
 
     public record AdmissionResult(Admission admission, Diagnostics diagnostics) {
         public AdmissionResult {

@@ -302,7 +302,8 @@ final class StructureRegistration {
         var shape = vessel.shape();
         var moved = device.withPlacement(Positions.of(level, node), ports(level, vessel)).withHeat(device.heat().withArea(sides.getFirst().area()));
         var spec = record.spec();
-        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry(), null);
+        // A breach (WP6b) is a fact the refresh keeps.
+        var respec = new FluidDeviceSpec(shape.volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), shape.levelHeight(), false, shape.fluidGeometry(), null).withBreached(spec.breached());
         if (!moved.equals(device) || !respec.equals(spec)) world.edit(device.id(), record.revision(), moved, respec);
         for (var other : nodes)
             if (!other.equals(node) && level.getBlockEntity(other) instanceof EquipmentShellBlockEntity stale && stale.fluidIdentity() == device.id()) stale.releaseIdentity();
@@ -627,7 +628,7 @@ final class StructureRegistration {
         var relief = fittedRelief(level, vessel, record);
         if (relief != null) { nozzles = new ArrayList<>(nozzles); nozzles.add(relief.port()); }
         world.edit(device.id(), record.revision(), device.withPlacement(Positions.of(level, node), nozzles),
-                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket(), relief == null ? 0 : spec.relief(), null));
+                vessel.shape().kind().mover() || vessel.shape().kind() == EquipmentShape.Kind.FLARE_STACK || vessel.shape().kind().chimney() ? spec : new FluidDeviceSpec(vessel.shape().volume(), spec.temperature(), spec.pressure(), spec.composition(), spec.solids(), vessel.shape().levelHeight(), open(vessel), vessel.shape().fluidGeometry(),spec.tower(), valve == null ? 0 : spec.blanket(), relief == null ? 0 : spec.relief(), null).withBreached(spec.breached()));
         if (oldNode != null && !oldNode.equals(node) && level.getBlockEntity(oldNode) instanceof EquipmentShellBlockEntity old && old.fluidIdentity() == device.id()) old.releaseIdentity();
         if (level.getBlockEntity(node) instanceof EquipmentShellBlockEntity entity && entity.fluidIdentity() != device.id()) entity.bindIdentity(device.id());
         ShaftParts.structure(level, vessel.origin(), vessel.shape(), device.id());

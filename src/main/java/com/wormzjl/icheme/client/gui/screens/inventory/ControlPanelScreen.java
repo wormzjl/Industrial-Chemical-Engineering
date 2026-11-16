@@ -223,6 +223,8 @@ public final class ControlPanelScreen extends AbstractContainerScreen<ControlPan
                 case HEIGHT_PERCENT -> "%";
                 case REVOLUTIONS_PER_MINUTE -> "rpm";
                 case STATE -> "";
+                // A pollution index is dimensionless (WP10).
+                case INDEX -> "";
             };
         } catch (IllegalArgumentException e) {
             return "";

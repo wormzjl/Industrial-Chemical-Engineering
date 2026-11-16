@@ -78,9 +78,11 @@ final class FluidFacts {
      *  remainder and its account (absent: no converter).
      *  25 (batch 2026-11-11-aqueous-solvents, W3b step 6; numbered 25 at the merge of main 0.28.0): a vessel's oil-liquid and
      *  aqueous-liquid amounts, after its {@code rigid}; absent means the pre-W3b reading of its liquid fields (the compounds'
-     *  liquid and the water as two liquids). */
-    static final int SCHEMA=25;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 25. */
+     *  liquid and the water as two liquids).
+     *  26 (batch 2026-11-15-pollution-system, WP6b): a device spec's {@code breached}, after its relief face: a blast breached
+     *  the vessel's wall (absent: false, whole). */
+    static final int SCHEMA=26;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 26. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -297,7 +299,7 @@ final class FluidFacts {
                 .list(d.ports(),(q,p)->{position(q,p.cell());q.name(p.face()).name(p.port()).name(p.role());})
                 .record(q->q.f64(s.volume()).f64(s.temperature()).f64(s.pressure()).doubles(s.composition())
                         .record(feed->feed.f64(s.solids().volumeFraction()).list(s.solids().grades(),(e,grade)->e.text(grade.material()).text(grade.size().metres()).f64(grade.massShare())))
-                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)))
+                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)).bool(s.breached()))
                 .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points())
                 .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit).count(d.suspendedBy());
     }
@@ -328,7 +330,9 @@ final class FluidFacts {
             double blanket=q.f64(0);
             // Schema 23: a spec written before the pressure safety valve existed has none.
             double relief=q.f64(0);var faces=q.list(List.<PhysicalFluidTopology.Direction>of(),e->required(e.name(PhysicalFluidTopology.Direction.class,null),e,"relief face"));if(faces.size()>1)throw q.invalid("Multiple relief faces");
-            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst()));});
+            // Schema 26: a spec written before a blast could breach a vessel is whole.
+            boolean breached=q.bool(false);
+            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst(),breached));});
         long revision=f.count(0);
         // Schema 2: a record written before joints existed connects through every face, as every pipe did then.
         long joints=f.count(PhysicalFluidTopology.ALL_FACES);if(joints>PhysicalFluidTopology.ALL_FACES)throw f.invalid("joints "+joints);
@@ -770,7 +774,8 @@ final class FluidFacts {
                 PassiveNetwork.Reservoir node;
                 if(held!=null) {
                     var state=Arrays.stream(v.moles).sum()==0&&!solids.empty()?held.solidState(v.temperature,v.pressure,solids):v.state(held).withSolids(solids);
-                    var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open).withBlanket(r.spec().blanket()));
+                    // A breached vessel's row is open (schema 26): it carries no gas blanket while it is.
+                    var kept=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,v.moles,v.energy,solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open).withBlanket(v.open?0:r.spec().blanket()));
                     origins.put(v.id,new IslandSets.Origin(kept,held));node=IslandSets.node(kept,held,model);
                 } else {
                     var moles=from.map(v.moles,removed);restated++;
@@ -778,7 +783,7 @@ final class FluidFacts {
                     if(Arrays.stream(moles).sum()==0&&solids.empty()){node=r.spec().initialize(r.device(),model,()->{});node=new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state(),node.kind(),node.inventory().withRigid(v.rigid));}
                     else {
                         var state=Arrays.stream(moles).sum()==0?model.solidState(v.temperature,v.pressure,solids):model.flashTP(v.temperature,v.pressure,moles,()->{}).withSolids(solids);
-                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open).withBlanket(r.spec().blanket()));
+                        node=new PassiveNetwork.Reservoir(v.id,y,state,PassiveNetwork.NodeKind.RESERVOIR,new PassiveNetwork.Inventory(v.volume,moles,state.internalEnergy(),solids,v.levelHeight,v.open,r.spec().geometry(),null,r.spec().tower(),v.rigid&&!v.open).withBlanket(v.open?0:r.spec().blanket()));
                     }
                     energy+=node.inventory().internalEnergy()-v.energy;
                 }

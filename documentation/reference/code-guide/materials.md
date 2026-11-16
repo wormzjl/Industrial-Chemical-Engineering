@@ -129,7 +129,7 @@ model continues, value and slope continuous.
 with it. Neither a package record's nor a method record's own `revision` is in any identity: the identity lists the
 method's physics fields, the datasets and the libraries, so a package edit alone, a compound added to a package, or a
 library added for other compounds moves no identity of a view without them. Assays and the `freezing`,
-`thermochemistry`, `flammability` and `combustion` sub-records are in no identity.
+`thermochemistry`, `flammability`, `combustion` and `hazard` sub-records are in no identity. `hazard` (`MaterialCatalog.Hazard`: channel TOXIC or CORROSIVE, a reference in ppm, its source and its own revision) and `flammability` feed the pollution standard ([pollution.md](pollution.md)).
 
 | Identity | Composed of, in order | Used for |
 |---|---|---|
@@ -267,4 +267,4 @@ Helpers: `MaterialTestBasis`, `Cdu17TestCatalog`, `SubRecords`, and the catalog 
 - Ethanol's activity fits cost about four times water's, because a pair the group model gives one liquid also scans
   `SCAN_POINTS` points per trial (`DerivedPairs.Context.shape`, `oneLiquid`); a list without ethanol pays nothing.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `05c02394f`, 2026-11-16.

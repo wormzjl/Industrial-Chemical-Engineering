@@ -69,7 +69,9 @@ public final class ControlColumns {
         FLOW,
         TEMPERATURE,
         SPEED,
-        ALARM
+        ALARM,
+        /** A pollution monitor's index (WP10); the names follow {@code Sensor.Kind}, which the screen reads by name. */
+        ANALYSER
     }
 
     public record View(

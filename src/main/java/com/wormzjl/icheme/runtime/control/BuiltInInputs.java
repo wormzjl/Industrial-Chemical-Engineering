@@ -208,6 +208,43 @@ final class BuiltInInputs {
         return view != null && view.unpowered();
     }
 
+    /** The role of a pollution monitor's index channel; the channel's name follows (WP10). */
+    static final String MONITOR = "MONITOR:";
+    /** The role of a pollution monitor's gas alarm (WP10): read 0 clear, 1 GAS, 2 GAS HIGH ({@code MonitorSignals.Alarm}). */
+    static final String GAS_ALARM = "ALARM:GAS";
+
+    /**
+     * A fixed pollution monitor's channels (batch 2026-11-15-pollution-system, WP10): the four indices of its cube, one per
+     * {@link com.wormzjl.icheme.science.pollution.Channel} ({@code toxic}, {@code combustible}, {@code corrosive},
+     * {@code particulate}), and its gas alarm ({@code alarm_gas}). Their identities derive from the host alone.
+     */
+    static List<ControlInput> monitor(long host) {
+        var out = new ArrayList<ControlInput>();
+        for (var channel : com.wormzjl.icheme.science.pollution.Channel.values())
+            out.add(ControlInput.builtIn(host, 0, channel.name().toLowerCase(Locale.ROOT), Sensor.Kind.ANALYSER, MONITOR + channel.name()));
+        out.add(ControlInput.builtIn(host, 0, "alarm_gas", Sensor.Kind.ALARM, GAS_ALARM));
+        return List.copyOf(out);
+    }
+
+    /** Whether {@code input} is one of a pollution monitor's channels. */
+    static boolean ofMonitor(ControlInput input) {
+        return input.physical() == null && (input.role().startsWith(MONITOR) || input.role().equals(GAS_ALARM));
+    }
+
+    /**
+     * A monitor channel's reading from its cube's four indices (in {@code Channel} order): an index, or the alarm's ordinal.
+     * Available while pollution runs; 0 and unavailable while it is off.
+     */
+    static Sensor.Reading monitorReading(ControlInput input, double[] indices, boolean enabled, long tick) {
+        double value;
+        if (input.role().equals(GAS_ALARM))
+            value = com.wormzjl.icheme.runtime.pollution.MonitorSignals.alarm(indices).ordinal();
+        else
+            value = indices[com.wormzjl.icheme.science.pollution.Channel.valueOf(input.role().substring(MONITOR.length())).ordinal()];
+        return new Sensor.Reading(input.instance(), input.kind(), input.channel(), enabled && Double.isFinite(value) ? value : 0, 0, 0,
+                Math.max(0, tick), enabled ? Instrument.Availability.AVAILABLE : Instrument.Availability.UNAVAILABLE);
+    }
+
     static List<ControlInput> inline(long host) {
         var out = new ArrayList<ControlInput>();
         stream(out, host, host, "inlet", "MOVER:INLET", false);
@@ -253,6 +290,7 @@ final class BuiltInInputs {
                 && !input.role().startsWith("ALARM:")
                 && !input.role().startsWith("FLARE:")
                 && !input.role().startsWith("CHIMNEY:")
+                && !input.role().startsWith(MONITOR)
                 && !input.role().startsWith("CONVERTER:")
                 && !input.role().startsWith("STILL:")
                 && !input.role().equals("REFLUX")

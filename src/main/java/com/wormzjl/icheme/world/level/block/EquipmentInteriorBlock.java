@@ -130,7 +130,9 @@ public final class EquipmentInteriorBlock extends Block {
 
     @Override
     public void onBlockExploded(BlockState state, Level level, BlockPos position, net.minecraft.world.level.Explosion explosion) {
-        // Explosions never authorise deconstruction, even when a custom blast ignores resistance.
+        // Explosions never authorise deconstruction, even when a custom blast ignores resistance. A strong one breaches the
+        // equipment instead (pollution WP6b); the block stays.
+        if (level instanceof net.minecraft.server.level.ServerLevel server) com.wormzjl.icheme.runtime.pollution.Breaches.exploded(server, position, explosion);
     }
 
     @Override public BlockState playerWillDestroy(Level level,BlockPos pos,BlockState state,Player player){EquipmentStructure.breaking(level,pos,player);return super.playerWillDestroy(level,pos,state,player);}

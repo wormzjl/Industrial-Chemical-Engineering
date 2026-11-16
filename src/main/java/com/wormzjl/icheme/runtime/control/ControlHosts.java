@@ -26,6 +26,8 @@ final class ControlHosts {
     private final Map<Long, List<ControlInput>> memberInputs = new HashMap<>();
     private final Map<Long, Set<Long>> columnMembers = new HashMap<>();
     private final Map<Long, Long> aliases = new HashMap<>();
+    /** The fixed pollution monitors bound this session, by host (WP10): where each reads its cube. */
+    private final Map<Long, Monitor> monitors = new HashMap<>();
     private DataBus bus = new DataBus(List.of(), Map.of());
     private long busRevision = -1;
 
@@ -177,13 +179,18 @@ final class ControlHosts {
                                                     && !world.registrations()
                                                             .containsKey(port.host())
                                                     && world.shafts().unit(port.host()) == null
+                                                    // A pollution monitor's socket beside the column's is not the column's (WP10).
+                                                    && !monitors.containsKey(port.host())
                                                     && port.dimension()
                                                             .equals(
                                                                     cell.getLevel()
                                                                             .dimension()
                                                                             .location()
                                                                             .toString())
-                                                    && port.centre().distanceToSqr(centre) < 1)
+                                                    && port.centre().distanceToSqr(centre) < 1
+                                                    && !(cell.getLevel().hasChunkAt(port.owner())
+                                                            && cell.getLevel().getBlockState(port.owner()).getBlock()
+                                                                    instanceof com.wormzjl.icheme.world.level.block.PollutionMonitorBlock))
                             .findFirst()
                             .orElse(null);
         }
@@ -202,6 +209,73 @@ final class ControlHosts {
                         List.of()));
         columnCells.put(id, new java.lang.ref.WeakReference<>(cell));
         bind(new InstrumentHosts.Host(id, cell, List.of(), false));
+    }
+
+    /** Where a pollution monitor reads: its server, dimension and block. */
+    record Monitor(
+            net.minecraft.server.MinecraftServer server,
+            net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
+            BlockPos position) {}
+
+    /**
+     * A fixed pollution monitor's host (WP10), as a column's: the socket fact whose owner is its block keeps its host and
+     * identity (registry first: a monitor placed again where a lost one stood takes its socket back); else a reserved
+     * control identity and a new socket. A wired socket keeps its built entry ({@link DataPorts#remount}).
+     */
+    long bindMonitor(PollutionMonitorBlockEntity monitor) {
+        var level = monitor.getLevel();
+        var existing =
+                monitorPort(
+                        facts.ports().values(),
+                        level.dimension().location().toString(),
+                        monitor.getBlockPos(),
+                        host -> world.registrations().containsKey(host) || world.shafts().unit(host) != null);
+        long host = existing == null ? world.reserveControlIdentity() : existing.host();
+        var mount = DataPorts.monitor(monitor, host, existing == null ? UUID.randomUUID() : existing.id());
+        var port = existing == null ? mount : DataPorts.remount(existing, mount, facts.wired(existing.id()));
+        if (!port.equals(existing)) facts.port(port);
+        equipmentPorts.put(host, port);
+        monitors.put(host, new Monitor(level.getServer(), level.dimension(), monitor.getBlockPos().immutable()));
+        if (host != monitor.host() || !port.equals(monitor.dataPort())) monitor.bind(host, port);
+        return host;
+    }
+
+    /**
+     * The sensor socket fact a pollution monitor at {@code owner} owns, or null: a socket of a host that no fluid
+     * registration or shaft unit holds ({@code taken}), owned by that block.
+     */
+    static DataPort monitorPort(
+            Collection<DataPort> ports, String dimension, BlockPos owner, java.util.function.LongPredicate taken) {
+        return ports.stream()
+                .filter(
+                        p ->
+                                p.kind() == DataPort.Kind.SENSOR
+                                        && p.host() > 0
+                                        && p.dimension().equals(dimension)
+                                        && p.owner().equals(owner)
+                                        && !taken.test(p.host()))
+                .min(Comparator.comparing(p -> p.id().toString()))
+                .orElse(null);
+    }
+
+    /** Whether {@code host} is a pollution monitor bound this session. */
+    boolean monitor(long host) {
+        return monitors.containsKey(host);
+    }
+
+    /** A monitor channel's reading: its cube's indices from the installed pollution field (no step), 0 while it is off. */
+    Sensor.Reading readMonitor(ControlInput input, long tick) {
+        var m = monitors.get(input.host());
+        var service =
+                m == null
+                        ? null
+                        : com.wormzjl.icheme.runtime.pollution.PollutionService.find(m.server()).orElse(null);
+        double[] indices =
+                m == null
+                        ? new double[com.wormzjl.icheme.science.pollution.Channel.values().length]
+                        : com.wormzjl.icheme.runtime.pollution.MonitorSignals.indices(service, m.dimension(), m.position());
+        return BuiltInInputs.monitorReading(
+                input, indices, com.wormzjl.icheme.runtime.pollution.MonitorSignals.enabled(service), tick);
     }
 
     void bindMotor(EquipmentShellBlockEntity cell, ShaftUnit unit) {
@@ -332,6 +406,7 @@ final class ControlHosts {
         columnCells.remove(host);
         memberInputs.remove(host);
         columnMembers.remove(host);
+        monitors.remove(host);
         aliases.entrySet().removeIf(a -> a.getKey() == host || a.getValue() == host);
         var port = equipmentPorts.remove(host);
         if (port != null) facts.removePort(port.id());
@@ -386,6 +461,8 @@ final class ControlHosts {
             }
         for (var channels : memberInputs.values())
             for (var input : channels) sensors.put(input.instance(), input);
+        for (long host : monitors.keySet())
+            for (var input : BuiltInInputs.monitor(host)) sensors.put(input.instance(), input);
         return sensors;
     }
 

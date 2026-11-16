@@ -69,6 +69,7 @@ public final class ProcessSolveCoordinator {
                 case ProcessSolveServices.FluidIslandCompletion fluid -> fluid.request().handler().completed(fluid);
                 case ProcessSolveServices.ColumnUnitCompletion column -> column.request().handler().accept(column.outcome());
                 case ProcessSolveServices.StillCompletion still -> still.request().handler().accept(still.outcome());
+                case ProcessSolveServices.PollutionCompletion pollution -> pollution.request().handler().accept(pollution.result());
             }
         }
     }
@@ -78,6 +79,7 @@ public final class ProcessSolveCoordinator {
             case ProcessSolveServices.FluidIslandRequest fluid -> fluid.handler().abandoned(fluid);
             case ProcessSolveServices.ColumnUnitRequest column -> column.handler().accept(new com.wormzjl.icheme.science.plant.column.ColumnSolve.Failed("SERVER_SHUTDOWN",true));
             case ProcessSolveServices.StillRequest still -> still.handler().accept(new com.wormzjl.icheme.science.plant.still.StillHead.Failed("SERVER_SHUTDOWN"));
+            case ProcessSolveServices.PollutionRequest pollution -> pollution.handler().accept(new ProcessSolveJobs.PollutionSolveResult(java.util.Optional.empty(),"SERVER_SHUTDOWN"));
         }
     }
 }

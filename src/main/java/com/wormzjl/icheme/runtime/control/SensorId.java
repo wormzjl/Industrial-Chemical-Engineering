@@ -28,6 +28,8 @@ public record SensorId(UUID instance, long number, Sensor.Kind kind) {
                     case LEVEL -> "LT";
                     case SPEED -> "ST";
                     case ALARM -> "XA";
+                    // An analyser transmitter (WP10): the pollution monitor's channels are labelled with it.
+                    case ANALYSER -> "AT";
                 },
                 number);
     }

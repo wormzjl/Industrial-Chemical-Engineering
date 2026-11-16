@@ -223,9 +223,19 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         });
     }
     @Override public BlockState playerWillDestroy(Level level,BlockPos pos,BlockState state,Player player){if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)h.instruments().recoverOnBreak(!player.isCreative());return super.playerWillDestroy(level,pos,state,player);}
+    /**
+     * A blast destroys a one-block device outright, as an ordinary block (owner 2026-11-15: no damage meter), and only this
+     * removal lets out what it held (batch 2026-11-15-pollution-system, WP6a, S5): the position is marked while the block
+     * leaves ({@link com.wormzjl.icheme.runtime.pollution.BurstPipes}). A player's break releases nothing.
+     */
+    @Override public void onBlockExploded(BlockState state,Level level,BlockPos position,Explosion explosion) {
+        if(level instanceof ServerLevel serverLevel)com.wormzjl.icheme.runtime.pollution.BurstPipes.exploded(serverLevel,position,()->super.onBlockExploded(state,level,position,explosion));
+        else super.onBlockExploded(state,level,position,explosion);
+    }
     @Override protected void onRemove(BlockState state,Level level,BlockPos position,BlockState replacement,boolean moved) {
         if(!registered&&state.getBlock()!=replacement.getBlock()&&level instanceof ServerLevel serverLevel)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
-            var p=Positions.of(level,position);world.at(p).ifPresent(r->{boolean drops=!(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)||h.instruments().recoverOnBreak();world.instruments().recover(r.device().id(),level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);world.remove(r.device().id());});
+            // A blast's removal (WP6a): what the device holds goes to the air before its registration leaves; the ledger books its removal as before.
+            var p=Positions.of(level,position);world.at(p).ifPresent(r->{if(com.wormzjl.icheme.runtime.pollution.BurstPipes.marked(serverLevel,position))com.wormzjl.icheme.runtime.pollution.BurstPipes.burst(serverLevel,position,world,r.device().id());boolean drops=!(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)||h.instruments().recoverOnBreak();world.instruments().recover(r.device().id(),level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);world.remove(r.device().id());});
         });
         super.onRemove(state,level,position,replacement,moved);
     }

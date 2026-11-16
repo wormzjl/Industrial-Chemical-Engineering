@@ -1,0 +1,11 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:blaze",
+    "minecraft:small_fireball",
+    "minecraft:fireball",
+    "minecraft:lightning_bolt",
+    "minecraft:tnt",
+    "minecraft:firework_rocket"
+  ]
+}

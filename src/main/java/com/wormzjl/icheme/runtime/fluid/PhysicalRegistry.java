@@ -431,7 +431,9 @@ public final class PhysicalRegistry {
                     var node=stock.get(edit.id());if(node==null)throw new IllegalStateException("Topology event reached vessel "+edit.id()+" outside the islands it fenced");
                     if(moved||respecified) {
                         var spec=replacement.spec();var held=node.inventory();
-                        var inventory=respecified?new PassiveNetwork.Inventory(spec.volume(),held.moles(),held.internalEnergy(),held.solids(),spec.levelHeight(),spec.open(),spec.geometry(),null,spec.tower(),held.rigid()&&!spec.open()).withBlanket(spec.blanket()):held;
+                        // A breach or its repair (batch 2026-11-15-pollution-system, WP6b) is such an edit: the vessel stands open while
+                        // its spec is vented (FluidDeviceSpec.vented), never rigid and with no gas blanket, and keeps what it holds.
+                        var inventory=respecified?new PassiveNetwork.Inventory(spec.volume(),held.moles(),held.internalEnergy(),held.solids(),spec.levelHeight(),spec.vented(),spec.geometry(),null,spec.tower(),held.rigid()&&!spec.vented()).withBlanket(spec.ventedBlanket()):held;
                         var rebuilt=new PassiveNetwork.Reservoir(node.id(),replacement.device().position().y(),node.state(),node.kind(),inventory);
                         stock.put(edit.id(),rebuilt);if(additions.containsKey(edit.id()))additions.put(edit.id(),rebuilt);
                     }

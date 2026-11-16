@@ -14,11 +14,12 @@ package com.wormzjl.icheme.network;
  * <p>History: before {@code icheme-1} each registrar carried its own string ({@code fluid-24}, {@code equipment-23},
  * {@code assembly-6}, {@code machine-4}, {@code control-5}, {@code lines-1}, {@code rotation-1}, {@code tutorial-1},
  * {@code sight-glass-3}, {@code mover-4}, {@code flare-2}, {@code still-1}, {@code instruments-1},
- * {@code pipeline-tool-5} and the process simulator's {@code 3}); the first value differs from all of them.</p>
+ * {@code pipeline-tool-5} and the process simulator's {@code 3}); the first value differs from all of them. {@code icheme-2}:
+ * the pollution map's payloads joined ({@link PollutionMapNetwork}, batch 2026-11-15-pollution-system, WP9).</p>
  */
 public final class NetworkProtocol {
     /** The version every registrar of the mod carries. */
-    public static final String VERSION = "icheme-1";
+    public static final String VERSION = "icheme-2";
 
     private NetworkProtocol() {
     }
