@@ -16,7 +16,7 @@ Up: [code guide](README.md) · the sheet and the block: [process-simulator.md](p
 
 `ProcessSimulatorScreen` is the one Minecraft class of the screen: it forwards events and draws. Everything it shows is
 built Minecraft-free in `client/gui/flowsheet/`, so `tools/heat-gui-renders/SimulatorRender.java` draws the same pages
-from shipped code. The frame has four tabs (FLOWSHEET, RESULTS, SIZING, BASIS); the sheet is drawn on a canvas with pan
+from shipped code. The frame has five tabs (FLOWSHEET, RESULTS, SIZING, METALLURGY shown as Materials, BASIS); the sheet is drawn on a canvas with pan
 and zoom; a click on a unit or a stream opens its door; edits go through one editor with undo and redo. Runs go to
 `SimulatorRunner`, one at a time on its own low-priority thread; the screen polls it each tick, uploads finished runs to
 the block (`SimulatorBlockHost`) and autosaves through one writer thread.
@@ -39,6 +39,7 @@ Lines at the snapshot.
 | [`StreamDoors`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/StreamDoors.java), [`StreamProps`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/StreamProps.java) | A stream's door (feed, flow, T and P, components, Copy and Paste; `largest`, `writeFeed`); what a stream's meters read (`Fluids.weight`) | 397, 102 |
 | [`ResultsPage`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/ResultsPage.java), [`NoteText`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/NoteText.java), [`SheetResults`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/SheetResults.java) | The Results tab (streams, units, the log, the balances); a note in the player's units; a run as the screen reads it | 470, 118, 93 |
 | [`SizingPage`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/SizingPage.java), [`SizingGlass`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/SizingGlass.java) | The Sizing tab's four views (sizing method apart from equipment type, count and size; `open`, `number`); its table, picks and scroll (`Table.branch`, `parented`) | 979, 503 |
+| [`MaterialsPage`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/MaterialsPage.java), [`MaterialsGlass`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/MaterialsGlass.java) | The Materials tab: each unit rated for the four materials of construction (the rating's `SheetMetallurgy.Rows`), Auto or Manual on the door (`press` writes `UnitFacts.material`, one step), `chosen` for Send to block; the unit table, the picked unit's four materials, picks and scroll | 180, 175 |
 | [`BasisPage`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/BasisPage.java), [`SelectionColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/SelectionColumn.java) | The Basis tab (package, design basis, solver settings); the selection's panel (readings, a feed's entries, Auto's sizes) | 84, 137 |
 | [`FileColumns`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/FileColumns.java), [`FlowsheetExamples`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/FlowsheetExamples.java) | Open and Save as dialogs and file names (`entries`, `opened`, `deletable`, `delete`, `nameAfterDelete`, `changes`); the bundled examples (`assets/icheme/flowsheet_examples/index.json`, read through a resource function) | 381, 81 |
 | [`SheetEditor`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/SheetEditor.java), [`SheetGestures`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/SheetGestures.java), [`SheetClipboard`](../../../src/main/java/com/wormzjl/icheme/client/gui/flowsheet/SheetClipboard.java) | Every edit with undo and redo, tags and refusals (`takes`, `roles`); the mouse and key state machine (`Mode.PAN`, `drawRings`); the one clipboard (`paste`) | 668, 436, 101 |
@@ -76,6 +77,9 @@ Lines at the snapshot.
 ## Contracts
 
 - **Window.** The screen keeps the player's GUI scale; layout and scrolling use the actual viewport.
+- **Five tabs.** Narrow tabs are 54 px and narrow file keys 34 px, so the tab row ends before the file keys at 464 px; there
+  the Flowsheet tab reads `tab.flowsheet_short` ("Sheet"), as Save as reads short. The Materials tab opens with the Sizing
+  tab (`SizingPage.open`) and re-rates quietly as Sizing does.
 - **Frame keys.** `keys(third)` puts Close in the footer and the tab's two keys, then Undo and Redo, in two pairs 12 px
   apart: on the tab row where they fit (`keysOnTabRow`), else on the title row; the tabs and file keys keep their wide
   widths only where the pairs fit between them (`wideKeys`). Each pair, the tabs, the file keys and the theme key stand

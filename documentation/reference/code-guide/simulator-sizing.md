@@ -21,6 +21,10 @@ applies every Auto size to a copy of the sheet and re-runs once, warm, where a s
 from each set pressure through every line and unit side to its taker. `SheetSizing.designs` is the list Send to block
 hands to the block, from which the equipment constructor imports.
 
+The Materials tab (`science/flowsheet/metallurgy/SheetMetallurgy`) rates each unit with a wall for the four materials of
+construction on the same run, by the world's own laws (`CorrosionLaw`, `ErosionLaw`; [integrity.md](integrity.md)). Its
+choice is a sizing fact, and Send to block builds each structure of it.
+
 ## Class map
 
 **`science/flowsheet/sizing/`** ([source](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/)). Lines at
@@ -52,6 +56,11 @@ the snapshot. "pp" = package-private.
 | [`EjectorSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/EjectorSizing.java), [`VacuumPumpSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/VacuumPumpSizing.java) | The suction bore whose world set holds the spared load; the type, then the smallest model whose capacity at the suction holds it | 99, 81 |
 | [`FlareSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/FlareSizing.java), [`ChimneySizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ChimneySizing.java) | The tip that passes the design flow; the exit diameter and the height on the constructor's grid | 87, 92 |
 | [`PrimeMoverSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PrimeMoverSizing.java), [`StillSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/StillSizing.java) | The smallest engine or turbine model whose rated fuel holds the fuel heat; a batch still's pot from the constructor's list, with its heater, worm and column | 78, 138 |
+
+**`science/flowsheet/metallurgy/`**: [`SheetMetallurgy`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/metallurgy/SheetMetallurgy.java)
+(the Materials tab's rows: `rate(sheet, run, thermo, sized)` per unit, `ratings`, `auto`, `trim`, `lamp`; 235 lines). It
+sits beside `sizing/` rather than in it: it reads the run's streams and the sizing's line speeds, writes no size, and
+imports `science/integrity`, which nothing in `sizing/` needs.
 
 Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com/wormzjl/icheme/science/equipment/SentDesign.java)
 (one sent unit design: tag, member, count, shape, column; 38 lines) and
@@ -121,6 +130,17 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
   within 7.5 to 30 m/s and the 100 m/s cap; the GEP height (2.5 times the structure's, at least 10 m) within the form's
   range. **Flares**: the tip that passes the design flow with the spare. **Prime movers** and **vacuum pumps**: the
   smallest model that holds, spare first.
+- **Materials** (`SheetMetallurgy`). A unit with a wall (`WALLED`: the types that build a structure with a fluid device,
+  columns included) is rated on every stream on its ports, the worst governing: `CorrosionLaw.inside` per stream, plus
+  `ErosionLaw.wall` on a heat side (`HEAT_SIDES`) at its line's sized speed. Lamps green at most 0.1 mm/y, yellow (amber)
+  at most 0.5, red above; life `WallState.lifeProcessSeconds` at `YEAR_PROCESS_HOURS` (20, the server's default: the
+  client reads no server setting). Auto: the cheapest green material, else the least rate, the cheaper on a tie. A control
+  valve rates its trim (`ErosionLaw.trim` at the run's drop, the inlet's density and inert solids); mixers, splitters and
+  filters get no row; the corrosive air is not rated. The rows are computed on the runner's thread beside every rating
+  (`SimulatorRunner.Engine.materials`, `Rated.materials`) for all four materials, so a choice changes facts only. The
+  choice is `SizingFacts.UnitFacts.material` (null for Auto), saved by name; an unknown name reads as Auto and stays
+  beside the row. `SheetSizing.designs(sheet, sized, material)` sets each fluid-device or column shape's material by its
+  unit (a member by its block); the two-argument form uses the Manual choice, else carbon steel.
 - **Saved names.** `SizingFactsFile` saves each kind's size by name (`STEAM_TURBINE`, `CHIMNEY`, `VACUUM_PUMP`,
   `PRIME_MOVER` among them): a new kind is a new name, no format change. Member keys are `Members`' saved names.
 
@@ -146,6 +166,7 @@ Sizing facts are facts of the sheet (`SizingFactsFile`, in the flowsheet file); 
 | The release pressures | `FlowThermo` | `ReleasePressureTest` (the sheet's p_v and E within 1 % of the world's PH readings) |
 | The sample sheet | the whole stage | `CrudeUnitSampleTest` (`holdGates`: nested `SimulatorRunTest`, `LineSizingSampleTest`, `UnitSizingSampleTest`, `ColumnSizingSampleTest`, `SizeAllSampleTest`; filter `CrudeUnitSampleTest$*`), `SmallCrudeUnitTest` (`holdGates`) |
 | Sent designs and Import | `SheetSizing.designs`, `SentDesign`, `SentDesignTags`, `EquipmentNetwork` | `SentDesignTagsTest` (the corpus), `ProcessSimulatorGameTests.aConstructorImportsTheNearestSimulatorsDesign` |
+| The Materials tab | `SheetMetallurgy`, `MaterialsPage`, `MaterialsGlass`, `UnitFacts.material`, `SheetSizing.designs` | `MaterialSelectionTest`, `MaterialsPageTest`, `SimulatorTourTest` |
 | A new kind's size class | `SizingCoverage` (`src/test`) | `SizingCoverageTest` |
 
 ## Traps

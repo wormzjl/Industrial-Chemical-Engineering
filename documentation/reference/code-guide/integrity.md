@@ -35,6 +35,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `science/integrity/Metallurgy` | The four materials (saved by name, append-only, `byName` defaults to carbon steel): allowance, overheating limit, cost index, factors of table 6.3, the hydrogen and oxygen limit lines |
 | `science/integrity/Mechanism` | M1 to M11 and erosion; the status names the governing one |
 | `science/integrity/CorrosionDigest` | The digest record (plan 6.1) |
+| `science/integrity/CorrosionStandards` | The one builder of a package's standards per compound list, by name (`of`, `on`): the world's walls (`FluidWorldAuthority.corrosionStandards`) and the simulator's Materials tab read the same compounds the same way |
+| `science/flowsheet/metallurgy/SheetMetallurgy` | The process simulator's Materials tab: the same laws on a solved sheet's streams, on the client ([simulator-sizing.md](simulator-sizing.md)) |
 | `science/integrity/CorrosionStandard` | Per list: molar masses, sulfur (formula, else the sub-record), acid and fouling numbers, the gases found by exact formula; `digest(...)` |
 | `science/integrity/CorrosionLaw` | M1 to M7 on carbon steel (`rate`), the material's M8, M10, M11, the inside rate (`inside`), M9 (`outside`) |
 | `science/integrity/ErosionLaw` | Wall erosion, trim speed and trim wear, the pump's solids intensity |

@@ -729,26 +729,4 @@ public final class Integrity {
             w.corroding = mechanism;
         }
     }
-
-    /** The compound lists' standards, from per-compound columns on the world list (a host's helper). */
-    static Function<List<String>, CorrosionStandard> standards(List<String> world, double[] molarMasses, double[][] formulas, double[] sulfur, double[] acid, double[] fouling) {
-        return compounds -> {
-            int n = compounds.size();
-            var m = new double[n];
-            var f = new double[n][];
-            var s = new double[n];
-            var a = new double[n];
-            var o = new double[n];
-            for (int c = 0; c < n; c++) {
-                int i = world.indexOf(compounds.get(c));
-                if (i < 0) return null;
-                m[c] = molarMasses[i];
-                f[c] = formulas[i];
-                s[c] = sulfur[i];
-                a[c] = acid[i];
-                o[c] = fouling[i];
-            }
-            return new CorrosionStandard(m, f, s, a, o);
-        };
-    }
 }

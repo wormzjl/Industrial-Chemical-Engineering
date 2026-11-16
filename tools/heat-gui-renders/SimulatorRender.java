@@ -82,7 +82,7 @@ public final class SimulatorRender {
     static final HeatControlColumn.Texts T = (key, a) -> HeatDiagramRender.tr("gui.icheme." + key, a).replace("%%", "%");
     static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
     static final String NETWORK = CATALOG.presets().network().packageId();
-    static final V3ColumnInput BASE = CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG);
+    static final V3ColumnInput BASE = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()), CATALOG);
     static StreamProps.Fluids FLUIDS;
     /** The display units the sheets show: the default's, with the flow's basis from {@code -Dbasis=MOLE|MASS|VOLUME}. */
     // -Dpressure=KILOPASCAL, -Dtime=PER_MINUTE and -Dbasis=MASS draw every sheet on those display keys. -Dconditions=true latches the P, T key.
@@ -212,6 +212,7 @@ public final class SimulatorRender {
         SimulatorFrame.Tab tab = SimulatorFrame.Tab.FLOWSHEET;
         ResultsPage.State results = new ResultsPage.State();
         SizingPage.State sizing = new SizingPage.State();
+        com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.State materials = new com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.State();
         int category = 2;
         SheetLayout.Place hover;
         /** A runner's result, which stands instead of the scene's run; a client's data that differ from the server's. */
@@ -297,6 +298,10 @@ public final class SimulatorRender {
                 SimulatorPage.sizing(d.c, d.skin, x, s.sizing, frame, d.w);
                 GuiPrototypes.doorColumn(d, SizingPage.rows(x, s.sizing), new Rect(10, SimulatorFrame.DOOR_TOP, SimulatorFrame.SIZING_DOOR - 10, frame.bottom() - SimulatorFrame.DOOR_TOP), SizingPage.values(x, s.sizing), "Sizing");
             }
+            case METALLURGY -> {
+                SimulatorPage.materials(d.c, d.skin, x, s.materials, frame, d.w);
+                GuiPrototypes.doorColumn(d, com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.rows(x, s.materials), new Rect(10, SimulatorFrame.DOOR_TOP, SimulatorFrame.MATERIALS_DOOR - 10, frame.bottom() - SimulatorFrame.DOOR_TOP), Map.of(), "Materials");
+            }
             case BASIS -> {
                 SimulatorPage.basis(d.c, d.skin, x, frame, d.w);
                 rows(d, BasisPage.rows(x), 10, SimulatorFrame.DOOR_TOP, SimulatorFrame.BASIS_DOOR - 10, BasisPage.values(x));
@@ -348,12 +353,14 @@ public final class SimulatorRender {
         List<? extends Column.Row> rows = switch (tab) {
             case RESULTS -> ResultsPage.rows(x, probe.results);
             case SIZING -> SizingPage.rows(x, probe.sizing);
+            case METALLURGY -> com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.rows(x, probe.materials);
             case BASIS -> BasisPage.rows(x);
             default -> List.of();
         };
         int doorW = switch (tab) {
             case RESULTS -> SimulatorFrame.RESULT_DOOR;
             case SIZING -> SimulatorFrame.SIZING_DOOR;
+            case METALLURGY -> SimulatorFrame.MATERIALS_DOOR;
             case BASIS -> SimulatorFrame.BASIS_DOOR;
             default -> 10;
         };
@@ -863,6 +870,36 @@ public final class SimulatorRender {
         });
     }
 
+    /**
+     * WP6's sheets (batch 2026-11-16-fouling-corrosion): the Materials tab on a real Size all of the sample, every unit rated for the four
+     * materials: the heater picked, the column, a valve's trim, an exchanger kept Manual; and the Sizing door's requirements naming the material.
+     */
+    private static void materials(Path out, Flowsheet sheet, FlowsheetRun run, double seconds) throws Exception {
+        var thermo = new FlowThermo(FluidThermodynamics.forNetwork(CATALOG, NETWORK), CATALOG, NETWORK, () -> {
+        });
+        var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+        var rows = MaterialRuntime.with(CATALOG, NETWORK, () -> com.wormzjl.icheme.science.flowsheet.metallurgy.SheetMetallurgy.rate(all.sheet(), all.run(), thermo, all.sized()));
+        for (var row : rows.rows().values())
+            System.out.printf("materials %s %s %.0f K auto %s %s%n", row.unit(), row.type(), row.temperature(), row.wall() ? row.auto() : "-",
+                    row.wall() ? row.ratings().stream().map(r -> r.material() + "=" + String.format("%.3g", r.rate()) + "/" + r.mechanism()).toList() : "trim " + String.format("%.3g h", row.trim().life()));
+        var finished = new SimulatorHost.Finished(all.sheet(), all.run(), seconds);
+        var host = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true, rows), null);
+        java.util.function.Function<Consumer<Scene>, BiConsumer<GuiPrototypes.Door, Skin>> tab = player -> scene(host.rated().sheet(), host.finished().run(), host.finished().seconds(), host, s -> {
+            s.finished = host.finished();
+            s.tab = SimulatorFrame.Tab.METALLURGY;
+            player.accept(s);
+        });
+        String valve = rows.rows().values().stream().filter(r -> !r.wall()).map(r -> r.unit()).findFirst().orElse("V-101");
+        sheet(out, "30-materials", W, H, List.of("H-101 picked: its four materials side by side", "T-101 picked", "A control valve: its trim", "E-101 kept Manual on stainless steel"),
+                List.of(tab.apply(s -> s.materials.unit = "H-101"), tab.apply(s -> s.materials.unit = "T-101"), tab.apply(s -> s.materials.unit = valve), tab.apply(s -> {
+                    s.materials.unit = "E-101";
+                    com.wormzjl.icheme.client.gui.flowsheet.MaterialsPage.press(s.context(), s.materials, "materials/material/STAINLESS_STEEL");
+                })));
+        sheet(out, "31-materials-sizing", W, H, List.of("The Sizing door names H-101's material"), List.of(sized(host, s -> s.sizing.unit = "H-101")));
+        sheet(out, "32-materials-least", SimulatorFrame.LEAST_W, SimulatorFrame.LEAST_H, List.of("The Materials tab at the least window, 464 by 254"),
+                List.of(tab.apply(s -> s.materials.unit = "H-101")));
+    }
+
     private static Flowsheet withSizing(Flowsheet sheet, SizingFacts facts) {
         return new Flowsheet(sheet.basis(), sheet.units(), sheet.streams(), sheet.settings(), facts, sheet.unknown());
     }
@@ -1285,6 +1322,11 @@ public final class SimulatorRender {
         // -Donly=member-counts: S3b's two sheets alone.
         if ("member-counts".equals(System.getProperty("only"))) {
             memberCounts(out, sheet, run, seconds);
+            return;
+        }
+        // -Donly=materials: the Materials tab (batch 2026-11-16-fouling-corrosion, WP6) on a real Size all of the sample.
+        if ("materials".equals(System.getProperty("only"))) {
+            materials(out, sheet, run, seconds);
             return;
         }
         // -Donly=sizing: S4b's sheets alone.

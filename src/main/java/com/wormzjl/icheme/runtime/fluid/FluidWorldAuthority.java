@@ -982,13 +982,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /**
      * The corrosion standards of the islands' compound lists (batch 2026-11-16-fouling-corrosion, WP2): the network package's
      * molar masses, formulas, sulfur shares, acid and fouling numbers in {@code model}'s conserved order, by component name,
-     * taken by name onto each list.
+     * taken by name onto each list ({@link com.wormzjl.icheme.science.integrity.CorrosionStandards#of}, which the process
+     * simulator's Materials tab reads too).
      */
     static java.util.function.Function<List<String>,com.wormzjl.icheme.science.integrity.CorrosionStandard> corrosionStandards(MaterialCatalog catalog,FluidThermodynamics model) {
-        String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
-        var names=catalog.conservedComponents(id);var components=model.components();
-        return Integrity.standards(components,model.molecularWeights(),formulas(catalog,model),onModel(catalog.sulfurShares(id),names,components,0),
-                onModel(catalog.acidNumbers(id),names,components,0),onModel(catalog.foulingNumbers(id),names,components,0));
+        return com.wormzjl.icheme.science.integrity.CorrosionStandards.of(catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog),
+                model.components(),model.molecularWeights());
     }
     /** What the walls do to the world (WP2): the queued spec edits, a heat side's release and the corrosive air. */
     private final class IntegrityHost implements Integrity.Host {

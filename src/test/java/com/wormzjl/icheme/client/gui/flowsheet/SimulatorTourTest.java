@@ -14,7 +14,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * The simulator's help tours (batch 2026-11-12-tutorial-system, P4b): each of the four tabs has its tour; every stop's anchor
+ * The simulator's help tours (batch 2026-11-12-tutorial-system, P4b): each of the five tabs has its tour; every stop's anchor
  * stands on its tab at every frame size, on the bundled small crude unit with and without a run, resolved as the screen
  * resolves it (a frame key or named area, else a door row's widget); the ? key stands beside the theme key on the title row
  * and covers no other key; the steps the screen reports are the guide's reading steps.
@@ -28,6 +28,7 @@ class SimulatorTourTest {
         List<? extends Column.Row> rows = switch (tab) {
             case RESULTS -> ResultsPage.rows(x, new ResultsPage.State());
             case SIZING -> SizingPage.rows(x, new SizingPage.State());
+            case METALLURGY -> MaterialsPage.rows(x, new MaterialsPage.State());
             case BASIS -> BasisPage.rows(x);
             case FLOWSHEET -> List.of();
         };
