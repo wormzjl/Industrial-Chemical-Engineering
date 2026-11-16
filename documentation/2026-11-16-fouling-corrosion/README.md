@@ -31,17 +31,19 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 - 2026-11-16, WP1 reported and read by the main thread: one commit, `71b2d9b9c` on `claude/fouling-corrosion-wp1-laws-71f413` (38 files, 1 703 lines): `science/integrity` (eight classes), `Wear.Fault.SOLIDS` with a neutral case in `MachineHealth`, `MaterialCatalog.Corrosion` and the twelve cuts' sub-records, six `LayeringTest` rules (the integrity laws import no machine, fluid, column, plant, flowsheet or equipment package), `tools/fouling-corrosion/fit-cuts.mjs`, code guide chapter `integrity.md`. Its run: 82 tests, one failure in its own new test (a strict rise expected where the rate reaches the 1e4 mm/y cap), corrected, that class run again, 5 of 5; every source set compiled. Diff read: the laws, limits and factors are the plan's. Its additions where the plan was silent: every rate capped at 1e4 mm/y; a side with oil and free water fouls by its oil; above 260 °C the oil fouling number is `max(f, min(1.8 f, 0.0009))`. The sulfur fit missed the plan's 20 % (worst assay 43 %): decision D9, the values as fitted (plan section 6.4). Not run, the final lane's: the 366 `test` classes, 67 `columnGates`, 26 `equipmentGates`, 10 `holdGates` and the GameTests that `affected.mjs` selects for a `MaterialCatalog` change. The branch is not merged into the batch branch yet.
 - 2026-11-16, WP7 still working (its Gradle run in flight, its changes uncommitted in its worktree).
 
+- 2026-11-16, owner: "Merge WP1". `claude/fouling-corrosion-wp1-laws-71f413` merged into the batch branch (`f9b3c79fd`, no conflict). No test run: this side of the merge held documents only, so WP1's own run stands.
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.
 
 ## Code areas
 
-None yet.
+- `science/integrity/` (WP1): `Metallurgy`, `Mechanism`, `CorrosionDigest`, `CorrosionStandard`, `CorrosionLaw`, `ErosionLaw`, `FoulingLaw`, `WallState`; `Wear.Fault.SOLIDS`; `MaterialCatalog.Corrosion`; the twelve `crude_pc` datasets; `tools/fouling-corrosion/`; code guide `integrity.md`.
 
 ## Open items
 
-- WP1 done on its branch, not merged into the batch branch; WP7 running.
+- WP1 merged into the batch branch; WP7 running on its own branch.
 - O4: the format reservation on `main` (facts schema 29, shape fields 13, `icheme-5`, sheet file 3), needed before WP2; the owner's word.
 - `wall_weep` candidates (three, synthesised) once the build starts.
 - Whether another live batch holds the hot files named above.
