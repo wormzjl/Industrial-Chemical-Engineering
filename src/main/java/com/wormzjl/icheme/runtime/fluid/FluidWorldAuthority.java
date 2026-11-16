@@ -778,7 +778,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
             var s=formerVessel.spec();long next=topology.nextIdentity();
             var vessel=new WorldTopologyLedger.Registration(formerVessel.device().withPlacement(d.node(),d.all()),
-                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace(),s.breached(),s.ambient()),Math.addExact(formerVessel.revision(),1));
+                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace(),s.breached(),s.ambient(),s.metallurgy()),Math.addExact(formerVessel.revision(),1));
             placed.add(vessel);edits.add(new WorldTopologyLedger.Edit(former,vessel));
             long[] ids={u==null?0:u.drain(),u==null?0:u.fill()};
             for(int k=0;k<2;k++) {
@@ -899,7 +899,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         long pot=u.id(),next=topology.nextIdentity();var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
         var old=potRecord.spec();var vessel=d.pot();
         var potDevice=potRecord.device().withPlacement(vessel.node(),vessel.ports()).withHeat(potRecord.device().heat().withArea(vessel.heat().area()));
-        var potSpec=new FluidDeviceSpec(vessel.volume(),old.temperature(),old.pressure(),old.composition(),old.solids(),vessel.levelHeight(),design.condenser(),vessel.geometry(),old.tower()).withBreached(old.breached());
+        var potSpec=new FluidDeviceSpec(vessel.volume(),old.temperature(),old.pressure(),old.composition(),old.solids(),vessel.levelHeight(),design.condenser(),vessel.geometry(),old.tower()).withBreached(old.breached()).withMetallurgy(old.metallurgy());
         // A side, outlet or burner the still has moves; one the layout adds registers; one it no longer has leaves.
         long water=0;WorldTopologyLedger.Registration waterRecord=null;
         var held=u.water()>0?registrations().get(u.water()):null;

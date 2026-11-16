@@ -256,7 +256,7 @@ public final class FluidCheckpointCodec {
             active=Map.copyOf(holding);
         }
         return new WorldTopologyLedger.Snapshot(snapshot.onlineTick(),snapshot.nextIdentity(),active,snapshot.events(),snapshot.constructed(),snapshot.destroyed(),snapshot.basis(),
-                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores(),snapshot.health(),snapshot.builds(),snapshot.stills(),snapshot.converters());
+                snapshot.recoveries(),snapshot.restated(),Map.copyOf(columns),Map.copyOf(shafts),snapshot.stores(),snapshot.health(),snapshot.builds(),snapshot.stills(),snapshot.converters(),snapshot.integrity());
     }
     /** The facts of a topology unit; facts this build cannot read refuse the world. */
     static FluidFacts.World worldFacts(byte[] data,Sections s) {
