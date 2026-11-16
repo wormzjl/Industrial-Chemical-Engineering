@@ -12,7 +12,7 @@ Up: [code guide](README.md)
 
 ## What it does
 
-`science/integrity/` holds the pure laws of batch `2026-11-16-fouling-corrosion` (plan
+`science/integrity/` holds the pure laws (their numbers and sources:
 `documentation/2026-11-16-fouling-corrosion/FOULING_CORROSION_PLAN.md`): no Minecraft types, no state. A
 `CorrosionStandard` built per compound list turns a node's state into a `CorrosionDigest` (temperature, wet and oil
 flags, the oil's sulfur, acid and fouling numbers, partial pressures of H2S, CO2, SO2, NH3, O2, H2). `CorrosionLaw`
@@ -40,7 +40,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `science/integrity/CorrosionStandard` | Per list: molar masses, sulfur (formula, else the sub-record), acid and fouling numbers, the gases found by exact formula; `digest(...)` |
 | `science/integrity/CorrosionLaw` | M1 to M7 on carbon steel (`rate`), the material's M8, M10, M11, the inside rate (`inside`), M9 (`outside`) |
 | `science/integrity/ErosionLaw` | Wall erosion, trim speed and trim wear, the pump's solids intensity |
-| `science/integrity/FoulingLaw` | `Rf∞` from the digest (`PLACEHOLDER_SHARE`, half the TEMA anchor, D14), the exact exponential step, levels of 5e-5, thickness |
+| `science/integrity/FoulingLaw` | `Rf∞` from the digest (`PLACEHOLDER_SHARE`, half the TEMA anchor), the exact exponential step, levels of 5e-5, thickness |
 | `science/integrity/WallState` | `SOUND`, `THIN`, `WEEPING`, `THROUGH` at u = 0.5, 0.9, 1; the life in process seconds |
 | `science/machine/Wear.Fault.SOLIDS` | The pump's erosion-class fault; its intensity is `ErosionLaw.solidsIntensity` |
 | `science/material/MaterialCatalog.Corrosion` | The `corrosion` sub-record; `corrosion(...)`, `sulfurShares`, `acidNumbers`, `foulingNumbers` |
@@ -54,8 +54,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `runtime/pollution/Breaches` | Wrecks every device of a blasted structure; heat sides close and release once |
 | `runtime/pollution/IntegrityCommands` | `/icheme integrity get`, `set <loss> <fouling> <wrecked>`, `clear`, by `id <device>` or `at <pos>` |
 | `world/item/RepairKitItem` | Refused on constructed equipment (`USE_CONSTRUCTOR`); queues a `MachineHealth.Repair` on an in-line pump's, compressor's or control valve's pipe block |
-| `world/level/block/EquipmentRepair` | The constructor's repair of the structure on its line: `repair` (its node devices to `queueStructureRepair`; a column to `FluidWorldAuthority.queueColumnRepair`, WP8; another structure with no fluid device answers `NOTHING_TO_REPAIR`), `key` (answer text), `state`, `column` and `words` (worst used allowance and `THIN WALL`, `WEEPING`, `LEAKING`, `FAILED`, `WRECKED`, a column's `TRAYS FOULED`) |
-| `science/integrity/ColumnWear`, `runtime/fluid/ColumnOperation` | A running column's trays and wall (WP8): see [Columns](#columns-wp8) |
+| `world/level/block/EquipmentRepair` | The constructor's repair of the structure on its line: `repair` (its node devices to `queueStructureRepair`; a column to `FluidWorldAuthority.queueColumnRepair`; another structure with no fluid device answers `NOTHING_TO_REPAIR`), `key` (answer text), `state`, `column` and `words` (worst used allowance and `THIN WALL`, `WEEPING`, `LEAKING`, `FAILED`, `WRECKED`, a column's `TRAYS FOULED`) |
+| `science/integrity/ColumnWear`, `runtime/fluid/ColumnOperation` | A running column's trays and wall: see [Columns](#columns) |
 | `world/level/block/EquipmentDeconstruction.checked` | The removal group's shared check (reach, build rights, target origin and stamp, loaded and interactable cells; break events only for a removal) |
 | `network/EquipmentNetwork.Repair`, `RepairAnswer`, `StructureState`, `StructureStateAnswer` | The Repair key's request and its answer from the event's reply (dropped when the player left); the state, a read answered at once |
 | `client/gui/common/ConstructorColumn.Removal`, `EquipmentConstructorScreen` | Repair beside Deconstruct; the state line after the keys; asks the state when the target changes and after a repair's answer |
@@ -63,11 +63,11 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `client/gui/common/DeviceMeters.wall`, `trim`, `DeviceColumn.integrity`, `trim` | The Integrity and Trim groups after the Phases (their names wrap, so they stand below the basis key); names under `gui.icheme.mechanism.*` and `gui.icheme.metallurgy.*` |
 | `Integrity.weeps`, `Host.weeping`, `EquipmentShellBlockEntity.weeping` | A weeping wall marks its node's shell cell at every cadence (the cell sends its update tag only when its flag changes; never saved) |
 | `client/WallWeeps` | Drips from the structure's lowest shell cells (one per 10 ticks a structure, at most 16 a tick) and the `wall_weep` loop through `FxSounds`, both within 8 blocks |
-| `science/fluid/network/HeatCurve.Films.fouled`, `PipeResistance.Geometry.narrowed` | The deposit's effect (WP5): each film `h/(1 + h Rf)`; the passage less twice `FoulingLaw.thickness`, at least half its bore; the same instance at 0 |
+| `science/fluid/network/HeatCurve.Films.fouled`, `PipeResistance.Geometry.narrowed` | The deposit's effect: each film `h/(1 + h Rf)`; the passage less twice `FoulingLaw.thickness`, at least half its bore; the same instance at 0 |
 | `science/equipment/HeatSides.heatSide(..., fouling)`, `HeatUnit.heatSide(double)` | The fouled law of a side: an exchanger's, a kettle's tubes', a still's water side's films; an air cooler's `AirCooled.Air.process`; a convection coil's `1/U' = 1/U + Rf`; a radiant or exhaust coil's heat reads no film (passage only) |
 | `runtime/fluid/PhysicalRegistry.fouling`, `PhysicalFluidTopology.compile(..., fouling)` | The levels the compile reads, from the ledger's facts (`FoulingLaw.level`; none with `fouling.enabled` off); a fouled side's pipe carries the fouled law and the narrowed passage |
 | `Integrity.flushAndRestate`, `Host.restate`, `FluidWorldAuthority.restate` | When a side's level moves (cadence, cleaning, `set`): the facts to the ledger, then the side's registration again, unchanged, at revision + 1, which recompiles its island |
-| `FluidWorldAuthority.queueUnitClean`, `network/FluidNetwork.CleanPayload`, `HeatControlColumn.deposit` | The heat page's Deposit group (fouling, UA left: the unit's UA over its clean UA, D16) and Clean: the side and its partner heat side queued; the answer a chat line (`message.icheme.heat.clean.*`); `FluidView.Heat.fouling`, `ua`, `uaClean`; `Integrity.fouled` says `FOULED` from 0.0005 m²K/W |
+| `FluidWorldAuthority.queueUnitClean`, `network/FluidNetwork.CleanPayload`, `HeatControlColumn.deposit` | The heat page's Deposit group (fouling, UA left: the unit's UA over its clean UA) and Clean: the side and its partner heat side queued; the answer a chat line (`message.icheme.heat.clean.*`); `FluidView.Heat.fouling`, `ua`, `uaClean`; `Integrity.fouled` says `FOULED` from 0.0005 m²K/W |
 
 ## Flow
 
@@ -85,23 +85,23 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
    kg/s over the island's last slice, or a mover of it runs), `NOT_EMPTY` (a vessel with 1 % of its volume liquid or
    more than 0.2 bar from the ambient), else `REPAIRED` (loss 0, breach closed, machine health 1) or `CLEANED`.
 
-4. The player side (WP4): the constructor's Repair re-checks the structure (`EquipmentDeconstruction.checked`, no break
+4. The player side: the constructor's Repair re-checks the structure (`EquipmentDeconstruction.checked`, no break
    events) and queues one event (`EquipmentRepair.repair`); the reply sends `RepairAnswer` and plays the smithing table sound at
    the structure on `REPAIRED`. `StructureState` reads `Integrity.wall`, `wrecked`, `MachineHealth.failed` and the breach
    of the structure's node devices. `ViewBuilder` adds `FluidView.integrity` and `trim` to every view it builds; their words
    stay on the status line, said once. At each cadence and after a repair, `Integrity.weeps` tells the host each weeping
    wall; the shell cell carries `Weeping` on its update tag to the clients that track it, and `WallWeeps` drips and plays.
-5. The deposit's effect (WP5): the graph sees a side's deposit only in whole steps of 5e-5 m²K/W. Each record keeps the
+5. The deposit's effect: the graph sees a side's deposit only in whole steps of 5e-5 m²K/W. Each record keeps the
    level its graph was compiled with (state; on a load, the facts' level, which the restored graph and its pending events
    carry). After the cadence, a cleaning or a `set`, `flushAndRestate` hands the facts to the ledger, then queues one
    `restate` for each side whose level moved; the registry's next compile of that island reads the level from the ledger
    (`PhysicalRegistry.fouling`). Between steps nothing the solver reads changes; a clean side compiles as before.
 
-## Columns (WP8)
+## Columns
 
 A distillation column is no fluid device: its `ColumnUnit` carries its own wear as facts (`trayFouling` 0 to 1,
 `wallLoss` mm, `material`, taken from its shape at Start by `ColumnStarts`), and `ColumnOperation` books them in the
-cycle's own ledger update, beside the totals (plan section 13.1, decision D10; numbers in `ColumnWear`).
+cycle's own ledger update, beside the totals (plan section 13.1; numbers in `ColumnWear`).
 
 1. `φ` = the inert solids the cycle moved to the bottoms over the feed mass it took plus those solids.
 2. Fouling: `f` approaches `min(1, φ/0.02)` with `fouling.asymptoteProcessHours`; it never falls by itself. The cycle's
@@ -116,7 +116,7 @@ cycle's own ledger update, beside the totals (plan section 13.1, decision D10; n
    `ColumnOperation` (`queueRepair`, `queueClean`, `apply` at the tick drain): `NOT_IDLE` while the unit runs, else
    wall 0 (`REPAIRED`) or fouling 0 (`CLEANED`), or `NOTHING_TO_REPAIR`. A stopped unit keeps its record, so the facts
    survive a Stop. The view (`OperationView.Wear`) carries the wear; `OperationColumn.wear` draws it as a table on the
-   glass (layout B, owner 2026-11-16), and `OperationColumn.footerButtons` places Clean on the footer.
+   glass, and `OperationColumn.footerButtons` places Clean on the footer.
 
 Tests: `ColumnWearTest` (the numbers), `ColumnCycleTest` (capacity 1 exact, 0.8 floods at 80 %), `ColumnRunTest`
 (solids foul and limit the feed; corrosion alone without solids; LEAKING, repair and clean refused running, accepted
@@ -127,9 +127,10 @@ stopped, the column runs again), `FluidFactsCompatTest` (the facts, older images
 
 - Fluid facts schema 29: `FluidDeviceSpec.metallurgy` (by name) and the `IntegritySection` (see
   [runtime-saves.md](runtime-saves.md) and [FORMATS.md](../FORMATS.md)). Rates, mechanisms, asymptotes and the cursor
-  are state and are not saved; so is the level a side's graph carries (WP5: the level is read from the facts).
-- Fluid checkpoint state format 52 (WP5): an air cooler's law carries its process films; a fouled exchanger side's films
-  and a narrowed passage were already in the checkpoint.
+  are state and are not saved; so is the level a side's graph carries (the level is read from the facts).
+- Fluid checkpoint state format 52: an air cooler's law (tag 3) carries its process films; a heat side's films (tag 1) and
+  the cooler's process films are followed by the deposit they hold, and each of the two laws ends with the unit's UA as
+  last planned (a flag, the UA, the clean UA). A narrowed passage is the pipe's own geometry.
 - Config: `corrosion.enabled`, `corrosion.yearProcessHours` (200), `corrosion.external`, `erosion.enabled`,
   `fouling.enabled`, `fouling.asymptoteProcessHours` (100). The two defaults live once, in
   `WallState.DEFAULT_YEAR_PROCESS_HOURS` and `FoulingLaw.DEFAULT_TIME_PROCESS_HOURS`. A switch off stops its part of the rate at once and nothing
@@ -147,7 +148,7 @@ stopped, the column runs again), `FluidFactsCompatTest` (the facts, older images
 - Erosion `(φ/0.01) (v/10)^2.6` mm/y; a trim `(φ/0.01) (v/30)^2.6` health per corrosion year, `v = sqrt(2Δp/ρ)`; a pump
   `clamp((φ − 0.001)/0.05, 0, 1)`.
 - Fouling cap 0.002 m²K/W, step 5e-5, `FOULED` from 0.0005, deposit conductivity 1 W/mK; the end value `Rf∞` is half the
-  TEMA anchor (`PLACEHOLDER_SHARE`, D14): water 0.000175 (0.00035 above 50 °C), oil half its anchor, which is the cuts'
+  TEMA anchor (`PLACEHOLDER_SHARE`): water 0.000175 (0.00035 above 50 °C), oil half its anchor, which is the cuts'
   number, from 260 °C `max(f, min(1.8 f, 0.0009))`, plus half of `min(0.0005, 0.02 φ)` for solids; at most 0.00115.
 
 ## Tests and gates
@@ -163,7 +164,7 @@ failures once by kind, wrecked, idle-and-empty, cleaning, corrosive air, the swi
 standing open, and the constructor's repair path mending a weeping drum (the cell's flag set, then cleared); `PollutionBreachGameTests` a
 wrecked drum; `PumpHealthGameTests` the kit refused on a casing. `IntegrityTest` also holds the weep calls; `EquipmentRepairTest`
 the answers' lines and the words; `EquipmentNetworkCodecTest` the four payloads; `DeviceMetersTest` the wall and trim readings
-and their JSON; `DeviceColumnTest` and `ConstructorColumnTest` the groups and the Repair key at every width. WP5:
+and their JSON; `DeviceColumnTest` and `ConstructorColumnTest` the groups and the Repair key at every width.
 `FoulingEffectTest` the films, the passage and each law against plan section 3.2's table; `HeatSideTopologyTest` the fouled
 compile and the levels from the facts; `IntegrityTest` one restate per step after the facts, none on a restore, the switch;
 `SheetSizingTest` a dirty service's design deposit; `IntegrityGameTests` a fouled air cooler moving less heat until cleaned.
@@ -191,14 +192,8 @@ compile and the levels from the facts; `IntegrityTest` one restate per step afte
   weeping wall each time and the cell sends only a change.
 - `FluidView.Integrity` shadows the runtime `Integrity` class inside `FluidView`; name the runtime class in full there.
 - A restored island runs on its checkpoint's graph, not on the load's compile: every fouled law must round-trip through
-  the checkpoint (`FluidCheckpointCodec`), as the air cooler's process films do since state format 52.
+  the checkpoint (`FluidCheckpointCodec`), as the air cooler's process films do (state format 52).
 - `Placement.edit` returns null for an unchanged registration: a recompile for a compile-only input goes through
   `FluidWorldAuthority.restate`, the flowmeter's way.
 
-## Snapshot
-
-2026-11-16, WP2: the laws (WP1) booked on vessels, heat sides and machines of constructed equipment, trims and `SOLIDS`
-on machine health, wrecked blasts, the structure repair and cleaning events, the config and the command. The pages
-(WP4: the constructor's Repair key and structure state, the Integrity and Trim groups, weeping walls) read them; a heat
-side's deposit acts on its films and passage in level steps, the heat page cleans it, and the simulator sizes on a design
-deposit (WP5). WP8: a column's trays and wall, its repair and cleaning, on its unit.
+**Snapshot:** `c004a4c57`, 2026-11-16.

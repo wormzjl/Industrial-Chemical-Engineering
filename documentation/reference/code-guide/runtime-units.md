@@ -21,8 +21,8 @@ Under `src/main/java/com/wormzjl/icheme/runtime/fluid/`. Lines at `d6f721b94`.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`ColumnOperation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnOperation.java) | A running column on the `Ports` hook: refresh, cycles, conditions, utilities' debts, members' power, feed plans; `FENCE_TICKS`, `APPLY_TICKS`, `KEEP_TICKS` ([column-operation.md](column-operation.md)) | 1180 |
-| [`ColumnUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnUnit.java) | A column unit's facts: stations, set points, condensers (`MAXIMUM_CONDENSERS`), `airSurface`, utilities, members; `State`, `Probes` | 195 |
+| [`ColumnOperation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnOperation.java) | A running column on the `Ports` hook: refresh, cycles, conditions, utilities' debts, members' power, feed plans, the trays' and wall's wear with its repair and clean ([integrity.md](integrity.md)); `FENCE_TICKS`, `APPLY_TICKS`, `KEEP_TICKS` ([column-operation.md](column-operation.md)) | 1288 |
+| [`ColumnUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnUnit.java) | A column unit's facts: stations, set points, condensers (`MAXIMUM_CONDENSERS`), `airSurface`, utilities, members; `State`, `Probes` | 210 |
 | [`ColumnPower`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnPower.java) | The members' power through the topology, the electric stores and the shafts | 68 |
 | [`Stills`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/Stills.java) | The batch stills on the `Ports` hook: the pot, outlets, water side and burners, their fenced logs (`Run`), the column jobs, the wakes, `statusLine`; `FENCE_TICKS`, `APPLY_TICKS`, `KEEP_TICKS`, `RESPONSE_TICKS`, `HOLD_CYCLES`, `REFILL_CYCLES` | 809 |
 | [`StillUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/StillUnit.java) | A still's facts: devices, design, head and vent accounts, fire, firing, reflux, totals | 52 |
@@ -33,11 +33,11 @@ Under `src/main/java/com/wormzjl/icheme/runtime/fluid/`. Lines at `d6f721b94`.
 | [`Flares`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/Flares.java) | A flare's tip plan at dispatch; what it received, burnt and released at commit | 144 |
 | [`Chimneys`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/Chimneys.java) | A chimney's span readings (flow, solids, gas temperature, exit velocity, opacity, status) from each committed or replayed span | 96 |
 | [`PrimeMovers`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/PrimeMovers.java) | The fuel and exhaust coupling between a combustion engine's or gas turbine's train, its fuel island and its steam coil's island | 232 |
-| [`ShaftTrains`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftTrains.java) | The `Shafts` hook: shaft trains and their drivers (`plans`, `booked`, `decide`, `held`), `Event`, `Hold` ([shaft-trains.md](shaft-trains.md)) | 1297 |
+| [`ShaftTrains`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftTrains.java) | The `Shafts` hook: shaft trains and their drivers (`plans`, `booked`, `decide`, `held`), `Event`, `Hold` ([shaft-trains.md](shaft-trains.md)) | 1317 |
 | [`ShaftUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ShaftUnit.java) | A shaft unit's facts and `Settings`; its driver's `State` | 90 |
 | [`ElectricStores`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ElectricStores.java) | Motors', generators' and fans' electric stores and FE ports: `draw`, `member`, `plans` | 607 |
-| [`MachineHealth`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineHealth.java) | Pump and machine wear in process time (`book`, `worn`, `status`) and repair | 432 |
-| [`HeatUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/HeatUnit.java) | A heat side's facts on its registration: unit, side, area, partner, `Control`, `transitJoule`, `Mode`; `heatSide()`, `controller()`, `lines()` | 134 |
+| [`MachineHealth`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineHealth.java) | Pump and machine wear in process time (`book`, `worn`, `status`) and repair; a control valve's trim (`trim`, `trimStatus`) and the `SOLIDS` fault ([shaft-trains.md](shaft-trains.md), [integrity.md](integrity.md)) | 621 |
+| [`HeatUnit`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/HeatUnit.java) | A heat side's facts on its registration: unit, side, area, partner, `Control`, `transitJoule`, `Mode`; `heatSide()`, `controller()`, `lines()` | 136 |
 | [`EquipmentAlarm`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/EquipmentAlarm.java) | The units' alarms with their texts (power, fuel, flare, still, draught, column, converter); `of(Condition)`, `column(conditions)` | 78 |
 
 ## Main flow
@@ -111,4 +111,4 @@ Each unit on the coordinator's hooks ([runtime-engine.md](runtime-engine.md)):
 - **The running column and the coupling date theirs as the still does**: `IslandCoordinator.through` materialises a certified island to the cycle's tick, `ExchangerCoupling.reads` to the slice start; the column's wakes and the coupling's (`ExchangerCoupling.dated`) act as of their ticks through `movedAt`; a refused column solve is held and asked again (`Run.heldJob`) ([column-run.md](column-run.md), [heat-units.md](heat-units.md)). A reader that needs no replay uses `reached`.
 - **`NO_DRIVER`**: `startColumn` refuses a column whose machines have no driver while `energy.machinesNeedPower` is on.
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `c004a4c57`, 2026-11-16.

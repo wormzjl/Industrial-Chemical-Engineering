@@ -23,7 +23,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | **Shape and cells** | | |
 | `EquipmentShape` | A vessel's record: `Kind` (`unit`, `storage`, `designed`, `reservoir`, `mover`), diameter, tangent length, `Orientation`, `Heading` front, support, `ColumnTrays`, drum `Connection`s, `Bank`, boot (`Boot`, `bootFor`), `outlet`/`outlets`, `TowerBank`, `MachineDuty`, still options, the material of construction (`Metallurgy`, `withMaterial`; not part of the layout), `ShaftEnd`s; validation; the frame and `transform`; `nozzles` (`Nozzle`, `Role`, `PortClass`); `clashes`; volume, area, `levelHeight`, `fluidGeometry`; `fluidDevice` (also by kind); `MAX_VOLUME`, `MAX_SUPPORT` | 1383 |
 | `ShapeRasterizer` | Shape to `Layout` (shell and interior `Cell`s), `CellKey`, `surface`/`fixedSurface`, `solid` (`Box`es), `ports` (`Port`), `nozzleCells`, `fluidCell`, `fluidCells`, `outline`, `climbable`, `hides`, `moving`, `floating` (`Floating`), `skylight`, `marks`, `stillParts`, `forgePort`, `tankGauge`, `blanketValve`, `reliefValve`, `reliefValveOnPipe`, `layoutRevision`, `legacyStamp`; the bounded `Geometry` cache; `serverOnly` | 2055 |
-| `Mesh` | Planar convex facets with a `Material` and a part index; primitives (prisms, frustums, rings, discs, boxes, elbows, spheres, hoops, tori); quarter-turn `Transform`; the cut into one cell's polygons; `headHeight` | 1186 |
+| `Mesh` | Planar convex facets with a `Material` and a part index; primitives (prisms, frustums, rings, discs, boxes, elbows, spheres, hoops, tori); quarter-turn `Transform`; the cut into one cell's polygons; `headHeight` | 1245 |
 | `Part` | Blender OBJ parts from `assets/icheme/parts/`, flat triangle pairs merged into quads | 195 |
 | `PipeSizes` | Drawn OD from bore, flanges, Class 150 bolting, `code` (the nozzle code), `drawn`, `MIN_OUTSIDE`, `MAX_OUTSIDE`, `MAX_BORE` | 110 |
 | `NozzleBore` | The largest pipe a nozzle takes: `largest`, `fits`, `proposed`, `clear`; `STEP`, `SURFACE`; cached, never saved | 149 |
@@ -32,12 +32,12 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | `PortMarkings` | Which way a stream passes each nozzle (`Flow` IN, OUT, NONE; `flow(kind, role)`), the pass-through `partner`, and the word-free arrows (`surface`, `fitting`, `fittingOverhanging`; `SHORTEST`) | 337 |
 | `BoundedCache` | The one cache of the equipment: a count and a weight bound, second-chance eviction, hits without a monitor | 165 |
 | `RenderDetail` | `NORMAL` or `LOW`: drawing only | 19 |
-| `HeatSides` | A unit's heat sides: `unit(kind)` (`Unit`), `of(shape)` (`Definition`, `Side`), `pool`, `kettleShell`, `kettleBundle`, the passages, the air (`AIR`, `NATURAL_DRAUGHT`, `fanPower`), the shared cooling numbers (`AIR_SPLIT_TEMPERATURE`, `airSplit`, `TOWER_WATER_TEMPERATURE`, `WATER_RANGE`, `WATER_APPROACH`, `coolingWaterOutlet`), `coilDuty`, `CONVECTION_U`, `heatSide` | 251 |
+| `HeatSides` | A unit's heat sides: `unit(kind)` (`Unit`), `of(shape)` (`Definition`, `Side`), `pool`, `kettleShell`, `kettleBundle`, the passages, the air (`AIR`, `NATURAL_DRAUGHT`, `fanPower`), the shared cooling numbers (`AIR_SPLIT_TEMPERATURE`, `airSplit`, `TOWER_WATER_TEMPERATURE`, `WATER_RANGE`, `WATER_APPROACH`, `coolingWaterOutlet`), `coilDuty`, `CONVECTION_U`, `heatSide` (with a deposit, `fouling`), `airFilms` (clean or fouled) | 265 |
 | `DeviceName` | A placed device's name rule: `clean`, `MAX`, `NONE`, `valid`, `titled` | 50 |
 | `Nameplate` | Where a named structure's plate sits (`of`) and a one-block device's tag (`tag`); `EYE`, `SIZES`, `STAND_OFF`, `CLEAR`, `LIFT` | 141 |
 | **Pipes, fittings, instruments** | | |
 | `LineGeometry` | One fluid-device block's drawn shape: runs, elbows, tees (off-centre with fitted sweeps), reducers, flanges with a seam, valve, strainer (`filterPolygons`), `fittingEnd`, `overhanging`, `SPOOL`; transition pipes (`Key.offsets`, `OFFSET`, `transition`) | 846 |
-| `ValveGeometry` | Check, shutoff (with `shutoffLever`, `shutoffStem`, `shutoffPivot`), pressure valve castings; the diverter's actuator apart (`diverterActuator`, `diverterAxis`) | 188 |
+| `ValveGeometry` | Check, shutoff (with `shutoffLever`, `shutoffStem`, `shutoffPivot`), pressure valve castings; the diverter's actuator apart (`diverterActuator`, `diverterAxis`) | 235 |
 | `InlineMoverGeometry` | In-line pump and geared compressor; `supports`, `boundaryJoints` | 249 |
 | `IntakeGeometry`, `HopperGeometry` | A gas intake's louvred filter house under a rain hood; a liquid hopper's square funnel on a short body; each with flanged stubs to its joined faces (`FluidDeviceModel`, `"body"`) | 55, 75 |
 | `SightGlassGeometry` | Round-window housing by bore; `supports`, `towards`, `window`, `bubbles` | 168 |
@@ -121,4 +121,4 @@ In `equipmentGates` (`src/test/java/com/wormzjl/icheme/science/equipment/`; run 
 - Fittings, dials and a tank's roof are not baked from a cell key alone: fittings from the pipe's state and drawn geometry, the roof, ladder, level bands, sight-glass liquid and needles per frame ([client-rendering.md](client-rendering.md)).
 - `NozzleBore.proposed` keeps no geometry in the cache: proposed sizes are shapes no world places.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `1ff5f0026`, 2026-11-16.

@@ -21,14 +21,14 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | Class | Role | Lines |
 |---|---|---|
 | **Screens** | | |
-| `EquipmentConstructorScreen` | `screens/`: the door at the left (`ConstructorColumn`, a `KitDoor`), the world and the ghost beside it; pages CHOOSE, DESIGN, TEMPLATES, IMPORTS, CONNECTIONS, NOZZLES, PAINT; `listImports`, `listed`, `answered`, `land`; sends the draft on `removed` when changed and with Build | 1123 |
+| `EquipmentConstructorScreen` | `screens/`: the door at the left (`ConstructorColumn`, a `KitDoor`), the world and the ghost beside it; pages CHOOSE, DESIGN, TEMPLATES, IMPORTS, CONNECTIONS, NOZZLES, PAINT; `listImports`, `listed`, `answered`, `land`; the Repair key and the structure's state line (asked when the target changes and after a repair's answer, [integrity.md](integrity.md)); sends the draft on `removed` when changed and with Build | 1197 |
 | `VesselScreen` | `screens/`: a column's or unit's datasheet on a door, title strip with the structure's name (an entry for a player who may name it), Size group and motion switch (`DialogColumns.vessel`); static `sheet(vessel)` builds the glass's `DialogColumns.Sheet`, a fluid device's material line (`DialogColumns.material`) among its notes | 334 |
 | `AssemblyScreen` | `screens/inventory/`: a column's assembly screen on `AssemblyColumn` and `OperationColumn`: the block drawing and parts list, Check parts, Open unit, Datasheet; the name entry (`nameBox`, `saveName`); the Operation page (`operationView`, `entry`, `fits`, `glassView`) | 685 |
 | `ColumnTemplates` | `screens/inventory/`: the client's templates: `listed`, `streams`, `saveColumn`, `saveStream`, `deleteColumn`, `load` (the constructor's Templates page), `choices` | 157 |
 | `V3EditorDraft` | `screens/inventory/`: keyed text over a `V3ColumnInput` with exact values (`assemble`, `unchanged`), `loadColumn`, `loadColumnAtDesignFeed`; nested `ColumnInputDraft`, `ColumnScalarDraft`, `SideDrawDraft`, `SteamFeedDraft`, `PumparoundDraft` | 426 |
 | `V3CompositionDraft` | `screens/inventory/`: binds a `RelativeComposition` to the source `V3ColumnInput` | 30 |
 | `V3ClientPresets` | `screens/inventory/`: bundled and custom JSON libraries (`Column` with its `V3ColumnTemplate`, `Mixture` with optional solids and conditions, `streamJson`), `Library` with its `Problem`s; `MAX_FILES`, `MAX_BYTES` | 173 |
-| `ProcessSimulatorScreen` | `screens/inventory/`: the process simulator's screen ([process-simulator.md](process-simulator.md)) | 1149 |
+| `ProcessSimulatorScreen` | `screens/inventory/`: the process simulator's screen ([process-simulator.md](process-simulator.md)) | 1163 |
 | `SimulatorBlockHost` | `screens/inventory/`: a simulator screen open on a block: the runner and the block's store ([process-simulator.md](process-simulator.md)) | 152 |
 | **Builders (`common`, no Minecraft classes)** | | |
 | `ConstructorColumn` | The constructor's door, `PANEL` wide: the pages' rows (`choose`, `design` (with `material`, the Material selector), `templates`, `imports`, `connections`, `nozzles`, `paint`), each `Page` with its footer; `listed` (an Import line), `label`, `title` (cut to `TITLE`), `withRemoval` (the Deconstruction group) | 701 |
@@ -51,7 +51,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 
 **Using a cell** is decided on the server: a column (or a unit its report holds) opens the assembly screen; a structure with a fluid device opens its fluid screen with the Datasheet page; any other unit gets its datasheet (`AssemblyNetwork.datasheet`, opened by `EquipmentClient.openVessel` as `VesselScreen`).
 
-**Assembly Operation page**: on a complete column whose view carries an operation, the door lays out `OperationColumn.rows`; set points are entries kept until Apply; a command is sent once and shown as queued until the answer; the glass holds the port, duty, solve, integrity (the column's wear, layout B), conditions and set-feed tables in the client's units; the footer reads Close, Clean (while the column stands) and Apply; without an operation the tab shows a note.
+**Assembly Operation page**: on a complete column whose view carries an operation, the door lays out `OperationColumn.rows`; set points are entries kept until Apply; a command is sent once and shown as queued until the answer; the glass holds the port, duty, solve, integrity (the column's wear), conditions and set-feed tables in the client's units; the footer reads Close, Clean (while the column stands) and Apply; without an operation the tab shows a note.
 
 ## Contracts
 
@@ -114,4 +114,4 @@ The ghost, the blocked-cells line, Enter in a name entry and the Operation page'
 - A focused entry on the assembly screen takes its keys first (`ProcessUi.textKeyPressed`), so a typed E does not close it.
 - The Operation page's glass scrolls: at the design size it does not fit one view once a column has tray data or conditions.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

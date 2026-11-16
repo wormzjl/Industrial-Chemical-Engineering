@@ -20,14 +20,14 @@ The lane's tool, [`tools/merge-lane/`](../../../tools/merge-lane/). Lines at the
 
 | File | Role | Lines |
 |---|---|---|
-| `lane.sh` | The lane: `lane.sh <base or head> [--all] [steps]`, steps `test regression gametest campaign`; output in `tmp/merge-lane/<side>/` (or `$LANE_OUT`); `$LANE_RUN` a fresh GameTest run id; `LANE_FORKS`, `LANE_WORKERS` | 83 |
-| `affected.mjs` | `select [--explain <class>] [--since A..B]` prints the selection (`TASK`, `STEP`, `WHY`, `NOTE` lines); `save <load logs> <results>` updates the load map | 317 |
-| `record.init.gradle` | `--init-script … -PlaneRecord=<folder>`: one JVM per test class with `-Xlog:class+load`, so each class's load set is recorded | 15 |
+| `lane.sh` | The lane: `lane.sh <base or head> [--all] [steps]`, steps `test regression gametest campaign`; output in `tmp/merge-lane/<side>/` (or `$LANE_OUT`); `$LANE_RUN` a fresh GameTest run id; `$LANE_SINCE` the base commit of a second lane in a batch (selection and campaign rule); `LANE_FORKS`, `LANE_WORKERS`; every run selects afresh | 92 |
+| `affected.mjs` | `select [--explain <class>] [--since A..B]` prints the selection (`TASK`, `STEP`, `WHY`, `NOTE` lines); `save <load logs> <results>` updates the load map; the `nativeTestClasses` of `build.gradle` are filed under `nativeSmoke` | 324 |
+| `record.init.gradle` | `--init-script … -PlaneRecord=<folder>`: one JVM per test class with `-Xlog:class+load`, so each class's load set is recorded; `-PlaneSelection=<file>` gives each Test task named on a `TASK` line its filters, with no length limit | 30 |
 | `readers.txt` | Readers no string constant shows: a path pattern and the reading source file | 4 |
 | `campaign-inputs.txt` | The campaign's inputs as path patterns; a change to one since the merge base runs the campaign | 11 |
 | `compare.mjs` | `node tools/merge-lane/compare.mjs <base> <head> [<campaign base>]`: campaign holds by class, counters, refusals, new budget-class holds, the junction lines' counters and `MIXED_GAS_COST` | 89 |
 | `main-reach.pl` | `perl tools/merge-lane/main-reach.pl .`: the classes of `src/main` the game cannot reach from the mod's entry points | 46 |
-| `README.md` | How to run, what each step runs, why the selection is safe | 56 |
+| `README.md` | How to run, what each step runs, why the selection is safe | 60 |
 
 The load map is `tools/merge-lane/logs/load-map.json.gz` in the main checkout (git-ignored, shared by every worktree; `$LANE_MAP` overrides it); it keeps the three newest load sets per test class. The tools the lane calls: the hold-fuzz harnesses in `tools/unified-thermo-port-forms/`, the classifier `tools/phase-ports-probes/hold-fuzz/classify.sh`, the printed-line extractor `tools/floating-roof-tanks/final-lane/printed.sh` ([verification-campaigns.md](verification-campaigns.md)).
 
@@ -35,7 +35,7 @@ The load map is `tools/merge-lane/logs/load-map.json.gz` in the main checkout (g
 
 `bash tools/merge-lane/lane.sh head`, from the branch's worktree, no dev client running:
 
-1. **test**: compiles (`testClasses compileFluidGameTestJava`), asks `affected.mjs select` which classes can be affected, and runs them task by task (`test`, `holdGates`, `columnGates`, `equipmentGates`) with `--tests` filters, side by side with `-PtestForks` and `--max-workers`, recording load sets; copies the JUnit XML to `results/`, sums the counts, writes `printed.txt` and, when the junction tests ran, `junction.txt`; saves the load sets of the classes that passed.
+1. **test**: compiles (`testClasses compileFluidGameTestJava`), asks `affected.mjs select` which classes can be affected, and runs them task by task (`test`, `holdGates`, `columnGates`, `equipmentGates`, and `nativeSmoke` where cargo is found), each with its filters from the selection file (`-PlaneSelection`), side by side with `-PtestForks` and `--max-workers`, recording load sets; copies the JUnit XML to `results/`, sums the counts, writes `printed.txt` and, when the junction tests ran, `junction.txt`; saves the load sets of the classes that passed.
 2. **regression**: `fluidSolverRegression -PfluidRegressionMode=exact` when `FluidSolverRegressionTest` is selected.
 3. **gametest**: `runFluidGameTestServer` on a fresh run id when a non-client main source, a GameTest source, `data/`, `META-INF/` or the templates changed since `main` (by path: the server loads the whole server side).
 4. **campaign**: cold random, then bundled random and defaults, seeds 1 to 1000 on 8 threads with counters, each classified, when a path of `campaign-inputs.txt` differs from the merge base.
@@ -107,4 +107,4 @@ Which check decides what, in the least measurement (AGENTS.md):
 - Under memory load the GameTest server can fail to start; rerun on a new run id. GameTest worlds persist between runs of one id: use a fresh id.
 - `lane.sh` warns, and does not stop, when other test or client JVMs run.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

@@ -132,4 +132,4 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - No class outside `client/pollution/ftbchunks/` may name an FTB or Architectury type: the mod must load without FTB Chunks. No test or GameTest loads those two classes; only a dev client with FTB Chunks proves the overlay's look.
 - `LargeMapScreen` and `refreshIconsIfOpen` are FTB internals, not its API. A new FTB version that moves them turns the overlay off, not the game.
 
-**Snapshot:** `410c37fcb`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

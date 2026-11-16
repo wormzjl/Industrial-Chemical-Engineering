@@ -29,11 +29,11 @@ snapshot. "pp" = package-private.
 | Class | Role | Lines |
 |---|---|---|
 | [`ColumnUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java) | The column as one block: its ports a pure function of its door (`FEED`, `OVERHEAD`, `DISTILLATE`, `WATER`, `BOTTOMS`, the draw, steam and pumparound ports: `drawPort`, `steamPort`, `pumparoundIn`, `pumparoundOut`), `add` (a mole fraction onto the axis; an id the axis lacks fails the column), `catalogFor(thermo, waterOnAxis)`, `SCREEN` (the liquid-supply screen ratio the sheet's column solves at: V3's default) | 194 |
-| `ColumnBlockSolve` (pp) | The block's own solve: the feed flashed to the feed tray's solved pressure (`FEED_ROUNDS`), water by `ColumnWater.onAxis`, the products back through the world's flash, the condenser duty as the closure on its own streams (`ColumnSolve.closure`), the steam CHECK; the inlets' solids (particles to the bottoms, crystals melted), the frozen test; keeps the last state and leaves it on its report | 506 |
+| `ColumnBlockSolve` (pp) | The block's own solve: the feed flashed to the feed tray's solved pressure (`FEED_ROUNDS`), water by `ColumnWater.onAxis`, the products back through the world's flash, the condenser duty as the closure on its own streams (`ColumnSolve.closure`), the steam CHECK; the inlets' solids (particles to the bottoms, crystals melted), the frozen test; keeps the last state and leaves it on its report | 515 |
 | [`ColumnDoor`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnDoor.java) | The column's door as a sheet holds it (record; `of`): the calculator's Column page less the feed; nested `Draw`, `Steam`, `Pumparound`, the vacuum choice | 305 |
 | `ColumnSides` (pp) | The sheet sides of the column's heat pairs: the condenser's, the kettle's and each pumparound cooler's utility side, a regulated side's feed and its rules | 148 |
 | [`ExchangerUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ExchangerUnit.java) | An exchanger or a kettle reboiler, target Outlet, Duty or Area; an outlet or a duty names a side | 184 |
-| [`ExchangerRating`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ExchangerRating.java) | A counterflow exchanger on the world's two heat curves: the surface a duty needs and the duty a surface gives | 119 |
+| [`ExchangerRating`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ExchangerRating.java) | A counterflow exchanger on the world's two heat curves: the surface a duty needs and the duty a surface gives; `Side.fouled(rf)`, a side at a design deposit | 128 |
 | [`CoolerUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/CoolerUnit.java) | Target Outlet or Duty, the coolant in at 25 °C; Air or Water is a sizing type only | 88 |
 | [`FiredHeaterUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/FiredHeaterUnit.java) | Target Outlet or Duty, with a duty limit (the fuel stays off the sheet); series or apart coils | 104 |
 | [`MoverUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/MoverUnit.java) | A pump or a compressor on the world's closures (`FlowControl.Pump`, `Compressor`), target Outlet or Rise; a Pump tile sized as a plunger pump (`Passages.pumpType`) on its isentropic work; the proposed driver (`driver`, `POLES`) | 108 |
@@ -164,4 +164,4 @@ A unit's settings are the file's `Params` ([process-simulator.md](process-simula
 - `TopologyCompiler.Kind.TURBINE` maps to the turbine tile; `MOTOR`, `GENERATOR` and `GEARBOX` stand on it as
   DRAWING_ONLY and size nothing (`FlowsheetCatalog.DRIVER`). The diverter valve is the splitter.
 
-**Snapshot:** `410c37fcb`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

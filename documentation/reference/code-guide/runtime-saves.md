@@ -22,12 +22,12 @@ Under `src/main/java/com/wormzjl/icheme/runtime/fluid/`. Lines at `d6f721b94`.
 | Class | Role | Lines |
 |---|---|---|
 | [`FluidSavedData`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidSavedData.java) | `SavedData` `icheme_fluid_core`: capture, `SaveTiming`, `open(server, models, catalog)` (the one reset, refusals), `load`, `route()`, `reason()`; `Capture` | 171 |
-| [`FluidCheckpointCodec`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidCheckpointCodec.java) | The envelope (`ENVELOPE`, `UNIT_MAGIC`, `UNIT_ENVELOPE`), the state format `VERSION`, the core record and the binary island and topology units; `PackageKey`, `PackageRecord`, `IslandEntry`, `MAXIMUM_COMPOUNDS`; `FormatMismatchException`, `Unreadable`; `Writer`, `Reader` | 1073 |
+| [`FluidCheckpointCodec`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidCheckpointCodec.java) | The envelope (`ENVELOPE`, `UNIT_MAGIC`, `UNIT_ENVELOPE`), the state format `VERSION`, the core record and the binary island and topology units; `PackageKey`, `PackageRecord`, `IslandEntry`, `MAXIMUM_COMPOUNDS`; `FormatMismatchException`, `Unreadable`; `Writer`, `Reader` | 1088 |
 | [`FluidCheckpointStore`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidCheckpointStore.java) | Packs, the SHA-256 index, dirty tracking, atomic commit, orphan cleanup; `load(core, models, catalog)` → `Loaded(checkpoint, world, route, reason)`, `Route` EXACT or FACTS; `resetForFormatChange` | 514 |
-| [`FluidFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidFacts.java) | Package-private: facts `SCHEMA`, `ALIASES`; `world` and `island` (the units' facts), `events` (the topology unit's state), `topologyState`, `disagreement`, `rebuild` (`Placed.restate`), `REBUILT_CADENCE`; the records the sections share (registration, account, set points, solids); `World` with its builder, `Vessel`, `Drift` | 923 |
+| [`FluidFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FluidFacts.java) | Package-private: facts `SCHEMA`, `ALIASES`; `world` and `island` (the units' facts), `events` (the topology unit's state), `topologyState`, `disagreement`, `rebuild` (`Placed.restate`), `REBUILT_CADENCE`; the records the sections share (registration, account, set points, solids); `World` with its builder, `Vessel`, `Drift` | 937 |
 | [`FactsSection`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/FactsSection.java) | Package-private: one subsystem's run of fields in the topology unit's facts record; `ALL` in stream order | 28 |
 | [`RegistryFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/RegistryFacts.java) | The identity counter, basis, registrations, the two totals, recoveries, `Restated` | 64 |
-| [`ColumnFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnFacts.java) | The column units (schema 29 appends each unit's tray fouling, wall loss and material by name) | 79 |
+| [`ColumnFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnFacts.java) | The column units (schema 29 appends each unit's tray fouling, wall loss and material by name) | 88 |
 | [`MachineFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineFacts.java) | Shaft units, electric stores, pump health | 67 |
 | [`BuildFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/BuildFacts.java) | Line paints, structure records, rack lane frames, device names | 76 |
 | [`StillFacts`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/StillFacts.java) | The batch stills | 47 |
@@ -103,4 +103,4 @@ The reset itself has no test: no unit test opens a world. Tests edit images with
 - **The state format is not compatibility**: a mismatch drops the state and the engine rebuilds it; never write a migration for it.
 - **Do not test against player worlds**: the corpus images are the gates.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

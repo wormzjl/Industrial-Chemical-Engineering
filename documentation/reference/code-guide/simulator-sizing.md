@@ -32,24 +32,24 @@ the snapshot. "pp" = package-private.
 
 | Class | Role | Lines |
 |---|---|---|
-| [`SheetSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SheetSizing.java) | The whole sheet sized and rated, in the physics' order: `rate` (cheap, no trial columns), `pass`, `designs`, the entries and results, `PumparoundMember` | 670 |
+| [`SheetSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SheetSizing.java) | The whole sheet sized and rated, in the physics' order: `rate` (cheap, no trial columns), `pass`, `designs`, the entries and results, `PumparoundMember` | 683 |
 | [`Proposal`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Proposal.java) | Size all: `sizeAll` (every Auto size on a copy, its column doors and member counts with it, one warm re-run where a size moves the run), `applied`, `pruned` | 145 |
 | `BlockSizing` (pp) | One sizing's column and its block: the column at its diameter, then its members and their lines; the first trial warm from the run's `Report.Warm` | 240 |
 | `PathWalk` (pp), [`PressurePath`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PressurePath.java) | The pressure paths from each stream that starts one; one path: available, lost, spare (bar), `spare()` | 195, 75 |
-| [`SizedPassages`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SizedPassages.java) | A sized unit's passages: the world's own law of each at flow times a stream's rate, read by the sizers and the run alike | 250 |
+| [`SizedPassages`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SizedPassages.java) | A sized unit's passages: the world's own law of each at flow times a stream's rate, read by the sizers and the run alike; `tube`, `shell`, `bank` with a design deposit `rf` (the narrowed passage) | 271 |
 | [`Limit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Limit.java) | Every rated row with its bound, unit and source (enum; `Kind` MUST, SHOULD, RULE; `Rank` CLOSEST, QUIET, PAID); the name is the stable id; a value changes here and nowhere else | 403 |
 | [`Bound`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Bound.java), [`Lamp`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Lamp.java) | A row's ceiling, floor or band (one number, `Step` steps along an axis, or given); a row's state, NONE < GREEN < YELLOW < RED | 121, 13 |
 | [`Rating`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Rating.java), [`Reading`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Reading.java) | What one size does against its limits; one limit read on one size | 87, 41 |
 | [`Selection`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Selection.java) | Auto: a search over sizes calling the rate function a Fixed size is rated by; a failed trial is a rating, not an exception | 66 |
 | [`UnitSize`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/UnitSize.java), [`UnitType`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/UnitType.java) | A unit's size, Auto's or the player's (`shape`: what the constructor can build); what a tile with one function is built as | 56, 38 |
-| [`SizingFacts`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SizingFacts.java), [`DesignBasis`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/DesignBasis.java) | What the player keeps of sizing (facts of the sheet): the design basis, each item's mode, type and size; the basis's three entries (`DEFAULT`: 1.10 design flow, 50 m line length, 60 K pumparound fall) | 169, 23 |
+| [`SizingFacts`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SizingFacts.java), [`DesignBasis`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/DesignBasis.java) | What the player keeps of sizing (facts of the sheet): the design basis, each item's mode, type and size; the basis's three entries (`DEFAULT`: 1.10 design flow, 50 m line length, 60 K pumparound fall) | 189, 23 |
 | [`LineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/LineSizing.java), [`Service`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Service.java) | A line's bore and runs (`rate`, `auto`), its drop on the network's viscosity; what a line carries, which picks its rows (the stream gives it, the player may choose) | 188, 125 |
-| [`ColumnSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ColumnSizing.java) | A column's diameter in the world's half metres, each rated by the real solver (`ColumnSolve.calculate`, the sheet's `ColdStart.LEARNED`) | 216 |
+| [`ColumnSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ColumnSizing.java) | A column's diameter in the world's half metres, each rated by the real solver (`ColumnSolve.calculate`, the sheet's `ColdStart.LEARNED`) | 217 |
 | [`PumpSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PumpSizing.java) The Pump tile's two types (`type`: Auto's choice): the smallest discharge whose rated flow fits the window (`Size`), or the smallest plunger pump model that holds the spared flow (`Plunger`, `autoPlunger`); `Duty` (flow, head, shaft power, NPSH3, proposed motor; `plungerDuty`), `Load` (`npsh`, `edge`, `boils`, `reducedDensity`, `pressure`, `exponent`) | 288 |
 | [`CompressorSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/CompressorSizing.java) | The type by its inlet flow, then the smallest frame; stages here alone; the discharge one stage's polytropic estimate on the world's exponent | 152 |
-| [`TurbineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/TurbineSizing.java) | A steam turbine's design point, rated power, inlet steam class and exhaust | 103 |
-| [`ExchangerSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ExchangerSizing.java) | An exchanger or a kettle on `ExchangerRating`, over shells, shell sizes, tubes and the `ExchangerType` catalog (a kettle Standard only) | 216 |
-| [`AirCoolerSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/AirCoolerSizing.java), [`CoolerSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/CoolerSizing.java) | An air cooler, the least face within its drop, `fans`; coolers on air and tower water | 161, 96 |
+| [`TurbineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/TurbineSizing.java) | A steam turbine's design point, rated power, inlet steam class and exhaust | 105 |
+| [`ExchangerSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ExchangerSizing.java) | An exchanger or a kettle on `ExchangerRating`, over shells, shell sizes, tubes and the `ExchangerType` catalog (a kettle Standard only); rated on each side's design deposit (`Load.tubeFouling`, `shellFouling`) | 227 |
+| [`AirCoolerSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/AirCoolerSizing.java), [`CoolerSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/CoolerSizing.java) | An air cooler, the least face within its drop, `fans`, its tubes' design deposit (`Load.fouling`); coolers on air and tower water | 170, 96 |
 | [`HeaterSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/HeaterSizing.java) | A fired heater: a vertical while the largest vertical holds the design duty with the spare, else a cabin | 98 |
 | [`DrumSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/DrumSizing.java), [`TankSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/TankSizing.java) | A drum (lying with a boot for a second liquid); a storage tile (floating roof, fixed roof or sphere by the storage pressure) | 151, 126 |
 | [`ValveSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ValveSizing.java) | A control valve on its inlet line's bore | 47 |
@@ -58,7 +58,7 @@ the snapshot. "pp" = package-private.
 | [`PrimeMoverSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PrimeMoverSizing.java), [`StillSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/StillSizing.java) | The smallest engine or turbine model whose rated fuel holds the fuel heat; a batch still's pot from the constructor's list, with its heater, worm and column | 78, 138 |
 
 **`science/flowsheet/metallurgy/`**: [`SheetMetallurgy`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/metallurgy/SheetMetallurgy.java)
-(the Materials tab's rows: `rate(sheet, run, thermo, sized)` per unit, `ratings`, `auto`, `trim`, `lamp`; 235 lines). It
+(the Materials tab's rows: `rate(sheet, run, thermo, sized)` per unit, `ratings`, `auto`, `trim`, `lamp`, `designFouling`; 285 lines). It
 sits beside `sizing/` rather than in it: it reads the run's streams and the sizing's line speeds, writes no size, and
 imports `science/integrity`, which nothing in `sizing/` needs.
 
@@ -139,7 +139,7 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
   duty is a failed rating. The type travels with the size into sent designs, Import and column member choices.
 - **Air coolers** (`AirCoolerSizing.fans`): the fan speed (0..1) that holds the load on the chosen face; power goes
   with the cube of the speed; `Sized.fanPower()` is the sheet's total.
-- **Design fouling** (batch 2026-11-16-fouling-corrosion, WP5): each heat side is rated dirty, at the deposit the
+- **Design fouling**: each heat side is rated dirty, at the deposit the
   world's walls grow towards on its service (`SheetMetallurgy.designFouling`: `FoulingLaw.asymptote` of the hotter
   end's digest and solid share; a kettle's pool none). `Load.tubeFouling`, `shellFouling` and `AirCoolerSizing.Load.fouling`
   carry it: the curves take `ExchangerRating.Side.fouled`, the air cooler `HeatSides.airFilms(fans, fouling)`, and the
@@ -155,7 +155,7 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
 - **Materials** (`SheetMetallurgy`). A unit with a wall (`WALLED`: the types that build a structure with a fluid device,
   columns included) is rated on every stream on its ports, the worst governing: `CorrosionLaw.inside` per stream, plus
   `ErosionLaw.wall` on a heat side (`HEAT_SIDES`) at its line's sized speed. Lamps green at most 0.1 mm/y, yellow (amber)
-  at most 0.5, red above; life `WallState.lifeProcessSeconds` at `YEAR_PROCESS_HOURS` (20, the server's default: the
+  at most 0.5, red above; life `WallState.lifeProcessSeconds` at `WallState.DEFAULT_YEAR_PROCESS_HOURS` (200, the server's default: the
   client reads no server setting). Auto: the cheapest green material, else the least rate, the cheaper on a tie. A control
   valve rates its trim (`ErosionLaw.trim` at the run's drop, the inlet's density and inert solids); mixers, splitters and
   filters get no row; the corrosive air is not rated. The rows are computed on the runner's thread beside every rating
@@ -198,4 +198,4 @@ Sizing facts are facts of the sheet (`SizingFactsFile`, in the flowsheet file); 
 - The type of an exchanger (Standard or crossflow) is a sizing choice, not another tile.
 - A sent list replaces the earlier one whole; the constructor imports from the nearest simulator only.
 
-**Snapshot:** `410c37fcb`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

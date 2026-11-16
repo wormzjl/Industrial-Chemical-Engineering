@@ -22,19 +22,19 @@ Lines at the snapshot.
 |---|---|---|
 | **World (`world/level/block`)** | | |
 | `EquipmentStructure` | The entry points: `place` (with the name every shell cell takes), `rename`, `name`, `at`, `find`, `collision`, `heatSides`, `movers`, `sideIdentities`, `heldAt`, `refreshNozzles`, `refreshNozzlesAt`, `dismantle`, `record`, `registerCommands`; forwarders to the three classes beside it (`restoreFluidBinding`, `restateLater`, `refreshLater`, `removeRetiredLater`, `realignLater`, `onLevelTick`); `FIND_STEPS` | 574 |
-| `StructureRegistration` | A structure's devices by kind: `register` (reservoir, mover, turbine, heat unit with its sides as partners, still, converter, flare, chimney, prime mover), `restoreFluidBinding`, `reregister` (one queued edit, identities kept), `unregister`, `converterDevices`; a machine's law from `MachineRatings` | 663 |
+| `StructureRegistration` | A structure's devices by kind: `register` (reservoir, mover, turbine, heat unit with its sides as partners, still, converter, flare, chimney, prime mover), `restoreFluidBinding`, `reregister` (one queued edit, identities kept), `unregister`, `converterDevices`; a machine's law from `MachineRatings`; `material` (after a registration, a restored binding and a refresh, the devices the structure holds at its nodes take the shape's material through `FluidWorldAuthority.material`, one queued event, none when they have it; the two spec rebuilds keep it, `withMetallurgy`) | 687 |
 | `StructureRefresh` | After a load: the STALE, RETIRED and RESTATE queues served by `onLevelTick` once a region is `ready`; `refresh`, `removeRetired`, `restate`, `restatePaint`; `survey`, `write`, `settle`, `waitForLight`, `loaded`, `corner` | 459 |
 | `StructureRealignment` | The registry first for structures: `realignLater`, `serveRealignment`, `realign`, `stands`, `members`, `holdShaft` | 174 |
 | `Positions` | `of(level, at)`: a block's fluid-topology position (no lane), for every world file | 16 |
-| `EquipmentShellBlock` | A shell cell: transparent, collision from its key (a full block while unbound), `isLadder`, `neighborChanged` to the nozzles; use decided on the server (the column's assembly screen, else the structure's own menu or datasheet) | 197 |
-| `EquipmentInteriorBlock` | An interior cell: an invisible full cube with no data; `OPEN` (a tank's), `SKYLIGHT` (a skirt that shows its inside) | 146 |
+| `EquipmentShellBlock` | A shell cell: transparent, collision from its key (a full block while unbound), `isLadder`, `neighborChanged` to the nozzles; use decided on the server (the column's assembly screen, else the structure's own menu or datasheet) | 199 |
+| `EquipmentInteriorBlock` | An interior cell: an invisible full cube with no data; `OPEN` (a tank's), `SKYLIGHT` (a skirt that shows its inside) | 148 |
 | `EquipmentConstructorBlock` | The constructor bench: `FACING` names the build direction; opens the screen on the client | 109 |
-| `EquipmentDeconstruction` | `target`: the nearest loaded structure on the constructor's line, independent of the draft | 143 |
+| `EquipmentDeconstruction` | `target`: the nearest loaded structure on the constructor's line, independent of the draft; `checked` (`Checked`), the removal group's shared check that Deconstruct and Repair make, break events only for a removal; the repair itself: `EquipmentRepair` ([integrity.md](integrity.md)) | 166 |
 | `EquipmentProtection` | Exact-cell, level and thread authority for lifecycle edits and Creative removal; no permission outlives an operation | 61 |
 | `FloatingRoofs` | A level's floating roofs: open cells collide up to the roof (`standing`), `carry` lifts what stands on a rising roof, `ladder`, `climb` | 413 |
 | **Block entities (`world/level/block/entity`)** | | |
-| `EquipmentShellBlockEntity` | One shell cell: shape, cell, nozzle codes, paint, name (`name`, `rename`, `bind`), layout revision and box (`layoutIncomplete`); `readShape`, `saved`, `writeShape`; a retired cell's `retired` kind and `retiredData`; the node cell's fluid identity; a tank's roof level; the gauges' metadata; `largestBore`, `largestBoreBeside` | 788 |
-| `EquipmentConstructorBlockEntity` | The constructor's `Design` (with `column`, `turns`, `name`; `buildable`, `imported`, `landed`, `keepingColumn`, `withName`, `withTurns`, `fresh`), `vessel`, `apply`, `simulator`, `readDesign`, `writeDesign` | 465 |
+| `EquipmentShellBlockEntity` | One shell cell: shape, cell, nozzle codes, paint, name (`name`, `rename`, `bind`), layout revision and box (`layoutIncomplete`); `readShape`, `saved`, `writeShape`; a retired cell's `retired` kind and `retiredData`; the node cell's fluid identity; a tank's roof level; the gauges' metadata; `largestBore`, `largestBoreBeside`; `weeping` (the node cell's `Weeping` flag on its update tag, never saved) | 829 |
+| `EquipmentConstructorBlockEntity` | The constructor's `Design` (with `column`, `turns`, `name`; `buildable`, `imported`, `landed`, `keepingColumn`, `withName`, `withTurns`, `withMaterial`, `fresh`), `vessel`, `apply`, `simulator`, `readDesign`, `writeDesign` | 491 |
 | `ColumnDesignTags` | A column design's NBT by name (trays, diameter, components, member counts, turns, operating point): `write`, `read`, `writeComponents`, `writeTurns`, `writeOperating`, `saved`, `savedTurns`, `savedOperating` | 228 |
 | `SentDesignTags` | The designs Send to block stores on a simulator: `write`, `read` (a `Read` of designs, unread entries kept, repairs), `whole` | 107 |
 | `DeviceNames` | A device's `Name` tag: `KEY`, `read` (cleaned and logged, never refused) | 37 |
@@ -44,7 +44,7 @@ Lines at the snapshot.
 | `ShapeRepair` | A saved shape onto the current rules: `Saved`, `Read`, the alias maps (`KIND_ALIASES`, `FORM_ALIASES`, `HEADING_ALIASES`, `ORIENTATION_ALIASES`, `ROLE_ALIASES`, `DRIVE_ALIASES`, `STEAM_ALIASES`, `SPLIT_ALIASES`, `EXCHANGER_TYPE_ALIASES`), `read`, `kind`, `form`, `exchangerType`, `material`, `SavedComponents`, `SavedTurn`, `SavedDuty`, `turns`; never throws | 480 |
 | `EquipmentRefresh` | The refresh plan: `Holding`, `Plan`, `anchor` within `REACH`; which saved cell is current (`placedRevision`, `legacyRevision`, `STALE`) | 158 |
 | **Others** | | |
-| `EquipmentNetwork` | `network/`: the payloads (`ConstructorPayload` with its `Action`, `ImportList`, `ImportListAnswer`, `ImportChoice`, `ImportAnswer`, `TemplatePayload`, `Rename`, `Deconstruct`, `DeconstructAnswer`, `SilhouetteWatch`, `SilhouetteBatch`), admission and chat replies; `IMPORT_REACH`, `MAX_TEXT` | 644 |
+| `EquipmentNetwork` | `network/`: the payloads (`ConstructorPayload` with its `Action`, `ImportList`, `ImportListAnswer`, `ImportChoice`, `ImportAnswer`, `TemplatePayload`, `Rename`, `Deconstruct`, `DeconstructAnswer`, `Repair`, `RepairAnswer`, `StructureState`, `StructureStateAnswer`, `SilhouetteWatch`, `SilhouetteBatch`), admission and chat replies; `IMPORT_REACH`, `MAX_TEXT` | 774 |
 | `EquipmentChunkMixin` | `mixin/`: refuses a `LevelChunk.setBlockState` on a structure cell outside `EquipmentProtection`'s authority | 34 |
 | `MachineRatings` | `science/plant/machine/`: a placed machine's law from its shape (`machineControl`, `ejectorControl`) | 50 |
 
@@ -117,4 +117,4 @@ The shell cell's NBT holds `Kind`, `Diameter`, `TangentLength`, `Orientation`, `
 - Columns and the units that are neither movers, heat units nor the other registered kinds are drawing only. A mover's auxiliary nozzles and a heat unit's nozzles that are not a side's inlet or outlet do not join the network.
 - The constructor bench's model faces the placing player, while `FACING` still names the build direction.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.

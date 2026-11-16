@@ -45,9 +45,9 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | [`ExchangerRelay`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ExchangerRelay.java) | The relay as pure functions: `Partner` (the other side as read, or a kettle's pool as a `Bath`; `model`, `withModel`), `Read` (`NONE`, `column`, `heating`, `withOperation`, `gives`), `Operation` (`bypass`, `feed`, `column`), `plan`, `wall`, `planPool`, `bathWall`, `capacityRate`, `TOLERANCE`; `Conductance` (`ua`, `clean`, `DEADBAND`, `same`), `conductance` (two streams, or tubes against a `Bath`), `cellFilms` | 431 |
 | [`CrossflowHeat`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/CrossflowHeat.java), [`HeatRouting`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatRouting.java) | A two-pass tube bundle against a shell mixed between crossflow rows, on the relay's wall solver; the routings `SERIES`, `TWO_PASS_TUBES`, `MIXED_CROSSFLOW` (`grid`) | 123, 112 |
 | [`HeatControl`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatControl.java) | The built-in controller: `Target` MANUAL, OUTLET_TEMPERATURE, DUTY; `value`, `lowLimit`, `manual`; `Limit` NONE, LOWEST, HIGHEST, LOW_LIMIT; `setting` (an Illinois root on the side's own law) | 76 |
-| [`Pool`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/Pool.java) | A kettle's pool on its vessel's `Inventory`: facts `id`, `partner`, `area`, the bundle's `bottom` and diameter; slice inputs `wall`, `giveBack` (W), `active`; `wetted`, `film`, `heat` | 127 |
+| [`Pool`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/Pool.java) | A kettle's pool on its vessel's `Inventory`: facts `id`, `partner`, `area`, the bundle's `bottom` and diameter; slice inputs `wall`, `giveBack` (W), `active`; `wetted`, `film`, `heat` | 128 |
 | **`science/equipment/`** | | |
-| [`HeatSides`](../../../src/main/java/com/wormzjl/icheme/science/equipment/HeatSides.java) | `Unit` EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER, PRIME_MOVER; `Side` TUBE, SHELL, PROCESS, CONVECTION, RADIANT, EXHAUST; `unit(kind)`, `of(shape)` (each side's nozzle roles, surface and passage, in registration order), `pool(kind)`, `kettleBundle`, `kettleShell`, `heatSide(...)`, `coilDuty`, `airFilms`, `fanPower`, `airCoolerSurface`; `AIR`, `AIR_TEMPERATURE`, `EXCHANGER_CELLS`, `CONVECTION_U`, `NATURAL_DRAUGHT`; the cooling utilities the column and the simulator share: `AIR_SPLIT_TEMPERATURE`, `airSplit`, `TOWER_WATER_TEMPERATURE`, `WATER_RANGE`, `WATER_APPROACH`, `coolingWaterOutlet` | 251 |
+| [`HeatSides`](../../../src/main/java/com/wormzjl/icheme/science/equipment/HeatSides.java) | `Unit` EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER, PRIME_MOVER; `Side` TUBE, SHELL, PROCESS, CONVECTION, RADIANT, EXHAUST; `unit(kind)`, `of(shape)` (each side's nozzle roles, surface and passage, in registration order), `pool(kind)`, `kettleBundle`, `kettleShell`, `heatSide(...)`, `coilDuty`, `airFilms`, `fanPower`, `airCoolerSurface`; `AIR`, `AIR_TEMPERATURE`, `EXCHANGER_CELLS`, `CONVECTION_U`, `NATURAL_DRAUGHT`; the cooling utilities the column and the simulator share: `AIR_SPLIT_TEMPERATURE`, `airSplit`, `TOWER_WATER_TEMPERATURE`, `WATER_RANGE`, `WATER_APPROACH`, `coolingWaterOutlet` | 265 |
 | [`ExchangerType`](../../../src/main/java/com/wormzjl/icheme/science/equipment/ExchangerType.java) | The exchanger configuration catalog (`CATALOG`: `STANDARD`, `CROSSFLOW`), saved by name: `key`, `cells`, `routing(side)`, `Layout`, `tubePassage`, `shellPassage` | 71 |
 
 ## Main flow
@@ -138,7 +138,7 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
   in every mode, manual included. A set point on a plateau names its liquid end on a cooled side and its vapour end on a
   heated side. An exchanger side's bypass is planned per slice with the wall, in turn until it moves less than 1e-6 (at
   most 8 rounds); an air cooler's draught per step, as a fired coil's firing.
-- **The unit's UA** (decision D16 of batch 2026-11-16-fouling-corrosion), a reading for the heat page: over the wall's
+- **The unit's UA**, a reading for the heat page: over the wall's
   cells `Σ A_k / (1/h_a,k + 1/h_b,k)`, each film the one that stream's march meets in cell k (`cellFilms`: the curve's film
   at the cell's mean specific enthalpy; a stream all through the bypass meets every cell at its inlet's film), so the
   liquid film resistance and the deposit are in it; the clean UA on both curves re-filmed with `Films.clean`. A kettle's
@@ -147,7 +147,7 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
   the partner counted stopped, or without flow on either side), `PassiveStepSolver.plan` on every air cooler (a controlled
   one on its planning curve, another on a curve kept without a flash, `keptCurve`). No flash, no residual. It takes no
   part in the law's equality, a planned reading within `Conductance.DEADBAND` of the last stands, so a steady plant keeps
-  its graph; it is saved with the law (state 52). Two clean water streams give U = 2500 W/m²K (`ConductanceTest`).
+  its graph; it is saved with the law (state format 52). Two clean water streams give U = 2500 W/m²K (`ConductanceTest`).
 
 ## Laws and constants
 
@@ -159,7 +159,7 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
   below 0.5, liquid from 1.5, `Films.at(x, w)`) and the vapour coordinate `1 − w`, so a dense fluid's film follows its
   density across its slot line. An inserted knot takes the weight only between points of one continuous fluid (the same
   slot, or both dense); on a plateau it keeps the two-phase film.
-- **Liquid film** (D13 and D15 of batch 2026-11-16-fouling-corrosion): a liquid's film is 5000 × φ, φ =
+- **Liquid film**: a liquid's film is 5000 × φ, φ =
   min(1, (k/0.6)^0.6 (cp/4180)^0.4 (1 mPa·s/μ)^0.4) (Dittus–Boelter at one mass flow and bore, no density term), never
   below the gas film, held as a resistance `HeatCurve.liquidResistance(μ, k, cp)` = (1/φ − 1)/5000 in series with the
   liquid film (`Films.at(x, w, resistance)`); a non-finite or non-positive property takes the reference's factor. Warm
@@ -175,7 +175,7 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
   bit for bit `at(x, w)`. An air cooler's `Air.films(draught)` are the tube-side process films with the air as their
   `Films.Outer` (a value record: the curve cache compares films by value), so the resistance lies inside the tubes;
   `wallLiquid`, `wallTwoPhase`, `wallGas` give the wall's effective films.
-- **Fouling** (batch 2026-11-16-fouling-corrosion, WP5; [integrity.md](integrity.md)): a side's deposit `Rf` stands in
+- **Fouling** ([integrity.md](integrity.md)): a side's deposit `Rf` stands in
   series with each film, `Films.fouled(Rf)` = `h/(1 + h Rf)`, and narrows its passage by `2 Rf k_d`
   (`Geometry.narrowed`); an air cooler's tubes carry it in `Air.process`, a convection coil in `1/U' = 1/U + Rf`. The
   compile gives a side its deposit in whole steps of 5e-5 m²K/W (`HeatSides.heatSide(..., fouling)`); at 0 every law is
@@ -202,9 +202,10 @@ The laws' facts are a heat unit's registration facts; their slice inputs and the
 
 | Change | Owner | Tests (`--tests` filter) |
 |---|---|---|
-| A curve, films, the march, a plateau's ends | `HeatCurve` | `HeatCurveTest` (the kernel against the analytic exponential and latent knots; a film step; a pure condensing stream against water; the boundary's resolution bounds the condensing march) |
+| A curve, films, the march, a plateau's ends | `HeatCurve` | `HeatCurveTest` (the kernel against the analytic exponential and latent knots; a film step; a pure condensing stream against water; the boundary's resolution bounds the condensing march); `LiquidFilmTest` (the liquid film of viscosity, conductivity and heat capacity); `FoulingEffectTest` (a deposit's films and passage) |
 | An exchanger side's heat, bypass, reversal, zero flow, a boiling junction | `HeatSide`, `StepEquations.sideHeat`, `bookedHeat`, `ConservativeTransport` | `HeatSideNetworkTest` |
 | The wall, the give-back, the plan, the column's reads | `ExchangerRelay` | `ExchangerRelayTest` (`aColumnsHeatingSideGivesItsDueDownToTheFloor`) |
+| The unit's UA | `ExchangerRelay.Conductance`, `AirCooled.conductance` | `ConductanceTest` |
 | The controller | `HeatControl` | `HeatControlTest` |
 | A fired heater's coils, the steam coil | `FiredCoil`, `ConvectionCoil`, `ExhaustCoil` | `FiredCoilTest`, `ConvectionCoilTest`, `ExhaustCoilTest` |
 | Crossflow | `CrossflowHeat`, `HeatRouting`, `ExchangerType` | `CrossflowHeatTest`, `CrossflowEquipmentTest`, `CrossflowSizingTest` |
@@ -221,4 +222,4 @@ The laws' facts are a heat unit's registration facts; their slice inputs and the
 - The air is a constant 25 °C (no weather, biome or altitude).
 - The curve's extension past its end knots raises no notice: the property models' own data-range notices do.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `c004a4c57`, 2026-11-16.
