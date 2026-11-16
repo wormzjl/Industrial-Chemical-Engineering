@@ -4,7 +4,8 @@
 # Chosen 2026-11-16 from the JUnit results of 19 archived final lanes (4088 test methods, 3264 s of test time, 28 of
 # them failed at least once): every test method of 1 s or more that ran in at least 6 of those lanes and never failed.
 # 363 methods in 187 classes, 2525 s (77 % of the test time, 8.9 % of the methods). A class keeps at least one test.
-# They stay in the sources: a run with --tests runs them, and so does the full lane (LANE_FULL=owner lane.sh head --all).
+# They stay in the sources: a run with --tests runs them, and so does the full lane (LANE_FULL=owner lane.sh head --all),
+# which runs only when the owner asks (owner, 2026-11-16: "Archive the full suite and runs only when asked").
 # Upkeep: a test on this list that fails in a run leaves the list. A test joins it when a batch's new tests would take
 # the lane past 8 minutes: the costliest test that never failed in the archived lanes first (README.md, "The tests left out").
 com.wormzjl.icheme.science.flowsheet.FlowsheetColumnTest.aFurnaceOnADutyClosesColdAsFromAFirstEstimate  # 236 s, no failure in 19 lanes

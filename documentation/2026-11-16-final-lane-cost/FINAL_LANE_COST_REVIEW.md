@@ -45,9 +45,9 @@ Tried and dropped:
 
 ## 5. What this costs, for the owner to validate
 
-1. The left-out tests no longer guard the lane. The choice is by record (never failed in 6 to 21 lanes), not by proof. `LANE_FULL=owner lane.sh head --all` runs them; a periodic full lane is an owner decision.
+1. The left-out tests no longer guard the lane. The choice is by record (never failed in 6 to 21 lanes), not by proof. `LANE_FULL=owner lane.sh head --all` runs them. Decided (owner, 2026-11-16: "Archive the full suite and runs only when asked"): no periodic full lane; the full suite runs only on the owner's word.
 2. The watch seeds leave out 27 seeds that held only at time factor 1 (listed in `campaign-seeds.txt`).
 3. Shared JVMs give each class the load set of its 8 JVM mates: more classes are selected later, never fewer.
 4. Open: the campaign's watch seeds move between clean and the budget class F from run to run (118, 678, 707, 241 between two runs of the same code). That is timing inside the lane; removing it means a deadline the harness counts in steps, which is a change to the harness.
-5. Open: whether the sources of the left-out tests go to `tools/test-archive-*`, as the 2026-10-21 test review did.
+5. Decided (owner, 2026-11-16): the left-out tests stay in the sources. No cut into `tools/test-archive-*`: it would change about 187 test classes that the unmerged fouling branch and `main` also change.
 6. Open: `AGENTS.md` still names a 200-seed quick check for comparing forms, which is now larger than the campaign.

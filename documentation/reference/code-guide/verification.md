@@ -24,7 +24,7 @@ The lane's tool, [`tools/merge-lane/`](../../../tools/merge-lane/). Lines at the
 | `affected.mjs` | `select [--explain <class>] [--since A..B]` prints the selection (`TASK`, `PICK`, `STEP`, `WHY`, `NOTE` lines); `save <load logs> <results>` updates the load map; `stamp <gametest or campaign>` records a step's run | 408 |
 | `record.init.gradle` | `--init-script … -PlaneTests=<file> -PlaneRecord=<folder>`: each test task's filters from a file; 8 test classes to a JVM with `-Xlog:class+load,class+init`, so each class's load set is recorded | 35 |
 | `campaign-seeds.txt` | The campaign's watch seeds: the 27 seeds that have held at the game's time factor | 12 |
-| `left-out.txt` | The test methods the lane never runs: 1 s or more, never failed in the archived lanes | 371 |
+| `left-out.txt` | The test methods the lane never runs: 1 s or more, never failed in the archived lanes | 373 |
 | `printed.mjs` | `node tools/merge-lane/printed.mjs <results> <out>`: the printed lines of every test, the class name in front | 14 |
 | `readers.txt` | Readers no string constant shows: a path pattern and the reading source file | 4 |
 | `campaign-inputs.txt` | The campaign's inputs as path patterns; a change to one since the campaign's last run runs the campaign | 12 |
