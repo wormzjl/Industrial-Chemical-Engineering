@@ -25,6 +25,7 @@ Lane (when built): new packages `science/solute` and `science/reaction`; hot fil
 - 2026-11-16, owner: "how NH4Cl modeled?". Review 4.7 gains the table of its forms (two compounds in gas, two ion tags on free water, no solid in revision 5) and a defect found on the way: plan 7.4 returns the ions to gases in any dry holdup, where ammonium and chloride together leave crystals (at 60 °C a plant keeps 0.4 ppm of each as gas). Option O10's A now also limits that return by `Kp`. Documents only.
 - 2026-11-16, owner: "how's the performance overhead? Is this a generalizable method?". Read `main`'s integrity chapter: a side's level step (5e-5 m²K/W) restates its registration and recompiles its island. Review 4.7 gains the cost in counts (a bit test per island; two pressures, one `exp` and one square root per candidate side; one recompile per level step, about one per 520 intervals unwashed, none under a continuous wash) and the method's reach (the record generalised to partners with exponents: bisulfide, amine hydrochlorides, carbamate, water scale; not for amounts above about 1 % of a stream). Plan O10 carries both. Documents only.
 - 2026-11-16, owner, on the salt law: "This is basically a reaction, needs to be handled by the reaction module". Plan revision 6: D15 (every chemical change is a `reactions` record; a volatile compound's ion tag is its account, posted with a sign at a passage and settled at the next holdup), the kind `equilibria` becomes the law `ionisation`, section 7.5 (ammonium chloride by the law `equilibrium`: uses up its gases exactly, the wall's `saltFouling` in kg, the dry holdup's residue), WP4d. The kind `salts` and the law `salt_deposit` are withdrawn; review 4.7 marks them superseded. Open in O10: when it is built. Documents only.
+- 2026-11-16, owner, asked whether to build the ammonium chloride reaction in this batch: "Yes, this batch" (plan O10, WP4d). Documents only.
 
 ## Documents
 
@@ -38,7 +39,7 @@ None yet.
 ## Open items
 
 - Every option of plan section 16 is decided. O9: the twelve shared cuts stay (owner: "Yes, cuts stay"); two assumptions stand until the randomization is designed: contents are one factor per tag on one profile, and a crude's character comes with the reactor design as type tags. The fits (O5) and the hydrogen chloride pair's size (O6) stay the owner's to change.
-- Option O10 (plan section 16 and 7.5, review 4.7): ammonium chloride as a reaction of the module (decided); when WP4d is built is open: in this batch (proposed) or with the hydroprocessing design.
+- Every option of plan section 16 is decided, O10 included: ammonium chloride is a reaction of the module, built in this batch as WP4d. The bisulfide's record and H2S's `ionisation` record come with the hydroprocessing and sour water design.
 - WP4c measures what coke as a solid costs: the campaign's counters on a coking world, and whether a vessel with a growing bed keeps a steady certificate.
 - Papers (review 7.5): the five for this batch are not fetched (owner: "Keep recalled values"); ten remain as the reading list of the reactor design.
 - Before the amine and sour water design: read the fitted constants (Kent–Eisenberg, SWEQ), and decide the bound gas as a compound (review 4.5).
