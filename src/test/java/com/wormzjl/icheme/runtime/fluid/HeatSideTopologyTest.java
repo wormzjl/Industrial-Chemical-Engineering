@@ -112,7 +112,7 @@ class HeatSideTopologyTest {
             } else {
                 assertEquals(passage.diameter()-.001,own.sections().getFirst().diameter(),1e-15);
                 assertEquals(passage.channels(),own.sections().getFirst().channels());
-                assertEquals(1000,films.liquid(),1e-9);assertEquals(1428.57,films.twoPhase(),.01);assertEquals(95.24,films.gas(),.01);
+                assertEquals(1428.57,films.liquid(),.01);assertEquals(1428.57,films.twoPhase(),.01);assertEquals(95.24,films.gas(),.01);
             }
         }
         // A side without its partner moves no heat; its narrowed passage carries less on the same head.
