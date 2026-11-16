@@ -70,7 +70,7 @@ class FoulingEffectTest {
         var dirty = (AirCooled) HeatSides.heatSide(HeatSides.Unit.AIR_COOLER, HeatSides.Side.PROCESS, area, 1, 0, 0, null, ExchangerType.STANDARD, rf);
         assertEquals(1000, dirty.air().process().liquid(), 1e-9);
         assertEquals(air.draught(), dirty.draught());
-        assertTrue(dirty.films().liquid() < air.films().liquid());
+        assertTrue(dirty.films().wallLiquid() < air.films().wallLiquid());
         assertEquals(HeatSides.airFilms(1, rf), dirty.films());
         assertEquals(HeatSides.airFilms(1), HeatSides.airFilms(1, 0));
         // A convection coil: 1/U' = 1/U + Rf on its overall coefficient (54.9 W/m²K: 53.4 at 5 steps).
