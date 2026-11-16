@@ -1,4 +1,6 @@
-# Solute and reaction system: design (revision 5)
+# Solute and reaction system: design (revision 6)
+
+Revision 6 (owner, 2026-11-16, on the ammonium salts: "This is basically a reaction, needs to be handled by the reaction module"): every chemical change is a `reactions` record of one module. The kind `equilibria` of revision 3 becomes the law `ionisation`; a salt that forms from two gases is the law `equilibrium` (7.5), which uses up its gases exactly: outside a holdup through their accounts, settled at the next holdup (D15). The separate kind and law that review 4.7 first proposed are withdrawn. Sections 4, 7.1, 7.4, 7.5, 12, 13, 15, 16, 17.
 
 Revision 5 (owner, 2026-11-16): the options are decided. O2: one material per column. O3: coke fines become a solid population in a vessel (5.5). O4: two tags, `nickel` and `vanadium`. O8: the plan's game values. And the owner's note "later in game the crude composition will be randomized, consider that": contents become a function of a crude stated by value (5.1, 5.6), the tag pass is judged with tags on every oil island (12), and the later models read the cuts and the tags only (14, review 7.6). Sections 4, 5, 8.5, 11 to 17.
 
@@ -75,6 +77,7 @@ None of these changes a stream's density, enthalpy or phase split by a part in 1
 | D8 | A stock without tag data has its datasets' default contents. Only a stock that differs stores amounts, so an old save needs no conversion and a fluid without contents pays nothing. With randomized crudes every crude stock differs: explicit tags are the usual case, and the costs are judged for it (section 12). |
 | D13 | A crude is stated **by value**: its amounts on the shared cuts and one factor per tag on the cuts' default profile (owner's note on randomized crudes, 5.6). No law, record or saved value names a grade. Contents are a pure function of those numbers. |
 | D14 | Coke fines are a tag while they travel and become a **solid population** in a vessel (owner, O3): the same mass leaves the carrier cut. From there the existing solids machinery settles, carries and filters them (5.5). |
+| D15 | Every chemical change is a record of the **reaction module** (owner, revision 6): rate laws and equilibria are laws of `reactions` records, with stated participants, window and sites. A reaction uses up what it uses. A volatile compound has an **account** outside the kernel, its ion tag: a reaction at a passage posts to the accounts, with a sign, and the next holdup settles them with the compound (7.4, 7.5). |
 | D9 | The electric desalter is a horizontal vessel of the fluid network with an electric store. Its law is the settling law every vessel has; the field only makes the drops larger. |
 | D10 | Corrosion is evaluated per part: each product zone of a column's shell and the process side of each of its exchangers has its own wall record. |
 | D11 | A reactor is a unit on accounts with a yield table from one model solve, as a running column is with its split table. Detailed design: the next task. |
@@ -231,13 +234,17 @@ Certified islands: a replay advances the flows linearly; at a materialisation th
 
 ### 7.1 Record
 
-A new material kind, `reactions`: `id`, `revision`, `source`; `uses` and `makes` (tags, with mass ratios); `law` (one of a closed list, below) with its parameters; `window` (temperature range, and which of oil, free water, gas must be present); `sites` (equipment classes); `enthalpy` (`none`, a stated J/kg, or `hess` for real compounds: section 14).
+A new material kind, `reactions`: `id`, `revision`, `source`; `uses` and `makes` (tags with mass ratios; for the two equilibrium laws also volatile compounds, each with its account tag and an exponent, and a solid); `law` (one of a closed list, below) with its parameters; `window` (temperature range, and which of oil, free water, gas must be present); `sites` (equipment classes); `enthalpy` (`none`, a stated J/kg, or `hess` for real compounds: section 14).
 
 | Law | Form | Used by |
 |---|---|---|
 | `first_order` | `k = A exp(−E/RT)` on a tag, optionally only on its excess over a `limit` (a factor on another tag) | Hydrolysis, bulk coking (8.5 uses the limit) |
 | `transfer` | A tag moves between carriers at a rate the site's law gives | Desalting, caustic |
 | `threshold_deposit` | Formation minus removal on a heat side's wall | Surface coking |
+| `ionisation` | Mass action between a volatile's molecular part and its ion in free water, all records closed together by the charge balance | Acids and bases in water (7.4) |
+| `equilibrium` | A product of activities against `K(T)`; the excess reacts to a solid, and the solid gives the gases back below it | Ammonium chloride (7.5); later the bisulfide, amine salts, carbamate |
+
+The first three are rate laws: a coefficient at the cadence, applied by the tag pass. The last two are equilibria: reached at once where they are evaluated.
 
 ### 7.2 Sites and residence time
 
@@ -267,7 +274,7 @@ So a coefficient lags its site's state by at most one cadence, and the solver is
 
 Each volatile acid or base has two forms. Its **molecular part** is the compound: the cubic sees it, with its pair, in every phase. Its **ions** exist only in free water and are a tag on that water: no pressure, no flash. One law splits a wet holdup's amount between the two (review 4.5 and 4.6).
 
-Record: a new material kind, `equilibria`.
+Record: a `reactions` record with the law `ionisation` (revision 6; revision 3 had a kind of its own, `equilibria`). Its fields:
 
 | Field | Meaning |
 |---|---|
@@ -298,7 +305,7 @@ Water's own product: 1e-14 at 25 °C, slope −6 710 K.
 
 **When.** Only in a holdup with free water that holds a `strong` volatile or its ion, excess `caustic`, or at least one acid and one base of the records. A single weak acid or base in water is left to its pair, which already holds its own weak ionisation. So no world of today is solved and no reference moves until a record for H2S or CO2 is added; the sour water batch states those.
 
-**Without free water** every ion of a volatile returns to its compound (the law at `W` → 0): a vessel boiled dry gives its hydrogen chloride and ammonia back as gases.
+**Without free water** every ion of a volatile returns to its compound (the law at `W` → 0): a vessel boiled dry gives its hydrogen chloride or its ammonia back as a gas. Where an `equilibrium` record names both, the two together stay as the salt, up to its constant (7.5).
 
 What it returns at 25 °C, all ammonia dissolved:
 
@@ -320,9 +327,48 @@ How it is booked:
 - A unit on accounts solves the same law on its accounts, with no solver part: a column on the free water of its top product, to which it gives all the hydrogen chloride of its feed (8.3); later an absorber and a regenerator on each stage.
 - For an amine the bound gas is 7 to 10 % of the solution's mass, too much for a tag without mass: a record's `ion` may then name a compound. That is the amine batch's decision (review 4.5).
 - An island that receives the compound and does not list it grows its list, as it does for a column outlet (`IslandSets`).
-- A junction, a pipe and a heat side exchange nothing. Between a heater and the next holdup the hydrolysis product travels as the tag.
+- A junction, a pipe and a heat side exchange nothing with a compound. The ion tag is the compound's **account** there (D15): the hydrolysis in a heater posts its product to `acid_chloride`, and a reaction that uses a compound at a passage posts the amount with a minus sign (7.5). Step 1's totals take the accounts with their sign, so the next holdup settles them: the compound is set to the total less the ions.
+- An account may be below zero only as such a debt. A vessel that receives a debt larger than the compound it holds sets the compound to 0 and keeps the rest of the debt until the compound arrives. A page shows a negative account as 0.
 
 This is the one place where the interval changes: one solve at its start for the flagged vessels, one enum constant in `ConservativeTransport`, and `SOLUTE` among the kinds a certificate replays as a rate (`IslandCertificate.rate`). The step's Newton, its booking and the kernel do not change.
+
+### 7.5 Equilibrium with a solid: ammonium chloride
+
+Owner, revision 6: the salt's formation is a reaction and belongs to this module. `NH3 + HCl ⇌ NH4Cl(s)` is a `reactions` record with the law `equilibrium`. Expected behaviour, numbers and sources: review 4.7.
+
+| Field | Value |
+|---|---|
+| `uses` | `Ammonia` (account `ammonium`) and `HydrogenChloride` (account `acid_chloride`), exponents 1 and 1. Activity: the partial pressure in the gas |
+| `makes` | The salt: 53.49 g/mol, 1 530 kg/m³. On a wall it is the wall's `saltFouling` (kg); in a vessel it is the two ion tags held without water |
+| `constant` | `ln K = 34.29 − 21 193 K/T`, bar² (from the formation data, recalled; within 8 K of the published chart fit) |
+| `window` | Forward only without free water; with free water the salt is ions (7.4) |
+| `sites` | Heat side passages, vessels |
+| `enthalpy` | `none`: 176 kJ/mol on parts per million, 0.5 kW against about 20 MW of cooling in the hydrotreater example |
+
+**At a heat side passage**, in the tag pass, on what passed in the interval:
+
+1. `Reactions` gives the side's coefficient at the cadence: `K` at the wall's colder end, the pressure, and whether that end holds free water.
+2. Dry. Each gas's moles that passed are the compound's (`PipeTransfer`) plus its account's, with its sign: `p = P · n / n_gas`. The pressure that reacts is `δ = ½ [(p_a + p_b) − √((p_a − p_b)² + 4K)]` where it is positive, and the moles `ξ = (δ/P) · n_gas`.
+3. The wall's `saltFouling` rises by `ξ` moles of salt and each account falls by `ξ` (D15). Because step 2 reads compound plus account, a colder side further on does not use the same gas twice.
+4. Wet. The wall's salt dissolves, up to the water that passed times the solubility (0.3 kg per kg): the wall's mass falls and each account rises by the same moles, on the water.
+
+**In a vessel**, at the interval's start, inside the solve of 7.4 (its totals already take the accounts):
+
+- With free water: `ionisation` alone. The salt cannot exist.
+- Without: the paired part of the two accounts is the salt, held as residue; an unpaired rest returns to its gas. The residue then meets the gas: above `K(T)` gas joins it, below `K(T)` it gives gas back, by the same formula, bounded by what is there. The compounds move by `SOLUTE`, as in 7.4.
+- A vessel's residue acts on nothing in it. It is ions again when water returns.
+
+**What the salt does.** A wall's salt resistance is `g · mass / (density · deposit conductivity · area)`, `g` = 10 (the coking law runs 13 times a plant's). It joins the wall's `fouling` in the level the compile reads: each film `h/(1 + h Rf)` and the narrowed passage, which exist. Under it, a wall whose gas holds water vapour corrodes (M13: 2.5 mm/y on carbon steel, recalled order, with M12's material factors).
+
+| Stream | Salt forms below | Unwashed |
+|---|---|---|
+| Crude overhead, 1.5 bar, HCl 50 ppm, ammonia 100 ppm | 130 °C, above the water dew point | The overhead exchanger fouls before water condenses |
+| Hydrotreater effluent, 60 bar, HCl 2 ppm, ammonia 0.2 % | 193 °C | 0.54 kg/h on 200 m²: `FOULED` in 29 process hours |
+| Any of them with free water at the wall's colder end | Never | The salt goes to the sour water as ions |
+
+Conservation: nitrogen and chlorine close exactly over the compounds, the accounts and the walls' salt (`TagLedgerTest`). Nothing changes in the step's Newton, its booking, the kernel or the certificates.
+
+Later salts are records of the same law: the bisulfide (with H2S's `ionisation` record), amine hydrochlorides, the carbamate by its exponents (review 4.7, the method's reach).
 
 ## 8. The transformations of this batch
 
@@ -384,7 +430,7 @@ What the compound needs of the data and the thermo model:
 | Hazard | A `hazard` sub-record, so a vent, a flare or a leak of it reaches the air through the pollution system as it stands |
 | Pairs with hydrocarbons | The rule of the refinery compounds (DWSIM `kij_pr.dat`, else the DECHEMA value, else 0) gives 0 for every pair: none of the three files holds one. A fair value: its solubility in paraffins is near ideal (review 4.2) |
 | Pair with water | For the molecular part only; the law holds the acid's own chemistry. A `henry_in_water` record of 0.1 atm at 25 °C and 10 atm at 100 °C, from which `DerivedPairs` fits its pair (`k_ij` about −0.68 and −0.54 on the stand-in). Sized, not measured: large enough that the water holds 97 % of a gas arriving within an interval and that a boiling vessel has molecular acid to give off (9 to 14 % of the acid at the azeotrope), small enough that the azeotrope stays the law's (review 4.6). At `k_ij` = 0 a flowing drum loses the gas between two solves; at −1.0 the azeotrope moves to 38 % |
-| The law | The `equilibria` record of 7.4 |
+| The law | The `ionisation` record of 7.4 |
 | Flash | As any compound. At parts per million it needs no special case: the trace cutoff folds trace phases, not trace compounds, and the flush acts below 1e-24 |
 | Column | Not on V3's axis and in no neural seed: the running column and the simulator's column carry it on their accounts and give it whole to the top product, as inert particles go whole to the bottoms |
 | Identity | A compound added to a package moves no identity of a view without it: no world is restated |
@@ -509,6 +555,7 @@ A sheet stream carries a `TagSet`; a feed states its crude by value (cut amounts
 | Transformation coefficients | Server thread, at the 5 s cadence | 256 sites a pass; a site outside its window costs one comparison |
 | Hydrogen chloride | Islands that carry it | One compound more in their flash (about 1 in 30 for an overhead system) |
 | Speciation | The island's worker, at an interval's start, flagged vessels only | Per vessel: one fugacity evaluation per phase (at most 3), one root in pH (60 bisection steps × 3 passes over at most a handful of records), one TP flash when an amount moved. A vessel is flagged by one bit test; an island without a record's species pays nothing |
+| The salt's equilibrium (7.5) | Server thread at the cadence; the island's worker in the tag pass and in the speciation solve | A bit test per island. Per side that may react: one `exp` at the cadence, one square root and three additions per interval in the tag pass. Per flagged dry vessel with both accounts: one `exp`, one square root. The solver sees only a level step of a wall's deposit: one island recompile, as today's fouling (about one per 520 intervals unwashed, none under a continuous wash) |
 | The step's Newton, its booking, the kernel, the certificates | | No change (`SOLUTE` joins the rate kinds) |
 | Column parts | Once per installed table | One digest per part |
 | Memory | Per stock with tags | 13 tags × 13 carriers doubles (1.4 kB) |
@@ -521,7 +568,8 @@ A sheet stream carries a `TagSet`; a feed states its crude by value (cut amounts
 | Fluid checkpoint state format | 52 | 53: junction tags, site coefficients |
 | Wire protocol | `icheme-5` | `icheme-6`: views with contents, the desalter's page |
 | Simulator sheet file | 2 (3 reserved, to be released) | The next free number: stream tags |
-| Material data | | Kinds `solutes`, `reactions` and `equilibria`; `content` sub-record; assay `content` (`factors` or `targets`); the `solids` record `icheme:coke`. In no identity. The compound `HydrogenChloride` with its dataset, its `henry_in_water` and its pairs, in `icheme:refinery` (its revision bumped; `materials-index.json`) |
+| Integrity facts | A wall: loss, fouling, wrecked | A wall's `saltFouling` (kg; absent: 0), inside schema 30 |
+| Material data | | Kinds `solutes` and `reactions` (five laws; no kind `equilibria`); `content` sub-record; assay `content` (`factors` or `targets`); the `solids` record `icheme:coke`. In no identity. The compound `HydrogenChloride` with its dataset, its `henry_in_water` and its pairs, in `icheme:refinery` (its revision bumped; `materials-index.json`) |
 | Interval result | | `BoundaryTransfer.Kind.SOLUTE`, appended |
 | Corpus | | `compat/fluid/schema-30` |
 
@@ -551,9 +599,10 @@ After `2026-11-16-fouling-corrosion` is on `main`. Five stages, each leaving `ma
 | A | WP1 | `science/solute`: `TagKind`, `TagSet`, kinds `solutes` and `reactions` in `MaterialCatalog`, the `content` sub-record (aliases of `corrosion`), `ContentProfile` (the pure function of 5.1, with `ContentProfileTest`: a target met, a cap reached, an almost empty cut, two crudes blended), assay `content` (`factors` or `targets`), the default profile written by `tools/crude-grades/`, the thirteen records | thermo: `MaterialCatalog` |
 | A | WP2 | `TagTransport`; `Inventory.tags`; the result and commit wiring; the replay step; generator contents; facts schema 30, state format 53, the corpus image; `TagLedgerTest` | fluid laws, runtime: `FluidFacts`, `FluidCheckpointCodec`, `IslandCoordinator` |
 | A | WP3 | The digest on tags (`CorrosionStandard`); references exact with default contents | thermo |
-| B | WP4 | `science/reaction` (the three laws), `runtime/fluid/Reactions`, `TagPlan`; hydrolysis, caustic, bulk and surface coking; `FoulingLaw`'s oil rows removed | runtime: `FluidWorldAuthority` |
-| B | WP4b | Speciation. `science/solute/Speciation`: a pure function (totals, `F`, free water, temperature → ions, pH), with `SpeciationTest` on the numbers of 7.4 and 8.3. Kind `equilibria` and its two records. Hydrogen chloride: the compound's records, `henry_in_water` and pairs, chlorine in the formula elements, the hazard. The solve at the interval's start (`PassiveIntervalSolver.solve`, `Kind.SOLUTE`, the flags and ions in the command, island growth); the ledger across compounds and tags | thermo, fluid laws: `MaterialCatalog`, `ConservativeTransport` (one constant), `IslandCoordinator` |
+| B | WP4 | `science/reaction` (the three rate laws), `runtime/fluid/Reactions`, `TagPlan`; hydrolysis, caustic, bulk and surface coking; `FoulingLaw`'s oil rows removed | runtime: `FluidWorldAuthority` |
+| B | WP4b | Speciation. `science/solute/Speciation`: a pure function (totals, `F`, free water, temperature → ions, pH), with `SpeciationTest` on the numbers of 7.4 and 8.3. The law `ionisation` and its two records. Hydrogen chloride: the compound's records, `henry_in_water` and pairs, chlorine in the formula elements, the hazard. The solve at the interval's start (`PassiveIntervalSolver.solve`, `Kind.SOLUTE`, the flags and ions in the command, island growth); the ledger across compounds and tags | thermo, fluid laws: `MaterialCatalog`, `ConservativeTransport` (one constant), `IslandCoordinator` |
 | B | WP4c | Coke fines to a solid (5.5), after WP4b, at its site: the `solid` block, the record `icheme:coke`, the flag and the amounts in the command, the exchange with `SOLUTE`, the ledger across cuts, tags and solids. Tests: mass and energy exact through one exchange; a hot drum settles a bed and a filter cakes; a vessel below the flag keeps its tag. The hold-fuzz campaign gains a coking world; its counters judge the cost | fluid laws: `IslandCoordinator` |
+| B | WP4d | The law `equilibrium` and the ammonium chloride record (7.5), after WP4b: accounts with a sign in `TagSet` and in step 1's totals; the passage's posting in the tag pass; the dry holdup's residue in the solve; a wall's `saltFouling` and its share of the level; M13. Tests: nitrogen and chlorine exact through a deposit, a wash and a settlement; the deposition temperatures of 7.5's table; two sides in a row do not use the gas twice; a debt larger than the compound waits. When it is built is the owner's to say (O10) | thermo, runtime: `Integrity`, `IslandCoordinator` |
 | B | WP5 | M12 and its factors; a heat side's colder end for the wet mechanisms; `coke_fines` in the solid share | thermo |
 | C | WP6 | The desalter: kind, design, model, registration, law, page, sound | equipment: `EquipmentShape`, `EquipmentStructure` |
 | D | WP7 | Tags through the column's, still's and converter's accounts; the column's parts and their facts; the Operation table | plant: `ColumnOperation`, `ColumnFacts` |
@@ -580,19 +629,19 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - **O9, what a random crude varies** (the owner's note; section 5.6):
   - **Decided** (owner, 2026-11-16: "Yes, cuts stay"): the twelve shared cuts and the light ends stay. A random crude draws its amounts on them, so no identity of the package moves with a crude.
   - Assumed, for the owner to correct when the randomization is designed: contents are one factor per tag on one profile over the boiling range. A crude cannot have, say, its sulfur in the naphtha only.
-  - Assumed likewise: a crude's character (paraffinic, naphthenic, aromatic) arrives with the reactor design as type tags (section 14).
-- **O10, ammonium salts on cold walls** (owner's case of the hydroprocessing wash water; review 4.7). Revision 5 has the water's end (the speciation law in the wet separator) and not the salt: ammonia and hydrogen chloride stay gases in every exchanger, so nothing precipitates, a wash prevents nothing, and neutralising a crude overhead with ammonia is free.
-  - A (proposed): in this batch, as WP4d after WP4b. Kind `salts` with the ammonium chloride record; the law `salt_deposit` at heat sides (dry: the wall's `saltFouling` grows where the gases' pressure product exceeds `Kp` at the colder end; wet: it dissolves); M13 under the deposit. Nothing is taken from the stream. A wall's facts gain `saltFouling` (default 0), inside schema 30. A crude overhead over-neutralised above its dew point then fouls its exchanger at 130 °C. The same constant corrects 7.4's dry holdup: ammonium and chloride together return to the gases only up to `Kp`; the rest stays as dry residue on the two ion tags until water returns (today all of it becomes gas at any temperature, where a plant has crystals).
-  - Cost of A (review 4.7): at the cadence one bit test per island, and for a side that may deposit two partial pressures, one `exp` and one square root; the solver sees only a deposit's level steps, one island recompile each (about one per 520 intervals in the unwashed hydrotreater example, none under a continuous wash). No change to the step, the kernel, the tag pass or the certificates.
-  - Reach of A (review 4.7): the record is a product of activities with exponents against one constant, so the bisulfide, amine hydrochlorides, carbamate and water scale are records. It does not serve amounts above about 1 % of a stream, which need a real phase.
-  - B: with the hydroprocessing design. Until then ammonia has no cost.
-  - Either way the bisulfide's record and H2S in the speciation law come with the hydroprocessing and sour water design. Until then crudes differ in boiling range and contents, not in character.
+  - Assumed likewise: a crude's character (paraffinic, naphthenic, aromatic) arrives with the reactor design as type tags (section 14). Until then crudes differ in boiling range and contents, not in character.
+- **O10, ammonium salts on cold walls** (owner's case of the hydroprocessing wash water; review 4.7). Revision 5 had the water's end (the speciation law in the wet separator) and not the salt: nothing precipitated, a wash prevented nothing, and neutralising a crude overhead with ammonia was free.
+  - **How: decided** (owner, 2026-11-16: "This is basically a reaction, needs to be handled by the reaction module"). A `reactions` record with the law `equilibrium`, which uses up its gases exactly (D15, section 7.5). The kind `salts` and the law `salt_deposit` of the first proposal, which took nothing from the stream, are withdrawn.
+  - **When: open.** Proposed: in this batch, as WP4d, because the reaction module is built here and the record already acts in a crude overhead neutralised with ammonia. The other way: with the hydroprocessing design; until then ammonia has no cost.
+  - Either way the bisulfide's record and H2S's `ionisation` record come with the hydroprocessing and sour water design.
 
 ## 17. Risks
 
 - The tag pass rebuilds transport from `PipeTransfer`. An interval that booked a transfer the history does not hold (a release, a melt) must be covered boundary by boundary; `TagLedgerTest` runs on the hold-fuzz worlds to find them.
 - Default contents (D8) must be expanded at every place two stocks meet: a missed place loses tags silently. One helper, `TagSet.of(inventory, defaults)`, and no other read.
 - Coke as a solid (5.5) puts solids into ordinary oil service. A hot vessel then holds a bed, and beds and cakes are located events of the solid driver: more of them means more searched steps and more chances of a hold in the classes that involve solids (still pipes, closures). WP4c measures it by the campaign's counters on a coking world. Whether a vessel with a growing bed keeps a steady certificate is read there too; if it does not, the flag's threshold is the lever.
+- Accounts with a sign (D15, 7.5). A debt rides its tag's carrier: `acid_chloride` goes with the vapour, as the gas it stands for; `ammonium` strands on the heaviest cut's liquid, while ammonia goes with the vapour. Where liquid and gas part before a holdup, the ammonia's debt reaches a vessel that holds little ammonia and waits there. The totals stay exact; the place is wrong by parts per million of the gas. Every reader of an account must take a negative value: WP4d lists them.
+- The salt's equilibrium is taken as reached at one colder end per side: no rate, no place along a tube bank, no crystals carried on.
 - One material per column (O2): the player cannot clad a top. The only answers to an acid overhead are upstream (desalter, caustic, ammonia) or a whole column of nickel alloy.
 - Randomized crudes (5.6): the tag pass is paid on every oil island, where this plan first counted on islands without tags. Its bound is unchanged, its use is not; the campaign's counters on a salted crude are the measure. A drawn crude outside the table's ranges, or with asphaltenes above 0.4 of its resins, meets laws at their clamps.
 - A column product's wetness is read from `waterBelow` only; a tray below the dew point inside the top zone is not seen.

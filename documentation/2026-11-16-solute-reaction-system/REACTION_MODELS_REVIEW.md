@@ -308,12 +308,21 @@ The water's end is right; the reason for the water is missing. For the same reas
 | Free water in a holdup | Two ion tags on the water, `ammonium` and `acid_chloride`, without mass | The speciation law at the interval's start. Equal amounts at 100 ppm give pH 5.90, the real solution's |
 | Between holdups, when the water evaporates in an exchanger | `ammonium` strands on the heaviest cut, `acid_chloride` rides the vapour | The tags' classes (plan 5.2, 5.4) |
 | A dry holdup | Both return to the two gases | Plan 7.4, "without free water" |
-| Solid on a cold wall | Revision 5: none. O10: `saltFouling` on a heat side's wall, without mass | `Kp` at the wall's colder end |
+| Solid on a cold wall | Revision 5: none. Revision 6 (plan 7.5): the wall's `saltFouling`, in kg, made from the gases it used | `K` at the wall's colder end |
 | Crystals carried by the oil, solids in a vessel | None | |
 
 The dry holdup is wrong for this pair. Hydrogen chloride alone, or ammonia alone, does leave boiled-dry water as a gas. The two together leave crystals: at 60 °C `Kp` is 1.8e-13 bar², so a plant keeps 0.4 ppm of each in a gas at 1 bar and the rest is solid; at 200 °C it keeps 5 200 ppm. The model gives all of it back as gas at any temperature. With O10 the gases then deposit at the next cold, dry heat side, which is where the fouling matters, but a cold dry vessel shows none.
 
-**Proposal** (plan option O10). The dry salt as a third form of the same pairs: one record kind and one law at heat sides.
+**The owner's direction** (2026-11-16: "This is basically a reaction, needs to be handled by the reaction module"). The form of the proposal below is superseded by plan revision 6, section 7.5. What changed:
+
+- No kind `salts` and no law `salt_deposit`. The salt's formation is a `reactions` record with the law `equilibrium`, beside the rate laws; the acid and base records of plan 7.4 are `reactions` records too, with the law `ionisation`. One module holds every chemical change.
+- The reaction uses up its gases. The first proposal took nothing from the stream, which no reaction does. A passage cannot change a compound, so the amounts are posted, with a minus sign, to the compounds' accounts (their ion tags), and the next holdup settles them. Nitrogen and chlorine close exactly over the compounds, the accounts and the walls' salt.
+- Cost: as in the table below, plus one square root and three additions per reacting side and interval in the tag pass.
+- Reach: as below. The gases' balance is now right at any level; the limit to trace amounts stays for the heat (none is booked) and for the solid, which has no volume in the stream.
+
+The physics, the numbers and the constants below stand.
+
+**The first proposal** (plan option O10, superseded in form). The dry salt as a third form of the same pairs: one record kind and one law at heat sides.
 
 - The same constant corrects the dry holdup: where a `salts` record names both ions, they return to the gases only up to `Kp` at the vessel's temperature. The rest stays in the vessel as dry residue on the two tags, as the salt of evaporated water does (plan 5.4), and is ions again when water returns. No new tag.
 
@@ -362,7 +371,7 @@ Where it does not reach:
 - Second ionisations (carbonate, sulfide: spent caustic above pH 10 to 12). The speciation records carry one charge per mole; a chained record would extend them.
 - Where along a tube bank the salt lands, particles carried on, and rates: a side has one colder end and the equilibrium is taken as reached.
 
-Not proposed: a deposit that holds its nitrogen and chlorine exactly. It needs a material exchange at a passage, which the frame forbids, or the chloride kept as a tag between holdups, which the owner's choice of a compound (O1) ended.
+Not proposed at first, and now the design (plan 7.5): a deposit that holds its nitrogen and chlorine exactly. I had judged that it needed a material exchange at a passage. It does not: the ion tags already carry a compound's amounts between holdups (the hydrolysis product travels so), and with a sign they carry what a reaction used.
 
 Sources of this section (search summaries; the API RP 932-B charts were not reached): [Digital Refining, the chart fit of the deposition temperature](https://www.digitalrefining.com/article/1002443/the-); [The Petro Solutions, wash water injection in hydroprocessing units](https://thepetrosolutions.com/?p=3612); [AFPM, bisulfide deposition at 80 to 150 °F and the 20 ft/s guidance](https://afpm.org/print/pdf/node/43082); [Digital Refining Q&A, 20 to 25 % of the wash water liquid](https://www.digitalrefining.com/qanda/286); [H.G. Houston, ammonium chloride corrosion in hydrotreating units](https://hghouston.com/archive/special-corrosion-topics/ammonium-chloride).
 
