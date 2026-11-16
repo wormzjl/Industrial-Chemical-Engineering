@@ -37,6 +37,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 - 2026-11-16, owner: "Merge WP7". `claude/fouling-corrosion-wp7-columns-816993` merged into the batch branch (`f4c7ea112`, no conflict). WP1 and WP7 changed disjoint files and nothing outside `MaterialCatalog` constructs the catalog, so no run was made on the union; the final lane is its first.
 
+- 2026-11-16, owner: "just start" (the reservation and WP2, WP3). Reserved on `main` (`ab6298d03`, documents only, through a scratch worktree of `main`, fast-forward): fluid facts schema 29, equipment shape fields 13, simulator sheet file 3, protocol `icheme-5`; `main` merged into the batch branch (`299f9a0be`). Started, each a sub-thread with a fresh brief in its own worktree cut from the batch branch: `fc-wp2-runtime` (Opus high: `Integrity` beside `MachineHealth`, facts schema 29 with `FluidDeviceSpec.metallurgy`, failures, wrecked, the structure repair's server entry point, the kit's new rule, trims and the pumps' `SOLIDS` fault) and `fc-wp3-material` (Opus medium: shape field `material`, `ShapeRepair`, `shapes-13.snbt`, the constructor's Material dropdown, the datasheet row, `icheme-5`). Two changes to the plan's split, so that the two write disjoint files: the constructor's Repair key moves from WP3 to WP4 (it needs WP2's entry point), and handing a shape's material to the device spec (`StructureRegistration`) is a join step after both merge.
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.
@@ -48,8 +50,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 ## Open items
 
-- WP1 and WP7 merged into the batch branch; the union not yet run (final lane). Next: WP2 and WP3, after the format reservation on `main`.
+- WP1 and WP7 merged into the batch branch; the union not yet run (final lane). WP2 and WP3 running.
+- After WP2 and WP3 merge: the join (`StructureRegistration` passes `shape.material()` into `FluidDeviceSpec.withMetallurgy`, carried wherever a spec is rebuilt), then WP4 (the Repair key, the Integrity group, the weep loop).
 - From WP7: a sheet feed cannot carry crystals (`FlowsheetCompiler` reads a feed's solids from `catalog.solids()`, which holds no crystal record), so the simulator column's melt is reached only at block level; V3 refuses a free-water receiver below the ice point (`column.failed`) before any product is tested, so that case never reads `column.frozen`.
-- O4: the format reservation on `main` (facts schema 29, shape fields 13, `icheme-5`, sheet file 3), needed before WP2; the owner's word.
 - `wall_weep` candidates (three, synthesised) once the build starts.
 - Whether another live batch holds the hot files named above.

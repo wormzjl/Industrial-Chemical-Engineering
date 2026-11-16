@@ -352,7 +352,7 @@ The owner's, 2026-11-16:
 - **O1** Fouling growth before the reaction module: the Kern–Seaton placeholder.
 - **O2** Alloy price: the cost index only; no items in this batch.
 - **O3** Sounds: set A, the weep loop only.
-- **O4** Format numbers on `main` (section 17) and the build's delegations (section 18): not yet.
+- **O4** Format numbers reserved on `main` (`ab6298d03`); the delegations approved one by one.
 - D8: repairs of constructed equipment with the constructor; the repair kit kept for in-line pumps and compressors and control valve trims.
 - Revision 2: a smaller material list (four); columns pass inert particles and stop only for freezing; particulate erosion, control valves first.
 
@@ -392,8 +392,8 @@ About 4 500 lines of production code: four stages, each leaving `main` working (
 |---|---|---|---|---|
 | A | WP1 | `science/integrity/` (new, pure): `Metallurgy`, `CorrosionDigest`, `CorrosionLaw`, `ErosionLaw`, `FoulingLaw`, `WallState`; `Wear.Fault.SOLIDS`; `MaterialCatalog.Corrosion` and the data; tests | thermo, machines: `MaterialCatalog` | |
 | A | WP2 | `runtime/fluid/Integrity` beside `MachineHealth`: booking at the cadence, failures, `wrecked`, the repair and clean events, corrosive air, the valves' trim and the pumps' `SOLIDS` fault in `MachineHealth`, facts schema 29, `/icheme integrity`, corpus, GameTests | runtime, machines: `FluidFacts`, `FluidWorldAuthority`, `ShaftTrains`; `Breaches`, `RepairKitItem` | WP1 |
-| A | WP3 | Shape fields 13, `ShapeRepair`, the constructor's dropdown and Repair key (`EquipmentNetwork.Repair`, target selection as `EquipmentDeconstruction.target`), the datasheet, the registration that hands a device its material | equipment, client: `EquipmentShape`, `EquipmentStructure` | WP1; beside WP2 |
-| A | WP4 | Integrity group and Trim meter on the device pages, status words, drip particles, the weep loop | client; runtime presentation | WP2, WP3 |
+| A | WP3 | Shape fields 13, `ShapeRepair`, the constructor's dropdown, the datasheet. The registration that hands a device its material is a join step after WP2 and WP3 merge | equipment, client: `EquipmentShape`, `EquipmentStructure` | WP1; beside WP2 |
+| A | WP4 | The constructor's Repair key (`EquipmentNetwork.Repair`, target selection as `EquipmentDeconstruction.target`, calling WP2's `queueStructureRepair`); Integrity group and Trim meter on the device pages, status words, drip particles, the weep loop | client; runtime presentation | WP2, WP3 |
 | B | WP5 | Fouling: `Films.fouled`, the passage diameter, the level steps, cleaning, the heat page, sizing on design `Rf` | fluid laws, flowsheet: `SheetSizing` | stage A |
 | C | WP6 | Simulator `METALLURGY` tab, Auto and Manual, Send to block, sheet file 3, the tour and guide page | flowsheet, client | WP1, WP3 |
 | D | WP7 | Columns and particles (section 13): `ColumnBlockSolve`, `ColumnSolve`'s product flash, `Condition.FROZEN` in `ColumnOperation`'s solve handling; tests | plant, flowsheet: `ColumnOperation` | none: it can run first, beside WP1 |
