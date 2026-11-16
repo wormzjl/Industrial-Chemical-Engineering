@@ -29,6 +29,8 @@ public final class ModMenus {
     public static final DeferredHolder<MenuType<?>, MenuType<com.wormzjl.icheme.world.inventory.MachineMenu>> MACHINE = MENU_TYPES.register("machine", () -> IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.MachineMenu::new));
 
     public static final DeferredHolder<MenuType<?>,MenuType<com.wormzjl.icheme.world.inventory.ControlPanelMenu>> CONTROL_PANEL=MENU_TYPES.register("control_panel",()->IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.ControlPanelMenu::new));
+    // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9).
+    public static final DeferredHolder<MenuType<?>,MenuType<com.wormzjl.icheme.world.inventory.AlarmBeaconMenu>> ALARM_BEACON=MENU_TYPES.register("alarm_beacon",()->IMenuTypeExtension.create(com.wormzjl.icheme.world.inventory.AlarmBeaconMenu::new));
     private ModMenus() {
     }
 

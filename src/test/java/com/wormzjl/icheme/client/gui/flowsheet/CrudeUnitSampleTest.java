@@ -600,15 +600,17 @@ class CrudeUnitSampleTest {
         @Test
         void e102() {
             var unit = alone.units().get("E-102");
-            assertEquals(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(6, 3), 1), unit.size(), "S4c: the least face that holds 1.2 × the curve's need, 869 m²; 6 × 4 bays of 2.0 × 5 m held the bare need");
+            // The larger bays (batch 2026-11-15-equipment-visual-design, AIR_COOLER_BAY_PLAN.md 4.5): three 6 × 12 m bays in series,
+            // 176.6 m² of face, take the 6 × 3 bays of 2.5 × 6 m's place (180.6 m²); one train of 36 m of tube loses 0.22 bar, not 0.045.
+            assertEquals(new AirCoolerSizing.Size(6, 12, new ProcessUnit.Bank(1, 3), 1), unit.size(), "S4c: the least face that holds 1.2 × the curve's need, 869 m²; 6 × 4 bays of 2.0 × 5 m held the bare need");
             closest(unit.rating(), Limit.AIR_COOLER_SURFACE);
             var surface = unit.rating().reading(Limit.AIR_COOLER_SURFACE);
-            assertEquals(903, surface.value(), ONE);
+            assertEquals(883, surface.value(), ONE);
             assertEquals(732.5, surface.low(), ONE, "the curve's surface");
             assertEquals(750.2, probesBareSurface(), ONE, "the probe's one capacity, from the same streams");
             itsCapacityRises("S-10", run.streams().get("S-10").temperature(), run.streams().get("RESIDUE").temperature());
             assertEquals(45, read(unit.rating(), Limit.AIR_COOLER_OUTLET), TENTH);
-            assertEquals(.045, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
+            assertEquals(.218, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
         }
 
         private static double probesBareSurface() {
@@ -924,18 +926,22 @@ class CrudeUnitSampleTest {
             var condenser = airSized.units().get(SheetSizing.member(T, "condenser"));
             System.out.println("AIR\t" + condenser.size() + "\t" + text(condenser.rating()));
             var banks = assertInstanceOf(AirCoolerSizing.Size.class, condenser.size());
-            assertEquals(2, banks.banks());
+            // One bank of 2 × 4 bays of 5.5 × 9 m (305 m² of face) since the larger bays (batch 2026-11-15-equipment-visual-design),
+            // where two banks of 5 × 4 bays of 2.5 × 5 m (310 m²) were needed before.
+            assertEquals(new AirCoolerSizing.Size(5.5, 9, new ProcessUnit.Bank(2, 4), 1), banks);
             assertNotEquals(Lamp.RED, condenser.rating().lamp(), () -> text(condenser.rating()));
             assertEquals(1265, condenser.rating().reading(Limit.AIR_COOLER_SURFACE).low(), 10);
-            var kept = size(air, airRun, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(banks, null, null, false))))
+            // A door that keeps half the bank (two bays in series, not four) is short of surface.
+            var half = new AirCoolerSizing.Size(banks.width(), banks.length(), new ProcessUnit.Bank(banks.bank().parallel(), banks.bank().series() / 2), 1);
+            var kept = size(air, airRun, thermo, new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(half, null, null, false))))
                     .units().get(SheetSizing.member(T, "condenser"));
-            assertEquals(banks.withBanks(1), kept.size(), "kept on a door of one bank");
+            assertEquals(half, kept.size(), "kept on a door of half the bank");
             assertEquals(Lamp.RED, kept.rating().lamp(), () -> text(kept.rating()));
             assertSame(Limit.AIR_COOLER_SURFACE, kept.rating().closest().limit(), () -> text(kept.rating()));
             // Size all writes the count to the door, which the design then asks the assembly for.
             var applied = Proposal.applied(air, airSized);
             var door = com.wormzjl.icheme.science.flowsheet.unit.ColumnDoor.of(applied.units().stream().filter(u -> u.id().equals(T)).findFirst().orElseThrow().params());
-            assertEquals(2, door.units().condenser());
+            assertEquals(1, door.units().condenser());
             assertNotNull(airSized.units().get(SheetSizing.member(T, "reflux pump")).size());
         }
 
@@ -1105,12 +1111,13 @@ class CrudeUnitSampleTest {
         void theResiduesPathIsTheProbes() {
             var residue = proposal.paths().stream().filter(p -> p.start().equals("T-101") && p.end().equals("RESIDUE")).findFirst().orElseThrow();
             assertEquals(List.of("S-9", "E-101", "S-10", "E-102", "RESIDUE"), residue.steps().stream().map(PressurePath.Step::item).toList());
-            double[] lost = {.005, .07, .09, .045, .16};
+            // E-102: 0.22 bar on three 6 × 12 m bays in series since the larger bays (batch 2026-11-15-equipment-visual-design), not 0.045.
+            double[] lost = {.005, .07, .09, .218, .16};
             for (int i = 0; i < lost.length; i++) assertEquals(lost[i], residue.steps().get(i).lost(), HUNDREDTH, residue.steps().get(i).item());
             assertEquals(.48, residue.head(), HUNDREDTH);
             assertEquals(2.21, residue.to(), HUNDREDTH);
             assertEquals(.98, residue.available(), HUNDREDTH);
-            assertEquals(.374, residue.lost(), HUNDREDTH);
+            assertEquals(.550, residue.lost(), HUNDREDTH);
             assertFalse(residue.set());
             assertSame(com.wormzjl.icheme.science.flowsheet.sizing.Rating.NONE, residue.rating());
         }

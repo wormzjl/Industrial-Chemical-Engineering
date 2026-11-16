@@ -259,6 +259,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         return saved.on(model);
     }
     static ResourceKey<Level> dimension(String name){return ResourceKey.create(Registries.DIMENSION,ResourceLocation.parse(name));}
+    /** The loaded level of dimension {@code name}, or null (batch 2026-11-15-fluid-interfaces, W9: where an alarm beacon stands). */
+    public net.minecraft.server.level.ServerLevel serverLevel(String name){var id=ResourceLocation.tryParse(name);return id==null?null:server.getLevel(ResourceKey.create(Registries.DIMENSION,id));}
     public List<FluidPresetCatalog.Preset> presets(){owned();return presetCache;}
     public List<String> components(){owned();return componentNames;}
     /** The world's network property model; its {@code domain()} is where a state may be evaluated. */
@@ -505,6 +507,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Applied events that did nothing for the player who asked (a recovery that found no cake or a full inventory), by event, for their reply. Bounded. */
     private final LinkedHashMap<UUID,String> refusedEvents=new LinkedHashMap<>();
     private void refuseEvent(UUID event,String reason){refusedEvents.put(event,reason);if(refusedEvents.size()>WorldTopologyLedger.MAXIMUM_EVENTS)refusedEvents.remove(refusedEvents.keySet().iterator().next());}
+    /** Registers a gas intake (batch 2026-11-15-fluid-interfaces, W2): the atmosphere as a generator, on, as one queued event. */
+    public WorldTopologyLedger.Registration placeIntake(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeIntake(position,facing);}
+    /** Registers a liquid hopper (batch 2026-11-15-fluid-interfaces, W4): a converter's fill port on its own, with its facts. */
+    public WorldTopologyLedger.Registration placeHopper(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeHopper(position,facing);}
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing) {
         return placement.place(position,kind,facing,List.of());
     }
@@ -670,6 +676,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public @org.jetbrains.annotations.Nullable String converterSettings(long id,Converters.Settings settings) {
         owned();if(closed)return "the fluid world is closed";var r=registrations().get(id);
         if(r==null||converters.unit(id)==null)return "no converter";
+        if(converters.unit(id).hopper())return "a liquid hopper has no settings";
         converters.queue(id,settings.clamped(com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume())));return null;
     }
     /**
@@ -712,7 +719,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
         if(ranges.size()>FluidView.Converter.MAXIMUM_RANGES)ranges.subList(FluidView.Converter.MAXIMUM_RANGES,ranges.size()).clear();
         double booked=converters.rate(id).litres();
-        return new FluidView.Converter(u.closed(),next.mode().name(),next.rate(),com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume()),next.deadband(),thresholds,converters.queued(id),
+        double rated=u.hopper()?u.maxRate():com.wormzjl.icheme.science.equipment.EquipmentShape.converterRate(r.spec().volume());
+        return new FluidView.Converter(u.closed(),next.mode().name(),next.rate(),rated,next.deadband(),thresholds,converters.queued(id),
                 status==null?"":status.name(),converters.direction(id).name(),Double.isFinite(booked)?booked:0,alarms,u.fluid(),u.stored(),u.capacity(),u.forgeFill(),Double.isNaN(fill)?null:fill,litres,kmol,kg,
                 rule==null?"":rule.id(),reverse,ranges);
     }
@@ -720,7 +728,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     private static Double bound(double value){return Double.isFinite(value)?value:null;}
     /** Converter {@code id}'s active alarms (W4): its status's and its level thresholds', on its published fill. */
     public java.util.Set<EquipmentAlarm> converterAlarms(long id) {
-        owned();var u=converters.unit(id);if(u==null)return java.util.Set.of();
+        owned();var u=converters.unit(id);if(u==null||u.hopper())return java.util.Set.of();
         return Converters.alarms(converters.status(id),u.thresholds(),converterFill(id),u.forgeFill());
     }
     /**
@@ -770,7 +778,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var edits=new ArrayList<WorldTopologyLedger.Edit>();var placed=new ArrayList<WorldTopologyLedger.Registration>();
             var s=formerVessel.spec();long next=topology.nextIdentity();
             var vessel=new WorldTopologyLedger.Registration(formerVessel.device().withPlacement(d.node(),d.all()),
-                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace(),s.breached()),Math.addExact(formerVessel.revision(),1));
+                    new FluidDeviceSpec(d.volume(),s.temperature(),s.pressure(),s.composition(),s.solids(),d.levelHeight(),!d.closed(),d.geometry(),null,d.blanket(),d.relief(),d.reliefFace(),s.breached(),s.ambient()),Math.addExact(formerVessel.revision(),1));
             placed.add(vessel);edits.add(new WorldTopologyLedger.Edit(former,vessel));
             long[] ids={u==null?0:u.drain(),u==null?0:u.fill()};
             for(int k=0;k<2;k++) {
@@ -1367,6 +1375,21 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public boolean installPipePressureValve(long id,PhysicalFluidTopology.Direction facing) {
         owned();return registry.installPipePressureValve(id,facing);
     }
+    // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7).
+    /** A restriction orifice plate of bore ratio {@code beta} on pipe {@code id}: see {@link PhysicalRegistry#installPipeOrifice}. */
+    public boolean installPipeOrifice(long id,PhysicalFluidTopology.Direction facing,double beta){owned();return registry.installPipeOrifice(id,facing,beta);}
+    /** An automated shutoff valve on pipe {@code id}, open: see {@link PhysicalRegistry#installPipeActuatedValve}. */
+    public boolean installPipeActuatedValve(long id,PhysicalFluidTopology.Direction facing){owned();return registry.installPipeActuatedValve(id,facing);}
+    /**
+     * Opens or closes automated shutoff valve {@code id} by hand, one queued edit; its flow answers at the commit. Null, or
+     * the translation key of why not: an enabled loop holds it as its output ({@link com.wormzjl.icheme.runtime.control.ControlFacts#loopHolds}).
+     */
+    public String toggleActuatedValve(long id){
+        owned();if(controlFacts.loopHolds(id))return "message.icheme.automated_shutoff_valve.held";
+        return registry.toggleActuatedValve(id)?null:"message.icheme.automated_shutoff_valve.missing";
+    }
+    /** Whether automated shutoff valve {@code id} stands open by hand, as queued (its mass target above 0). */
+    public boolean actuatedValveOpen(long id){owned();var r=registrations().get(id);return r!=null&&r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve v&&v.onOffValve()&&v.massTarget()>0;}
     /** Rapid clicks toggle the latest queued value, never the older drawn lever. */
     public void togglePipeCutoff(long id) {
         owned();registry.togglePipeCutoff(id);
@@ -1721,6 +1744,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public boolean flowmeterOn(long id){owned();return registry.flowmeterOn(id);}
     public void flowmeter(long id,boolean installed){owned();registry.flowmeter(id,installed);}
     public boolean removePipeAccessory(long id){owned();return registry.removePipeAccessory(id);}
+    /** {@link #removePipeAccessory(long)}, the pipe's minor loss less {@code plate} (an orifice plate's K): see {@link PhysicalRegistry#removePipeAccessory(long,double)}. */
+    public boolean removePipeAccessory(long id,double plate){owned();return registry.removePipeAccessory(id,plate);}
     public record InstrumentReading(double pressure,double temperature,boolean flowing,double massFlow,Double volumeFlow){public InstrumentReading(double pressure,double temperature,boolean flowing){this(pressure,temperature,flowing,0,0.0);}}
     /** A pipe's instrument reading: its observations in its island's last solved interval, which carry no compound amounts, so
      * they are read as stored, with no island snapshot, preview or world-list padding (code base review R1). */

@@ -132,6 +132,7 @@ class StillHeadTest {
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 0.0, 0.0};
         assertEquals(model.hydrocarbon.componentCount() + 1, pot.length, "the network's basis, water last");
         double outlet = 303.15, diameter = BatchStill.columnDiameter(new BatchStill.Design(.5, BatchStill.Heater.SOLID, true, 4).rating());

@@ -14,7 +14,6 @@ Every sprite but the casting (tiled by 2 m), the motor's plain and panel sprites
 | `pump_joint` | `PUMP_JOINT` | bolted joint's rim: two flanges and the gasket |
 | `pump_disc` | `PUMP_DISC` | low-detail cover face: twelve textured nuts, spigot |
 | `pump_cover` | `PUMP_COVER` | plain recessed cover under normal raised casing nuts |
-| `equipment_bolt_face` | `BOLT_FACE` | flush textured hex nut for low-detail flanges |
 | `pump_base`, `pump_channel` | `PUMP_BASE`, `PUMP_CHANNEL` | drain-rim deck with anchors, drain and grout holes; channel sides with gussets |
 | `coupling_guard` | `COUPLING_GUARD` | framed expanded-metal panel, safety yellow; its plain band makes the end plates |
 | `shaft_steel` | `SHAFT` | machined steel of every turning shaft and hub, and of the shaft block models |
@@ -30,7 +29,7 @@ From the worktree root:
 java -Djava.awt.headless=true tools/pump-sprites/PumpSprites.java src/main/resources/assets/icheme/textures/block
 ```
 
-It writes seventeen PNGs including the plain cover and low-detail hex nut. `probes/PumpRender` takes `-Dpaint=RRGGBB` to render another body paint. The output is the same on every run (no random numbers; the grain is a fixed hash).
+It writes sixteen PNGs including the plain cover. The flush hex nut `equipment_bolt_face` moved to `tools/pbr-textures/equipment_textures.py` on 2026-11-15 (batch `2026-11-15-equipment-visual-design`). `probes/PumpRender` takes `-Dpaint=RRGGBB` to render another body paint. The output is the same on every run (no random numbers; the grain is a fixed hash).
 
 `probes/` holds the checks used for the rework. They are in package `com.wormzjl.icheme.science.equipment`: compile them with `javac -proc:none -d <worktree>/tmp/<folder>` against `build/classes/java/main` and the runtime class path, and run them with that folder, the main classes and `build/resources/main` on the class path, from the worktree root.
 

@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    " P ",
+    "IFI",
+    " I "
+  ],
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "P": {
+      "item": "minecraft:heavy_weighted_pressure_plate"
+    },
+    "F": {
+      "item": "icheme:fluid_pipe"
+    }
+  },
+  "result": {
+    "id": "icheme:orifice_plate",
+    "count": 1
+  }
+}

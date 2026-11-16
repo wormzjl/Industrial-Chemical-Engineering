@@ -80,9 +80,12 @@ final class FluidFacts {
      *  aqueous-liquid amounts, after its {@code rigid}; absent means the pre-W3b reading of its liquid fields (the compounds'
      *  liquid and the water as two liquids).
      *  26 (batch 2026-11-15-pollution-system, WP6b): a device spec's {@code breached}, after its relief face: a blast breached
-     *  the vessel's wall (absent: false, whole). */
-    static final int SCHEMA=26;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 26. */
+     *  the vessel's wall (absent: false, whole).
+     *  27 (batch 2026-11-15-fluid-interfaces): a device spec's {@code ambient}, after {@code breached} (absent: false, not the
+     *  atmosphere), a gas intake's. A liquid hopper's converter facts (W4) use the schema-24 fields: its fill port is its own
+     *  identity, with no drain. The control valve source {@code ON_OFF} (W7), an automated shutoff valve. */
+    static final int SCHEMA=27;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 27. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -299,7 +302,7 @@ final class FluidFacts {
                 .list(d.ports(),(q,p)->{position(q,p.cell());q.name(p.face()).name(p.port()).name(p.role());})
                 .record(q->q.f64(s.volume()).f64(s.temperature()).f64(s.pressure()).doubles(s.composition())
                         .record(feed->feed.f64(s.solids().volumeFraction()).list(s.solids().grades(),(e,grade)->e.text(grade.material()).text(grade.size().metres()).f64(grade.massShare())))
-                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)).bool(s.breached()))
+                        .f64(s.levelHeight()).bool(s.open()).record(shape->geometry(shape,s.geometry())).list(s.tower()==null?List.<com.wormzjl.icheme.science.fluid.network.CoolingTower>of():List.of(s.tower()),FluidFacts::tower).f64(s.blanket()).f64(s.relief()).list(s.reliefFace()==null?List.<PhysicalFluidTopology.Direction>of():List.of(s.reliefFace()),(e,face)->e.name(face)).bool(s.breached()).bool(s.ambient()))
                 .count(r.revision()).count(d.joints()).count(d.slots()).count(d.points())
                 .list(d.heat()==null?List.<HeatUnit>of():List.of(d.heat()),FluidFacts::heatUnit).count(d.suspendedBy());
     }
@@ -332,7 +335,9 @@ final class FluidFacts {
             double relief=q.f64(0);var faces=q.list(List.<PhysicalFluidTopology.Direction>of(),e->required(e.name(PhysicalFluidTopology.Direction.class,null),e,"relief face"));if(faces.size()>1)throw q.invalid("Multiple relief faces");
             // Schema 26: a spec written before a blast could breach a vessel is whole.
             boolean breached=q.bool(false);
-            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst(),breached));});
+            // Schema 27: a spec written before the gas intake existed is not the atmosphere.
+            boolean ambient=q.bool(false);
+            required(composition,q,"composition");return valid(q,"device spec",()->new FluidDeviceSpec(volume,temperature,pressure,composition,feed,levelHeight,open,shape,towers.isEmpty()?null:towers.getFirst(),blanket,relief,faces.isEmpty()?null:faces.getFirst(),breached,ambient));});
         long revision=f.count(0);
         // Schema 2: a record written before joints existed connects through every face, as every pipe did then.
         long joints=f.count(PhysicalFluidTopology.ALL_FACES);if(joints>PhysicalFluidTopology.ALL_FACES)throw f.invalid("joints "+joints);

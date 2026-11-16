@@ -31,6 +31,8 @@ class RefineryImportTest {
             if(path.equals(ROOT+"transport/chemsep_liquid_reference.json")||path.equals(ROOT+"interactions/dwsim_refinery_pr78.json")||path.equals(ROOT+"packages/refinery.json"))return true;
             // Ethanol (W6 of batch 2026-11-11-aqueous-solvents) is a later import: its records stay, as O11's do below.
             if(path.equals(ROOT+"properties/chemsep_ethanol.json"))return false;
+            // The rare gases (W1 of batch 2026-11-15-fluid-interfaces) are a later import whose pairs name Tier 1 compounds: before the import they did not exist.
+            if(path.equals(ROOT+"interactions/dwsim_refinery_pr78_rare_gases.json")||path.equals(ROOT+"transport/chemsep_rare_gas_liquid_reference.json"))return true;
             if(path.startsWith(ROOT+"properties/chemsep_"))return true;
             if(!path.startsWith(ROOT+"components/"))return false;
             var o=JsonParser.parseString(e.getValue()).getAsJsonObject();
@@ -76,7 +78,7 @@ class RefineryImportTest {
         var axis=before.requirePackage(NETWORK).components();var refinery=after.requirePackage(REFINERY);
         assertEquals(axis,refinery.components().subList(0,axis.size()));
         assertEquals(before.physicsContent(NETWORK,axis),after.physicsContent(REFINERY,axis),"the refinery package on the old network's axis");
-        assertEquals(axis.size()+26,refinery.components().size(),"the 24 Tier 1 compounds, CO2 (O11 of batch 2026-11-04-open-thermo-data) and ethanol (W6: ethanol joins icheme:refinery)");
+        assertEquals(axis.size()+31,refinery.components().size(),"the 24 Tier 1 compounds, CO2 (O11 of batch 2026-11-04-open-thermo-data), ethanol (W6: ethanol joins icheme:refinery) and the five rare gases (batch 2026-11-15-fluid-interfaces, W1)");
         assertTrue(refinery.components().size()+1<=MaterialAxis.MAX_CONSERVED_COMPONENTS,"the world list stays under the cap");
     }
 
@@ -102,7 +104,7 @@ class RefineryImportTest {
     @Test void thePairLibraryAddsOnlyPairsWithANewCompound() {
         var after=after();var before=before();
         var added=new HashSet<>(after.requirePackage(REFINERY).components());added.removeAll(before.requirePackage(NETWORK).components());
-        assertEquals(26,added.size(),"the 24 Tier 1 compounds, CO2 (O11) and ethanol (W6: ethanol joins icheme:refinery; its pairs are derived, none in the library)");
+        assertEquals(31,added.size(),"the 24 Tier 1 compounds, CO2 (O11), ethanol (W6: ethanol joins icheme:refinery; its pairs are derived, none in the library) and the five rare gases (their pairs in their own library)");
         var library=JsonParser.parseString(after.resources().get(ROOT+"interactions/dwsim_refinery_pr78.json")).getAsJsonObject();
         assertEquals(LIBRARY,library.get("id").getAsString());
         double methaneSulfide=Double.NaN;

@@ -29,7 +29,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`. Every class under `sc
 | `client/gui/tutorial/cards/` (14) | `Card`, `Cards` (name to builder), `Bars`, and the 11 cards: `three_parts`, `chain`, `barrel`, `products`, `road`, `pot_temperature`, `reflux`, `compare`, `balance`, `unit_map`, `limit` |
 | `client/gui/common/` `TourAnchors`, `DeviceTour`, `ScreenTours`, `AssemblyTour`; `client/gui/flowsheet/SimulatorTour` | Minecraft-free anchor maps: where each stop stands on a page, in the screen's own coordinates; the screens resolve the same maps the gates check |
 | `world/item/FieldGuideItem`, `EquipmentInfoItem`; `registry/ModItems`, `ModCreativeTabs.EQUIPMENT_GUIDE` | The Field Guide; one reference item per kind (builds nothing, no recipe, no loot; use opens its page). Client calls stay behind the client-side check |
-| `compat/jei/IChemEJeiPlugin` | JEI information pages for every reference item and every other mod item; found by `@JeiPlugin`, named by nothing in the mod |
+| `compat/jei/IChemEJeiPlugin` | JEI information pages for every reference item and every other mod item, the fluid conversion category (one recipe per rule the server sent, catalysts the two converters' reference items; rules that arrive later reach the running recipe manager), and the placeholder crude oil removed while another mod's is in `c:crude_oil`; found by `@JeiPlugin`, named by nothing in the mod |
+| `compat/jei/FluidConversionCategory` | The category: the fluid slot (a tag's source fluids) and a scroll box of the rule's text. The text: `science/fluid/conversion/ConversionLines` ([fluid-laws.md](fluid-laws.md)) |
 
 ## Main flow
 

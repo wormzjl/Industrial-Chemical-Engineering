@@ -19,6 +19,7 @@ public final class IChemEClient {
         event.register(ModMenus.PROCESS_SIMULATOR.get(), ProcessSimulatorScreen::new);
         event.register(ModMenus.FLUID_DEVICE.get(),com.wormzjl.icheme.client.gui.screens.inventory.FluidDeviceScreen::new);
         event.register(ModMenus.CONTROL_PANEL.get(),com.wormzjl.icheme.client.gui.screens.inventory.ControlPanelScreen::new);
+        event.register(ModMenus.ALARM_BEACON.get(),com.wormzjl.icheme.client.gui.screens.inventory.AlarmBeaconScreen::new);
         event.register(ModMenus.GAUGE.get(), com.wormzjl.icheme.client.gui.screens.inventory.GaugeScreen::new);
         event.register(ModMenus.ASSEMBLY.get(), com.wormzjl.icheme.client.gui.screens.inventory.AssemblyScreen::new);
         event.register(ModMenus.MACHINE.get(), com.wormzjl.icheme.client.gui.screens.inventory.MachineScreen::new);

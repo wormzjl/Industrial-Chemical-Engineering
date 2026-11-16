@@ -35,7 +35,7 @@ class RefineryCarbonDioxideCatalogTest {
         var refinery = catalog.requirePackage(REFINERY);
         int co2 = refinery.components().indexOf("CarbonDioxide");
         // W6: ethanol joins icheme:refinery after CO2, so CO2 keeps its index (44) and is no longer the last.
-        assertEquals(refinery.components().size() - 2, co2, "CO2 keeps index 44, ethanol after it");
+        assertEquals(44, co2, "CO2 keeps index 44, ethanol after it (the rare gases after ethanol, batch 2026-11-15-fluid-interfaces)");
         assertEquals("Ethanol", refinery.components().get(co2 + 1));
         assertEquals("icheme:chemsep_carbon_dioxide", refinery.properties().get(co2).id());
         assertEquals(List.of(CRYSTAL), refinery.crystals());

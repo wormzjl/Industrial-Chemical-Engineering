@@ -28,7 +28,7 @@ import java.util.*;
  */
 @EventBusSubscriber(modid = IChemE.MOD_ID, value = Dist.CLIENT)
 public final class DataControlRenderer {
-    private static final Set<ControlPanelBlockEntity> PANELS =
+    private static final Set<net.minecraft.world.level.block.entity.BlockEntity> PANELS =
             Collections.newSetFromMap(new WeakHashMap<>());
     private static final ResourceLocation WHITE =
             ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "textures/misc/instrument.png");
@@ -86,11 +86,11 @@ public final class DataControlRenderer {
 
     private DataControlRenderer() {}
 
-    public static void loaded(ControlPanelBlockEntity box) {
+    public static <T extends net.minecraft.world.level.block.entity.BlockEntity & DataPort.Owner> void loaded(T box) {
         PANELS.add(box);
     }
 
-    public static void unloaded(ControlPanelBlockEntity box) {
+    public static void unloaded(net.minecraft.world.level.block.entity.BlockEntity box) {
         PANELS.remove(box);
     }
 
@@ -113,9 +113,10 @@ public final class DataControlRenderer {
         for (var panel : List.copyOf(PANELS))
             if (panel.getLevel() == level
                     && !panel.isRemoved()
-                    && panel.dataPort() != null
-                    && panel.dataPort().centre().distanceToSqr(centre) < radius * radius)
-                ports.put(panel.dataPort().id(), panel.dataPort());
+                    && panel instanceof DataPort.Owner owner
+                    && owner.dataPort() != null
+                    && owner.dataPort().centre().distanceToSqr(centre) < radius * radius)
+                ports.put(owner.dataPort().id(), owner.dataPort());
         for (var monitor : List.copyOf(MONITORS))
             if (monitor.getLevel() == level
                     && !monitor.isRemoved()

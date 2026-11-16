@@ -365,9 +365,9 @@ class ConstructorColumnTest {
         assertEquals(List.of("power","power-","power+","support","support-","support+","base_speed","base_speed-","base_speed+"),slots(motor).subList(0,9));
         assertFalse(slots(motor).stream().anyMatch(k->k.startsWith("poles:")||k.startsWith("drive:")));
         var turbine = ConstructorColumn.design(design(Form.STEAM_TURBINE, 1, 1, 0, 3, 0, 0), t);
-        assertEquals(List.of("power", "power-", "power+", "size", "support", "support-", "support+", "steam:mp", "steam:hp", "steam:vhp", "exhaust", "exhaust-", "exhaust+"),
-                slots(turbine).subList(0, 13));
-        assertTrue(buttons(turbine).get("steam:hp").latched() && buttons(turbine).get("steam:vhp").active());
+        assertEquals(List.of("power", "power-", "power+", "size", "support", "support-", "support+", "steam:lp", "steam:mp", "steam:hp", "steam:vhp", "exhaust", "exhaust-", "exhaust+"),
+                slots(turbine).subList(0, 14));
+        assertTrue(buttons(turbine).get("steam:hp").latched() && buttons(turbine).get("steam:vhp").active() && buttons(turbine).get("steam:lp").active());
         assertFalse(slots(ConstructorColumn.design(design(Form.GEARBOX, 250, 1, 0, 3, 0, 0), t)).contains("poles:2"), "a gearbox has no speed of its own");
         assertEquals(List.of("paint", "build"), pump.footer().stream().map(Column.Button::key).toList(), "a unit has no Nozzles page");
         var reactor = buttons(ConstructorColumn.design(design(Form.TRICKLE_BED_REACTOR, 2, 2, 3, 3, 0, 0), t));

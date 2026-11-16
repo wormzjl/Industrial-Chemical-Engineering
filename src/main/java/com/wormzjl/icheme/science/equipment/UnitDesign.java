@@ -87,6 +87,14 @@ public abstract class UnitDesign {
         return MachineDuty.NONE;
     }
 
+    /**
+     * The design point a fresh draft of these sizes starts at in the constructor: {@link #duty(double, int)}, unless the
+     * kind's first offer differs from the point its old saves read (a steam turbine's, owner point T2).
+     */
+    public MachineDuty draft(double size, int length) {
+        return duty(size, length);
+    }
+
     /** The main size design point {@code duty} gives. */
     public double size(MachineDuty duty) {
         throw new IllegalArgumentException("This kind has no design point");
@@ -142,6 +150,17 @@ public abstract class UnitDesign {
     /** A new unit's second size at main size {@code size}: the least by default (a set of adsorbers starts at two beds). */
     public int defaultLength(double size) {
         return minLength(size);
+    }
+
+    /** The constructor's starting main size for a new choice ({@link ConstructorDefaults}): the middle of the kind's sizes. */
+    public double startSize() {
+        var all = sizes();
+        return all.get(all.size() / 2);
+    }
+
+    /** The constructor's starting second size at {@link #startSize}; 0 leaves it to {@link ConstructorDefaults}' own rule. */
+    public int startLength(double size) {
+        return 0;
     }
 
     /** The second size's step (a balanced-opposed compressor's throws come in pairs). */

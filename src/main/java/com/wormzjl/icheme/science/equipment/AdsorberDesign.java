@@ -242,7 +242,7 @@ final class AdsorberDesign extends UnitDesign {
         u.mesh.prism(f, r, at - .1, at + .15, n, Material.PIPE);
         u.mesh.cylinder(f, fl, at + .15, at + .21, n, Material.FLANGE);
         u.mesh.cylinder(f, fl, at + .21, at + .27, n, Material.FLANGE);
-        u.mesh.bolts(f, od, r + .01, fl, at + .27, 1, Material.BOLT);
+        u.mesh.flangeBolts(f, od, r + .01, fl, at + .27, 1, Material.BOLT);
         u.solids.add(ProcessUnit.Solid.rod(axis, 1, Math.min(apex - .1 * sign, apex + .27 * sign), Math.max(apex - .1 * sign, apex + .27 * sign), fl, 0));
     }
 
@@ -297,7 +297,7 @@ final class AdsorberDesign extends UnitDesign {
             u.mesh.prism(f, ru, -.05, length, n, Material.PIPE);
             u.mesh.cylinder(f, fl, length, length + .06, n, Material.FLANGE);
             u.mesh.cylinder(f, fl, length + .06, length + .12, n, Material.FLANGE);
-            u.mesh.bolts(f, od, ru + .01, fl, length + .12, 1, Material.BOLT);
+            u.mesh.flangeBolts(f, od, ru + .01, fl, length + .12, 1, Material.BOLT);
             double[] c = f.along(length + .06);
             u.solids.add(ProcessUnit.Solid.box(new double[]{c[0] - fl, c[1] - fl, c[2] - fl}, new double[]{c[0] + fl, c[1] + fl, c[2] + fl}));
             return;

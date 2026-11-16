@@ -52,6 +52,11 @@ final class ControlLaw {
             return new Decision("CONTROLLING", null, null, null, null, outlet, null, 0);
         }
 
+        /** An automated shutoff valve's law {@code law}, open or closed (W7): its status says which. */
+        static Decision onOff(FlowControl.ControlValve law, boolean open) {
+            return new Decision(open ? "OPEN" : "CLOSED", law, null, null, null, null, null, 0);
+        }
+
         /** A column loop's planned feed rate for column unit {@code unit}, mol/s (W6.3). */
         static Decision columnFeed(long unit, double feed) {
             return new Decision("CONTROLLING", null, null, null, null, null, feed, unit);
@@ -72,6 +77,9 @@ final class ControlLaw {
     /** A still controller's last correction: its pot, handle and target, the reading's tick and the setpoint. */
     private record StillSample(long output, boolean firing, double target, long tick, double value) {}
 
+    /** An on/off loop's last switch (W7): its output and whether it left the valve open. State, never saved. */
+    private record Switch(long output, boolean open) {}
+
     /** Below this, kg/s, a still is taken to give no distillate. */
     private static final double FLOWING = 1e-9;
 
@@ -81,6 +89,7 @@ final class ControlLaw {
     /** Each level controller's last decision, for its record (diagnostics only, never read back by the law). */
     private final Map<UUID, ControlService.LevelDecision> levelDecisions = new HashMap<>();
     private final Map<UUID, StillSample> stills = new HashMap<>();
+    private final Map<UUID, Switch> switches = new HashMap<>();
 
     ControlLaw(FluidWorldAuthority world, ControlHosts hosts) {
         this.world = world;
@@ -95,6 +104,7 @@ final class ControlLaw {
         levels.remove(panel);
         levelDecisions.remove(panel);
         stills.remove(panel);
+        switches.remove(panel);
     }
 
     /** Level controller {@code panel}'s last decision, or null. */
@@ -157,8 +167,10 @@ final class ControlLaw {
         // owner decisions O1 and O2) act on the reading at the cadence, not inside the solve: their
         // sensor may be on another island (a cut's head temperature switches its line's diverter).
         var device = record.device();
+        // An automated shutoff valve's loop (batch 2026-11-15-fluid-interfaces, W7, decision D4) switches at the cadence too.
+        boolean onOff = device.control() instanceof FlowControl.ControlValve valve && valve.onOffValve();
         boolean cadenced =
-                device.stillPot() || device.kind() == TopologyCompiler.Kind.DIVERTER_VALVE;
+                device.stillPot() || device.kind() == TopologyCompiler.Kind.DIVERTER_VALVE || onOff;
         if (!cadenced && !world.controlCoupled(sensor.source(), s.output()))
             return Decision.noSetpoint("NOT SAME PROCESS");
         if (reading == null || reading.availability() != Instrument.Availability.AVAILABLE)
@@ -174,6 +186,7 @@ final class ControlLaw {
         if (s.unit() != reading.unit()
                 && reading.secondaryUnit().filter(u -> u == s.unit()).isEmpty())
             return Decision.noSetpoint("UNIT MISMATCH");
+        if (onOff) return onOff(panel, (FlowControl.ControlValve) device.control(), reading);
         if (device.stillPot()) return still(panel, sensor, reading);
         // A diverter valve: its straight outlet while the reading stands below the target, its first
         // side outlet at or above it. Two in a line give three cuts.
@@ -332,6 +345,20 @@ final class ControlLaw {
     /** The reading in the settings' unit: its primary value, or its secondary one. */
     private static double measured(ControlSettings s, Sensor.Reading reading) {
         return s.unit() == reading.unit() ? reading.value() : reading.secondary();
+    }
+
+    /**
+     * An automated shutoff valve's loop (W7, decision D4, {@link ControlSettings#onOff}): open or closed from the reading in
+     * the settings' unit, its last switch kept between cadences. A first decision, or one after its output changed, starts
+     * from the valve's own position, the one saved with it.
+     */
+    private Decision onOff(ControlFacts.Panel panel, FlowControl.ControlValve base, Sensor.Reading reading) {
+        var s = panel.settings();
+        var last = switches.get(panel.id());
+        boolean was = last != null && last.output() == s.output() ? last.open() : base.massTarget() > 0;
+        boolean open = s.onOff(was, measured(s, reading));
+        switches.put(panel.id(), new Switch(s.output(), open));
+        return Decision.onOff(base.withMassTarget(open ? 1 : 0), open);
     }
 
     /**

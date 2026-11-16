@@ -164,9 +164,10 @@ public final class PhysicalFluidTopology {
             if(engine&&(onPortLane||ports.size()!=1||ports.getFirst().port!=PassiveNetwork.PhasePort.BULK||ports.getFirst().role!=ConnectionRole.VESSEL))
                 throw new IllegalArgumentException("A prime mover's fuel void has one bulk port and its fuel valve");
             // A fluid converter's port (batch 2026-11-12-fluid-conversion): its drain void or its fill generator in the port lane
-            // of a cell of its vessel, meeting the vessel through one inside contact, the converter's valve its control.
+            // of a cell of its vessel, meeting the vessel through one inside contact, the converter's valve its control; or a
+            // liquid hopper (batch 2026-11-15-fluid-interfaces, W4): its fill generator alone, one block with no ports.
             boolean converter=(kind==TopologyCompiler.Kind.VOID||kind==TopologyCompiler.Kind.GENERATOR)&&heat==null&&control instanceof FlowControl.ControlValve conv&&conv.source()==FlowControl.ValveSource.CONVERTER;
-            if(converter&&!onPortLane)throw new IllegalArgumentException("A converter's port stands in its vessel's port lane");
+            if(converter&&!onPortLane&&!(kind==TopologyCompiler.Kind.GENERATOR&&ports.isEmpty()&&position.lane()==0))throw new IllegalArgumentException("A converter's port stands in its vessel's port lane");
             boolean sink=burner||flare||outlet||fired||chimney||engine;
             if(position.lane()==0||onPortLane?slots!=0||points!=0:!laneFits(position.lane(),slots)||(points>>>60)!=0)throw new IllegalArgumentException("Invalid rack lane "+position.lane()+" of "+slots+" positions");
             if(suspendedBy<0||onPortLane&&suspendedBy!=0)throw new IllegalArgumentException("Invalid column suspension");
@@ -573,7 +574,7 @@ public final class PhysicalFluidTopology {
             if(other==null||other.id<=d.id||!d.joins(other,contact.cell(),direction))continue;
             if(next.lane()!=other.position.lane())next=other.position;
             if(d.boundary()||other.boundary()) {
-                var owner=d.boundary()?other:d;links.add(new TopologyCompiler.Link(linkId,d.id,other.id,scaled(owner.geometry,.5)));
+                var owner=d.boundary()?other:d;links.add(new TopologyCompiler.Link(linkId,d.id,other.id,boundaryHalf(owner,d.boundary()?d:other)));
                 linkDirections.put(linkId,direction);
                 if(d.kind==TopologyCompiler.Kind.RESERVOIR){tankFaces.put(linkId,direction);tankPorts.put(linkId,d.portAt(contact.cell(),direction));}
                 else if(other.kind==TopologyCompiler.Kind.RESERVOIR){tankFaces.put(linkId,opposite(direction));tankPorts.put(linkId,other.portAt(next,opposite(direction)));}
@@ -954,6 +955,15 @@ public final class PhysicalFluidTopology {
     /** An ejector's motive valve's section: 1 m at its motive nozzle's bore ({@link com.wormzjl.icheme.science.machine.SteamEjector#motiveBore}). */
     static PipeResistance.Geometry ejectorNozzle(FlowControl.Ejector ejector) {
         return new PipeResistance.Geometry(1,ejector.design().motiveBore(),PipeResistance.DEFAULT_ROUGHNESS_METRES,0);
+    }
+    /**
+     * A boundary's link: half its neighbour's geometry, as always, with a generator's own minor loss on top where it has one
+     * (a gas intake's entry loss, batch 2026-11-15-fluid-interfaces, W2). Every other generator has none, and a vessel's or a
+     * sink's link is its neighbour's half as before: bit for bit.
+     */
+    private static PipeResistance.Geometry boundaryHalf(Device owner,Device boundary) {
+        var half=scaled(owner.geometry,.5);double own=boundary.kind==TopologyCompiler.Kind.GENERATOR?boundary.geometry.minorLoss():0;
+        return own>0?new PipeResistance.Geometry(half.length(),half.diameter(),half.roughness(),half.minorLoss()+own,half.channels()):half;
     }
     private static PipeResistance.Geometry scaled(PipeResistance.Geometry g,double fraction){return new PipeResistance.Geometry(g.length()*fraction,g.diameter(),g.roughness(),g.minorLoss()*fraction,g.channels());}
     private static void mapViews(Map<Long,List<View>> views,TopologyCompiler.Run run,Map<Long,Long> owners,Map<Long,Direction> linkDirections,Map<Long,Device> physical,int island,long pipe,boolean forward) {mapViews(views,run,owners,linkDirections,physical,island,pipe,forward,false);}

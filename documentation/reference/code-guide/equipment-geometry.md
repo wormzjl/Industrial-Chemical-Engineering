@@ -39,6 +39,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | `LineGeometry` | One fluid-device block's drawn shape: runs, elbows, tees (off-centre with fitted sweeps), reducers, flanges with a seam, valve, strainer (`filterPolygons`), `fittingEnd`, `overhanging`, `SPOOL`; transition pipes (`Key.offsets`, `OFFSET`, `transition`) | 846 |
 | `ValveGeometry` | Check, shutoff (with `shutoffLever`, `shutoffStem`, `shutoffPivot`), pressure valve castings; the diverter's actuator apart (`diverterActuator`, `diverterAxis`) | 188 |
 | `InlineMoverGeometry` | In-line pump and geared compressor; `supports`, `boundaryJoints` | 249 |
+| `IntakeGeometry`, `HopperGeometry` | A gas intake's louvred filter house under a rain hood; a liquid hopper's square funnel on a short body; each with flanged stubs to its joined faces (`FluidDeviceModel`, `"body"`) | 55, 75 |
 | `SightGlassGeometry` | Round-window housing by bore; `supports`, `towards`, `window`, `bubbles` | 168 |
 | `BlanketValveGeometry` | A drum's gas blanketing valve on its reservation: `of`, `bounds`, `face` | 114 |
 | `ReliefValveGeometry` | A pressure safety valve on a drum or a pipe (`onPipe`): `of`, `face` | 185 |

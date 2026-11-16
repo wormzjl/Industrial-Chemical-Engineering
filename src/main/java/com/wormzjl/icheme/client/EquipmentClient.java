@@ -43,10 +43,13 @@ public final class EquipmentClient {
 
     @SubscribeEvent
     public static void renderConfigReloaded(net.neoforged.fml.event.config.ModConfigEvent.Reloading event) {
-        if (event.getConfig().getSpec() != ClientConfig.SPEC || ClientConfig.renderDetail() == EquipmentShellModel.detail()) return;
+        if (event.getConfig().getSpec() != ClientConfig.SPEC) return;
+        if (ClientConfig.renderDetail() == EquipmentShellModel.detail() && !EquipmentShellModel.variantChanged()) return;
         var client = net.minecraft.client.Minecraft.getInstance();
         client.execute(() -> {
             if (ClientConfig.renderDetail() != EquipmentShellModel.detail()) client.reloadResourcePacks();
+            // pbr_textures under a shader pack moves the shell cells' variant (RELIEF_SPRITES_PLAN.md 4.2): re-mesh them.
+            else if (EquipmentShellModel.variantChanged() && client.levelRenderer != null) client.levelRenderer.allChanged();
         });
     }
 

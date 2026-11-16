@@ -20,6 +20,8 @@ public final class ScreenTours {
 
     /** The one-page screens' tours: a gauge's settings, a pipeline tool's, a structure's datasheet, a machine's page. */
     public static final String GAUGE = "gauge.settings", PIPELINE_TOOL = "pipeline_tool.settings", VESSEL = "vessel.datasheet", MACHINE = "machine.overview";
+    /** The alarm beacon's settings (batch 2026-11-15-fluid-interfaces, W9). */
+    public static final String ALARM_BEACON = "alarm_beacon.settings";
 
     /** The {@code ?} key of a screen {@code width} wide with no theme key: the title strip's rightmost key. */
     public static Rect help(int width) {

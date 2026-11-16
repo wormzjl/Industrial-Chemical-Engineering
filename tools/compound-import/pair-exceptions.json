@@ -5,6 +5,16 @@
       "cas": "1333-74-0",
       "name": "Hydrogen",
       "reason": "Every hydrogen pair is zero (no pair written): the DECHEMA H2 values are narrow-range fits (H2/Toluene -0.51, H2/N-butane -0.397, H2/Propane -0.131) that would put H2 into the oil; zero is DWSIM's own default without data and the treatment H2 gets with the crude fractions."
+    },
+    {
+      "cas": "7440-59-7",
+      "name": "Helium",
+      "reason": "A quantum gas with a negative acentric factor (ChemSep -0.39), treated as hydrogen (batch 2026-11-15-fluid-interfaces, plan 4.5): every pair zero. DECHEMA gives one helium pair (Helium-4/CarbonMonoxide 0.5463, a cryogenic fit)."
+    },
+    {
+      "cas": "7440-01-9",
+      "name": "Neon",
+      "reason": "A quantum gas with a negative acentric factor (ChemSep -0.0396), treated as hydrogen (batch 2026-11-15-fluid-interfaces, plan 4.5): every pair zero."
     }
   ],
   "overrides": [

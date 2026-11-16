@@ -119,6 +119,10 @@
     "subtitle": "subtitles.icheme.valve_turn",
     "sounds": [{ "name": "icheme:valve_turn", "stream": false }]
   },
+  "alarm_horn": {
+    "subtitle": "subtitles.icheme.alarm_horn",
+    "sounds": [{ "name": "icheme:alarm_horn", "stream": false }]
+  },
   "pipe_burst_gas": {
     "subtitle": "subtitles.icheme.pipe_burst",
     "sounds": [{ "name": "icheme:pipe_burst_gas", "stream": false }]

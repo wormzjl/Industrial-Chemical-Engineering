@@ -83,15 +83,27 @@ public final class ConverterDoor {
             levels.add(in.canEdit() ? new Column.Field(key, label, "%", hint) : new Column.Reading("converter:" + key, label, in.thresholds().get(i), "%", hint));
         }
         rows.add(new Column.Group(t.get(KEY + "group.levels"), t.get(KEY + "group.levels.hint"), levels));
-        // From here the texts follow the plant: these groups hold no widget.
+        rows.addAll(plant(in, t, true));
+        return rows;
+    }
+
+    /**
+     * The groups that follow the plant and hold no widget: the tanks, the rule and what it books. Without {@code process}
+     * the process tank is left out: a liquid hopper (batch 2026-11-15-fluid-interfaces, W4) has its Forge tank only, and
+     * no setting, so its page is these groups alone.
+     */
+    public static List<Column.Row> plant(Input in, HeatControlColumn.Texts t, boolean process) {
+        var rows = new ArrayList<Column.Row>();
         var tanks = new ArrayList<Column.Row>();
         tanks.add(new Column.Line(t.get(KEY + "tank.forge"), Palette.MUTED));
         tanks.add(bar(in.forge()));
         tanks.add(new Column.Line(t.get(KEY + "tank.line", in.forge().fill(), in.forge().amount()), Palette.TEXT));
         tanks.add(in.fluid() == null ? new Column.Line(t.get(KEY + "tank.empty"), Palette.MUTED) : new Column.Paragraph(in.fluid(), Palette.TEXT, null));
-        tanks.add(new Column.Line(t.get(KEY + "tank.process"), Palette.MUTED));
-        tanks.add(bar(in.process()));
-        tanks.add(new Column.Line(t.get(KEY + "tank.line", in.process().fill(), in.process().amount()), Palette.TEXT));
+        if (process) {
+            tanks.add(new Column.Line(t.get(KEY + "tank.process"), Palette.MUTED));
+            tanks.add(bar(in.process()));
+            tanks.add(new Column.Line(t.get(KEY + "tank.line", in.process().fill(), in.process().amount()), Palette.TEXT));
+        }
         rows.add(new Column.Group(t.get(KEY + "group.tanks"), t.get(KEY + "group.tanks.hint"), tanks));
         var rule = new ArrayList<Column.Row>();
         if (in.rule() == null) rule.add(new Column.Line(t.get(KEY + "rule.none"), Palette.MUTED));

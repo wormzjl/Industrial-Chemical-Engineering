@@ -100,7 +100,7 @@ class AqueousSolventDataTest {
         // The record is unchanged; the network's view carries Water in its cubic and ice Ih among its crystals.
         assertFalse(world.components().contains("Water"),"the record does not name Water");
         assertEquals(List.of("icheme:crystal_carbon_dioxide_i"),world.crystals());
-        assertEquals("refinery-tier1-r4",world.revision(),"the network package record: r4 since W6 (ethanol joins icheme:refinery)");
+        assertEquals("refinery-tier1-r5",world.revision(),"the network package record: r4 since W6 (ethanol joins icheme:refinery), r5 since the rare gases (batch 2026-11-15-fluid-interfaces, W1)");
         for(var p:catalog.packages().values())for(var property:p.properties())assertNotEquals(CUBIC_WATER,property.id(),p.id());
         var wet=catalog.withWater(WORLD).requirePackage(WORLD);
         assertEquals("Water",wet.components().getLast());
@@ -132,7 +132,8 @@ class AqueousSolventDataTest {
             if(g)counts++;if(h)henry++;if(g||h)entry.setValue(o.toString());
         }
         // W6: ethanol's main record (icheme:chemsep_ethanol) carries Dortmund counts: 34 before it.
-        assertEquals(35,counts,"the 33 defined compounds of the world list, ethanol and the cubic water");assertEquals(8,henry);
+        assertEquals(36,counts,"the 33 defined compounds of the world list, ethanol, the cubic water and argon (batch 2026-11-15-fluid-interfaces, W1: its E-PPR78 count)");
+        assertEquals(13,henry,"the eight gases and the five rare gases (batch 2026-11-15-fluid-interfaces, W1)");
         resources.remove(ROOT+TABLE);resources.remove(ROOT+"group_interactions/eppr78_2022.json");
         var without=MaterialCatalog.parse(resources);
         var edited=MaterialCatalog.parse(changed(HEXANE,o->{var d=o.getAsJsonObject("group_counts").getAsJsonObject(ModifiedUnifac.SCHEME);

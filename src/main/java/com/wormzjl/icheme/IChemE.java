@@ -236,6 +236,8 @@ public final class IChemE {
     public IChemE(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        // The placeholder crude oil (batch 2026-11-15-fluid-interfaces, W3): its own fluid, block and bucket registers.
+        com.wormzjl.icheme.registry.ModFluids.register(modEventBus);
         com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
         // The Create coupling (W6b, D40): its only entry point, guarded; no class outside compat/create names a Create type.
         if (net.neoforged.fml.ModList.get().isLoaded("create")) com.wormzjl.icheme.compat.create.CreateCompat.register(modEventBus);
@@ -263,6 +265,8 @@ public final class IChemE {
         gameEventBus.addListener(com.wormzjl.icheme.material.MaterialReloadListener::register);
         // After the materials: the conversion rules resolve their compounds on the catalog that reload publishes.
         gameEventBus.addListener(com.wormzjl.icheme.material.ConversionReloadListener::register);
+        // The rules reach the client's JEI page at login and after each reload (batch 2026-11-15-fluid-interfaces, W5).
+        gameEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::syncConversionRules);
         gameEventBus.addListener(IChemE::onServerStarting);
         com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.listen(com.wormzjl.icheme.runtime.assembly.AssemblyService::edited);
         gameEventBus.addListener(IChemE::onServerTickPost);
@@ -301,6 +305,8 @@ public final class IChemE {
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.fuel());
         // A fluid converter's Forge tank on its port cell's port face (batch 2026-11-12-fluid-conversion, W3): passive, whole mB.
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.forgeTank(side));
+        // A liquid hopper's Forge tank (batch 2026-11-15-fluid-interfaces, W4).
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, ModBlockEntities.FLUID_DEVICE.get(), (device, side) -> device.hopperTank(side));
     }
     /**
      * The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves), and the

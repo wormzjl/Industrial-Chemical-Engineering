@@ -71,7 +71,7 @@ public final class ConduitLineBackend implements LineBackend {
     public PortResult socket(Level level, LineTarget target, LineProfile.Settings settings) {
         var be = level.getBlockEntity(target.clicked());
         DataPort port = null;
-        if (be instanceof ControlPanelBlockEntity panel) port = panel.dataPort();
+        if (be instanceof DataPort.Owner owner) port = owner.dataPort();
         // A pollution monitor's data socket (WP10), as the controller's.
         else if (be instanceof PollutionMonitorBlockEntity monitor) port = monitor.dataPort();
         else if (be instanceof Instrument.Holder holder) {
@@ -248,7 +248,7 @@ public final class ConduitLineBackend implements LineBackend {
         if (socket == null || socket.id() == null) return;
         DataPort port = null;
         var be = level.getBlockEntity(socket.owner());
-        if (be instanceof ControlPanelBlockEntity panel) port = panel.dataPort();
+        if (be instanceof DataPort.Owner owner) port = owner.dataPort();
         else if (be instanceof PollutionMonitorBlockEntity monitor) port = monitor.dataPort();
         else if (be instanceof Instrument.Holder holder) {
             port = holder.instruments().dataPort();

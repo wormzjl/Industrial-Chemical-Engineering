@@ -45,7 +45,7 @@ public final class EquipmentInfo {
             EquipmentShape.Kind.FLUID_CONVERTER, EquipmentShape.Kind.GAS_CONVERTER));
 
     /** The ids of the mod's other items that need something to work (a {@code .needs} line beside their {@code .serves}). */
-    public static final Set<String> ITEMS_THAT_NEED = Set.of("fluid_pump", "fluid_compressor", "local_controller", "dcs", "gas_blanketing_valve", "create_coupling");
+    public static final Set<String> ITEMS_THAT_NEED = Set.of("fluid_pump", "fluid_compressor", "local_controller", "dcs", "gas_blanketing_valve", "create_coupling", "alarm_beacon");
 
     private EquipmentInfo() {
     }

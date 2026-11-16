@@ -480,7 +480,7 @@ public final class ConstructorColumn {
      * and the table), an electric machine's or a pump's rated RPM, a motor's Drive,
      * a turbine's Inlet steam (latched keys) and Exhaust. Keys: the settings {@code flow}, {@code head},
      * {@code power}, {@code exhaust}, {@code support}; {@code base_speed},
-     * {@code steam:mp}, {@code steam:hp}, {@code steam:vhp}.
+     * {@code steam:lp}, {@code steam:mp}, {@code steam:hp}, {@code steam:vhp}.
      */
     private static List<Column.Row> machine(Design in, HeatControlColumn.Texts t) {
         var kind = in.form().kind();

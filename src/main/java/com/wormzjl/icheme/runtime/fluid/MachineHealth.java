@@ -220,7 +220,8 @@ public final class MachineHealth {
             p.wetGas = Wear.wetGas(wet);
             // A steam turbine's own exhaust moisture (N4): its stream at the exhaust pressure and at its inlet enthalpy less its
             // shaft work, flashed by the solve and carried by its observation row. What the exhaust node holds does not enter.
-            double exhaust = read && control instanceof FlowControl.Turbine ? row.condensedShare() : Double.NaN;
+            // Read against the onset at its exhaust pressure, the row's second end (W5, Wear.wetOnset): less the onset's rise.
+            double exhaust = read && control instanceof FlowControl.Turbine ? Wear.wetExcess(row.condensedShare(), row.secondPressure()) : Double.NaN;
             p.wetExhaust = Wear.wetExhaust(exhaust);
             // The largest intensity of each class, and the fault that set it.
             double erosion = 0, seizure = 0;

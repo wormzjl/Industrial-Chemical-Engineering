@@ -104,7 +104,8 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
   the heat capacity ratio as the network reads it), cooled back to the suction between stages. `COMPRESSOR_LIQUID` is a
   SHOULD row: a wet suction is compressed.
 - **Turbines** (`TurbineSizing`): rated power from `MachineDuty.POWERS` with `Motor.SPARE`, the lowest steam class whose
-  header holds the inlet, the nearest exhaust of `MachineDuty.EXHAUSTS`; rows `TURBINE_SPARE`, `TURBINE_INLET`.
+  header holds the inlet, the nearest exhaust of `MachineDuty.TURBINE_EXHAUSTS` (below the LP header); rows `TURBINE_SPARE`, `TURBINE_INLET`,
+  `TURBINE_EXHAUST` (a tile exhausting at or above the LP header is red: no turbine is built for back pressure).
 - **Ejectors** (`EjectorSizing`): a bore rated on the world's set at the sheet's motive pressure (`Load.motivePressure`;
   `Size.capacity` = `SteamEjector.capacity` with all its steam); Auto takes the smallest bore whose capacity holds the
   spared load; `VACUUM_SPEED` is smooth below its edge (`Bound.Step` with an exponent), its reading v(P_s) times load

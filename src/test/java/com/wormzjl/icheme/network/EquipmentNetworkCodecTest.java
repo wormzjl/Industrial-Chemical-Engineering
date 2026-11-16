@@ -61,7 +61,8 @@ class EquipmentNetworkCodecTest {
     @Test void deconstructionRequestsRoundTrip() {
         // One protocol for every registrar since icheme-1 (codebase review P3-22); the equipment payloads were equipment-23.
         // icheme-2: the pollution map's payloads joined (WP9).
-        assertEquals("icheme-2", NetworkProtocol.VERSION);
+        // icheme-3: the steam classes gained LP, first, so their ordinals moved; the conversion rules sync and the alarm beacon's payloads (batch 2026-11-15-fluid-interfaces).
+        assertEquals("icheme-3", NetworkProtocol.VERSION);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 
@@ -107,6 +108,10 @@ class EquipmentNetworkCodecTest {
         var points = List.of(new Design(0, 0, VesselPlacement.Form.STEAM_TURBINE, 4, new VesselPlacement(3, 1, 0), Design.TRAYS, List.of(), Paint.DEFAULT,
                         com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, false, 0, null, List.of(), com.wormzjl.icheme.science.equipment.TowerBank.ONE,
                         com.wormzjl.icheme.science.equipment.MachineDuty.turbine(2500, com.wormzjl.icheme.science.equipment.MachineDuty.Steam.VHP, 10)),
+                // The LP class, the first ordinal on the wire (icheme-3).
+                new Design(0, 0, VesselPlacement.Form.STEAM_TURBINE, 4, new VesselPlacement(3, 1, 0), Design.TRAYS, List.of(), Paint.DEFAULT,
+                        com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, false, 0, null, List.of(), com.wormzjl.icheme.science.equipment.TowerBank.ONE,
+                        com.wormzjl.icheme.science.equipment.MachineDuty.turbine(800, com.wormzjl.icheme.science.equipment.MachineDuty.Steam.LP, 150)),
                 new Design(0, 0, VesselPlacement.Form.MOTOR, 2, new VesselPlacement(3, 1, 0), Design.TRAYS, List.of(), Paint.DEFAULT,
                         com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE, false, 0, null, List.of(), com.wormzjl.icheme.science.equipment.TowerBank.ONE,
                         com.wormzjl.icheme.science.equipment.MachineDuty.motor(4500, 6, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE)));

@@ -16,7 +16,8 @@ import java.util.Objects;
  * A steam turbine (batch 2026-11-03-rotating-machinery, W8, owner decision D43): the constructor's design point, rated power,
  * inlet steam class and exhaust, proposed from the tile's shaft power at design flow. Auto takes the smallest rated power of
  * {@link MachineDuty#POWERS} that holds the need with the {@link Motor#SPARE} (the owner's "always have enough excess"), on the
- * lowest steam class whose header holds the inlet, at the exhaust of {@link MachineDuty#EXHAUSTS} nearest the tile's. What the
+ * lowest steam class whose header holds the inlet, at the exhaust of {@link MachineDuty#TURBINE_EXHAUSTS} nearest the tile's (batch
+ * 2026-11-15-equipment-visual-design: below the LP header; a tile exhausting at or above it reads red on {@link Limit#TURBINE_EXHAUST}). What the
  * constructor refuses (a power outside the turbine's range, an exhaust above half its class's inlet) reads red on
  * {@link Limit#UNIT_SHAPE}; the tile itself refuses an exhaust at or above its inlet, so no steady run holds one.
  */
@@ -74,13 +75,14 @@ public final class TurbineSizing {
         // A ratio, not a share over the need: under the need it still ranks, so where nothing holds the spare Auto offers the largest.
         readings.add(Limit.TURBINE_SPARE.read(size.power() / load.power()));
         readings.add(Limit.TURBINE_INLET.against(load.inlet(), size.steam().pressure));
+        readings.add(Limit.TURBINE_EXHAUST.read(MachineDuty.Steam.LP.pressure - load.exhaust()));
         return new Rating(readings);
     }
 
-    /** The exhaust of {@link MachineDuty#EXHAUSTS} nearest {@code exhaust} (kPa) by ratio, the lower on a tie. */
+    /** The exhaust of {@link MachineDuty#TURBINE_EXHAUSTS} (below the LP header) nearest {@code exhaust} (kPa) by ratio, the lower on a tie. */
     static double exhaust(double exhaust) {
-        double best = MachineDuty.EXHAUSTS.getFirst(), far = Double.POSITIVE_INFINITY;
-        for (double e : MachineDuty.EXHAUSTS) {
+        double best = MachineDuty.TURBINE_EXHAUSTS.getFirst(), far = Double.POSITIVE_INFINITY;
+        for (double e : MachineDuty.TURBINE_EXHAUSTS) {
             double d = Math.abs(DeterministicMath.log(e / exhaust));
             if (d < far) {
                 far = d;

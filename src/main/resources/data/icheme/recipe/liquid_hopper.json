@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "I I",
+    "IHI",
+    " P "
+  ],
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "H": {
+      "item": "minecraft:hopper"
+    },
+    "P": {
+      "item": "icheme:fluid_pipe"
+    }
+  },
+  "result": {
+    "id": "icheme:liquid_hopper",
+    "count": 1
+  }
+}

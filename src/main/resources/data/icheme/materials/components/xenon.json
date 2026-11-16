@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Xenon",
+  "kind": "chemical",
+  "translation_key": "material.icheme.xenon",
+  "fallback": "Xenon",
+  "properties": "icheme:chemsep_xenon",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7440-63-3",
+    "chemsep_id": "959",
+    "smiles": "[Xe]",
+    "formula": "Xe"
+  }
+}

@@ -6,17 +6,17 @@ import java.io.File;
  * Writes the vessel sprites (batch 2026-10-15-custom-equipment-rendering, supports task), from a fixed
  * seed so the output is reproducible:
  * <ul>
- *   <li>vessel_shell.png 64x64: one plate length (fitted to the circumference) by two 2 m courses. A weld bead closes each
- *   course (bottom rows 63 and 31, shadow in the row below the bead); longitudinal seams are staggered: column 0 in the
- *   lower course, column 32 in the upper one.</li>
- *   <li>vessel_head.png 64x64: a pressed head, seamless; the tangent line weld on rows 0-1 (the sprite runs from the weld
- *   to the apex).</li>
+ *   <li>vessel_shell.png 64x64: 4 m of plate, seamless: no plate courses or weld seams (owner, 2026-11-15: "these should
+ *   not be visually presented"; batch 2026-11-15-equipment-visual-design, RELIEF_SPRITES_PLAN.md).</li>
+ *   <li>vessel_head.png 64x64: a pressed head, seamless, without its tangent line weld (the same rule).</li>
  *   <li>vessel_support.png 32x32: 2 m of painted support steel, darker, plain.</li>
  *   <li>equipment_*.png (process equipment task 2026-10-16), one per remaining Mesh.Material: 32x32 for 1 m of pipe and
- *   flange, 16x16 for the other 1 m parts (opening, grating, handrail, steelwork, machine, motor, actuator, feed, drain),
- *   32x32 for 2 m of cladding.</li>
+ *   flange, 16x16 for the other 1 m parts (opening, grating, handrail, steelwork, machine, motor, actuator, feed, drain).
+ *   The cladding sprites, with their band straps, are written by tools/pbr-textures/equipment_textures.py since
+ *   2026-11-15; equipment_feed.png and equipment_drain.png in the assets are no longer this tool's (32x32 there).</li>
  * </ul>
- * Run: java tools/custom-equipment-rendering-poc/textures/VesselTextures.java src/main/resources/assets/createcheme/textures/block
+ * Run: java tools/custom-equipment-rendering-poc/textures/VesselTextures.java <folder>, then copy the sprites a change
+ * touched into src/main/resources/assets/icheme/textures/block (the others there match this output bit for bit).
  */
 public class VesselTextures {
     public static void main(String[] args) throws Exception {
@@ -29,7 +29,6 @@ public class VesselTextures {
         ImageIO.write(line(PIPE), "png", new File(out, "equipment_pipe.png"));
         ImageIO.write(line(FLANGE), "png", new File(out, "equipment_flange.png"));
         ImageIO.write(opening(), "png", new File(out, "equipment_opening.png"));
-        ImageIO.write(cladding(), "png", new File(out, "equipment_cladding.png"));
         ImageIO.write(grating(), "png", new File(out, "equipment_grating.png"));
         ImageIO.write(plain(16, HANDRAIL, 6, .6), "png", new File(out, "equipment_handrail.png"));
         ImageIO.write(plain(16, STEELWORK, 7, .9), "png", new File(out, "equipment_steelwork.png"));
@@ -43,7 +42,6 @@ public class VesselTextures {
         ImageIO.write(paintedShell(), "png", new File(out, "painted_shell.png"));
         ImageIO.write(paintedHead(), "png", new File(out, "painted_head.png"));
         ImageIO.write(paintedPlain(32, 21, 2, .5), "png", new File(out, "painted_support.png"));
-        ImageIO.write(paintedCladding(), "png", new File(out, "painted_cladding.png"));
         ImageIO.write(paintedPlain(16, 23, 2.5, .5), "png", new File(out, "painted_steelwork.png"));
         ImageIO.write(paintedPlain(16, 24, 4, 1), "png", new File(out, "painted_machine.png"));
         if (args.length > 1) ImageIO.write(preview(), "png", new File(args[1]));
@@ -78,32 +76,19 @@ public class VesselTextures {
         return v << 16 | v << 8 | v;
     }
 
-    /** The painted shell: two 2 m courses as {@link #shell}, the welds only faintly brighter with a faint shadow. */
+    /** The painted shell: the painted metal, seamless. */
     static BufferedImage paintedShell() {
         var image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < 64; y++)
-            for (int x = 0; x < 64; x++) {
-                double shade = metal(x, y, 64, 25, 1, 1);
-                int seam = y >= 32 ? 0 : 32;
-                if (y == 63 || y == 31) shade += 4 + ripple(x) / 2;
-                else if (y == 0 || y == 32) shade -= 4;
-                else if (x == seam) shade += 3;
-                else if (x == seam + 1) shade -= 3;
-                image.setRGB(x, y, grey(shade));
-            }
+            for (int x = 0; x < 64; x++) image.setRGB(x, y, grey(metal(x, y, 64, 25, 1, 1)));
         return image;
     }
 
-    /** The painted head: pressed, seamless but for the tangent line weld, as faint as the shell's. */
+    /** The painted head: pressed, seamless. */
     static BufferedImage paintedHead() {
         var image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < 64; y++)
-            for (int x = 0; x < 64; x++) {
-                double shade = metal(x, y, 64, 26, 1, 1);
-                if (y == 0) shade += 4 + ripple(x) / 2;
-                else if (y == 1) shade -= 4;
-                image.setRGB(x, y, grey(shade));
-            }
+            for (int x = 0; x < 64; x++) image.setRGB(x, y, grey(metal(x, y, 64, 26, 1, 1)));
         return image;
     }
 
@@ -112,21 +97,6 @@ public class VesselTextures {
         var image = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < size; y++)
             for (int x = 0; x < size; x++) image.setRGB(x, y, grey(metal(x, y, size, seed, streak, .5) + (hash(x, y, seed + 7) - .5) * grain));
-        return image;
-    }
-
-    /** 2 m of jacketing as {@link #cladding}: the laps kept (overlapping sheets), softer, on a streaked sheet. */
-    static BufferedImage paintedCladding() {
-        var image = new BufferedImage(32, 32, BufferedImage.TYPE_INT_RGB);
-        for (int y = 0; y < 32; y++)
-            for (int x = 0; x < 32; x++) {
-                double shade = metal(x, y, 32, 27, 1, .6);
-                if (y == 0 || y == 11 || y == 21) shade += 7;
-                else if (y == 1 || y == 12 || y == 22) shade -= 8;
-                else if (x % 16 == 0) shade += 5;
-                else if (x % 16 == 1) shade -= 6;
-                image.setRGB(x, y, grey(shade));
-            }
         return image;
     }
 
@@ -198,24 +168,6 @@ public class VesselTextures {
         return image;
     }
 
-    /**
-     * 2 m of aluminium jacketing: panels 1 m wide (lapped seams at columns 0 and 16, bright edge then shadow) and about
-     * 0.67 m tall (circumferential laps at rows 0, 11 and 21), with faint weathering streaks.
-     */
-    static BufferedImage cladding() {
-        var image = new BufferedImage(32, 32, BufferedImage.TYPE_INT_RGB);
-        for (int y = 0; y < 32; y++)
-            for (int x = 0; x < 32; x++) {
-                double shade = plate(x, y, 32, 13) * .5 - 6 * hash(x, 0, 14) * (y % 11) / 11.0;
-                if (y == 0 || y == 11 || y == 21) shade += 14;
-                else if (y == 1 || y == 12 || y == 22) shade -= 16;
-                else if (x % 16 == 0) shade += 10;
-                else if (x % 16 == 1) shade -= 12;
-                image.setRGB(x, y, rgb(CLADDING, shade));
-            }
-        return image;
-    }
-
     /** Galvanised grating: bearing bars every other column, cross bars every fourth row, dark openings between. */
     static BufferedImage grating() {
         var image = new BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB);
@@ -238,30 +190,14 @@ public class VesselTextures {
     static BufferedImage shell() {
         var image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < 64; y++)
-            for (int x = 0; x < 64; x++) {
-                double shade = plate(x, y, 64, 1);
-                boolean lower = y >= 32;
-                int seam = lower ? 0 : 32;
-                // Course weld at the bottom of each course; its shadow on the row just below (wrapping).
-                if (y == 63 || y == 31) shade += 15 + ripple(x);
-                else if (y == 0 || y == 32) shade -= 22;
-                // Staggered longitudinal seams: bead, then its shadow to the right.
-                else if (x == seam) shade += 12 + ripple(y);
-                else if (x == seam + 1) shade -= 17;
-                image.setRGB(x, y, rgb(PAINT, shade));
-            }
+            for (int x = 0; x < 64; x++) image.setRGB(x, y, rgb(PAINT, plate(x, y, 64, 1)));
         return image;
     }
 
     static BufferedImage head() {
         var image = new BufferedImage(64, 64, BufferedImage.TYPE_INT_RGB);
         for (int y = 0; y < 64; y++)
-            for (int x = 0; x < 64; x++) {
-                double shade = plate(x, y, 64, 2);
-                if (y == 0) shade += 15 + ripple(x);
-                else if (y == 1) shade -= 20;
-                image.setRGB(x, y, rgb(PAINT, shade));
-            }
+            for (int x = 0; x < 64; x++) image.setRGB(x, y, rgb(PAINT, plate(x, y, 64, 2)));
         return image;
     }
 
@@ -277,11 +213,6 @@ public class VesselTextures {
         double grain = (hash(x, y, seed) - .5) * 12;
         double mottle = 3 * Math.sin(2 * Math.PI * (2 * x + y) / size + seed) + 2 * Math.sin(2 * Math.PI * (x - 3 * y) / size + 2 * seed);
         return grain + mottle;
-    }
-
-    /** A weld bead's ripples: brighter every other pixel. */
-    static double ripple(int i) {
-        return (i & 1) == 0 ? 4 : -2;
     }
 
     static double hash(int x, int y, int seed) {

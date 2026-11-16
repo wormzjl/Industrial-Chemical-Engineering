@@ -119,7 +119,7 @@ public final class RegistryRealignment {
         }
         for (java.util.UUID id; tally.checked < DEVICES && System.nanoTime() - start < BUDGET_NANOS && (id = controls.nextPanel(dimension)) != null; ) {
             try {
-                tally.add(panel(level, world, id));
+                tally.add(world.controls().facts().alarm(id) != null ? alarm(level, world, id) : panel(level, world, id));
             } catch (RuntimeException failed) {
                 tally.checked++;
                 IChemE.LOGGER.error("fluid_realign failed panel={}", id, failed);
@@ -163,7 +163,7 @@ public final class RegistryRealignment {
         var at = new BlockPos(d.position().x(), d.position().y(), d.position().z());
         if (!level.hasChunkAt(at)) return Check.NONE; // unloaded since: its next load queues it again
         if (d.position().lane() > 0) return lane(level, world, at, d);
-        var wanted = FluidDeviceBlock.stateFor(d);
+        var wanted = FluidDeviceBlock.stateFor(record);
         if (wanted == null) return Check.NONE;
         var present = level.getBlockState(at);
         Outcome outcome;
@@ -344,6 +344,35 @@ public final class RegistryRealignment {
         return new Check(outcome, held);
     }
 
+    /**
+     * Re-aligns the cell of alarm beacon {@code id} (batch 2026-11-15-fluid-interfaces, W9) to its facts, as a controller's:
+     * a missing beacon is placed where its cell is free, turned as its socket says; a cell another block holds keeps that
+     * block, and the beacon is not decided there (no hold).
+     */
+    public static Check alarm(ServerLevel level, FluidWorldAuthority world, java.util.UUID id) {
+        var facts = world.controls().facts();
+        var alarm = facts.alarm(id);
+        var port = facts.port(id);
+        if (alarm == null || port == null || !alarm.dimension().equals(level.dimension().location().toString())) return Check.NONE;
+        var at = alarm.position();
+        if (!level.hasChunkAt(at)) return Check.NONE;
+        var facing = AlarmBeaconBlock.facing(port, at);
+        var present = level.getBlockState(at);
+        Outcome outcome;
+        if (present.is(ModBlocks.ALARM_BEACON.get())) {
+            boolean turned = present.getValue(AlarmBeaconBlock.FACING) != facing;
+            if (turned) FluidDeviceBlock.quietly(() -> level.setBlock(at, present.setValue(AlarmBeaconBlock.FACING, facing), Block.UPDATE_ALL));
+            outcome = turned ? Outcome.RESTATED : Outcome.NOTHING;
+        } else if (present.isAir() || present.canBeReplaced()) {
+            var wanted = ModBlocks.ALARM_BEACON.get().defaultBlockState().setValue(AlarmBeaconBlock.FACING, facing);
+            FluidDeviceBlock.quietly(() -> level.setBlock(at, wanted, Block.UPDATE_ALL));
+            outcome = Outcome.PLACED;
+        } else return Check.NONE;
+        if (level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.AlarmBeaconBlockEntity beacon
+                && (!id.equals(beacon.identity()) || !port.equals(beacon.dataPort()))) world.controls().loaded(beacon);
+        return new Check(outcome, false);
+    }
+
     private static Check holdCable(ControlFacts facts, DataBus.Site site, boolean held) {
         if (held) return Check.NONE;
         facts.hold(site, true);
@@ -409,7 +438,7 @@ public final class RegistryRealignment {
 
     /** The block of {@code d} stands at {@code at}: it takes {@code d}'s facing, fittings and sight glass, and its identity. Whether anything changed. */
     private static boolean restate(ServerLevel level, FluidWorldAuthority world, BlockPos at, BlockState present, PhysicalFluidTopology.Device d) {
-        var fitted = sightGlass(FluidDeviceBlock.fittings(present, d), world, d.id());
+        var fitted = plate(sightGlass(FluidDeviceBlock.fittings(present, d), world, d.id()), world, d);
         // A lever's drawn position follows the commit, not a queued toggle (FluidDeviceBlockEntity.refreshGeometry).
         if (FluidDeviceBlock.hasShutoff(present) && FluidDeviceBlock.hasShutoff(fitted)) fitted = fitted.setValue(FluidDeviceBlock.SHUTOFF, present.getValue(FluidDeviceBlock.SHUTOFF));
         boolean changed = fitted != present;
@@ -435,7 +464,7 @@ public final class RegistryRealignment {
         FluidDeviceBlock.quietly(() -> level.setBlock(at, wanted, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE));
         if (!(level.getBlockEntity(at) instanceof FluidDeviceBlockEntity entity)) return;
         entity.bindIdentity(d.id());
-        var connected = sightGlass(FluidDeviceBlock.connectedState(level.getBlockState(at), level, at), world, d.id());
+        var connected = plate(sightGlass(FluidDeviceBlock.connectedState(level.getBlockState(at), level, at), world, d.id()), world, d);
         FluidDeviceBlock.quietly(() -> level.setBlock(at, connected, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE));
         // The neighbours meet the new block, or part from the one it replaced, as at a placement.
         connected.updateNeighbourShapes(level, at, Block.UPDATE_CLIENTS);
@@ -449,6 +478,17 @@ public final class RegistryRealignment {
      * that lies along the run. A glass the block already shows is kept. A run that cannot carry one stays bare, and the
      * record stays for the break to refund.
      */
+    /**
+     * {@code state} with the orifice plate the accessory store holds for pipe {@code d} (batch 2026-11-15-fluid-interfaces,
+     * W6), as {@link #sightGlass}: the record is the fact. A pipe that carries another fitting, or that cannot carry one,
+     * stays as it is, and the record stays for the break to refund.
+     */
+    private static BlockState plate(BlockState state, FluidWorldAuthority world, PhysicalFluidTopology.Device d) {
+        if (!state.hasProperty(FluidDeviceBlock.SHUTOFF) || FluidDeviceBlock.hasFitting(state) || FluidDeviceBlock.hasOrifice(state)) return state;
+        if (world.instruments().fitting(d.id()) != Instrument.Type.ORIFICE || !FluidDeviceBlock.supportsSightGlass(state)) return state;
+        return state.setValue(FluidDeviceBlock.SHUTOFF, FluidDeviceBlock.Shutoff.ORIFICE).setValue(FluidDeviceBlock.FACING, Direction.valueOf(d.facing().name()));
+    }
+
     private static BlockState sightGlass(BlockState state, FluidWorldAuthority world, long id) {
         if (state.getValue(FluidDeviceBlock.SIGHT_GLASS) || !FluidDeviceBlock.supportsSightGlass(state)) return state;
         if (world.instruments().fitting(id) != Instrument.Type.SIGHT_GLASS) return state;

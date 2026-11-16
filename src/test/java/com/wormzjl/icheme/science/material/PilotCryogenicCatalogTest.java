@@ -39,12 +39,13 @@ class PilotCryogenicCatalogTest {
      * is every record's revision (MaterialCatalogTest checks the composition), and the physics the packages share is
      * compared directly ({@link #TJL20_PHYSICS}). The refinery record is r3 since O11 of batch 2026-11-04-open-thermo-data
      * (decisions E25, E27): it holds CO2 on its ChemSep dataset and admits the CO2-I crystal, the only column or network
-     * package with a crystal. It is r4 since W6 of batch 2026-11-11-aqueous-solvents (ethanol joins icheme:refinery).
+     * package with a crystal. It is r4 since W6 of batch 2026-11-11-aqueous-solvents (ethanol joins icheme:refinery), r5
+     * since W1 of batch 2026-11-15-fluid-interfaces (the rare gases join it).
      */
     private static final String[][] BUNDLED_PINS = {
         {"icheme:tjl20_methane", "icheme:tjl20_methane@crude-regrouped-r3"},
         {"icheme:tjl20_methane_nitrogen", "icheme:tjl20_methane_nitrogen@crude-regrouped-r3"},
-        {"icheme:refinery", "icheme:refinery@refinery-tier1-r4"},
+        {"icheme:refinery", "icheme:refinery@refinery-tier1-r5"},
     };
     private static final String TJL20 = "icheme:tjl20_methane";
     /**
@@ -264,7 +265,7 @@ class PilotCryogenicCatalogTest {
     void spineAndCrystalRecordsNeedCoverageAndAKnownComponent() {
         refused(NITROGEN, o -> o.remove("coverage"), "coverage: required field");
         refused(NITROGEN, o -> o.getAsJsonObject("coverage").addProperty("grade", "good"), "coverage.grade: expected");
-        refused(NITROGEN, o -> o.addProperty("component", "Argon"), "component: unresolved Argon");
+        refused(NITROGEN, o -> o.addProperty("component", "Radon"), "component: unresolved Radon");
         refused(CRYSTAL, o -> o.remove("coverage"), "coverage: required field");
         refused(NITROGEN, o -> o.addProperty("revision", "spine nitrogen r1"), "revision: \"spine nitrogen r1\" must be a token");
     }
