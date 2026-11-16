@@ -29,7 +29,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * The help tours' coverage (batch 2026-11-12-tutorial-system, P1): every tour has at most 7 stops; every anchor of the
  * still's tour stands in the rows StillDoor and DeviceColumn build, for at least one still, at every width the door takes;
  * every anchor of the guide's tour stands on GuidePage; each screen either has a tour or is {@link #EXEMPT} (P6). P4b: the
- * still with a column has its own tour (its reflux valve), whose anchors stand on such a still's page; the simulator's four
+ * still with a column has its own tour (its reflux valve), whose anchors stand on such a still's page; the simulator's five
  * tabs have theirs (their anchors: SimulatorTourTest). P5 stage B: the column's assembly screen has one for each tab (their
  * anchors: AssemblyTourTest).
  */
@@ -40,7 +40,7 @@ class HelpCoverageTest {
      * the machine page, the control panel and the constructor theirs (ScreenTours; their anchors: ScreenToursTest).
      */
     static final Map<String, Set<String>> TOURED = Map.ofEntries(Map.entry("GuideScreen", Set.of("guide")), Map.entry("FluidDeviceScreen", devicePages()),
-            Map.entry("ProcessSimulatorScreen", Set.of("simulator.sheet", "simulator.results", "simulator.sizing", "simulator.basis")),
+            Map.entry("ProcessSimulatorScreen", Set.of("simulator.sheet", "simulator.results", "simulator.sizing", "simulator.materials", "simulator.basis")),
             Map.entry("AssemblyScreen", Set.of("assembly.structure", "assembly.operation")), Map.entry("GaugeScreen", Set.of(ScreenTours.GAUGE)),
             Map.entry("PipelineToolScreen", Set.of(ScreenTours.PIPELINE_TOOL)), Map.entry("VesselScreen", Set.of(ScreenTours.VESSEL)),
             Map.entry("MachineScreen", Set.of(ScreenTours.MACHINE)),
