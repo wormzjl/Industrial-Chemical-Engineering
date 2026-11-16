@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The P3 forms probe (batch 2026-11-16-supercritical-followups, P3_COLUMN_FEED_REVIEW.md) on one grid of
 # COLUMN_FEED_REVIEW.md. From the worktree root, after ./gradlew --offline testClasses --max-workers 4:
-#   bash tools/supercritical-probes/p3/run.sh coarse|dense|wet tmp/<name>
-# (wet: P3WetProbe, the lane fixes' wet grid and dry two-liquid scan, LANE_FIXES_REVIEW.md)
+#   bash tools/supercritical-probes/p3/run.sh coarse|dense|wet|medium tmp/<name>
+# (wet: P3WetProbe, the lane fixes' wet grid and dry two-liquid scan, LANE_FIXES_REVIEW.md;
+#  medium: P3MediumCrudeProbe, the cold one-liquid check of the medium crude, batch 2026-11-16-cdu17-fixture-removal)
 # Compiles against the built classes (the probe reads package-private members: it compiles only against the commit it
 # names, or one with the same members) and writes <name>/<grid>.tsv (summary, then the states) and <grid>.log.
 set -e
@@ -20,5 +21,6 @@ mkdir -p "$OUT/classes"
 javac -nowarn -cp "$CP" -d "$OUT/classes" $(find tools/supercritical-probes/p3/src -name '*.java')
 MAIN=P3FormsProbe
 [ "$1" = wet ] && MAIN=P3WetProbe
+[ "$1" = medium ] && MAIN=P3MediumCrudeProbe
 java -cp "$OUT/classes;$CP" com.wormzjl.icheme.science.column.v3.thermo.$MAIN "$1" "$OUT/$1.tsv" > "$OUT/$1.log" 2>&1
 echo "exit $?" >> "$OUT/$1.log"
