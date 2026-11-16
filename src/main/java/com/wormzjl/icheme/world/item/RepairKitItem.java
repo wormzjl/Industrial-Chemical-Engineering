@@ -60,7 +60,7 @@ public final class RepairKitItem extends Item {
         if (use == Use.PASS) return InteractionResult.PASS;
         if (!(player instanceof ServerPlayer server) || !(level instanceof ServerLevel serverLevel)) return InteractionResult.SUCCESS;
         if (use == Use.CONSTRUCTOR) {
-            server.displayClientMessage(Component.translatable(USE_CONSTRUCTOR), true);
+            if (server.connection != null) server.displayClientMessage(Component.translatable(USE_CONSTRUCTOR), true);
             return InteractionResult.FAIL;
         }
         if (!server.mayBuild() || !serverLevel.mayInteract(server, pos) || !server.canInteractWithBlock(pos, 1.0)) return InteractionResult.FAIL;

@@ -30,8 +30,10 @@ import java.util.List;
  * A blast breaches constructed equipment (batch 2026-11-15-pollution-system, WP6b): a 3 m drum holding nitrogen, an explosion
  * of power 4 (a TNT block's) 2 m from its west shell that breaks no block ({@link Level.ExplosionInteraction#NONE}). Within
  * {@link #BREACHED_WITHIN} ticks the drum's spec is breached, no cell of it is gone, and its graph inventory stands open
- * once the island applies the queued edit; a second breach queues nothing, and the repair ({@link FluidWorldAuthority#repair},
- * the repair kit's path) closes it again. The drum is removed at the end, its registration with it.
+ * once the island applies the queued edit; a second breach queues nothing; the drum is wrecked and the Equipment
+ * Constructor's repair refused (batch 2026-11-16-fouling-corrosion); the authority's low-level repair
+ * ({@link FluidWorldAuthority#repair}, the path a wall corroded through takes back) closes it again. The drum is removed
+ * at the end, its registration with it.
  */
 @GameTestHolder("icheme_fluid_test")
 @PrefixGameTestTemplate(false)
@@ -89,6 +91,7 @@ public final class PollutionBreachGameTests {
         var blast = origin.getCenter().add(-2, 1, 1);
         String[] failure = {null};
         long[] blasted = {0};
+        com.wormzjl.icheme.runtime.fluid.Integrity.Outcome[] wrecked = {null};
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(moles(world, id) > 10, "Waiting for nitrogen in the drum"))
                 .thenExecute(() -> {
@@ -108,6 +111,14 @@ public final class PollutionBreachGameTests {
                     for (var at : cells)
                         if (failure[0] == null && !EquipmentProtection.cell(level.getBlockState(at))) failure[0] = "the blast removed the cell at " + at.subtract(origin).toShortString();
                     if (failure[0] == null && world.breach(id)) failure[0] = "a second breach queued another edit";
+                    // Blast damage is final (batch 2026-11-16-fouling-corrosion): the drum is wrecked, the Equipment
+                    // Constructor's repair refused.
+                    if (failure[0] == null && !world.integrity().wrecked(id)) failure[0] = "the blast did not wreck the drum";
+                    world.queueStructureRepair(List.of(id), o -> wrecked[0] = o);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(wrecked[0] != null, "Waiting for the structure repair's answer"))
+                .thenExecute(() -> {
+                    if (failure[0] == null && wrecked[0] != com.wormzjl.icheme.runtime.fluid.Integrity.Outcome.WRECKED) failure[0] = "a wrecked drum was repaired: " + wrecked[0];
                 })
                 .thenWaitUntil(() -> {
                     var n = node(world, id);

@@ -3,6 +3,7 @@ package com.wormzjl.icheme.fluid.gametest;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
+import com.wormzjl.icheme.runtime.fluid.Integrity;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
@@ -27,8 +28,9 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 /**
  * Pump health in the world (batch 2026-11-03-rotating-machinery W10b, build plan revision 2, section 3.4): a creative motor
  * drives a constructed pump from a water supply held at about twice its NPSH3 into a tank. It cavitates and loses health
- * at its commits (its status line names its health); a repair kit used on its casing is accepted on the engine's tick
- * drain, taken from the player, and makes the pump new. The test removes everything it placed,
+ * at its commits (its status line names its health). A repair kit used on its casing is refused and kept: constructed
+ * equipment is repaired with the Equipment Constructor (batch 2026-11-16-fouling-corrosion, plan section 10), whose
+ * repair is refused while the pump delivers ({@link Integrity.Outcome#NOT_IDLE}). The test removes everything it placed,
  * before it passes or fails.
  */
 @GameTestHolder("icheme_fluid_test")
@@ -38,7 +40,7 @@ public final class PumpHealthGameTests {
     }
 
     @GameTest(template = "empty", timeoutTicks = 6000, batch = "pump-health")
-    public static void aCavitatingPumpLosesHealthAndAKitRestoresIt(GameTestHelper helper) {
+    public static void aCavitatingPumpLosesHealthAndRefusesAKitOnItsCasing(GameTestHelper helper) {
         var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(12, 10, 12));
         var level = plant.level;
         var world = plant.world;
@@ -46,6 +48,7 @@ public final class PumpHealthGameTests {
         long[] ids = new long[3];
         BlockPos[] casing = {null};
         ServerPlayer[] player = {null};
+        Integrity.Outcome[] outcome = {null};
         var sequence = helper.startSequence();
         try {
             plant.hold();
@@ -98,16 +101,15 @@ public final class PumpHealthGameTests {
                 var stack = p.getItemInHand(InteractionHand.MAIN_HAND);
                 var hit = new BlockHitResult(Vec3.atCenterOf(casing[0]), Direction.UP, casing[0], false);
                 var result = stack.getItem().onItemUseFirst(stack, new UseOnContext(p, InteractionHand.MAIN_HAND, hit));
-                if (!result.consumesAction()) failure[0] = "the kit was not used on the casing: " + result;
+                if (failure[0] == null && result.consumesAction()) failure[0] = "the kit was used on the casing: " + result;
+                if (failure[0] == null && p.getItemInHand(InteractionHand.MAIN_HAND).getCount() != 2) failure[0] = "the kit was taken on the casing";
+                // The Equipment Constructor's repair waits for the pump to stop.
+                world.queueStructureRepair(java.util.List.of(ids[2]), o -> outcome[0] = o);
             });
-            // Accepted on the tick drain: one kit taken, the pump new again.
-            sequence = sequence.thenWaitUntil(() -> {
-                if (failure[0] != null) return;
-                helper.assertTrue(player[0].getItemInHand(InteractionHand.MAIN_HAND).getCount() == 1, "Waiting for the kit to be taken: " + world.health().health(ids[2]));
-            }).thenExecute(() -> {
-                if (failure[0] != null) return;
-                double health = world.health().health(ids[2]);
-                if (health < .999) failure[0] = "the repair did not restore the pump: " + health;
+            sequence = sequence.thenWaitUntil(() -> helper.assertTrue(outcome[0] != null, "Waiting for the structure repair's answer")).thenExecute(() -> {
+                if (failure[0] == null && outcome[0] != Integrity.Outcome.NOT_IDLE) failure[0] = "a delivering pump was repaired: " + outcome[0];
+                Double health = world.health().health(ids[2]);
+                if (failure[0] == null && (health == null || !(health < 1))) failure[0] = "the refused repair changed the pump's health: " + health;
             });
         }
         sequence.thenExecute(() -> {
