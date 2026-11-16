@@ -317,7 +317,7 @@ The dry holdup is wrong for this pair. Hydrogen chloride alone, or ammonia alone
 
 - The same constant corrects the dry holdup: where a `salts` record names both ions, they return to the gases only up to `Kp` at the vessel's temperature. The rest stays in the vessel as dry residue on the two tags, as the salt of evaporated water does (plan 5.4), and is ions again when water returns. No new tag.
 
-- Kind `salts`: `base` and `acid` (compounds), `constant` (`ln Kp = a − b/T`), `density`, `solubility`.
+- Kind `salts`: `partners` (each a species with an exponent), `constant` (`ln K = a − b/T`), `density`, `solubility`. A partner's activity is its partial pressure if it is a compound in a gas, its molality if it is an ion tag on free water. The salt forms where the product of the activities, each to its exponent, exceeds `K`. Ammonium chloride: ammonia and hydrogen chloride, exponents 1 and 1, for which the formula below is written.
 - Law `salt_deposit`, at a heat side passage (a site class the plan has, 7.2), evaluated at the cadence on the committed state:
   - A side without free water at its colder end: with `p_b` and `p_a` the two gases' partial pressures and `T_c` the wall's colder end, the pressure that deposits is `δ = ½ [(p_a + p_b) − √((p_a − p_b)² + 4 Kp(T_c))]`, where it is positive. The deposit grows by `g · (δ/P) · gas flow · molar mass`, on the side's own area: `dRf/dt = rate / (density · deposit conductivity · area)`.
   - A side with free water at its colder end: no deposit, and the salt it holds dissolves at `water flow · solubility`: gone within one cadence at any practical rate. So a continuous wash keeps the side clean and a wash now and then cleans it, as in a plant.
@@ -326,6 +326,41 @@ The dry holdup is wrong for this pair. Hydrogen chloride alone, or ammonia alone
 - Under the deposit: a side that holds salt and whose gas holds water vapour corrodes at a stated rate (M13: 2.5 mm/y on carbon steel, recalled order of magnitude, with M12's material factors).
 - `g` = 10, in line with the coking law's 13: the hydrotreater of the table (0.54 kg/h of salt on 200 m²) reaches the `FOULED` level in 29 process hours without wash; a plant takes ten times as long.
 - Records: ammonium chloride now. Ammonium bisulfide and the H2S record of the speciation law come with the hydroprocessing and sour water design; no stream of this batch reaches its range (the crude overhead: −54 °C).
+
+**Cost** (owner, 2026-11-16: "how's the performance overhead?"). Counts, from the design; nothing is measured before the build.
+
+| Part | Where and when | Count |
+|---|---|---|
+| Gate | Server thread, the 5 s cadence | One bit test per island. An island without both gases pays nothing |
+| A dry side that may deposit | The same pass, inside its bound of 256 sites | Two partial pressures (the wall's digest already reads five gases'), one `exp`, one square root |
+| A wet side that holds salt | The same pass | One comparison, one subtraction |
+| The dry holdup's limit | The island's worker, inside the speciation solve, for a flagged vessel with both ions and no water | One `exp`, one square root. The restate was there already |
+| What the solver sees | | Nothing until the wall's deposit crosses a level of 5e-5 m²K/W. Then one restate, which recompiles the island, as today's fouling does (`Integrity.flushAndRestate`). The hydrotreater without wash: one per 2.9 process hours, about 520 intervals. A continuous wash: none. A wash that clears the salt: one |
+| Facts | | One number per wall |
+| The step's Newton, the kernel, the tag pass, the certificates | | No change |
+
+The alternative with a true solid, a salt phase inside the flash, would add a chemical equilibrium to every flash of every island that holds the gases, and a new way for a flash to fail. That is why the salt is kept outside the kernel, as the ions are.
+
+**How far the method reaches** (owner: "Is this a generalizable method?"). The method is: a product of activities against one constant at a site's temperature; the excess becomes a deposit on that wall, or a residue in that vessel, without mass; a solvent takes it back. A new case is a record.
+
+| Case | Partners | Fits |
+|---|---|---|
+| Ammonium chloride | Ammonia, hydrogen chloride | This batch |
+| Ammonium bisulfide | Ammonia, H2S | A record |
+| Amine hydrochlorides (neutralising amines in an overhead) | The amine, hydrogen chloride | A record per amine once it is a compound. Their salt points differ, which is how a refiner chooses one |
+| Ammonium carbamate (urea, a sour water stripper's overhead) | Ammonia twice, CO2 | A record, by the exponents |
+| Ammonium bisulfate in flue gas (air preheaters) | Ammonia, SO3, water | A record, once SO3 is a compound |
+| Water scale: calcium carbonate, calcium sulfate | Ion tags in the water | The same form on a wet side. It needs hardness tags, and would replace Kern–Seaton on water sides. Water does not take it back: cleaning does |
+| Salt left by evaporated water | Ion tags | The stranding rule exists (plan 5.4); the record's `solubility` would add the limit the plan leaves out |
+| Wax, sulfur or asphaltenes dropping out on a cold wall | One species above its solubility | The same site and fact, by `threshold_deposit` |
+| Gas hydrates | A gas and free water | The form fits. But hydrates plug pipes and valves, where nothing happens: only at heat sides and vessels |
+
+Where it does not reach:
+
+- An amount that matters to the stream, above about 1 % of it: a crystalliser, a sulfur condenser, urea, a coke drum. Nothing is taken from the stream here, so those need a real phase: a compound, a crystal of the kernel, or a solid population (plan 5.5).
+- Two gases meeting at per cent level. The error is the deposited share of the scarcer gas, which stays in the gas: parts per million in the cases above.
+- Second ionisations (carbonate, sulfide: spent caustic above pH 10 to 12). The speciation records carry one charge per mole; a chained record would extend them.
+- Where along a tube bank the salt lands, particles carried on, and rates: a side has one colder end and the equilibrium is taken as reached.
 
 Not proposed: a deposit that holds its nitrogen and chlorine exactly. It needs a material exchange at a passage, which the frame forbids, or the chloride kept as a tag between holdups, which the owner's choice of a compound (O1) ended.
 
