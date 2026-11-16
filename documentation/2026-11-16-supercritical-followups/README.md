@@ -32,6 +32,12 @@ line service and device pages, the column's feed flash by a stability test, the 
   the lang commit's selection (`affected.mjs select --since 132614789..e1446cfba`): `test` 69 classes, 482 tests;
   `holdGates` 8 classes, 57 tests; `columnGates` 1 class, 2 tests (from cache); `equipmentGates` `UnitTextTest`, 1 test;
   0 failures. `LanguageFilesTest` among them.
+- 2026-11-16: the final lane, sub-thread, once at `9b1dd2bd6` (`lane.sh head`): **not clean**. 3,964 tests, 2 failed
+  (`DeterministicMathSourceTest`: `PlungerPump` calls `Math.log1p`/`expm1`; `ColumnWaterTest.aLiquidThatWouldSettleIsANote`:
+  the feed flash refuses a wet unstable feed); `EngineDigestTest` passes on its reference; chain-100 exact; GameTests 114 of
+  114; junction lines 33 of 33 identical; campaign 0 refusals, four new wall-deadline holds (cold 6, bundled 47, 59, 707)
+  all clean on their one replay; 8 unannounced moved results (the W5 aqueous sheet STEADY → FAILED, three ethanol flows or
+  shares in the 4th to 5th digit, one packed size, three allocation counters). [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md).
 
 ## Documents
 
@@ -40,6 +46,7 @@ line service and device pages, the column's feed flash by a stability test, the 
 - [P1_PLUNGER_REVIEW.md](P1_PLUNGER_REVIEW.md): P1, the plunger pump's clearance and work: reference rows, moved values, runs.
 - [P4_SOUND_REVIEW.md](P4_SOUND_REVIEW.md): P4, the plunger pump's own sound: the real machine, the recipe, levels against the skill, the candidates.
 - [P2_READINGS_REVIEW.md](P2_READINGS_REVIEW.md): P2, one dense fluid in the level, sight glass, burst, line service and device pages: carbon dioxide at 310 K before and after, each point, runs.
+- [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane at `9b1dd2bd6`: selection, failures, moved results, campaign, GameTests.
 
 ## Code areas
 
