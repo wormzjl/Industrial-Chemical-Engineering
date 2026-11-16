@@ -174,7 +174,39 @@ One constant, `k_ij` = −1.23, reproduces the acid at 1 mol/kg at both temperat
 
 **Not checked.** A pair of −1.23 is far from any pair the solver has met. Its effect on flash robustness (the wet-oil false root, wet junctions) is a measurement of the build: the 200-seed quick check on worlds that hold the compound.
 
-**Proposal** (plan option O6): the pair fitted to the acid at 1 mol/kg, with the absorption to the tag kept as the owner described it, and capped at 1 mol/kg of water.
+**Proposal** (plan option O6): a fitted pair, with the absorption to the tag kept as the owner described it, and capped at 1 mol/kg of water. Section 4.4 changes the fit's target from the acid at 1 mol/kg to the azeotrope.
+
+### 4.4 Driving hydrogen chloride out of water with heat and vacuum
+
+Owner's question, 2026-11-16. Computed with `tmp/hcl-check/pr78-strip.mjs` (same stand-in).
+
+**Expected.** It does not leave dilute acid. Over 1 mol/kg acid at its boiling point the vapour holds 0.9 % of the liquid's share of hydrogen chloride at 1 atm and 0.1 % at 50 mmHg; at 100 ppm, 0.003 % and less. The water boils off first and the acid gets stronger, up to the azeotrope: 20.2 % by mass at 760 mmHg (381.7 K), 23.4 % at 50 mmHg (321.9 K) (Bonner and Wallace, **recalled**). From there acid and water leave together. Vacuum works against the aim: the acid's pressure falls faster on cooling than water's (75 against 44 kJ/mol). Hydrogen chloride comes off as a gas only from acid stronger than the azeotrope, from a vessel boiled dry, or with an azeotrope breaker (sulfuric acid, calcium chloride), which the mod does not have.
+
+**What one constant pair can do.** The cubic gives a maximum-boiling azeotrope, as the real acid has, but one `k_ij` cannot hold both ends:
+
+| `k_ij` | Vapour share at 1 mol/kg, 1 atm (real 0.009) | Azeotrope at 760 mmHg (real 20.2 %, 381.7 K) | At 50 mmHg (real 23.4 %, 321.9 K) | Drum share in water |
+|---|---|---|---|---|
+| −1.23 (the acid at 1 mol/kg) | 0.013 | None below 60 %; the boiling point runs away | 33.4 %, 325.2 K | 99.999 % |
+| −1.0 (the azeotrope) | 0.13 | 22.6 %, 378.7 K | 22.8 %, 317.6 K | 99.98 % |
+| −0.83 | 0.69 | 8.2 % | 8.6 % | 99.9 % |
+
+With −1.23 a player could boil acid to a strength that does not exist. With −1.0 strong acid is right and dilute acid is 15 times too volatile.
+
+**The tag closes the dilute end.** Up to 1 mol/kg the acid is the tag, which has no volatility: the real acid's is below 1 % of water's there. Above 1 mol/kg the excess is the compound, with the pair fitted to the azeotrope. Boiling 1 mol/kg acid away, tag and compound together:
+
+| Water gone | HCl gone, 760 mmHg | Acid, % by mass | HCl gone, 50 mmHg | Acid, % by mass |
+|---|---|---|---|---|
+| 50 % | 2 % | 6.7 | 1 % | 6.7 |
+| 80 % | 13 % | 13.7 | 7 % | 14.5 |
+| 90 % | 31 % | 20.1 | 25 % | 21.6 |
+| 98 % | 81 % | 25.5 | 81 % | 25.6 |
+
+- The acid levels at 25.6 % (378.6 K and 317.5 K), against 20.2 % and 23.4 %: the tag's 3.5 % is unseen by the cubic and adds to its azeotrope.
+- The model has no shift of the azeotrope with pressure; the real one moves 3 % by mass.
+- It loses too much hydrogen chloride on the way up (31 % at 90 % of the water gone; the real acid loses little before 20 %).
+- From refinery water (100 ppm) nothing leaves until 99.7 % of the water is gone, and a vessel boiled dry releases all of it: both as the real acid.
+
+**Proposal** (option O6, B): fit the pair to the azeotrope at 1 atm (about −1.0 on this stand-in; the kernel's own fit decides), and state the tag's rule in both directions: in a wet vessel the tag holds the acid up to 1 mol/kg of free water and the rest is the compound.
 
 ## 5. Not found, and open
 

@@ -194,7 +194,7 @@ How it is booked:
 3. The tag pass reads the interval's `SOLUTE` transfers and books the same chlorine on the tag side. Chlorine closes exactly across compound and tags (`TagLedgerTest`).
 
 - Absorption takes what the vessel holds at the interval's start; what arrives within the interval is taken at the next one. Until then the flash decides where it sits: this is why the pair with water matters (option O6).
-- Absorption stops at 1 mol of `acid_chloride` per kg of free water (pH 0, where M12 is already at its cap). Above it the compound stays a compound in the water, at the concentration the pair is fitted to. A tag has no mass, so without the cap a vessel fed hydrogen chloride on purpose would swallow it without limit.
+- One rule in both directions: in a wet vessel the tag holds the acid up to 1 mol per kg of free water (pH 0, where M12 is already at its cap) and the rest is the compound. Absorption stops there; where water boils off and the tag exceeds it, the excess becomes the compound again. A tag has no mass, so without the limit a vessel fed hydrogen chloride on purpose would swallow it without end, and acid could not be boiled to its azeotrope.
 - A unit on accounts does both on its accounts, with no solver part. A column gives all the `acid_chloride` and `HydrogenChloride` of its feed to its top product, as the compound (section 8.3).
 - An island that receives the compound and does not list it grows its list, as it does for a column outlet (`IslandSets`).
 - A junction, a pipe and a heat side exchange nothing. Between a heater and the next holdup the hydrolysis product travels as the tag.
@@ -260,13 +260,13 @@ What the compound needs of the data and the thermo model:
 | Formula | Chlorine joins `MaterialCatalog.FORMULA_ELEMENTS` and `Thermochemistry.ELEMENTS`. The heating value is 0 (it burns as an inert) |
 | Hazard | A `hazard` sub-record, so a vent, a flare or a leak of it reaches the air through the pollution system as it stands |
 | Pairs with hydrocarbons | The rule of the refinery compounds (DWSIM `kij_pr.dat`, else the DECHEMA value, else 0) gives 0 for every pair: none of the three files holds one. A fair value: its solubility in paraffins is near ideal (review 4.2) |
-| Pair with water | Open, option O6. Revision 2 stated `k_ij` = 0; at 0 the cubic keeps 99.7 % of the compound out of the water and a flowing drum loses it to its gas between two absorptions (review 4.3). Proposed: a library pair fitted on the kernel to the acid at 1 mol/kg (1.85e-5 atm at 25 °C, 7.4e-3 atm at 100 °C; `k_ij` about −1.23, one constant) |
+| Pair with water | Open, option O6. Revision 2 stated `k_ij` = 0; at 0 the cubic keeps 99.7 % of the compound out of the water and a flowing drum loses it to its gas between two absorptions (review 4.3). Proposed: a library pair, one constant, fitted on the kernel to the azeotrope at 1 atm (20.2 % by mass, 381.7 K; `k_ij` about −1.0). A fit to the dilute acid (−1.23) lets acid boil to a strength that does not exist (review 4.4) |
 | Flash | As any compound. At parts per million it needs no special case: the trace cutoff folds trace phases, not trace compounds, and the flush acts below 1e-24 |
 | Column | Not on V3's axis and in no neural seed: the running column and the simulator's column carry it on their accounts and give it whole to the top product, as inert particles go whole to the bottoms |
 | Identity | A compound added to a package moves no identity of a view without it: no world is restated |
 | Kernel, engine | No change: no electrolyte model, no new phase |
 
-With the fitted pair the flash itself puts the compound into the water wherever water is: in a wet stream, a junction, and a vessel between two absorptions. It leaves a wet vessel only with the water, and the next holdup's absorption turns it into the tag. The cubic's acid is then never older than one interval, so its errors away from 1 mol/kg (review 4.3) do not accumulate.
+With the fitted pair the flash itself puts the compound into the water wherever water is: in a wet stream, a junction, and a vessel between two absorptions. It leaves a wet vessel only with the water, and the next holdup's absorption turns it into the tag. Dilute acid, to 1 mol/kg, is the tag: it does not boil off, as the real acid does not (its volatility is below 1 % of water's). Stronger acid is the compound, and the pair decides how it boils: it levels at 25.6 % by mass against the real 20.2 % (1 atm) to 23.4 % (50 mmHg), and gives hydrogen chloride off above that (review 4.4). Heat and vacuum therefore do not strip dilute acid water, in the model as in a plant; a vessel boiled dry releases all of it.
 
 ### 8.4 Surface coking (`threshold_deposit`, a heat side that carries oil)
 
@@ -423,8 +423,8 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - **O5, the numbers** of sections 8 and 9 are game-level fits to the stated anchors, as the corrosion matrix is.
 - **O6, hydrogen chloride's pair with water** (review 4.3). No electrolyte model in any option.
   - **A, `k_ij` = 0** (revision 2). The flash puts 0.27 % of it in a drum's water; the absorption catches only what the vessel holds every 20 s of process time; most leaves with the off-gas. Not as intended.
-  - **B, a fitted pair and the absorption** (proposed). `k_ij` about −1.23: the flash puts 99.999 % in the water everywhere, the heat of solution appears, and the absorption still turns it into the tag on water, capped at 1 mol/kg. Risk: a pair this negative is new to the solver; the build measures it on the 200-seed quick check.
-  - **C, the fitted pair alone.** No absorption: the acid stays a compound in the water and M12 reads it there. Deletes the absorption and half of `SOLUTE`; keeps the release and the neutralisation. It departs from "aqueous phase solute", and the cubic's acid then lives for hours, with its errors when concentrated.
+  - **B, a fitted pair and the absorption** (proposed). `k_ij` about −1.0, fitted to the azeotrope: the flash puts 99.98 % in a drum's water everywhere, and the absorption still turns it into the tag on water, up to 1 mol/kg. Heat and vacuum do not strip dilute acid; strong acid boils to 25.6 % (real 20.2 to 23.4 %) and gives hydrogen chloride off above it. Known errors: no shift of the azeotrope with pressure, too much hydrogen chloride lost while the acid concentrates. Risk: a pair this negative is new to the solver; the build measures it on the 200-seed quick check.
+  - **C, the fitted pair alone.** No absorption: the acid stays a compound in the water and M12 reads it there. Deletes the absorption and half of `SOLUTE`; keeps the release and the neutralisation. It departs from "aqueous phase solute", and one constant is then wrong at one end: fitted to the azeotrope, dilute acid is 15 times too volatile; fitted to dilute acid, the azeotrope is lost.
 
 ## 17. Risks
 
