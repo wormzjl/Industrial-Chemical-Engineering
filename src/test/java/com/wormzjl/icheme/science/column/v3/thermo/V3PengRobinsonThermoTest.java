@@ -10,13 +10,12 @@ import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3PengRobinsonThermoTest {
-    private static final String PACKAGE_ID = "icheme:cdu17_tjl_acs2018";
-    private static final String ASSAY_ID = "icheme:tia_juana_light_kl1976";
+    private static final String PACKAGE_ID = com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_PACKAGE;
+    private static final String ASSAY_ID = com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_ASSAY;
 
     @Test
-    void registeredSampleCrudeHasTheDeclaredSixteenHydrocarbonBasisAndDefensiveAssayVector() {
+    void registeredMediumCrudeHasTheDeclaredNineteenHydrocarbonBasisAndDefensiveAssayVector() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE_ID);
         V3CrudeFeed crude = thermo.crudeFeed(ASSAY_ID);
         double[] copy = crude.moleFractions();
@@ -25,10 +24,11 @@ class V3PengRobinsonThermoTest {
         assertEquals(PACKAGE_ID, thermo.packageId());
         var current = com.wormzjl.icheme.science.material.MaterialRuntime.current();
         assertEquals(V3PengRobinsonThermo.columnIdentity(current, PACKAGE_ID), thermo.datasetRevision());
-        assertTrue(thermo.datasetRevision().startsWith(com.wormzjl.icheme.science.material.Cdu17TestCatalog.catalog().requirePackage(PACKAGE_ID).scientificRevision()));
-        assertEquals(16, thermo.componentBasis().componentCount());
+        assertTrue(thermo.datasetRevision().startsWith(current.requirePackage(PACKAGE_ID).scientificRevision()));
+        assertEquals(19, thermo.componentBasis().componentCount());
         assertEquals("Methane", thermo.componentBasis().componentId(0));
-        assertEquals("cdu17_pc12", thermo.componentBasis().componentId(15));
+        assertEquals("N-pentane", thermo.componentBasis().componentId(6));
+        assertEquals("crude_pc12", thermo.componentBasis().componentId(18));
         assertEquals(1.0, sum(crude.moleFractions()), 1.0e-12);
         assertTrue(crude.moleFractions()[0] < 1.0);
     }
@@ -63,12 +63,12 @@ class V3PengRobinsonThermoTest {
 
         assertEquals(V3FeedPhase.LIQUID, liquid.phase(), liquid::detail);
         assertEquals(0.0, liquid.vaporFraction());
-        assertEquals(16, liquid.liquidComposition().length);
+        assertEquals(19, liquid.liquidComposition().length);
         assertEquals(0, liquid.vaporComposition().length);
         assertEquals(V3FeedPhase.VAPOR, vapor.phase(), vapor::detail);
         assertEquals(1.0, vapor.vaporFraction());
         assertEquals(0, vapor.liquidComposition().length);
-        assertEquals(16, vapor.vaporComposition().length);
+        assertEquals(19, vapor.vaporComposition().length);
     }
 
     @Test
@@ -84,11 +84,12 @@ class V3PengRobinsonThermoTest {
 
         assertEquals(enthalpy, fugacity.molarEnthalpyJoulesPerMol(), 1.0e-9);
         assertTrue(Arrays.stream(fugacity.logFugacityCoefficients()).allMatch(Double::isFinite));
-        // 901 K is outside the package's data range, which never refuses (AGENTS.md, Thermo validity): the crude is a
+        // 921 K is outside the package's data range, which never refuses (AGENTS.md, Thermo validity): the crude is a
         // dilute vapour beyond its dew point (stable by the tangent-plane test on this kernel), lost at the vapour end at
-        // the second iteration and answered as one phase (batch 2026-11-15-supercritical-fluids, D1).
-        assertTrue(thermo.outsideDataRange(901.0, 250_000.0));
-        V3FlashResult hot = thermo.flashTP(901.0, 250_000.0, crude.moleFractions(), thermo.newWorkspace());
+        // the second iteration and answered as one phase (batch 2026-11-15-supercritical-fluids, D1). The medium crude's
+        // residue keeps a liquid to about 910 K at 250 kPa (99.75 % vapour at 901 K).
+        assertTrue(thermo.outsideDataRange(921.0, 250_000.0));
+        V3FlashResult hot = thermo.flashTP(921.0, 250_000.0, crude.moleFractions(), thermo.newWorkspace());
         assertEquals(V3FeedPhase.VAPOR, hot.phase(), hot::detail);
         assertEquals(2, hot.iterations());
         assertTrue(hot.detail().startsWith(V3FeedFlash.ONE_PHASE), hot::detail);
@@ -109,7 +110,12 @@ class V3PengRobinsonThermoTest {
     // repair is in place. * <p>The independent ninety-digit oracle and the physical-branch regressions for the
     // cubic itself moved to {@code science.thermo.PengRobinsonKernelRootPrecisionTest} with the kernel. This case
     // stayed here because it drives {@code V3FeedFlash}, which is the column's own flash, not the kernel's.</p>
-    private static final double[] CAPTURED_FEED = {
+    // Captured on the removed sixteen-component test package (C1, C2, C3, one C4 lump, PC01..12) and carried by id to
+    // the medium crude's package (the C4 lump on N-butane; the fixture removal of 2026-11-16). It sums to one.
+    private static final String[] CAPTURED_IDS = {"Methane", "Ethane", "Propane", "N-butane", "crude_pc01", "crude_pc02",
+            "crude_pc03", "crude_pc04", "crude_pc05", "crude_pc06", "crude_pc07", "crude_pc08", "crude_pc09", "crude_pc10",
+            "crude_pc11", "crude_pc12"};
+    private static final double[] CAPTURED_SHARES = {
             0.0, 0.0012538307614088564, 0.01125827896184405, 0.030567148542406393,
             0.1378591287206576, 0.06609502137128358, 0.11425564814222493, 0.05540489460148969,
             0.10058448104420363, 0.08801950204022142, 0.07490279910729795, 0.06483752146890542,
@@ -117,7 +123,10 @@ class V3PengRobinsonThermoTest {
 
     @Test
     void exactCapturedFeedFlashConvergesWithinTheUnchangedSixtyFourIterationBudget() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE_ID);
+        double[] CAPTURED_FEED = new double[thermo.componentBasis().componentCount()];
+        for (int i = 0; i < CAPTURED_IDS.length; i++)
+            CAPTURED_FEED[com.wormzjl.icheme.science.column.v3.V3TestInputs.index(thermo, CAPTURED_IDS[i])] = CAPTURED_SHARES[i];
         V3ThermoWorkspace workspace = thermo.newWorkspace();
         // Capture contains z after normalization: replay these exact doubles without normalizing a second time.
         System.arraycopy(CAPTURED_FEED, 0, workspace.normalizedOverall, 0, CAPTURED_FEED.length);
@@ -125,7 +134,7 @@ class V3PengRobinsonThermoTest {
 
         assertEquals(V3FeedPhase.TWO_PHASE, flash.phase());
         assertTrue(flash.iterations() > 0 && flash.iterations() <= 64, flash::detail);
-        assertEquals(0.7855276025697608, flash.vaporFraction(), 1.0e-9);
+        assertEquals(0.6382013326899407, flash.vaporFraction(), 1.0e-9);
         double[] x = flash.liquidComposition();
         double[] y = flash.vaporComposition();
         V3FugacityResult liquid = thermo.fugacity(638.15, 137250.0, x, Root.LIQUID, thermo.newWorkspace());

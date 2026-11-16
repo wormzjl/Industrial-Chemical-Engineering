@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3FeedFlashEquivalenceTest {
     @Test
     void rootMatchesFrozenHundredStepAlgorithmIncludingEndpointsAndInvalidInputs() throws Exception {
@@ -51,9 +51,10 @@ class V3FeedFlashEquivalenceTest {
     void completeFlashAndFailureOutcomesMatchFrozenMain() {
         int successes = 0;
         int failures = 0;
-        for (String packageId : new String[]{"icheme:cdu17_tjl_acs2018", "icheme:tjl19_dwsim"}) {
+        for (String packageId : new String[]{com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_PACKAGE, "icheme:tjl19_dwsim"}) {
             V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
-            double[] overall = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(packageId)).moleFractions();
+            double[] overall = thermo.crudeFeed("icheme:tjl19_dwsim".equals(packageId) ? com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.LITERATURE_ASSAY_ID
+                    : com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_ASSAY).moleFractions();
             for (double temperature : new double[]{298.15, 323.15, 500, 638.15, 900}) {
                 for (double pressure : new double[]{50_000, 110_000, 267_250}) {
                     V3ThermoWorkspace oldWorkspace = thermo.newWorkspace();
@@ -99,14 +100,21 @@ class V3FeedFlashEquivalenceTest {
     // Merged from V3FeedFlashTest.
     @Test
     void convergedLiquidEndpointDoesNotPublishAnInfinitesimalVaporPhase() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        // A 50 Celsius crude-condenser outlet whose Wilson guess starts inside the two-phase bracket.
-        double[] composition = {0.0, 0.002221751374857895, 0.019949047354192243, 0.054160836655037715,
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_PACKAGE);
+        // A 50 Celsius crude-condenser outlet whose Wilson guess starts inside the two-phase bracket, captured on the
+        // removed sixteen-component test package and carried by id (its C4 lump on N-butane; the fixture removal of
+        // 2026-11-16).
+        String[] ids = {"Methane", "Ethane", "Propane", "N-butane", "crude_pc01", "crude_pc02", "crude_pc03", "crude_pc04",
+                "crude_pc05", "crude_pc06", "crude_pc07", "crude_pc08", "crude_pc09", "crude_pc10", "crude_pc11", "crude_pc12"};
+        double[] captured = {0.0, 0.002221751374857895, 0.019949047354192243, 0.054160836655037715,
                 0.2442251337042464, 0.11704483090680007, 0.20198741266388825, 0.09732234881493797,
                 0.17093587548826125, 0.0881394158911579, 0.003960475367106011, 5.245952693290889e-5,
                 4.11295543900127e-7, 9.5703604528816e-10, 1.4138582777064319e-15, 2.3450168525575994e-27};
+        double[] composition = new double[thermo.componentBasis().componentCount()];
+        for (int i = 0; i < ids.length; i++) composition[com.wormzjl.icheme.science.column.v3.V3TestInputs.index(thermo, ids[i])] = captured[i];
 
-        V3FlashResult flash = thermo.flashTP(323.15, 110_000.0, composition, thermo.newWorkspace());
+        // At 90 kPa on this basis (at 110 kPa its Wilson endpoint already classifies it as liquid).
+        V3FlashResult flash = thermo.flashTP(323.15, 90_000.0, composition, thermo.newWorkspace());
 
         assertTrue(flash.iterations() > 0);
         assertEquals(V3FeedPhase.LIQUID, flash.phase(), flash::detail);
