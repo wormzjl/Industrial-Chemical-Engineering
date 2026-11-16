@@ -208,6 +208,35 @@ With −1.23 a player could boil acid to a strength that does not exist. With �
 
 **Proposal** (option O6, B): fit the pair to the azeotrope at 1 atm (about −1.0 on this stand-in; the kernel's own fit decides), and state the tag's rule in both directions: in a wet vessel the tag holds the acid up to 1 mol/kg of free water and the rest is the compound.
 
+### 4.5 Is an electrolyte model necessary? (hydrogen chloride now, amine absorption of H2S later)
+
+Owner's question, 2026-11-16. Not computed with the kernel; the numbers below are ideal mass action from recalled constants and show shapes, not magnitudes.
+
+**What the systems do.** Each is an acid or a base that turns into ions in water, and only its molecular part has a pressure.
+
+| System | Law of the molecular part | What follows |
+|---|---|---|
+| Hydrogen chloride (strong acid) | `p = (γ m)² / K` | The apparent Henry constant moves over 4 decades with strength (4.3); an azeotrope (4.4) |
+| H2S or CO2 in an amine | `H2S + amine ⇌ amineH⁺ + HS⁻`: free H2S proportional to `α² / (1 − α)`, α the loading in mol per mol of amine | 80 000 times between a loading of 0.01 and 0.9; the capacity ends near 1 mol per mol of amine; the constant falls about 7 times from 40 to 120 °C (MDEA), which is why a regenerator works |
+| Sour water (NH3 with H2S or CO2) | `NH3 + H2S ⇌ NH4⁺ + HS⁻` | Each holds the other in the water: at 0.1 mol/kg of both, 93 % of the H2S is ionic at 25 °C and 64 % at 120 °C |
+| Caustic, ammonia against acid | Charge balance | pH, neutralisation |
+
+**What a cubic with pairs can and cannot do.** A pair gives a solubility that is linear in the dissolved amount, has no capacity and does not depend on a third compound. It cannot give a loading curve, a saturation at 1 mol per mol, or ammonia holding hydrogen sulfide. Hydrogen chloride already showed it: one constant fits one strength (4.4), and the plan's limit of 1 mol/kg, its neutralisation rule and M12's pH formula are three hand-made pieces of a speciation.
+
+**So: three levels.**
+
+| Level | What it is | Enough for | Not enough for | Cost |
+|---|---|---|---|---|
+| 0, rules per substance (plan revision 2 with O6) | A fitted pair, a tag, a limit | Refinery water at parts per million, corrosion | Any amine or sour water unit | In the plan |
+| 1, speciation at the exchange sites | One law for all: mass action with fitted constants `K(T)` and Henry constants, activity coefficients inside the constants (the class of Kent and Eisenberg 1976 for amines, of Edwards et al. 1978 and API's SWEQ for sour water: **recalled**). Evaluated in wet holdups at an interval's start and on each stage of a unit on accounts (absorber, regenerator, sour water stripper). Never inside the step's Newton | Loading curves, capacity, regeneration, heat of absorption (from `K(T)`), pH, neutralisation, the corrosion inputs | Acid gas flashing out of rich amine in plain network equipment between two exchange sites; a gas met within an interval (4.3); strong acid as a bulk liquid | One small module (a one-dimensional root in pH per wet holdup that holds a listed compound); no kernel change |
+| 2, electrolyte thermodynamics in the kernel | Speciation and ion activity inside every fugacity (electrolyte NRTL, or a chemical term in the excess energy of the Huron–Vidal rule) | Everything, everywhere, at every strength | | A kernel batch of the size of the aqueous solvents redesign: a speciation solve and its derivatives in every fugacity call, Java and native; phases are found from the physics, so the ions must fade smoothly outside water-rich phases; every reference moves |
+
+**Answer.** A full electrolyte activity model (level 2) is not necessary for this batch or for amine units at game depth. A speciation law (level 1) is necessary for amine absorption and sour water; pairs cannot replace it. It is small, and hydrogen chloride should already be built on it: then the limit, the neutralisation and the pH are its outputs and no later acid or base needs a rule of its own.
+
+**One thing level 1 leaves open for amines.** The bound gas is not a trace: at a loading of 0.5 it is 7 % of the rich solution's mass (H2S in 50 % MDEA) to 10 % (CO2 in 30 % MEA). A tag has no mass, so the bound form must be a compound there (a salt compound with the mass of both, held in the water by its pair), not a tag. The exchange of plan 7.4 must therefore allow a compound on both sides. Whether such a salt compound behaves in the cubic (no fourth phase, no share in the oil) is a measurement of the amine batch; if it does not, that batch needs level 2.
+
+**Not known.** Ideal mass action misses measured amine loadings by about a factor of 10 at 4 mol/kg of ions (**recalled** data against my estimate), which is why the constants must be the fitted ones; they are not read yet. Kent–Eisenberg is weak below a loading of 0.05 and for H2S with CO2 together (**recalled**).
+
 ## 5. Not found, and open
 
 - The numeric table of hydrochloric acid corrosion in API RP 581 Part 2 Annex B. The plan's M12 anchors are recalled.
