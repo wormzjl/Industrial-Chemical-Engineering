@@ -56,7 +56,15 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
     public record Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
                          List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
                          @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns, com.wormzjl.icheme.science.equipment.TowerBank towerBank, String name,
-                         MachineDuty duty, com.wormzjl.icheme.science.equipment.ExchangerType exchangerType, com.wormzjl.icheme.science.equipment.BatchStillOptions still) {
+                         MachineDuty duty, com.wormzjl.icheme.science.equipment.ExchangerType exchangerType, com.wormzjl.icheme.science.equipment.BatchStillOptions still,
+                         com.wormzjl.icheme.science.integrity.Metallurgy material) {
+        /** A design of carbon steel (shape fields 13): every design saved before the material of construction. */
+        public Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
+                      List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
+                      @org.jetbrains.annotations.Nullable ColumnDesign column, List<ColumnTrays.Turn> turns, com.wormzjl.icheme.science.equipment.TowerBank towerBank, String name,
+                      MachineDuty duty, com.wormzjl.icheme.science.equipment.ExchangerType exchangerType, com.wormzjl.icheme.science.equipment.BatchStillOptions still) {
+            this(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,name,duty,exchangerType,still,com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);
+        }
         /** A design with the default still options (a batch still's, shape fields 11; every other form carries them). */
         public Design(double diameter, int tangentLength, VesselPlacement.Form form, int support, VesselPlacement placement, ColumnTrays trays,
                       List<EquipmentShape.Connection> connections, Paint paint, ProcessUnit.Bank bank, boolean boot, int outlet,
@@ -87,18 +95,26 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
 
         /** This design whose structure is built named {@code value} (cleaned; empty: unnamed). */
         public Design withName(String value) {
-            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,value,duty, exchangerType, still);
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,value,duty, exchangerType, still, material);
         }
         public Design withExchangerType(com.wormzjl.icheme.science.equipment.ExchangerType value) {
-            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,name,duty,value,still);
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,name,duty,value,still,material);
+        }
+
+        /**
+         * This design built of {@code value} (shape fields 13, batch 2026-11-16-fouling-corrosion). Kept across a form switch;
+         * a form whose structure registers no fluid device builds carbon steel ({@link #shape}).
+         */
+        public Design withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy value) {
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,name,duty,exchangerType,still,value);
         }
 
         /** This design with batch still options {@code value} (W6: the constructor's heater, condenser and stages). */
         public Design withStill(com.wormzjl.icheme.science.equipment.BatchStillOptions value) {
-            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,name,duty,exchangerType,value);
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,towerBank,name,duty,exchangerType,value,material);
         }
         public Design withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank value) {
-            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,value,name,duty, exchangerType, still);
+            return new Design(diameter,tangentLength,form,support,placement,trays,connections,paint,bank,boot,outlet,column,turns,value,name,duty, exchangerType, still, material);
         }
         /** A new column's trays: twenty, fed in the middle. */
         public static final ColumnTrays TRAYS = ColumnTrays.simple(20, 10);
@@ -136,6 +152,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
 
         public Design {
             Objects.requireNonNull(exchangerType);
+            if (material == null) material = com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL;
             if (still == null) still = com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT;
             Objects.requireNonNull(form, "form");
             Objects.requireNonNull(placement, "placement");
@@ -158,13 +175,19 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
             shape(diameter, tangentLength, form, support, trays, connections, bank, boot, outlet, column, turns, duty, EquipmentShape.Heading.NORTH);
         }
 
-        public EquipmentShape shape(Direction facing) {
+        private EquipmentShape layoutShape(Direction facing) {
             return shape(diameter, tangentLength, form, support, trays, connections, bank, boot, outlet, column, turns, duty, form.front(facing.getStepX(), facing.getStepZ())).withTowerBank(form.kind()==EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER?towerBank:com.wormzjl.icheme.science.equipment.TowerBank.ONE).withExchangerType(form.kind()==EquipmentShape.Kind.EXCHANGER?exchangerType:com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD).withStill(form.kind()==EquipmentShape.Kind.BATCH_STILL?still:com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT);
+        }
+
+        /** The shape built facing {@code facing}: as {@link #shape(Direction)} built, of this design's material where it registers a fluid device, else carbon steel. */
+        public EquipmentShape shape(Direction facing) {
+            var built = layoutShape(facing);
+            return built.withMaterial(built.fluidDevice() ? material : com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);
         }
 
         /** This design with the column's side nozzles turned as {@code next}. */
         public Design withTurns(List<ColumnTrays.Turn> next) {
-            return new Design(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, next, towerBank, name, duty, exchangerType, still);
+            return new Design(diameter, tangentLength, form, support, placement, trays, connections, paint, bank, boot, outlet, column, next, towerBank, name, duty, exchangerType, still, material);
         }
 
         /** Whether this design builds: anything but a column without an imported design. */
@@ -179,7 +202,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         public Design imported(ColumnDesign imported) {
             double d = imported.diameter();
             return new Design(d, tangentLength, VesselPlacement.Form.COLUMN, Math.max(support, EquipmentShape.minimumSkirt(d)), placement, trays, connections, paint,
-                    bank, boot, 0, imported, turns,towerBank, name, duty, exchangerType, still);
+                    bank, boot, 0, imported, turns,towerBank, name, duty, exchangerType, still, material);
         }
 
         /**
@@ -189,7 +212,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
          * fields are kept; a lying drum laid crosswise stays crosswise.
          */
         public Design landed(com.wormzjl.icheme.science.equipment.SentDesign sent) {
-            if (sent.column() != null) return imported(sent.column());
+            if (sent.column() != null) return imported(sent.column()).withMaterial(sent.shape().material());
             var shape = sent.shape();
             var kind = shape.kind();
             VesselPlacement.Form to = null;
@@ -201,13 +224,13 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
             boolean drum = kind == EquipmentShape.Kind.DRUM;
             var fitted = drum ? EquipmentShape.defaultConnections(shape.diameter(), length, shape.orientation(), shape.support(), shape.boot(), shape.outlet()) : connections;
             return new Design(shape.diameter(), length, to, shape.support(), placement, trays, fitted, paint, kind == EquipmentShape.Kind.AIR_COOLER ? shape.bank() : bank,
-                    drum ? shape.boot() : boot, shape.outlet(), column, turns, kind == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER ? shape.towerBank() : towerBank, name, shape.duty(), kind == EquipmentShape.Kind.EXCHANGER ? shape.exchangerType() : exchangerType, kind == EquipmentShape.Kind.BATCH_STILL ? shape.still() : still);
+                    drum ? shape.boot() : boot, shape.outlet(), column, turns, kind == EquipmentShape.Kind.INDUCED_DRAFT_COOLING_TOWER ? shape.towerBank() : towerBank, name, shape.duty(), kind == EquipmentShape.Kind.EXCHANGER ? shape.exchangerType() : exchangerType, kind == EquipmentShape.Kind.BATCH_STILL ? shape.still() : still, shape.material());
         }
 
         /** {@code edited}, a design the player sent, with this design's imported column: only an import sets it. */
         public Design keepingColumn(Design edited) {
             return new Design(edited.diameter, edited.tangentLength, edited.form, edited.support, edited.placement, edited.trays, edited.connections, edited.paint,
-                    edited.bank, edited.boot, edited.outlet, column, edited.turns,edited.towerBank, name, edited.duty, edited.exchangerType, edited.still);
+                    edited.bank, edited.boot, edited.outlet, column, edited.turns,edited.towerBank, name, edited.duty, edited.exchangerType, edited.still, edited.material);
         }
 
         /** The shape; an outlet the form does not turn to is refused ({@link EquipmentShape#outlets}); a machine carries its design point. */
@@ -322,6 +345,8 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         if(tag.contains("Still",net.minecraft.nbt.Tag.TAG_COMPOUND)){var still=tag.getCompound("Still");var list=new java.util.ArrayList<String>();
             design=design.withStill(com.wormzjl.icheme.science.equipment.BatchStillOptions.read(still.contains("Heater")?still.getString("Heater"):null,still.contains("Condenser")?still.getString("Condenser"):null,still.contains("Stages")?still.getInt("Stages"):null,list));
             list.forEach(repairs);}
+        // The material of construction (shape fields 13), as a shell saves it: absent is carbon steel with no repair.
+        if(tag.contains("Material"))design=design.withMaterial(ShapeRepair.material("material",tag.getString("Material"),repairs));
         if(!tag.contains("TowerBank"))return design;
         try{return design.withTowerBank(com.wormzjl.icheme.science.equipment.TowerBank.decode(tag.getIntArray("TowerBank")));}
         catch(IllegalArgumentException invalid){repairs.accept("tower bank -> one cell: "+invalid.getMessage());return design;}
@@ -433,6 +458,7 @@ public final class EquipmentConstructorBlockEntity extends BlockEntity {
         if (!design.turns().isEmpty()) tag.put("Turns", ColumnDesignTags.writeTurns(design.turns()));
         DeviceNames.write(tag, design.name());
         if (!design.duty().equals(MachineDuty.NONE)) tag.put("Duty", EquipmentShellBlockEntity.writeDuty(design.duty()));
+        if (design.material() != com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL) tag.putString("Material", design.material().name());
     }
 
     /** Server: the process simulator nearest this constructor within {@code reach} blocks, whose designs its Import lists; empty when there is none. A read: nothing is solved. */

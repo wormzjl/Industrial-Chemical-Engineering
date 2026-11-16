@@ -337,7 +337,12 @@ public final class ConstructorColumn {
      * the reach of a column's import in blocks, and a machine's design point ({@link MachineDuty#NONE} for another form).
      */
     public record Design(VesselPlacement.Form form, double diameter, int length, int support, int forward, int right, int up, ProcessUnit.Bank bank,
-                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still) {
+                         @Nullable Imported column, Outlet outlet, int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still,
+                         com.wormzjl.icheme.science.integrity.Metallurgy material) {
+        /** The draft of carbon steel (shape fields 13). */
+        public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,@Nullable Imported column,Outlet outlet,int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank,MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still) {
+            this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,towerBank,duty,exchangerType,still,com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);
+        }
         /** The draft of a form with the default still options. */
         public Design(VesselPlacement.Form form,double diameter,int length,int support,int forward,int right,int up,ProcessUnit.Bank bank,@Nullable Imported column,Outlet outlet,int reach,com.wormzjl.icheme.science.equipment.TowerBank towerBank,MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
             this(form,diameter,length,support,forward,right,up,bank,column,outlet,reach,towerBank,duty,exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT);
@@ -421,6 +426,7 @@ public final class ConstructorColumn {
         if (form.designed() && UnitDesign.of(form.kind()).hasDuty()) rows.addAll(machine(in, t));
         else rows.add(new Column.Group(t.get(KEY + "group.size"), t.get(KEY + "shift"), size));
         if (form.kind() == EquipmentShape.Kind.BATCH_STILL) rows.addAll(still(in.still(), t));
+        if (EquipmentShape.fluidDevice(form.kind())) rows.add(material(in.material(), t));
         // A bottom outlet leaving through the skirt turns where the design lets it (a trickle-bed reactor's effluent).
         if (form.designed() && Integer.bitCount(in.outlet().allowed()) > 1) rows.add(outlet(in.outlet(), t));
         var place = new ArrayList<Column.Row>();
@@ -449,6 +455,27 @@ public final class ConstructorColumn {
             rows.set(beforePlacement,new Column.Group(group.title(),group.hint(),controls));
         }
         return new Page(rows,base.footer(),base.display());
+    }
+
+    /**
+     * The structure's material of construction (batch 2026-11-16-fouling-corrosion, WP3; shape fields 13; owner decision
+     * D2: one a structure): a selector of the four, each with its name and cost index (shown, not charged: owner O2), its
+     * hover the material's place. Only a form whose structure registers a fluid device shows it; another builds carbon
+     * steel. Keys {@code material:<constant>}.
+     */
+    static Column.Group material(com.wormzjl.icheme.science.integrity.Metallurgy current, HeatControlColumn.Texts t) {
+        var choices = new ArrayList<Column.Button>();
+        for (var m : com.wormzjl.icheme.science.integrity.Metallurgy.values()) {
+            String id = m.name().toLowerCase(java.util.Locale.ROOT);
+            choices.add(position("material:" + m.name(), t.get(KEY + "material.choice", t.get("metallurgy." + id), cost(m.cost())), m == current,
+                    t.get(KEY + "material." + id + ".hint")));
+        }
+        return new Column.Group(t.get(KEY + "group.material"), t.get(KEY + "group.material.hint"), List.of(new Column.Buttons(choices)));
+    }
+
+    /** A cost index as the selector shows it: whole where it is whole (×15), else one decimal. */
+    static String cost(double index) {
+        return index == Math.rint(index) ? Long.toString((long) index) : UnitDesign.number(index);
     }
 
     /**

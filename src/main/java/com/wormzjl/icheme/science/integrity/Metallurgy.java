@@ -119,8 +119,14 @@ public enum Metallurgy {
 
     /** The constant saved as {@code name}, by its name or an alias; {@link #CARBON_STEEL} for null or an unknown name. */
     public static Metallurgy byName(String name) {
-        if (name == null) return CARBON_STEEL;
+        var named = named(name);
+        return named == null ? CARBON_STEEL : named;
+    }
+
+    /** The constant saved as {@code name}, by its name or an alias; null for null or a name this build does not have. */
+    public static Metallurgy named(String name) {
+        if (name == null) return null;
         for (var m : values()) if (m.name().equals(name)) return m;
-        return ALIASES.getOrDefault(name, CARBON_STEEL);
+        return ALIASES.get(name);
     }
 }

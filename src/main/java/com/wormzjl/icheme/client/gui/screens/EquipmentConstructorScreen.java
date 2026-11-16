@@ -107,6 +107,8 @@ public final class EquipmentConstructorScreen extends Screen {
     private com.wormzjl.icheme.science.equipment.ExchangerType exchangerType;
     /** A batch still's heater, condenser and stages (W6); the default for another form. */
     private com.wormzjl.icheme.science.equipment.BatchStillOptions still=com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT;
+    /** The material of construction (shape fields 13): kept across pages and form switches; a form without a fluid device builds carbon steel. */
+    private com.wormzjl.icheme.science.integrity.Metallurgy material = com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL;
     private ColumnTrays trays;
     /** The column design imported from a column calculator, the only one a column is built from (plan 2026-10-26, section 4.5); null before an import. */
     private @Nullable ColumnDesign column;
@@ -204,6 +206,7 @@ public final class EquipmentConstructorScreen extends Screen {
         duty = design.duty();
         exchangerType=design.exchangerType();
         still=design.still();
+        material = design.material();
         boot = design.boot();
         outlet = design.outlet();
         support = Math.max(design.support(), minimumSupport());
@@ -231,7 +234,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The draft; always valid, because every stepper is clamped to the bounds of its parameter. */
     public Design design() {
         return new Design(diameter, tangentLength, form, support, new VesselPlacement(forward, right, up), trays, List.copyOf(connections), paint, bank, hasBoot(), outlet(),
-                column, List.copyOf(turns), towerBank, name, duty,exchangerType,still);
+                column, List.copyOf(turns), towerBank, name, duty,exchangerType,still,material);
     }
 
     private static Skin skin() {
@@ -315,7 +318,7 @@ public final class EquipmentConstructorScreen extends Screen {
             case CHOOSE -> ConstructorColumn.choose(category != null ? category : Equipment.of(form).category, Equipment.of(form), EquipmentNetwork.IMPORT_REACH, EquipmentConstructorScreen::tr);
             case DESIGN -> ConstructorColumn.design(new ConstructorColumn.Design(form, diameter, tangentLength, support, forward, right, up, bank,
                     form.column() ? new ConstructorColumn.Imported(column != null ? column.diameter() : diameter, shownTrays().trays() + 2, shownTrays().feed() + 1) : null,
-                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty,exchangerType,still),
+                    new ConstructorColumn.Outlet(outlets(), outlet(), words()), EquipmentNetwork.IMPORT_REACH,towerBank,duty,exchangerType,still,material),
                     !form.designed()&&!form.column()?connectionInput():null,form.column()?nozzleInput():null,EquipmentConstructorScreen::tr);
             case PAINT -> ConstructorColumn.paint(channel, EquipmentConstructorScreen::tr);
             case TEMPLATES -> ConstructorColumn.templates(templateKeys(), templates.unreadable(), EquipmentConstructorScreen::tr);
@@ -465,6 +468,7 @@ public final class EquipmentConstructorScreen extends Screen {
         String what = colon < 0 ? key : key.substring(0, colon), at = colon < 0 ? "" : key.substring(colon + 1);
         switch (what) {
             case "exchanger" -> {exchangerType=com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(at);rebuildWidgets();}
+            case "material" -> {material = com.wormzjl.icheme.science.integrity.Metallurgy.byName(at);rebuildWidgets();}
             case "still_heater" -> {still=still.withHeater(com.wormzjl.icheme.science.equipment.BatchStillOptions.Heater.valueOf(at));refresh();}
             case "still_condenser" -> {still=still.withCondenser(com.wormzjl.icheme.science.equipment.BatchStillOptions.Condenser.valueOf(at));refresh();}
             case "category" -> {

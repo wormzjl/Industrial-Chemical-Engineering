@@ -705,6 +705,9 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
             tag.put("Still", still);
         }
         if (shape.designed() && com.wormzjl.icheme.science.equipment.UnitDesign.of(shape.kind()).hasDuty()) tag.put("Duty", writeDuty(shape.duty()));
+        // The material of construction (shape fields 13, batch 2026-11-16-fouling-corrosion) by name, only when it is not
+        // carbon steel: absent reads carbon steel, so a carbon steel structure's image stays as before the field.
+        if (shape.material() != com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL) tag.putString("Material", shape.material().name());
     }
 
     /**
@@ -713,6 +716,12 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
      */
     public static ShapeRepair.Read readShape(CompoundTag tag) {
         var read=ShapeRepair.read(saved(tag));
+        if (read.shape() != null && tag.contains("Material")) {
+            // Shape fields 13: absent is carbon steel with no repair; a name this build does not have reads carbon steel, a repair.
+            var repairs = new java.util.ArrayList<>(read.repairs());
+            var material = ShapeRepair.material("material", tag.getString("Material"), repairs::add);
+            read = new ShapeRepair.Read(read.shape().withMaterial(material), read.retired(), repairs);
+        }
         if(read.shape()!=null && tag.contains("ExchangerType")) {
             // An exchanger's type by name (shape fields 9): a name this build does not have reads standard, a repair.
             var repairs = new java.util.ArrayList<>(read.repairs());

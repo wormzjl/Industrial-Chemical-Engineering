@@ -4658,5 +4658,17 @@
   "chat.icheme.breach": "%s was breached by an explosion.",
   "chat.icheme.breach.unnamed": "The equipment at %1$s, %2$s, %3$s was breached by an explosion.",
   "message.icheme.repair_kit.use_constructor": "Repair this with the Equipment Constructor.",
-  "chat.icheme.repair_kit.not_idle": "Flow passes this device: stop the flow through it before you repair it."
+  "chat.icheme.repair_kit.not_idle": "Flow passes this device: stop the flow through it before you repair it.",
+  "gui.icheme.metallurgy.carbon_steel": "Carbon steel",
+  "gui.icheme.metallurgy.chrome_steel": "Chrome steel",
+  "gui.icheme.metallurgy.stainless_steel": "Stainless steel",
+  "gui.icheme.metallurgy.nickel_alloy": "Nickel alloy",
+  "gui.icheme.equipment_constructor.group.material": "Material",
+  "gui.icheme.equipment_constructor.group.material.hint": "What the whole structure is built of, with its cost index against carbon steel. The index is shown, not charged.",
+  "gui.icheme.equipment_constructor.material.choice": "%1$s ×%2$s",
+  "gui.icheme.equipment_constructor.material.carbon_steel.hint": "Dry and clean service. Corrosion allowance 3 mm, up to 540 °C.",
+  "gui.icheme.equipment_constructor.material.chrome_steel.hint": "9Cr-1Mo: hot sulfur oil and heater tubes. Corrosion allowance 3 mm, up to 650 °C.",
+  "gui.icheme.equipment_constructor.material.stainless_steel.hint": "316L: wet acid gas, naphthenic acid and hot H2S. Corrosion allowance 1.5 mm, up to 815 °C.",
+  "gui.icheme.equipment_constructor.material.nickel_alloy.hint": "Alloy 625: everything, at a price. Corrosion allowance 1.5 mm, up to 980 °C.",
+  "gui.icheme.vessel.material": "Material: %1$s, corrosion allowance %2$s mm"
 }

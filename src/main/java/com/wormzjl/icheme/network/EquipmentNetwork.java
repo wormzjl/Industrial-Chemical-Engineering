@@ -48,7 +48,8 @@ import java.util.Optional;
  * structure takes. A machine's design point rides on the constructor's design too (protocol 18, batch
  * 2026-11-03-rotating-machinery), and a batch still's heater, condenser and stages (protocol 22, batch 2026-11-09-batch-distiller, W6).
  * The far silhouettes' subscription ({@link SilhouetteWatch}) and the registry's records it answers with ({@link SilhouetteBatch};
- * protocol 23, batch 2026-11-10-custom-shader-system, W10).
+ * protocol 23, batch 2026-11-10-custom-shader-system, W10). The structure's material of construction rides on the design
+ * by name (protocol {@code icheme-5}, batch 2026-11-16-fouling-corrosion, WP3); a name the server does not have reads carbon steel.
  */
 public final class EquipmentNetwork {
     /** A player edits or builds only within this distance of the constructor, blocks. */
@@ -73,7 +74,12 @@ public final class EquipmentNetwork {
      * ({@link ColumnTrays#encodeTurns}), a machine's design point {@code duty}), and what to do with it.
      */
     public record ConstructorPayload(BlockPos position, double diameter, int tangentLength, int form, int support, int forward, int right, int up,
-                                     int[] trays, int[] connections, int[] paint, int[] bank, boolean boot, int outlet, int[] turns, Action action, int[] towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still) implements CustomPacketPayload {
+                                     int[] trays, int[] connections, int[] paint, int[] bank, boolean boot, int outlet, int[] turns, Action action, int[] towerBank, MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still,
+                                     com.wormzjl.icheme.science.integrity.Metallurgy material) implements CustomPacketPayload {
+        /** A design before the material of construction (protocol {@code icheme-5}): carbon steel. */
+        public ConstructorPayload(BlockPos position,double diameter,int tangentLength,int form,int support,int forward,int right,int up,int[] trays,int[] connections,int[] paint,int[] bank,boolean boot,int outlet,int[] turns,Action action,int[] towerBank,MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions still) {
+            this(position,diameter,tangentLength,form,support,forward,right,up,trays,connections,paint,bank,boot,outlet,turns,action,towerBank,duty,exchangerType,still,com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL);
+        }
         public ConstructorPayload(BlockPos position,double diameter,int tangentLength,int form,int support,int forward,int right,int up,int[] trays,int[] connections,int[] paint,int[] bank,boolean boot,int outlet,int[] turns,Action action,int[] towerBank,MachineDuty duty,com.wormzjl.icheme.science.equipment.ExchangerType exchangerType) {
             this(position,diameter,tangentLength,form,support,forward,right,up,trays,connections,paint,bank,boot,outlet,turns,action,towerBank,duty,exchangerType,com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT);
         }
@@ -85,7 +91,8 @@ public final class EquipmentNetwork {
             public ConstructorPayload decode(RegistryFriendlyByteBuf b) {
                 return new ConstructorPayload(b.readBlockPos(), b.readDouble(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(), b.readVarInt(),
                         b.readVarInt(), b.readVarIntArray(ColumnTrays.MAX_ENCODED), b.readVarIntArray(3 * EquipmentShape.MAX_CONNECTIONS), b.readVarIntArray(2), b.readVarIntArray(2), b.readBoolean(), b.readVarInt(),
-                        b.readVarIntArray(3 * ColumnTrays.MAX_TURNS), b.readEnum(Action.class), b.readVarIntArray(2), readDuty(b),com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(b.readUtf(64)),readStill(b));
+                        b.readVarIntArray(3 * ColumnTrays.MAX_TURNS), b.readEnum(Action.class), b.readVarIntArray(2), readDuty(b),com.wormzjl.icheme.science.equipment.ExchangerType.valueOf(b.readUtf(64)),readStill(b),
+                        com.wormzjl.icheme.science.integrity.Metallurgy.byName(b.readUtf(64)));
             }
 
             public void encode(RegistryFriendlyByteBuf b, ConstructorPayload p) {
@@ -108,6 +115,7 @@ public final class EquipmentNetwork {
                 writeDuty(b, p.duty);
                 b.writeUtf(p.exchangerType.name(),64);
                 b.writeEnum(p.still.heater());b.writeEnum(p.still.condenser());b.writeVarInt(p.still.stages());
+                b.writeUtf(p.material.name(), 64);
             }
         };
 
@@ -115,7 +123,7 @@ public final class EquipmentNetwork {
             var p = design.placement();
             return new ConstructorPayload(position, design.diameter(), design.tangentLength(), design.form().ordinal(), design.support(), p.forward(), p.right(), p.up(),
                     design.trays().encode(), EquipmentShape.Connection.encode(design.connections()), design.paint().encode(), design.bank().encode(), design.boot(), design.outlet(),
-                    ColumnTrays.encodeTurns(design.turns()), action,design.towerBank().encode(), design.duty(),design.exchangerType(),design.still());
+                    ColumnTrays.encodeTurns(design.turns()), action,design.towerBank().encode(), design.duty(),design.exchangerType(),design.still(),design.material());
         }
 
         /**
@@ -128,7 +136,7 @@ public final class EquipmentNetwork {
             if (form < 0 || form >= forms.length) throw new IllegalArgumentException("Unknown form " + form);
             return stored.keepingColumn(new EquipmentConstructorBlockEntity.Design(diameter, tangentLength, forms[form], support, new VesselPlacement(forward, right, up),
                     ColumnTrays.decode(trays), EquipmentShape.Connection.decode(connections), Paint.decode(paint), ProcessUnit.Bank.decode(bank), boot, outlet, null,
-                    ColumnTrays.decodeTurns(turns),com.wormzjl.icheme.science.equipment.TowerBank.decode(towerBank), duty).withExchangerType(exchangerType).withStill(still));
+                    ColumnTrays.decodeTurns(turns),com.wormzjl.icheme.science.equipment.TowerBank.decode(towerBank), duty).withExchangerType(exchangerType).withStill(still).withMaterial(material == null ? com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL : material));
         }
 
         @Override

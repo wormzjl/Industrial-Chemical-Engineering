@@ -83,6 +83,11 @@ class EquipmentShapeCompatTest {
         // Shape fields 12 (batch 2026-11-10-vacuum-pump, owner V5): a vacuum top held by a liquid ring pump on the receiver.
         shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)),
                 COMPONENTS.withVacuum(ColumnComponents.Vacuum.LIQUID_RING)), Heading.SOUTH, EquipmentShape.minimumSkirt(3)));
+        // Shape fields 13 (batch 2026-11-16-fouling-corrosion, WP3): every material of construction but carbon steel.
+        shapes.add(EquipmentShape.drum(2, 4, Orientation.VERTICAL, Heading.NORTH, 2).withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.STAINLESS_STEEL));
+        shapes.add(EquipmentShape.unit(Kind.EXCHANGER, 1.5, 6, Heading.EAST, 3).withExchangerType(ExchangerType.CROSSFLOW).withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.CHROME_STEEL));
+        shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS), Heading.WEST,
+                EquipmentShape.minimumSkirt(3)).withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY));
         return shapes;
     }
 
@@ -113,6 +118,65 @@ class EquipmentShapeCompatTest {
         assertEquals(List.of("still stages 12 -> 0"), read.repairs());
         // Every other kind writes no still options.
         assertFalse(saved(EquipmentShape.unit(Kind.PUMP, .05, 1, Heading.EAST, 0)).contains("Still"));
+    }
+
+    /**
+     * The material of construction (shape fields 13): saved by name, only when it is not carbon steel, so a carbon steel
+     * shape's tags are those of before the field; a shape saved without it is carbon steel with no repair (so its cells are
+     * not stale); a name this build does not have reads carbon steel and is named. Not part of the layout.
+     */
+    @Test
+    void aMaterialReadsByNameAndAnUnknownOneIsRepairedToCarbonSteel() {
+        var drum = EquipmentShape.drum(2, 4, Orientation.VERTICAL, Heading.NORTH, 2);
+        assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL, drum.material());
+        assertFalse(saved(drum).contains("Material"));
+        for (var material : com.wormzjl.icheme.science.integrity.Metallurgy.values()) {
+            var shape = drum.withMaterial(material);
+            var tag = saved(shape);
+            assertEquals(material != com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL, tag.contains("Material"), material.name());
+            var read = EquipmentShellBlockEntity.readShape(tag);
+            assertEquals(shape, read.shape(), material.name());
+            assertTrue(read.repairs().isEmpty(), material + ": " + read.repairs());
+            assertEquals(ShapeRasterizer.legacyStamp(drum), ShapeRasterizer.legacyStamp(shape), "the material is not part of the layout");
+            assertEquals(ShapeRasterizer.layoutRevision(drum), ShapeRasterizer.layoutRevision(shape));
+        }
+        var stainless = saved(drum.withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.STAINLESS_STEEL));
+        var old = stainless.copy();
+        old.remove("Material");
+        var read = EquipmentShellBlockEntity.readShape(old);
+        assertEquals(drum, read.shape());
+        assertTrue(read.repairs().isEmpty(), read.repairs().toString());
+        var empty = stainless.copy();
+        empty.putString("Material", "");
+        read = EquipmentShellBlockEntity.readShape(empty);
+        assertEquals(drum, read.shape());
+        assertTrue(read.repairs().isEmpty(), read.repairs().toString());
+        var unknown = stainless.copy();
+        unknown.putString("Material", "TITANIUM");
+        read = EquipmentShellBlockEntity.readShape(unknown);
+        assertEquals(drum, read.shape());
+        assertEquals(List.of("material TITANIUM -> CARBON_STEEL"), read.repairs());
+    }
+
+    /** A constructor's draft keeps its material across a save and a load, and builds it only on a structure that registers a fluid device. */
+    @Test
+    void aConstructorKeepsItsMaterialAcrossAReload() {
+        var fresh = EquipmentConstructorBlockEntity.Design.DEFAULT;
+        var design = fresh.withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY);
+        var tag = new CompoundTag();
+        EquipmentConstructorBlockEntity.writeDesign(tag, design);
+        var repairs = new ArrayList<String>();
+        var read = EquipmentConstructorBlockEntity.readDesign(tag, fresh, repairs::add);
+        assertTrue(repairs.isEmpty(), repairs.toString());
+        assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY, read.material());
+        assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY, read.shape(net.minecraft.core.Direction.NORTH).material());
+        var plain = new CompoundTag();
+        EquipmentConstructorBlockEntity.writeDesign(plain, fresh);
+        assertFalse(plain.contains("Material"));
+        assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL, EquipmentConstructorBlockEntity.readDesign(plain, fresh, repairs::add).material());
+        tag.putString("Material", "TITANIUM");
+        assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL, EquipmentConstructorBlockEntity.readDesign(tag, fresh, repairs::add).material());
+        assertEquals(List.of("material TITANIUM -> CARBON_STEEL"), repairs);
     }
 
     private static CompoundTag saved(EquipmentShape shape) {
@@ -498,9 +562,9 @@ class EquipmentShapeCompatTest {
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
      * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank; 6: a
      * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
-     * point; 11: a batch still's options; 12: what holds a column's vacuum top).
+     * point; 11: a batch still's options; 12: what holds a column's vacuum top; 13: the material of construction).
      */
-    private static final int SHAPE_FIELDS = 12;
+    private static final int SHAPE_FIELDS = 13;
 
     /** A column's components as an image written before the member counts shows them. */
     private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
@@ -575,6 +639,8 @@ class EquipmentShapeCompatTest {
                     if (!expected.contains("exchangerType=")) expected = expected.substring(0, expected.length() - 1) + ", exchangerType=STANDARD]";
                     // Shape fields 11: a shape saved before the still options has the default ones.
                     if (!expected.contains("still=")) expected = expected.substring(0, expected.length() - 1) + ", still=" + BatchStillOptions.DEFAULT + "]";
+                    // Shape fields 13: a shape saved before the material of construction is carbon steel.
+                    if (!expected.contains("material=")) expected = expected.substring(0, expected.length() - 1) + ", material=CARBON_STEEL]";
                     if(!expected.contains("baseSpeed="))expected=expected.replaceAll("(exhaust=[0-9.Ee+-]+)\\]","$1, baseSpeed=0.0]");
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }
