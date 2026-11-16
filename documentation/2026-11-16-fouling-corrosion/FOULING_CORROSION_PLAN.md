@@ -1,6 +1,8 @@
-# Fouling, corrosion and erosion system: plan (revision 8)
+# Fouling, corrosion and erosion system: plan (revision 9)
 
 Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0), rebased on `main` at `66a87f9d5` (0.33.0) on 2026-11-16 (the owner's word). Status: plan, no code.
+
+Revision 9 (owner, 2026-11-16: "build it now", decision D13): a liquid's film follows its viscosity at every sampled point of the heat curve, so a deposit weighs on heavy oil as it does in a real plant (sections 12, 15).
 
 Revision 8 (owner, 2026-11-16: "10x", decision D12): corrosion and fouling ten times slower by default, the corrosion year 200 process hours and the fouling time constant 100 (sections 6.5, 8, 12, 13.1, 15).
 
@@ -309,7 +311,7 @@ At the cadence the service reads `PollutionService.index(dimension, origin, CORR
 - State: `Rf` per heat side, a fact, 0 to 0.002 m²K/W.
 - Effect: `HeatCurve.Films.fouled(Rf)` (section 3.2) and the passage's section diameter less `2 Rf k_d`.
 - The graph changes only in steps of 0.0001 m²K/W: when a side's level changes, one queued respecify edit gives it its new films and diameter. Between steps the solver's inputs are bit for bit the same.
-- Sizing: the simulator's exchanger, cooler and heater rows size on a design `Rf` per side (the service's asymptote), so a unit sent to the block meets its duty dirty. This closes the two `SIZING_PLAN.md` rows.
+- Sizing: the simulator's exchanger, cooler and heater rows size on a design `Rf` per side (the service's asymptote), so a unit sent to the block meets its duty dirty. This closes the two `SIZING_PLAN.md` rows. Since the viscous film (D13) the crude sample's E-101 needs 2.20 times its clean surface on the design deposit (1422 against 647 m², 2.36 on the fixed film) and E-102 1.22 times (1243 against 1016 m², 1.30 before).
 - Words: `FOULED` from `Rf` ≥ 0.001; the heat page shows `Rf` and the clean-to-now duty ratio.
 
 **Decided (O1, owner 2026-11-16): a placeholder grows `Rf` until the reaction module exists.** Kern–Seaton, `dRf/dt = (Rf∞ − Rf)/τ` while the side flows, `τ` = 100 process hours (config; D12, 10 under O1: 25 hours of play at time factor 4 to 63 % of `Rf∞`), `Rf∞` from the digest:
@@ -379,6 +381,7 @@ The owner's, 2026-11-16:
 - D8: repairs of constructed equipment with the constructor; the repair kit kept for in-line pumps and compressors and control valve trims.
 - D11 (owner, 2026-11-16: "Yes, 0.06"): chrome steel's sulfidation factor is 0.06, not 0.12. At 0.12 a crude heater at 365 °C read 0.19 mm/y on chrome steel, over the 0.1 mm/y the Materials tab calls green, so Auto took stainless; at 0.06 chrome steel stays green to about 380 °C at 0.6 wt% sulfur (0.14 at 400 °C).
 - D12 (owner, 2026-11-16: "10x"; section 6.5): ten times slower by default. The corrosion year is 200 process hours (D3's 20 h), the fouling time constant 100 process hours (O1's 10 h); the column's trays use the same constant. A carbon steel wall in crude at 370 °C is through after 460 process hours, 115 hours of play, where it was 11.5.
+- D13 (owner, 2026-11-16: "build it now"; section 12): a liquid's film follows its viscosity. In turbulent flow at one mass flow and bore Dittus–Boelter's Nu = 0.023 Re^0.8 Pr^0.4 gives the film μ^-0.4: the liquid film is the reference 2000 W/m²K times φ = min(1, (μ_ref/μ)^0.4), μ_ref = 1 mPa·s (water at 20 °C; it and every thinner liquid keep 2000), never below the gas film (100 W/m²K, reached at 1.79 Pa·s). 3 mPa·s gives 1289 W/m²K, 10 mPa·s 796, 30 mPa·s 513. It is a resistance in series with the film, as a deposit is: `R_μ = (1/φ − 1)/2000`, at most 0.0095 m²K/W (`HeatCurve.viscous`), so a fouled viscous liquid's film is `1/(1/2000 + Rf + R_μ)`, and an air cooler takes it inside its tubes, before the air. The viscosity is the network's liquid viscosity at each sampled point of the heat curve where the liquid film has weight (the curve keeps each knot's `R_μ`, so a re-filming reads no flash); the boiling or condensing film and the gas film stay. Why: with one film for every liquid a heavy-oil exchanger had a clean coefficient near 1000 W/m²K where a real one has 300 to 500, so the same TEMA deposit weighed two to three times heavier than in a real plant.
 - D10 (section 13.1): a column that carries solids fouls its trays and loses wall with the solid share; the numbers are the agent's, open to the owner.
 - Revision 2: a smaller material list (four); columns pass inert particles and stop only for freezing; particulate erosion, control valves first.
 

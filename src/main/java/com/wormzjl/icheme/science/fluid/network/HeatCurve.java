@@ -289,7 +289,8 @@ public final class HeatCurve {
      * change is bisected to {@link #BOUNDARY_KELVIN}, other segments are refined while the midpoint's temperature lies more than 0.2 K off
      * the chord, and knots at the vapour fractions {@link #LIQUID_UNTIL} and {@link #GAS_FROM} are placed along h, where
      * the vapour fraction is linear: a pure component's plateau, which has no other inner knot, so takes the two-phase
-     * film between them. Solids, if any, are not on the curve.
+     * film between them. Solids, if any, are not on the curve. Each point where the liquid film has weight reads its liquid's
+     * viscosity once, for its viscous resistance ({@link #viscous(double)}, decision D13 of batch 2026-11-16-fouling-corrosion).
      */
     public static HeatCurve sample(FluidThermodynamics model,double[] amounts,double pressure,double low,double high,Films films,Runnable checkpoint) {
         if(!(low>0)||!(high>low)||!Double.isFinite(high))throw new IllegalArgumentException("Invalid curve span");
