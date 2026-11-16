@@ -174,6 +174,21 @@ public final class MaterialCatalog {
         }
     }
     /**
+     * A dataset's corrosion data, its optional {@code corrosion} sub-record (batch 2026-11-16-fouling-corrosion, plan section
+     * 6.4): the sulfur of a compound whose formula carries none (a crude cut, CHx), wt% (0 to 10); its acid number, mg KOH/g
+     * (0 to 20); its fouling number, m²K/W (0 to 0.002); whether estimated, its source and the sub-record's own revision.
+     * Read by the integrity laws ({@link MaterialCatalog#sulfurShares}); in no saved state, so like {@link Hazard} it is in no
+     * identity. A compound with sulfur in its formula needs no record.
+     */
+    public record Corrosion(double sulfurMassPercent, double acidNumber, double fouling, boolean estimated, String source, String revision) {
+        public Corrosion {
+            Objects.requireNonNull(source); Objects.requireNonNull(revision);
+            if (!(sulfurMassPercent >= 0 && sulfurMassPercent <= 10)) throw new IllegalArgumentException("sulfur_mass_percent: must lie in [0, 10]");
+            if (!(acidNumber >= 0 && acidNumber <= 20)) throw new IllegalArgumentException("acid_number: must lie in [0, 20]");
+            if (!(fouling >= 0 && fouling <= .002)) throw new IllegalArgumentException("fouling: must lie in [0, 0.002]");
+        }
+    }
+    /**
      * A dataset's or water model's lower heating value, its optional {@code combustion} sub-record (batch
      * 2026-11-09-furnace-fuel-power, owner decision F2): J/mol of the ideal gas at 298.15 K burnt to CO2, H2O (gas), SO2
      * and N2, prebuilt from the record's {@link Thermochemistry} by {@code tools/heating-values}; 0 for a record that gives
@@ -241,7 +256,7 @@ public final class MaterialCatalog {
      * {@link MaterialCatalog#fluidRevision}, and the spine and crystal records (the column refuses such packages) record by
      * record in {@link MaterialCatalog#spineRevision}. Assays are compositions, not physics: no identity carries them, and
      * neither do a dataset's freezing, thermochemistry, flammability and hazard sub-records ({@link Freezing}, {@link Thermochemistry},
-     * {@link Flammability}, {@link Hazard}), which no phase model reads, nor its {@code group_counts} ({@link GroupCounts}) and
+     * {@link Flammability}, {@link Hazard}, {@link Corrosion}), which no phase model reads, nor its {@code group_counts} ({@link GroupCounts}) and
      * {@code henry_in_water} ({@link HenryConstant}), data for the derived pairs, nor the group tables until a package's rule
      * resolves a pair from one.</p>
      */
@@ -300,6 +315,8 @@ public final class MaterialCatalog {
     /** Each dataset's {@link Flammability} and {@link Hazard} by record key ({@code properties/<id>}): what a release puts in the air. */
     private final Map<String, Flammability> flammability;
     private final Map<String, Hazard> hazards;
+    /** Each dataset's {@link Corrosion} by record key ({@code properties/<id>}). */
+    private final Map<String, Corrosion> corrosion;
     /**
      * The group data of batch 2026-11-11-aqueous-solvents (data for the derived pairs, in no identity): each record's
      * {@code group_counts} by scheme and each gas's {@code henry_in_water}, by record key ({@code properties/<id>},
@@ -321,9 +338,9 @@ public final class MaterialCatalog {
             Map<String, FluidAppearance> assayAppearances, Map<String, FluidAppearance> componentAppearances, Map<String, LiquidMixtureCorrection> liquidMixtures, MaterialPresets presets, FluidData fluidData,
             Map<String, Validity> propertyValidity, Map<String, Validity> packageValidity,
             Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, Map<String, Map<String, Double>> formulas,
-            Map<String, Flammability> flammability, Map<String, Hazard> hazards, SolidMaterialCatalog solids,
+            Map<String, Flammability> flammability, Map<String, Hazard> hazards, Map<String, Corrosion> corrosion, SolidMaterialCatalog solids,
             SolidFuelCatalog fuels, Records records, Map<String, Definition> definitions, GroupData groupData, DerivedPairs.Cache derivedPairs) {
-        this.flammability = Map.copyOf(flammability); this.hazards = Map.copyOf(hazards);
+        this.flammability = Map.copyOf(flammability); this.hazards = Map.copyOf(hazards); this.corrosion = Map.copyOf(corrosion);
         this.groupData = Objects.requireNonNull(groupData);
         this.derivedPairs = Objects.requireNonNull(derivedPairs);
         this.propertyValidity = Map.copyOf(propertyValidity); this.packageValidity = Map.copyOf(packageValidity);
@@ -345,7 +362,7 @@ public final class MaterialCatalog {
     /** This catalog with its packages, liquid-mixture corrections and definitions replaced; a view, never published. */
     private MaterialCatalog derived(Map<String, Package> packages, Map<String, LiquidMixtureCorrection> liquidMixtures, Map<String, Definition> definitions) {
         return new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,presets,
-                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,flammability,hazards,solids,fuels,records,definitions,groupData,derivedPairs);
+                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,flammability,hazards,corrosion,solids,fuels,records,definitions,groupData,derivedPairs);
     }
     public Package requirePackage(String id) {
         Package p = packages.get(id);
@@ -629,6 +646,7 @@ public final class MaterialCatalog {
         var formulas = new HashMap<String, Map<String, Double>>();
         var flammability = new HashMap<String, Flammability>();
         var hazards = new HashMap<String, Hazard>();
+        var corrosion = new HashMap<String, Corrosion>();
         var propertyRevisions = new HashMap<String, String>();
         for (var o : group(groups,"components").values()) checked(origins,o,() -> {
             JsonObject cut = o.has("cut") ? object(o,"cut") : null;
@@ -721,6 +739,7 @@ public final class MaterialCatalog {
             if (o.has("combustion")) combustion.put("properties/"+id,readCombustion(object(o,"combustion")));
             if (o.has("flammability")) flammability.put("properties/"+id,readFlammability(object(o,"flammability")));
             if (o.has("hazard")) hazards.put("properties/"+id,readHazard(object(o,"hazard")));
+            if (o.has("corrosion")) corrosion.put("properties/"+id,readCorrosion(object(o,"corrosion")));
             // Data for the derived pairs (batch 2026-11-11-aqueous-solvents), kept apart from the Property: in no identity.
             if (o.has("group_counts")) groupCounts.put("properties/"+id,readGroupCounts(object(o,"group_counts"),activityTables));
             if (o.has("henry_in_water")) henry.put("properties/"+id,HenryConstant.read(object(o,"henry_in_water")));
@@ -797,7 +816,7 @@ public final class MaterialCatalog {
             throw new IllegalArgumentException(record.origin()+": no package holds every compound of assay "+record.id());
         if(packages.isEmpty()) throw new IllegalArgumentException("Material catalog has no packages");
         var result=new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,MaterialPresets.read(group(groups,"presets"),group(groups,"networks"),origins,packages,names.keySet()),fluidData,
-                propertyValidity,packageValidity,spines,crystals,combustion,formulas,flammability,hazards,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions,
+                propertyValidity,packageValidity,spines,crystals,combustion,formulas,flammability,hazards,corrosion,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions,
                 new GroupData(groupCounts,henry,activityTables,homomorphs),new DerivedPairs.Cache());
         // The column's check of each column preset runs above this layer, before a catalog is published
         // (V3ColumnPresets.validate, called by the reload listener; codebase review C2, F5).
@@ -950,6 +969,31 @@ public final class MaterialCatalog {
             };
             return new Hazard(channel,number(o,"reference_ppm"),bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
         } catch (RuntimeException invalid) { throw new IllegalArgumentException("hazard."+invalid.getMessage(),invalid); }
+    }
+    /** A dataset's {@code corrosion} sub-record ({@link Corrosion}); a refusal names the field. */
+    static Corrosion readCorrosion(JsonObject o) {
+        try {
+            return new Corrosion(number(o,"sulfur_mass_percent"),number(o,"acid_number"),number(o,"fouling"),bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("corrosion."+invalid.getMessage(),invalid); }
+    }
+    /** A compound's {@link Corrosion} in a package: the {@code corrosion} of the dataset the package takes for it; none for the water. */
+    public Optional<Corrosion> corrosion(String packageId,String componentId) {
+        return Optional.ofNullable(corrosion.get(recordKey(packageId,componentId)));
+    }
+    /**
+     * Package {@code packageId}'s {@link Corrosion} sulfur, wt% (mass percent, not a fraction), in the fluid network's
+     * conserved order (its components, then the water): 0 where the record has no {@code corrosion} sub-record. A compound
+     * with sulfur in its formula takes the formula's in the integrity laws' standard.
+     */
+    public double[] sulfurShares(String packageId) { return corrosionValues(packageId,0); }
+    /** As {@link #sulfurShares}: the acid numbers, mg KOH/g. */
+    public double[] acidNumbers(String packageId) { return corrosionValues(packageId,1); }
+    /** As {@link #sulfurShares}: the fouling numbers, m²K/W. */
+    public double[] foulingNumbers(String packageId) { return corrosionValues(packageId,2); }
+    private double[] corrosionValues(String packageId,int value) {
+        var out=new double[conservedComponents(packageId).size()];var keys=datasetKeys(packageId);
+        for(int k=0;k<keys.size();k++){var c=corrosion.get(keys.get(k));out[k]=c==null?0:value==0?c.sulfurMassPercent():value==1?c.acidNumber():c.fouling();}
+        return out;
     }
     /** A compound's {@link Hazard} in a package: the {@code hazard} of the dataset the package takes for it; none for the water. */
     public Optional<Hazard> hazard(String packageId,String componentId) {

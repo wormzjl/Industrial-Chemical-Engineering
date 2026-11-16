@@ -84,7 +84,13 @@ class LayeringTest {
             new PackageRule("material-below-equipment", "science/material", "science.equipment", "the catalog is below the equipment"),
             new PackageRule("material-below-machine", "science/material", "science.machine", "the catalog is below the machines"),
             new PackageRule("material-below-flowsheet", "science/material", "science.flowsheet", "the catalog is below the sheet"),
-            new PackageRule("material-below-plant", "science/material", "science.plant", "the catalog is below the plant layer"));
+            new PackageRule("material-below-plant", "science/material", "science.plant", "the catalog is below the plant layer"),
+            new PackageRule("integrity-below-machine", "science/integrity", "science.machine", "the integrity laws are pure, below the machine layer that books them"),
+            new PackageRule("integrity-below-fluid", "science/integrity", "science.fluid", "the integrity laws are pure, below the fluid layer that books them"),
+            new PackageRule("integrity-below-column", "science/integrity", "science.column", "the integrity laws are pure, below the column layer that books them"),
+            new PackageRule("integrity-below-plant", "science/integrity", "science.plant", "the integrity laws are pure, below the plant layer that books them"),
+            new PackageRule("integrity-below-flowsheet", "science/integrity", "science.flowsheet", "the integrity laws are pure, below the flowsheet layer that books them"),
+            new PackageRule("integrity-below-equipment", "science/integrity", "science.equipment", "the integrity laws are pure, below the equipment layer that books them"));
 
     private static final Pattern IMPORT =
             Pattern.compile("^\\s*import\\s+(?:static\\s+)?com\\.wormzjl\\.icheme\\.([A-Za-z_]\\w*)[\\w.*]*\\s*;");
