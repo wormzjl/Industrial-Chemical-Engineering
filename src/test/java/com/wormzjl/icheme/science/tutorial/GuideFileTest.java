@@ -96,7 +96,7 @@ class GuideFileTest {
             var picture = loader.loadClass("com.wormzjl.icheme.science.tutorial.films.PagePicture");
             var pageType = loader.loadClass("com.wormzjl.icheme.science.tutorial.guide.Pages$Page");
             var all = (java.util.Map<?, ?>) pages.getClass().getMethod("pages").invoke(pages);
-            assertEquals(41, all.size());
+            assertEquals(42, all.size());
             for (var e : all.entrySet()) assertNotNull(picture.getMethod("of", pageType).invoke(null, e.getValue()), e.getKey() + ": its picture");
         }
     }

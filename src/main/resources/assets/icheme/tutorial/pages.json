@@ -51,6 +51,7 @@
     "equipment_gas_turbine": { "film": "page_gas_turbine" },
     "equipment_fluid_converter": { "film": "unit_converter" },
     "equipment_gas_converter": { "film": "page_gas_converter" },
+    "equipment_plunger_pump": { "film": "page_plunger_pump" },
     "pressure_control_valve": {}
   }
 }
