@@ -204,7 +204,8 @@ Later, with their species: HCl overhead corrosion and chloride cracking, amine a
 
 ### 6.4 Data
 
-- `corrosion` sub-record on the twelve crude cut datasets: `sulfur_mass_percent`, `acid_number`, `fouling`, `estimated`, `source`, `revision`. In no identity, as `hazard` is. Sulfur rises with the cut (0.02 wt% for the lightest to about 5 wt% for the residue) so that the four assays reproduce their `sulfur_mass_percent` within 20 %; the acid number rises the same way and gives about 0.1 (light), 0.3 (medium), 1.5 (heavy) and 2.5 (dilbit) mg KOH/g on the whole crudes. All marked estimated.
+- `corrosion` sub-record on the twelve crude cut datasets: `sulfur_mass_percent`, `acid_number`, `fouling`, `estimated`, `source`, `revision`. In no identity, as `hazard` is. Sulfur and the acid number rise with the cut. All marked estimated.
+- **Decided (D9, after WP1's fit): the cuts' values as fitted; the assays' `sulfur_mass_percent` stays display metadata.** One set of twelve values cannot reproduce the four assays within 20 %: the cuts are shared, the heavy crude holds more of every heavy cut than the dilbit, and their specifications are 3 and 3.74 wt%. As fitted (`tools/fouling-corrosion/fit-cuts.mjs`, revision `corrosion-fit-r1`): sulfur 0.02 wt% for cuts 1 to 7, then 0.057, 1.2, 3, 4.7 and 6; acid number 0 to cut 9, then 0.72, 2.5 and 4.5. Whole crudes: sulfur 0.28 (light, specification 0.2), 1.03 (medium, 1.5), 2.55 (heavy, 3), 2.13 (dilbit, 3.74); acid number 0.08, 0.45, 1.57, 1.24. The sulfidation rate goes with sulfur to the power 0.4, so the largest miss (dilbit, −43 %) moves its rate by −20 %; the acid targets were this plan's own estimates. Matching each assay would need sulfur as a carried species, which the network does not have.
 - Real compounds need no record: their sulfur is in their formula.
 
 ### 6.5 Time
@@ -260,7 +261,7 @@ A compressor and a dry screw already refuse solids (`InletPhase.decide`).
 |---|---|---|---|
 | 0.2 bar | 7 m/s | 860 process hours | 172 |
 | 1 bar | 16 m/s | 105 process hours | 21 |
-| 5 bar | 35 m/s | 13 process hours | 2.7 |
+| 5 bar | 35 m/s | 13 process hours | 2.6 |
 | 20 bar | 71 m/s | 2.1 process hours | 0.4 |
 
 - From health 0.25: `ERODED TRIM` on its status line.

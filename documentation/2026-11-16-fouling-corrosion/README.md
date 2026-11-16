@@ -28,6 +28,9 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 - 2026-11-16, WP7 and WP1 started on the owner's "Start both", each an Opus medium sub-thread with a fresh brief in its own worktree cut from this branch at `5330f457e`: `fc-wp7-columns` (branch slug `fouling-corrosion-wp7-columns`: the simulator column passes inert particles and melts a frozen feed; `Condition.FROZEN` from the solve's product flash) and `fc-wp1-laws` (branch slug `fouling-corrosion-wp1-laws`: `science/integrity`, `Wear.Fault.SOLIDS`, `MaterialCatalog.Corrosion`, the twelve cuts' data). One Gradle lane each, `--max-workers 4`. Neither edits this README or the index; the main thread records their reports.
 
+- 2026-11-16, WP1 reported and read by the main thread: one commit, `71b2d9b9c` on `claude/fouling-corrosion-wp1-laws-71f413` (38 files, 1 703 lines): `science/integrity` (eight classes), `Wear.Fault.SOLIDS` with a neutral case in `MachineHealth`, `MaterialCatalog.Corrosion` and the twelve cuts' sub-records, six `LayeringTest` rules (the integrity laws import no machine, fluid, column, plant, flowsheet or equipment package), `tools/fouling-corrosion/fit-cuts.mjs`, code guide chapter `integrity.md`. Its run: 82 tests, one failure in its own new test (a strict rise expected where the rate reaches the 1e4 mm/y cap), corrected, that class run again, 5 of 5; every source set compiled. Diff read: the laws, limits and factors are the plan's. Its additions where the plan was silent: every rate capped at 1e4 mm/y; a side with oil and free water fouls by its oil; above 260 °C the oil fouling number is `max(f, min(1.8 f, 0.0009))`. The sulfur fit missed the plan's 20 % (worst assay 43 %): decision D9, the values as fitted (plan section 6.4). Not run, the final lane's: the 366 `test` classes, 67 `columnGates`, 26 `equipmentGates`, 10 `holdGates` and the GameTests that `affected.mjs` selects for a `MaterialCatalog` change. The branch is not merged into the batch branch yet.
+- 2026-11-16, WP7 still working (its Gradle run in flight, its changes uncommitted in its worktree).
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.
@@ -38,7 +41,7 @@ None yet.
 
 ## Open items
 
-- WP1 and WP7 running; their reports and diffs to be checked by the main thread.
+- WP1 done on its branch, not merged into the batch branch; WP7 running.
 - O4: the format reservation on `main` (facts schema 29, shape fields 13, `icheme-5`, sheet file 3), needed before WP2; the owner's word.
 - `wall_weep` candidates (three, synthesised) once the build starts.
 - Whether another live batch holds the hot files named above.
