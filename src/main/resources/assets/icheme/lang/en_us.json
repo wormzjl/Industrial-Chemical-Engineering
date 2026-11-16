@@ -67,7 +67,7 @@
   "gui.icheme.fluid.heat_acting.burners.hint": "The heater's burners: they fire both coils, up to each coil's duty.",
   "gui.icheme.fluid.heat_group.lines.hint": "The lines this side's control needs: a bypass for a temperature or a duty; a feed valve and the other feed's flowmeter for a ratio.",
   "gui.icheme.fluid.heat_group.deposit": "Deposit",
-  "gui.icheme.fluid.heat_group.deposit.hint": "Fouling on this side's wall. It grows while the side carries water, oil, residue or solids, and it moves less heat and narrows the passage. FOULED from 1 m²K/kW.",
+  "gui.icheme.fluid.heat_group.deposit.hint": "Fouling on this side's wall. It grows while the side carries water, oil, residue or solids, and it moves less heat and narrows the passage. FOULED from 0.5 m²K/kW.",
   "gui.icheme.fluid.fouling_rf": "Fouling",
   "gui.icheme.fluid.fouling_rf.hint": "The deposit's resistance to heat, in series with the side's film. It grows to the level its stream sets, at most 2 m²K/kW.",
   "gui.icheme.fluid.fouling_film": "Film left",

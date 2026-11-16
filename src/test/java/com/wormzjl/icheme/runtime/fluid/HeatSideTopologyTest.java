@@ -89,7 +89,7 @@ class HeatSideTopologyTest {
     }
     /**
      * A fouled side (batch 2026-11-16-fouling-corrosion, WP5): at level 0 its passage compiles as before, the same geometry
-     * and an equal law; at level 5 (0.0005 m²K/W) its films are the plan's 1000, 1429 and 95 W/m²K and its passage 1 mm
+     * and an equal law; at level 10 (0.0005 m²K/W in steps of 5e-5, D14; level 5 of 1e-4 before) its films are the plan's 1000, 1429 and 95 W/m²K and its passage 1 mm
      * narrower, and the same line carries less flow. The levels the compile reads come from the walls' facts in the ledger.
      */
     @Test void aFouledSidesPassageCompilesWithItsFilmsBehindTheDepositAndNarrowed() {
@@ -101,7 +101,7 @@ class HeatSideTopologyTest {
         var seed=states.get(1L).state();
         PassiveNetwork.Pipe before=PhysicalFluidTopology.compile(devices,states,Map.of(),seed,Set.of(),Map.of(),Set.of()).islands().getFirst().graph().pipes().stream()
                 .filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
-        for(int level:new int[]{0,5}) {
+        for(int level:new int[]{0,10}) {
             var graph=PhysicalFluidTopology.compile(devices,states,Map.of(),seed,Set.of(),Map.of(),Set.of(),level==0?Map.of():Map.of(10L,level)).islands().getFirst().graph();
             var own=graph.pipes().stream().filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
             var films=((HeatSide)own.heat()).films();
@@ -118,7 +118,7 @@ class HeatSideTopologyTest {
         // A side without its partner moves no heat; its narrowed passage carries less on the same head.
         var lone=List.of(plain(1,8,0,10,Kind.GENERATOR),plain(20,9,0,10,Kind.PIPE),side(10,ports,passage,TUBE),plain(30,1,2,0,Kind.PIPE),plain(2,2,2,0,Kind.VOID));
         double[] flows=new double[2];
-        for(int level:new int[]{0,5}) {
+        for(int level:new int[]{0,10}) {
             var graph=PhysicalFluidTopology.compile(lone,states,Map.of(),seed,Set.of(),Map.of(),Set.of(),level==0?Map.of():Map.of(10L,level)).islands().getFirst().graph();
             var own=graph.pipes().stream().filter(p->p.id()==PhysicalFluidTopology.sideIdentity(10)).findFirst().orElseThrow();
             var result=new PassiveIntervalSolver(model).solve(graph,.05,PassiveIntervalSolver.Settings.defaults(),()->{});
@@ -143,7 +143,7 @@ class HeatSideTopologyTest {
         });
         assertEquals(Map.of(),registry.fouling(active.values()),"no walls' facts: every side clean");
         ledger.integrity(Map.of(10L,new WorldTopologyLedger.IntegrityFacts(0,.00057,false),20L,new WorldTopologyLedger.IntegrityFacts(.1,0,false)));
-        assertEquals(Map.of(10L,5),registry.fouling(active.values()),"whole steps of 0.0001 m²K/W; a pipe's wall loss is no deposit");
+        assertEquals(Map.of(10L,11),registry.fouling(active.values()),"whole steps of 0.00005 m²K/W (D14; 5 steps of 0.0001 before); a pipe's wall loss is no deposit");
         fouling[0]=false;
         assertEquals(Map.of(),registry.fouling(active.values()),"fouling.enabled false: the deposit acts on nothing");
     }
