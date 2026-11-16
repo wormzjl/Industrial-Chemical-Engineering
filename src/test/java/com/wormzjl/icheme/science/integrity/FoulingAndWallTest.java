@@ -11,22 +11,26 @@ class FoulingAndWallTest {
         return new CorrosionDigest(celsius + K, wet, oil, 0, 0, 0, 0, 0, 0, 0, 0, fouling);
     }
 
+    /**
+     * The game's end values are half the TEMA anchors (D14, 2026-11-16); before D14 the end value was the anchor itself
+     * (0.00035, 0.0007, 0.0005, 0.0009, 0.0018, 0.0002, 0.00085, the cap 0.002), each row exactly twice the value it asserts now.
+     */
     @Test
     void theAsymptoteFollowsThePlansTable() {
         assertEquals(0, FoulingLaw.asymptote(side(200, false, false, .0005), 0), "gas and steam");
         assertEquals(0, FoulingLaw.asymptote(side(200, false, false, 0), .05), "gas carries no solids");
         assertEquals(0, FoulingLaw.asymptote(side(100, false, true, 0), 0), "a light clean liquid");
-        assertEquals(.00035, FoulingLaw.asymptote(side(30, true, false, 0), 0), "water");
-        assertEquals(.00035, FoulingLaw.asymptote(side(50, true, false, 0), 0), "water at 50 °C");
-        assertEquals(.0007, FoulingLaw.asymptote(side(51, true, false, 0), 0), "water above 50 °C");
-        assertEquals(.0005, FoulingLaw.asymptote(side(200, false, true, .0005), 0), 1e-15, "crude below 260 °C");
-        assertEquals(.0009, FoulingLaw.asymptote(side(260, false, true, .0005), 0), 1e-15, "crude from 260 °C");
-        assertEquals(.0018, FoulingLaw.asymptote(side(200, false, true, .0018), 0), 1e-15, "residue");
-        assertEquals(.0018, FoulingLaw.asymptote(side(350, false, true, .0018), 0), 1e-15, "residue, hot");
-        assertEquals(.0005, FoulingLaw.asymptote(side(200, true, true, .0005), 0), 1e-15, "oil with free water reads the oil");
-        assertEquals(.0002, FoulingLaw.asymptote(side(30, false, true, 0), .01), 1e-15, "1 wt% solids adds 0.0002");
-        assertEquals(.00035 + .0005, FoulingLaw.asymptote(side(30, true, false, 0), .5), 1e-15, "at most + 0.0005");
-        assertEquals(FoulingLaw.CAP, FoulingLaw.asymptote(side(350, false, true, .0018), .1), "never above the cap");
+        assertEquals(.000175, FoulingLaw.asymptote(side(30, true, false, 0), 0), "water (0.00035 before D14)");
+        assertEquals(.000175, FoulingLaw.asymptote(side(50, true, false, 0), 0), "water at 50 °C (0.00035 before D14)");
+        assertEquals(.00035, FoulingLaw.asymptote(side(51, true, false, 0), 0), "water above 50 °C (0.0007 before D14)");
+        assertEquals(.00025, FoulingLaw.asymptote(side(200, false, true, .0005), 0), 1e-15, "crude below 260 °C (0.0005 before D14)");
+        assertEquals(.00045, FoulingLaw.asymptote(side(260, false, true, .0005), 0), 1e-15, "crude from 260 °C (0.0009 before D14)");
+        assertEquals(.0009, FoulingLaw.asymptote(side(200, false, true, .0018), 0), 1e-15, "residue (0.0018 before D14)");
+        assertEquals(.0009, FoulingLaw.asymptote(side(350, false, true, .0018), 0), 1e-15, "residue, hot (0.0018 before D14)");
+        assertEquals(.00025, FoulingLaw.asymptote(side(200, true, true, .0005), 0), 1e-15, "oil with free water reads the oil (0.0005 before D14)");
+        assertEquals(.0001, FoulingLaw.asymptote(side(30, false, true, 0), .01), 1e-15, "1 wt% solids adds 0.0001 (0.0002 before D14)");
+        assertEquals(.000175 + .00025, FoulingLaw.asymptote(side(30, true, false, 0), .5), 1e-15, "at most + 0.00025 (0.00035 + 0.0005 before D14)");
+        assertEquals(.00115, FoulingLaw.asymptote(side(350, false, true, .0018), .1), 1e-15, "the highest end value, hot residue with solids: (0.0018 + 0.0005) / 2; the cap 0.002 before D14");
         for (double f = 0; f <= .002; f += 1e-5) {
             assertTrue(FoulingLaw.asymptote(side(300, false, true, f + 1e-5), 0) >= FoulingLaw.asymptote(side(300, false, true, f), 0), "monotone in the number");
             assertTrue(FoulingLaw.asymptote(side(300, false, true, f), 0) >= FoulingLaw.asymptote(side(200, false, true, f), 0), "hot fouls more");
@@ -35,6 +39,22 @@ class FoulingAndWallTest {
             double r = FoulingLaw.asymptote(new CorrosionDigest(x, true, true, x, x, x, x, x, x, x, x, x), x);
             assertTrue(r >= 0 && r <= FoulingLaw.CAP, x + ": " + r);
         }
+    }
+
+    /** D14: the end value is {@link FoulingLaw#PLACEHOLDER_SHARE} times its TEMA anchor, and a side reaches it in a few steps. */
+    @Test
+    void theEndValueIsHalfTheAnchor() {
+        assertEquals(.5, FoulingLaw.PLACEHOLDER_SHARE);
+        double h = FoulingLaw.PLACEHOLDER_SHARE;
+        assertEquals(h * FoulingLaw.WATER, FoulingLaw.asymptote(side(30, true, false, 0), 0), "water");
+        assertEquals(h * FoulingLaw.WARM_WATER, FoulingLaw.asymptote(side(60, true, false, 0), 0), "warm water");
+        assertEquals(h * .0005, FoulingLaw.asymptote(side(200, false, true, .0005), 0), 1e-18, "crude below 260 °C");
+        assertEquals(h * FoulingLaw.HOT_CRUDE, FoulingLaw.asymptote(side(300, false, true, .0005), 0), 1e-18, "crude from 260 °C");
+        assertEquals(h * .0018, FoulingLaw.asymptote(side(200, false, true, .0018), 0), 1e-18, "residue");
+        assertEquals(h * (FoulingLaw.WATER + FoulingLaw.SOLIDS_PER_SHARE * .01), FoulingLaw.asymptote(side(30, true, false, 0), .01), 1e-18, "water with 1 wt% solids");
+        assertEquals(h * (.0005 + FoulingLaw.SOLIDS_CAP), FoulingLaw.asymptote(side(200, false, true, .0005), .5), 1e-18, "crude with the solids' cap");
+        assertEquals(3, FoulingLaw.level(FoulingLaw.asymptote(side(30, true, false, 0), 0)), "water 0.000175: 3 steps of 5e-5");
+        assertEquals(5, FoulingLaw.level(FoulingLaw.asymptote(side(200, false, true, .0005), 0)), "crude 0.00025: 5 steps");
     }
 
     @Test
@@ -56,14 +76,16 @@ class FoulingAndWallTest {
             }
     }
 
+    /** Whole steps of 5e-5 m²K/W since D14 (1e-4 before: 0.99e-4 was 0, 0.0003 was 3, the cap 20; each level now twice). */
     @Test
     void levelsAndThickness() {
         assertEquals(0, FoulingLaw.level(0));
-        assertEquals(0, FoulingLaw.level(.99e-4));
-        assertEquals(1, FoulingLaw.level(1e-4));
-        assertEquals(3, FoulingLaw.level(.0003));
-        assertEquals(20, FoulingLaw.level(.002));
-        assertEquals(20, FoulingLaw.level(5));
+        assertEquals(0, FoulingLaw.level(.49e-4));
+        assertEquals(1, FoulingLaw.level(5e-5));
+        assertEquals(1, FoulingLaw.level(.99e-4), "0 before D14");
+        assertEquals(6, FoulingLaw.level(.0003), "3 before D14");
+        assertEquals(40, FoulingLaw.level(.002), "20 before D14");
+        assertEquals(40, FoulingLaw.level(5), "20 before D14");
         assertEquals(0, FoulingLaw.level(Double.NaN));
         assertEquals(0, FoulingLaw.level(-1));
         // Section 3.2: delta = Rf k_d.

@@ -55,7 +55,8 @@ class FoulingEffectTest {
 
     @Test
     void eachHeatLawReadsTheDepositOnItsProcessSide() {
-        double area = 450, rf = 5 * FoulingLaw.STEP;
+        // 0.0005 m²K/W: 10 steps of 5e-5 since D14 (5 of 1e-4 before).
+        double area = 450, rf = 10 * FoulingLaw.STEP;
         // An exchanger's side: its films behind the deposit.
         var clean = (HeatSide) HeatSides.heatSide(HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE, area, 0, 0, 7, null, ExchangerType.STANDARD);
         var atZero = (HeatSide) HeatSides.heatSide(HeatSides.Unit.EXCHANGER, HeatSides.Side.TUBE, area, 0, 0, 7, null, ExchangerType.STANDARD, 0);

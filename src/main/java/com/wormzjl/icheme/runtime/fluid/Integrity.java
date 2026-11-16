@@ -734,7 +734,7 @@ public final class Integrity {
         return w != null && w.kind == Kind.HEAT_SIDE && !w.wrecked && w.fouling >= FoulingLaw.FOULED && settings.get().fouling();
     }
 
-    /** Heat side {@code id}'s deposit in whole steps of {@link FoulingLaw#STEP}, 0 to 20: what the films read (WP5). */
+    /** Heat side {@code id}'s deposit in whole steps of {@link FoulingLaw#STEP}, 0 to 40: what the films read (WP5). */
     public int foulingLevel(long id) {
         return FoulingLaw.level(fouling(id));
     }

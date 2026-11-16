@@ -40,7 +40,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `science/integrity/CorrosionStandard` | Per list: molar masses, sulfur (formula, else the sub-record), acid and fouling numbers, the gases found by exact formula; `digest(...)` |
 | `science/integrity/CorrosionLaw` | M1 to M7 on carbon steel (`rate`), the material's M8, M10, M11, the inside rate (`inside`), M9 (`outside`) |
 | `science/integrity/ErosionLaw` | Wall erosion, trim speed and trim wear, the pump's solids intensity |
-| `science/integrity/FoulingLaw` | `Rf∞` from the digest, the exact exponential step, levels of 1e-4, thickness |
+| `science/integrity/FoulingLaw` | `Rf∞` from the digest (`PLACEHOLDER_SHARE`, half the TEMA anchor, D14), the exact exponential step, levels of 5e-5, thickness |
 | `science/integrity/WallState` | `SOUND`, `THIN`, `WEEPING`, `THROUGH` at u = 0.5, 0.9, 1; the life in process seconds |
 | `science/machine/Wear.Fault.SOLIDS` | The pump's erosion-class fault; its intensity is `ErosionLaw.solidsIntensity` |
 | `science/material/MaterialCatalog.Corrosion` | The `corrosion` sub-record; `corrosion(...)`, `sulfurShares`, `acidNumbers`, `foulingNumbers` |
@@ -67,7 +67,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `science/equipment/HeatSides.heatSide(..., fouling)`, `HeatUnit.heatSide(double)` | The fouled law of a side: an exchanger's, a kettle's tubes', a still's water side's films; an air cooler's `AirCooled.Air.process`; a convection coil's `1/U' = 1/U + Rf`; a radiant or exhaust coil's heat reads no film (passage only) |
 | `runtime/fluid/PhysicalRegistry.fouling`, `PhysicalFluidTopology.compile(..., fouling)` | The levels the compile reads, from the ledger's facts (`FoulingLaw.level`; none with `fouling.enabled` off); a fouled side's pipe carries the fouled law and the narrowed passage |
 | `Integrity.flushAndRestate`, `Host.restate`, `FluidWorldAuthority.restate` | When a side's level moves (cadence, cleaning, `set`): the facts to the ledger, then the side's registration again, unchanged, at revision + 1, which recompiles its island |
-| `FluidWorldAuthority.queueUnitClean`, `network/FluidNetwork.CleanPayload`, `HeatControlColumn.deposit` | The heat page's Deposit group (fouling, film left) and Clean: the side and its partner heat side queued; the answer a chat line (`message.icheme.heat.clean.*`); `FluidView.Heat.fouling`, `filmLeft`; `Integrity.fouled` says `FOULED` from 0.001 m²K/W |
+| `FluidWorldAuthority.queueUnitClean`, `network/FluidNetwork.CleanPayload`, `HeatControlColumn.deposit` | The heat page's Deposit group (fouling, film left) and Clean: the side and its partner heat side queued; the answer a chat line (`message.icheme.heat.clean.*`); `FluidView.Heat.fouling`, `filmLeft`; `Integrity.fouled` says `FOULED` from 0.0005 m²K/W |
 
 ## Flow
 
@@ -91,7 +91,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
    of the structure's node devices. `ViewBuilder` adds `FluidView.integrity` and `trim` to every view it builds; their words
    stay on the status line, said once. At each cadence and after a repair, `Integrity.weeps` tells the host each weeping
    wall; the shell cell carries `Weeping` on its update tag to the clients that track it, and `WallWeeps` drips and plays.
-5. The deposit's effect (WP5): the graph sees a side's deposit only in whole steps of 1e-4 m²K/W. Each record keeps the
+5. The deposit's effect (WP5): the graph sees a side's deposit only in whole steps of 5e-5 m²K/W. Each record keeps the
    level its graph was compiled with (state; on a load, the facts' level, which the restored graph and its pending events
    carry). After the cadence, a cleaning or a `set`, `flushAndRestate` hands the facts to the ledger, then queues one
    `restate` for each side whose level moved; the registry's next compile of that island reads the level from the ledger
@@ -146,7 +146,9 @@ stopped, the column runs again), `FluidFactsCompatTest` (the facts, older images
   `50 p_O2 / p_limit` above `max(0.3, p_150 2^(−(T − 150 °C)/100))`.
 - Erosion `(φ/0.01) (v/10)^2.6` mm/y; a trim `(φ/0.01) (v/30)^2.6` health per corrosion year, `v = sqrt(2Δp/ρ)`; a pump
   `clamp((φ − 0.001)/0.05, 0, 1)`.
-- Fouling cap 0.002 m²K/W, step 1e-4, deposit conductivity 1 W/mK; oil `max(f, min(1.8 f, 0.0009))` from 260 °C.
+- Fouling cap 0.002 m²K/W, step 5e-5, `FOULED` from 0.0005, deposit conductivity 1 W/mK; the end value `Rf∞` is half the
+  TEMA anchor (`PLACEHOLDER_SHARE`, D14): water 0.000175 (0.00035 above 50 °C), oil half its anchor, which is the cuts'
+  number, from 260 °C `max(f, min(1.8 f, 0.0009))`, plus half of `min(0.0005, 0.02 φ)` for solids; at most 0.00115.
 
 ## Tests and gates
 
