@@ -17,7 +17,7 @@ import javax.imageio.ImageIO;
  * </pre>
  *
  * Detail is relief baked into the albedo from one height field per sprite (lit from the upper left, crevices darkened),
- * not polygons: the base's four hex bolts, the gland's nut, the lens's Fresnel ribs, the horn mouth's rings.
+ * not polygons: the plate's four hex bolts, the sounder's grille slots, the gland's nut, the lens's Fresnel ribs.
  */
 public final class AlarmAssets {
     private AlarmAssets() {}
@@ -49,16 +49,17 @@ public final class AlarmAssets {
             double[] a = {p.x(), p.y(), p.z()}, b = {p.X(), p.Y(), p.Z()};
             String texture =
                     switch (p.finish()) {
-                        case BASE, HORN -> "housing";
+                        case BASE -> "housing";
+                        case GRILLE -> "grille";
                         case SOCKET, GUARD -> "guard";
                         case LENS -> lit ? "lens_lit" : "lens";
-                        case MOUTH -> "housing";
                     };
             var faces = new LinkedHashMap<String, Face>();
             for (var d : DIRECTIONS) faces.put(d, new Face(texture, auto(d, a, b)));
-            if (p.name().equals("base plate")) faces.put("up", new Face("base_top", auto("up", a, b)));
+            if (p.name().equals("mounting plate")) faces.put("up", new Face("base_top", auto("up", a, b)));
+            // The sounder body's ends are plain casting; its slots run round its sides.
+            if (p.finish() == AlarmGeometry.Finish.GRILLE) for (var d : new String[] {"up", "down"}) faces.put(d, new Face("housing", auto(d, a, b)));
             if (p.name().equals("socket gland")) faces.put("north", new Face("gland", FULL));
-            if (p.name().equals("horn mouth")) faces.put("east", new Face("mouth", FULL));
             out.add(new Box(p.name(), a, b, faces, p.finish() == AlarmGeometry.Finish.LENS && lit));
         }
         return out;
@@ -71,7 +72,7 @@ public final class AlarmAssets {
         t.put("base_top", "icheme:block/alarm_base_top");
         t.put("guard", "icheme:block/alarm_guard");
         t.put("gland", "icheme:block/alarm_gland");
-        t.put("mouth", "icheme:block/alarm_horn_mouth");
+        t.put("grille", "icheme:block/alarm_grille");
         t.put(lit ? "lens_lit" : "lens", "icheme:block/" + (lit ? "alarm_lens_lit" : "alarm_lens"));
         return t;
     }
@@ -187,10 +188,8 @@ public final class AlarmAssets {
     }
 
     static BufferedImage housing() {
-        var h = flat(32, 32);
-        // A cast parting line around the middle, the only relief: the sides read as painted castings.
-        for (int x = 0; x < 32; x++) h[15][x] = -.6;
-        return relief(h, 0xA7ACA8, .025, 1);
+        // Plain painted casting: the plate, the collar and the sounder's ends (a parting line crossed the thin parts).
+        return relief(flat(32, 32), 0xA7ACA8, .025, 1);
     }
 
     static BufferedImage baseTop() {
@@ -222,17 +221,24 @@ public final class AlarmAssets {
         return image;
     }
 
-    static BufferedImage mouth() {
+    /**
+     * The sounder's grille: three rows of slots round the body (its sides span v 8.5..15 sixteenths, px 17..30), between a
+     * solid band under the collar and one over the plate; ribs every 6 px split the slots. Recessed relief, not black.
+     */
+    static BufferedImage grille() {
         var h = flat(32, 32);
-        // The horn's mouth: three ridged rings round a phasing plug.
         for (int y = 0; y < 32; y++)
             for (int x = 0; x < 32; x++) {
-                double r = Math.hypot(x + .5 - 16, y + .5 - 16);
-                h[y][x] = r < 3.5 ? 1.2 : r > 15 ? 1.5 : .6 * Math.cos(r * 1.25) - .4;
+                boolean slot = (y == 20 || y == 21 || y == 23 || y == 24 || y == 26 || y == 27) && x % 6 != 0;
+                h[y][x] = slot ? -1.4 : 0;
             }
-        var image = relief(h, 0x666C6B, .03, 6);
+        var image = relief(h, 0xA7ACA8, .025, 6);
         for (int y = 0; y < 32; y++)
-            for (int x = 0; x < 32; x++) if (Math.hypot(x + .5 - 16, y + .5 - 16) > 15) image.setRGB(x, y, 0xA7ACA8);
+            for (int x = 0; x < 32; x++)
+                if (h[y][x] < 0) {
+                    int c = image.getRGB(x, y);
+                    image.setRGB(x, y, rgb((c >> 16 & 255) * .55, (c >> 8 & 255) * .57, (c & 255) * .58));
+                }
         return image;
     }
 
@@ -269,7 +275,7 @@ public final class AlarmAssets {
         out.put("alarm_base_top", baseTop());
         out.put("alarm_guard", guard());
         out.put("alarm_gland", gland());
-        out.put("alarm_horn_mouth", mouth());
+        out.put("alarm_grille", grille());
         out.put("alarm_lens", lens(0x7C1D16, false));
         out.put("alarm_lens_lit", lensLit());
         return out;

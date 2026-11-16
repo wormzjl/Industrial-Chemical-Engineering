@@ -91,8 +91,8 @@ class AlarmGeometryTest {
         assertEquals(2, AlarmGeometry.socketOutward(1));
         assertEquals(3, AlarmGeometry.socketOutward(0));
         for (int f = 2; f < 6; f++) assertEquals(0, AlarmGeometry.socketOutward(f), "wall " + f);
-        // On the gland's face, inside the cell, near the mounting face.
+        // On the gland's face on the sounder's back, inside the cell, near the mounting face.
         for (int f = 0; f < 6; f++) for (double v : AlarmGeometry.socket(f)) assertTrue(v >= 0 && v <= 16);
-        assertArrayEquals(new double[] {8, 1.5, 1.5}, AlarmGeometry.socket(1), 1e-9);
+        assertArrayEquals(new double[] {8, 3, 3}, AlarmGeometry.socket(1), 1e-9);
     }
 }

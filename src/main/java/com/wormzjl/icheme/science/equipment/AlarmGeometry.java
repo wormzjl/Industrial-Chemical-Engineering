@@ -4,11 +4,13 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The alarm beacon (batch 2026-11-15-fluid-interfaces, W9, decision A1), in sixteenths of a block for a beacon standing on
- * a floor (its mounting face down): a square steel base with the data socket's gland on its north side, a neck, a lamp
- * collar, the lens dome (its own texture; a lit beacon draws the animated lens full-bright) under a four-bar wire guard, and
- * a short stepped horn cone on its east side. The block model ({@code tools/pump-sprites/AlarmAssets.java}) and the
- * collision shape read these boxes; 17 boxes, 102 faces.
+ * The alarm beacon (batch 2026-11-15-fluid-interfaces, W9, decision A1; owner's form 2026-11-16, "Stacked unit"), in
+ * sixteenths of a block for a beacon standing on a floor (its mounting face down): a combined sounder and beacon as one
+ * stacked unit. A square mounting plate with four fixing bolts; on it the round sounder body (two crossed boxes, a stepped
+ * round section) with grille slots all round, the data socket's cable gland on its back (north) near the plate; a collar;
+ * the dome lens (its own texture; a lit beacon draws the animated lens full-bright) and its crown under two crossed wire
+ * hoops, whose posts stand on the collar against the lens and whose bows rest on the crown. The block model
+ * ({@code tools/pump-sprites/AlarmAssets.java}) and the collision shape read these boxes; 15 boxes, 90 faces.
  */
 public final class AlarmGeometry {
     private AlarmGeometry() {}
@@ -17,10 +19,9 @@ public final class AlarmGeometry {
     public enum Finish {
         BASE,
         SOCKET,
+        GRILLE,
         LENS,
-        GUARD,
-        HORN,
-        MOUTH
+        GUARD
     }
 
     /** One box, {@code x..X, y..Y, z..Z} in sixteenths, for a beacon standing on a floor. */
@@ -31,25 +32,27 @@ public final class AlarmGeometry {
     }
 
     /** The data socket's centre on its gland's north face, in sixteenths (standing on a floor), and its outward axis −Z. */
-    public static final double[] SOCKET = {8, 1.5, 1.5};
+    public static final double[] SOCKET = {8, 3, 3};
 
     public static List<Part> parts() {
         var out = new ArrayList<Part>();
-        out.add(new Part("base plate", 3, 0, 3, 13, 3, 13, Finish.BASE));
-        out.add(new Part("socket gland", 6, .5, 1.5, 10, 2.5, 3, Finish.SOCKET));
-        out.add(new Part("neck", 6, 3, 6, 10, 5, 10, Finish.BASE));
-        out.add(new Part("lamp collar", 5, 5, 5, 11, 6, 11, Finish.BASE));
-        out.add(new Part("lens", 5.5, 6, 5.5, 10.5, 10.5, 10.5, Finish.LENS));
-        out.add(new Part("lens crown", 6.5, 10.5, 6.5, 9.5, 11.5, 9.5, Finish.LENS));
-        for (double[] c : new double[][] {{5, 5}, {10.4, 5}, {5, 10.4}, {10.4, 10.4}})
-            out.add(new Part("guard post", c[0], 6, c[1], c[0] + .6, 11.5, c[1] + .6, Finish.GUARD));
-        out.add(new Part("guard bow", 5, 11.5, 7.7, 11, 12.1, 8.3, Finish.GUARD));
-        out.add(new Part("guard bow", 7.7, 11.5, 5, 8.3, 12.1, 11, Finish.GUARD));
-        out.add(new Part("guard cap", 7.4, 12.1, 7.4, 8.6, 12.5, 8.6, Finish.GUARD));
-        out.add(new Part("horn throat", 10, 3, 6.5, 11.5, 5.5, 9.5, Finish.HORN));
-        out.add(new Part("horn body", 11.5, 2.5, 5.75, 13, 6, 10.25, Finish.HORN));
-        out.add(new Part("horn bell", 13, 2, 5, 14.5, 6.5, 11, Finish.HORN));
-        out.add(new Part("horn mouth", 14.5, 2.3, 5.3, 14.6, 6.2, 10.7, Finish.MOUTH));
+        out.add(new Part("mounting plate", 3, 0, 3, 13, 1, 13, Finish.BASE));
+        // The sounder: a round body drawn as two crossed boxes, its grille slots all round.
+        out.add(new Part("sounder body", 4.5, 1, 5.5, 11.5, 7.5, 10.5, Finish.GRILLE));
+        out.add(new Part("sounder body", 5.5, 1, 4.5, 10.5, 7.5, 11.5, Finish.GRILLE));
+        out.add(new Part("socket gland", 6.5, 1.75, 3, 9.5, 4.25, 4.5, Finish.SOCKET));
+        out.add(new Part("collar", 4, 7.5, 5, 12, 8.5, 11, Finish.BASE));
+        out.add(new Part("collar", 5, 7.5, 4, 11, 8.5, 12, Finish.BASE));
+        out.add(new Part("lens", 5.5, 8.5, 6.25, 10.5, 12.5, 9.75, Finish.LENS));
+        out.add(new Part("lens", 6.25, 8.5, 5.5, 9.75, 12.5, 10.5, Finish.LENS));
+        out.add(new Part("lens crown", 6.75, 12.5, 6.75, 9.25, 13.25, 9.25, Finish.LENS));
+        // Two crossed wire hoops: posts on the collar against the lens, bows resting on the crown.
+        out.add(new Part("guard post", 5, 8.5, 7.7, 5.5, 13.25, 8.3, Finish.GUARD));
+        out.add(new Part("guard post", 10.5, 8.5, 7.7, 11, 13.25, 8.3, Finish.GUARD));
+        out.add(new Part("guard post", 7.7, 8.5, 5, 8.3, 13.25, 5.5, Finish.GUARD));
+        out.add(new Part("guard post", 7.7, 8.5, 10.5, 8.3, 13.25, 11, Finish.GUARD));
+        out.add(new Part("guard bow", 5, 13.25, 7.7, 11, 13.85, 8.3, Finish.GUARD));
+        out.add(new Part("guard bow", 7.7, 13.25, 5, 8.3, 13.85, 11, Finish.GUARD));
         return List.copyOf(out);
     }
 

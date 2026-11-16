@@ -19,7 +19,7 @@ No fluid or accessory facts change.
   - `DataPort.Kind.ALARM` (appended).
   - The corpus image and the FORMATS.md control row.
 - Block, model, light and sound, `2725c28fe`:
-  - `AlarmGeometry`: 17 boxes, 102 faces.
+  - `AlarmGeometry`: 17 boxes, 102 faces (replaced on 2026-11-16 by the stacked unit, below).
   - `AlarmBeaconBlock` (six facings, `STATE` clear, active or acknowledged, light 12) and its block entity.
   - `ControlAlarms`: the edits, the acknowledgements, the decision after the loops, the block state and the publication.
   - The `ControlService` delegation, the chunk binding, and `RegistryRealignment.alarm`.
@@ -99,6 +99,28 @@ All runs were filtered `--tests` runs, with `--max-workers 4`.
 - **The horn** plays on the client from the block state (`AlarmBeaconSounds`). It joins the `FxSounds` budget at 130 dB
   (volume 3, 48 blocks).
 - **The flash** is a two-frame texture animation at 2 Hz on a full-bright lens element (NeoForge `neoforge_data`).
+
+## Model rework (2026-11-16)
+
+- **Why.** The owner looked at the render of the first model (a horn box on the side of a base slab, the lamp off
+  centre in a loose cage) and said: "need to improve this model before merge, this doesn't make sense".
+- **The new form.** Asked to choose between three forms with drawings, the owner chose "Stacked unit": one combined
+  sounder and beacon, as industrial units are built.
+- **What it is now** (`AlarmGeometry`, 15 boxes, 90 faces):
+  - a square mounting plate with four fixing bolts;
+  - a round sounder body, drawn as two crossed boxes, with three rows of grille slots all round (sprite
+    `alarm_grille`, replacing `alarm_horn_mouth`);
+  - a collar;
+  - the dome lens and its crown;
+  - two crossed wire hoops: their posts stand on the collar against the lens, their bows rest on the crown.
+- **Where it departs from the drawing.**
+  - The drawing showed a three-bar guard. Axis-aligned block elements cannot space three bars at 120°, so the guard is
+    two hoops (four posts).
+  - The cable gland sits on the sounder's back near the plate, because the plate's underside is the mounting face.
+- **What moved.** The socket moved from {8, 1.5, 1.5} to {8, 3, 3} sixteenths. It still faces north on a floor, south
+  from a ceiling and down on a wall. The housing sprite lost its parting line.
+- **Tests.** `AlarmGeometryTest` 3/3, with the socket pin updated.
+- **Renders.** In the worktree's `tmp/alarm-beacon/views-stacked/`.
 
 ## What the plan had wrong
 
