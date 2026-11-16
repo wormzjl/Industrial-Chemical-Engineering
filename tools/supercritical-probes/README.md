@@ -56,11 +56,13 @@ The Node scripts run with `node <script>` from the worktree root, with the argum
 | `merge` | `tokens.js` | The revision-token table of the material records both sides of a merge changed | same |
 | `dense-pump` | `pump_numbers.py` | An isentropic pump step on dense fluids against the mod's `rho_s g H` | `DENSE_PUMP_RESEARCH_REVIEW.md` |
 | `dense-pump` | `pd_numbers.py` | A reciprocating pump's clearance loss on a compressible fluid | `PD_PUMP_RESEARCH_REVIEW.md` |
+| `p3/src` | `P3FormsProbe`, run by `p3/run.sh coarse\|dense tmp/<name>` | The column feed flash's forms F1, F2, F3 and D, the production flash (classification by the stability test) on the grids of `COLUMN_FEED_REVIEW.md`, against the frozen flash, the D1 flash and the engine; its dense output gives `V3FeedFlashStabilityTest`'s states. Batch `2026-11-16-supercritical-followups`, base `3a48e08b4` | `2026-11-16-supercritical-followups/P3_COLUMN_FEED_REVIEW.md` |
 
 The scripts keep the `tmp/` paths they ran with (`tmp/supercritical-*`, `tmp/plunger-forms/`); give the new paths when
 you run one again. None was recompiled after its stage's last commit.
 
 ## History
 
+- 2026-11-16: `p3/` added by package P3 of batch `2026-11-16-supercritical-followups` (the column feed flash's forms).
 - 2026-11-16: gathered from the batch's `tmp/` folders at the merge preparation (the cleanup of `merge-prep`). Edit
   scripts, Gradle logs, stored results, compiled classes and outputs stayed in `tmp/`.

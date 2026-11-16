@@ -17,11 +17,16 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
     private final DerivedPairs.Result pairs;
     /** The column's identity: {@link #identity(MaterialCatalog.Package, DerivedPairs.Result)} of this package and its pairs. */
     private final String datasetRevision;
+    /** The catalog the package was resolved on: the feed engine is built on it ({@link #feedEngine}). */
+    private final MaterialCatalog catalog;
+    /** The feed engine, built on first use (P3 of batch 2026-11-16-supercritical-followups). */
+    private volatile V3FeedEngine feedEngine;
     /** Resolves immutable package data from the current calculation's catalog snapshot. */
     static V3PropertyPackage require(String packageId) {
         return new V3CatalogPropertyPackage(MaterialRuntime.current(),packageId);
     }
     V3CatalogPropertyPackage(MaterialCatalog catalog,String id) {
+        this.catalog=catalog;
         data=catalog.requirePackage(id);
         if(!data.model().equals("pr78")) throw new IllegalArgumentException("Thermodynamic solver unavailable: " + data.model());
         // A package that admits crystals (P6): the column is a vapour-liquid algorithm without crystal equations.
@@ -58,6 +63,17 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
         return identity;
     }
     @Override public DerivedPairs.Result derivedPairs(){return pairs;}
+    @Override public V3FeedEngine feedEngine(){
+        if(pairs==null)return null;
+        V3FeedEngine engine=feedEngine;
+        if(engine==null){
+            synchronized(this){
+                engine=feedEngine;
+                if(engine==null)feedEngine=engine=V3FeedEngine.of(catalog,data.id(),datasetRevision,basis);
+            }
+        }
+        return engine;
+    }
     @Override public String packageId(){return data.id();}
     @Override public String datasetRevision(){return datasetRevision;}
     @Override public V3ComponentBasis componentBasis(){return basis;}
