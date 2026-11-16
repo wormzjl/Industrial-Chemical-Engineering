@@ -1,6 +1,8 @@
-# Fouling, corrosion and erosion system: plan (revision 6)
+# Fouling, corrosion and erosion system: plan (revision 7)
 
 Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0), rebased on `main` at `66a87f9d5` (0.33.0) on 2026-11-16 (the owner's word). Status: plan, no code.
+
+Revision 7 (owner, 2026-11-16: "when column handles solids, add both fouling and corrosion to it depending on the solid fraction"): a running column's trays foul and its wall is lost with the solid share of what it takes (section 13.1, WP8).
 
 Revision 6 (owner, 2026-11-16: "repairs needs to be performed with the constructor"): constructed equipment is repaired by a Repair key in the Equipment Constructor, not by the repair kit (sections 9, 10, 14, 17, 18).
 
@@ -30,6 +32,7 @@ After the first plan:
 - "Add particulate erosion to equipment, especially control valves."
 - "How about hot hydrogen service and hp oxygen service?"
 - "Repairs needs to be performed with the constructor."
+- "When column handles solids, add both fouling and corrosion to it depending on the solid fraction."
 
 ## 2. What exists today
 
@@ -335,6 +338,22 @@ Proposal:
 
 Nothing in the V3 solver changes: particles are not on its axis.
 
+### 13.1 A column that carries solids fouls and wears
+
+Expected: particles that ride the liquid down a column settle on its trays and in its downcomers, so the trays pass less vapour and liquid before they flood; and they scour the shell and the trays (erosion, and corrosion under the deposit). Both go with how much solid the column takes.
+
+Today: a column is not a fluid device (`EquipmentShape.fluidDevice()` is false for `COLUMN`), so the wall records of section 7 do not reach it, and nothing fouls it.
+
+Proposal (**D10**, the owner's request; the numbers the agent's):
+
+- `φ`: the solid mass share of what a cycle took, the inert solids it moved to the bottoms over the feed mass it took. Both are in the cycle already.
+- **Tray fouling** `f`, 0 to 1, a fact of the column unit. While solids pass: `df/dt = (f∞ − f)/τ`, `f∞ = min(1, φ/0.02)`, `τ` the fouling time (10 process hours). It never falls by itself. Effect: the trays' capacity is `1 − 0.4 f`, so the flood fraction the cycle reads is divided by it; `HIGH LOAD` and then `FLOODING` (the feed taken is limited) come earlier. At 1 wt% solids the column settles at 80 % of its clean capacity; from 2 wt% at 60 %. Word: `TRAYS FOULED` from `f` ≥ 0.5.
+- **Wall loss**, mm, a fact of the column unit, on the column's material (its shape's `material`, taken at Start): a solids term `min(5, 0.5 · φ/0.01)` mm/y times the material's erosion factor (1 wt%: 0.5 mm/y on carbon steel, 0.25 on stainless), plus the matrix of section 6 on the bottoms liquid of the installed table (its composition and temperature, the column's pressure), computed once per installed table. A column without solids therefore corrodes as a vessel holding its bottoms would.
+- Stages as section 7 (`THIN WALL`, `WEEPING`). Through: a new `Condition.LEAKING` of rank `TRIP`; the column takes nothing until it is repaired.
+- Repair and cleaning: the constructor's Repair on a stopped column sets its wall loss to 0; Clean on a stopped column sets `f` to 0. A wrecked column (blast) is deconstructed, as every structure.
+- The constructor shows the Material choice for a column too (WP3 left it out because a column is no fluid device).
+- Not built: a release to the air from a leaking column (it holds accounts, not an inventory the open-vessel law can spill).
+
 ## 14. Constructor and simulator
 
 - Constructor, the group of the structure in front: `Repair` beside `Deconstruct`; its target line also shows the structure's state (wall left, `LEAKING`, `FAILED`, `WRECKED`) from the last published snapshot.
@@ -354,6 +373,7 @@ The owner's, 2026-11-16:
 - **O3** Sounds: set A, the weep loop only.
 - **O4** Format numbers reserved on `main` (`ab6298d03`); the delegations approved one by one.
 - D8: repairs of constructed equipment with the constructor; the repair kit kept for in-line pumps and compressors and control valve trims.
+- D10 (section 13.1): a column that carries solids fouls its trays and loses wall with the solid share; the numbers are the agent's, open to the owner.
 - Revision 2: a smaller material list (four); columns pass inert particles and stop only for freezing; particulate erosion, control valves first.
 
 ## 16. Sounds
@@ -372,7 +392,7 @@ The owner's, 2026-11-16:
 | Format | Now | This batch |
 |---|---|---|
 | Fluid facts schema | 27; 28 reserved by `2026-11-15-supercritical-fluids` | 29: per device `wallLoss`, `fouling`, `wrecked` in `MachineFacts`, each written only when not at its default; a control valve's trim health in the health map that exists |
-| Column facts | in the fluid facts | no new field: `FROZEN` is a condition, state, set again by the next solve |
+| Column facts | in the fluid facts | under schema 29: a column unit's tray fouling, wall loss and material (WP8), each with the default of a clean carbon steel column; `FROZEN` and `LEAKING` are conditions, state |
 | Equipment shape fields | 12 | 13: `material` |
 | Wire protocol | `icheme-3`; `icheme-4` reserved by `2026-11-15-supercritical-fluids` | `icheme-5`: views carry integrity and trim; the constructor payload carries the material; `Repair` and its answer beside `Deconstruct` |
 | Simulator sheet file | 2 | 3 |
@@ -397,6 +417,7 @@ About 4 500 lines of production code: four stages, each leaving `main` working (
 | B | WP5 | Fouling: `Films.fouled`, the passage diameter, the level steps, cleaning, the heat page, sizing on design `Rf` | fluid laws, flowsheet: `SheetSizing` | stage A |
 | C | WP6 | Simulator `METALLURGY` tab, Auto and Manual, Send to block, sheet file 3, the tour and guide page | flowsheet, client | WP1, WP3 |
 | D | WP7 | Columns and particles (section 13): `ColumnBlockSolve`, `ColumnSolve`'s product flash, `Condition.FROZEN` in `ColumnOperation`'s solve handling; tests | plant, flowsheet: `ColumnOperation` | none: it can run first, beside WP1 |
+| E | WP8 | Column fouling and wall loss from solids (section 13.1): `ColumnUnit` facts, `ColumnCycle`'s flood fraction, `ColumnOperation` booking, `Condition.LEAKING`, Start takes the material, repair and clean of a stopped column, the constructor's Material row for columns | plant, runtime: `ColumnOperation`, `ColumnFacts` | WP2, WP3 |
 | each | | Code guide chapter `integrity.md`, `FORMATS.md` rows, README history, final lane, translation commit at the merge | documents | |
 
 WP7 touches no file of the others and no format, so it can merge on its own as a small batch. WP2 and WP3 write disjoint files and can run as two threads at once; so can WP5 and WP6. Each work package gets a full brief (files, methods, numbers, tests, pitfalls) when it starts.
