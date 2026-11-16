@@ -73,6 +73,11 @@ public final class InletPhase {
         /** The mass share of droplets in the stream, what erodes a compressor's impeller ({@code Wear.wetGas}) and wets a
          * turbine's exhaust: its condensed mass share; 0 for one dense fluid, which has none (S4b). */
         public double dropletMassShare(){return dense?0:condensedMassShare;}
+        /** The volume share of bubbles in the stream, what a pump's gas ratio, churn and GAS word read (S5): its vapour volume
+         * share; NaN (no bubble read) for one dense fluid above reduced density 0.5 (its share below 1: the pump's liquid-like
+         * weight above 0), which holds none. At or below 0.5 a dense fluid is the gas it is and reads as before. Its head share
+         * reads {@link #vapourVolumeShare}. */
+        public double bubbleVolumeShare(){return dense&&vapourVolumeShare<1?Double.NaN:vapourVolumeShare;}
     }
 
     /**

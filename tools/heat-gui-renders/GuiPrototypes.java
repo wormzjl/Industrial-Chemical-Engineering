@@ -92,6 +92,7 @@ public final class GuiPrototypes {
         out.addAll(machinePages());
         out.add(exchangerTypes());
         out.addAll(pumpReadings());
+        out.addAll(dense());
         out.addAll(createCoupling());
         out.addAll(controlPanels());
         out.addAll(firedHeater());
@@ -299,6 +300,89 @@ public final class GuiPrototypes {
             d.c.fill(b.x()+20,b.y()+116,b.x()+220,b.y()+126,Palette.LINE);
             d.c.text("Lower internal space",b.x()+8,b.y()+139,Palette.TEXT);
         },true);
+    }
+
+    // ---- One dense fluid (batch 2026-11-15-supercritical-fluids, S5) ----
+
+    /**
+     * A closed tank of carbon dioxide at 310 K at reduced density 0.4, 0.8, 1.0005 and 1.6, and a casing pump drawing it at 0.6
+     * and 0.8: the shipped DeviceMeters on a view formed from the network model's own flash, as the screen reads it, with the
+     * client's dense label ({@code DenseLabel}) evaluated on that view. The slot rule moves the fluid between the vapour and the
+     * oil row at 1; the tab and legend of the row that holds it read Dense above 0.5, the level line No interface, the pump's
+     * gas meter its head share.
+     */
+    static List<Prototype> dense() {
+        var catalog = com.wormzjl.icheme.science.material.MaterialCatalog.bundled();
+        var model = com.wormzjl.icheme.client.gui.common.DenseLabel.model(catalog);
+        double[] co2 = new double[model.componentCount()];
+        co2[model.components().indexOf("CarbonDioxide")] = 1;
+        var weights = new ArrayList<Double>();
+        for (int i = 0; i < model.componentCount(); i++) weights.add(model.molecularWeight(i));
+        var out = new ArrayList<Prototype>();
+        for (double delta : new double[]{.4, .8, 1.0005, 1.6, .6}) {
+            double lo = 1e5, hi = 8e7;
+            for (int i = 0; i < 200 && hi - lo > 1e-13 * hi; i++) {
+                double mid = (lo + hi) / 2;
+                if (model.flashTP(310, mid, co2, () -> {
+                }).reducedDensity() < delta) lo = mid;
+                else hi = mid;
+            }
+            var s = model.flashTP(310, (lo + hi) / 2, co2, () -> {
+            });
+            var state = new com.wormzjl.icheme.runtime.fluid.FluidView.State(s.pressure(), s.temperature(), s.volume(), s.mass(),
+                    new double[]{s.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL), s.labelVolume(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS), s.vaporVolume()},
+                    new double[][]{s.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.OIL).clone(), s.labelAmountsView(com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOUS).clone(), s.vaporAmounts()},
+                    com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY, s.volume());
+            String tag = String.valueOf(delta).replace('.', '_');
+            String said = "reduced density " + delta + ", " + (s.oneFluidSlot() == com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State.VAPOR ? "vapour slot" : "liquid slot");
+            boolean pump = delta == .6 || delta == .8;
+            if (delta != .6) {
+                var tank = new com.wormzjl.icheme.runtime.fluid.FluidView.Tank(2, false, 0, 0, s.volume(), s.pressure(), s.pressure());
+                var view = new com.wormzjl.icheme.runtime.fluid.FluidView(2, 1, 0, 0, "FULL", state, 0, List.of(), null, 1, List.of(), null, null, List.of(), tank);
+                var meters = new com.wormzjl.icheme.client.gui.common.DeviceMeters(new com.wormzjl.icheme.client.gui.common.DeviceMeters.Data(Kind.RESERVOIR, view, model.components(), weights, true, null, false, List.of()),
+                        null, com.wormzjl.icheme.client.gui.common.DeviceMeters.PhaseRatioBasis.VOLUME, com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.CELSIUS,
+                        com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit.BAR, com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.PER_SECOND, false, TEXTS);
+                var m = meters.withDense(meters.denseRow(model));
+                var in = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.NONE, null, false, m.level(), null, List.of(), m.phases(), m.meters());
+                int row = m.dense() >= 0 ? m.dense() : s.oneFluidSlot() == com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.State.VAPOR ? 2 : 0;
+                out.add(devicePage("dense-tank-" + tag, WINDOW[0], WINDOW[1], in, (d, k) -> {
+                    d.title("CO2 tank at 310 K, " + said);
+                    d.tabs(0, "Overview", "Outlets", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    var box = device(d, in, Map.of());
+                    denseContents(d, box, row, m.dense(), List.of(new String[]{"Component", "Volume %", "kmol"}, new String[]{"CarbonDioxide", "100.0", com.wormzjl.icheme.client.gui.common.kit.Format.number(s.mass() / .04401 / 1000)}));
+                    d.footer(1, "Close", "Volume", "°C", "bar", "/s");
+                }));
+            }
+            if (pump) {
+                double alpha = 1 - com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.pumpLiquidLikeWeight(s);
+                var view = new com.wormzjl.icheme.runtime.fluid.FluidView(3, 1, 0, 0, "STEADY: flowing", state, 5.0, List.of(), 2e5, 1, List.of(), null, null, List.of(), null, null, null, null, null,
+                        new com.wormzjl.icheme.runtime.fluid.FluidView.Pump(null, null, alpha, 1, null, null), null, null, null, null);
+                var meters = new com.wormzjl.icheme.client.gui.common.DeviceMeters(new com.wormzjl.icheme.client.gui.common.DeviceMeters.Data(Kind.PUMP, view, model.components(), weights, true, null, false, List.of()),
+                        null, com.wormzjl.icheme.client.gui.common.DeviceMeters.PhaseRatioBasis.VOLUME, com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit.CELSIUS,
+                        com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit.BAR, com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit.PER_HOUR, false, TEXTS);
+                var m = meters.withDense(meters.denseRow(model));
+                var in = casingInput().withSuction(m.suction());
+                // The Suction and Health groups alone, as the page shows them under the drive.
+                List<Column.Row> rows = DeviceColumn.suction(m.suction(), TEXTS);
+                out.add(devicePage("dense-pump-" + tag, WINDOW[0], WINDOW[1], rows, (d, k) -> {
+                    d.title("Centrifugal pump, CO2 at 310 K, " + said);
+                    d.name("P-101", true);
+                    d.tabs(0, "Overview", "Datasheet");
+                    d.status(Door.tr("gui.icheme.fluid.flowing"), Palette.MUTED);
+                    device(d, in, rows, Map.of("volumeFlow", "100.0", "maximumAddedPressure", "10.0"));
+                    d.footer(2, "Close", "Apply", "Volume", "°C", "bar", "/h");
+                }));
+            }
+        }
+        return out;
+    }
+
+    /** The contents' phase tabs as the device screen names them ({@code DeviceColumn.phaseKey}, the dense row's "Dense"), then the table. */
+    static void denseContents(Door d, Rect box, int phase, int dense, List<String[]> table) {
+        int n = 4, tw = (box.w() - 3 * (n - 1)) / n;
+        for (int i = 0; i < n; i++) d.skin.button(d.c, new Rect(box.x() + i * (tw + 3), box.y(), tw, 16), TEXTS.get("phase_tab." + DeviceColumn.phaseKey(i, false, dense)), i == phase ? Skin.Press.CURRENT : Skin.Press.REST, false);
+        d.table(new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20), new int[]{box.w() - 120, 60, 60}, table);
     }
 
     // ---- W10d's pump readings and curve (batch 2026-11-03-rotating-machinery, decision D37; W10D_BUILD_PLAN.md) ----

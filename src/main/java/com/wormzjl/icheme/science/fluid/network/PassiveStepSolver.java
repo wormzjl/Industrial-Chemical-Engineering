@@ -208,10 +208,12 @@ public final class PassiveStepSolver {
      * graph and slice, and the density of each set-flow pump's supply on it ({@link MoverSuction#riseDensity}; -1 where none is
      * measured), NaN until read, then filled in place.</li>
      * <li>{@code readControls}, {@code suctionMovers}, {@code npshDesigns}, {@code liquidDensities}, {@code wetShares},
-     * {@code vapourShares}, {@code condensedShares}: request 11 (owner decisions D19 and D20): what this solve reads of its
+     * {@code vapourShares}, {@code condensedShares}, {@code bubbleShares}: request 11 (owner decisions D19 and D20): what this solve reads of its
      * mover's suction on the step's start states ({@link MoverSuction#readSuctions}): the control the reading belongs to, the mover as
      * its law runs this solve (a centrifugal pump's head scaled by its gas share), its NPSH design and the density of the
-     * liquid it draws, and a centrifugal compressor's wet efficiency as a share of its dry one (one elsewhere).</li>
+     * liquid it draws, and a centrifugal compressor's wet efficiency as a share of its dry one (one elsewhere); a liquid mover's
+     * share of bubbles in its supply, which its gas ratio, churn and GAS word read: its vapour volume share, NaN for one dense
+     * fluid, which holds none (S5 of batch 2026-11-15-supercritical-fluids; {@link InletPhase.Supply#bubbleVolumeShare}).</li>
      * </ul>
      * The suction readings and the vapour lock are written into a solve's arrays right after it is built
      * ({@link MoverSuction#suctionFloors(PassiveNetwork,List,SolveConstants)}, {@link MoverSuction#readSuctions}, {@link MoverSuction#vapourLocks}), the
@@ -223,35 +225,36 @@ public final class PassiveStepSolver {
         final double[] heldOpenings;final BitSet standing;final int[] series;
         final PassiveNetwork supplyGraph;final double supplyDuration;final double[] supplyDensities;
         final FlowControl[] readControls;final FlowControl.Mover[] suctionMovers;final com.wormzjl.icheme.science.machine.Npsh[] npshDesigns;
-        final double[] liquidDensities,wetShares,vapourShares,condensedShares;
+        final double[] liquidDensities,wetShares,vapourShares,condensedShares,bubbleShares;
         private SolveConstants(List<FluidThermodynamics.State> inputStates,double[] suctionFloors,double[] zoneEdges,InletPhase.Drawn[] drawnStreams,Runnable suctionCheckpoint,
                                boolean[] vapourLocked,double[] heldOpenings,BitSet standing,int[] series,PassiveNetwork supplyGraph,double supplyDuration,double[] supplyDensities,
                                FlowControl[] readControls,FlowControl.Mover[] suctionMovers,com.wormzjl.icheme.science.machine.Npsh[] npshDesigns,
-                               double[] liquidDensities,double[] wetShares,double[] vapourShares,double[] condensedShares) {
+                               double[] liquidDensities,double[] wetShares,double[] vapourShares,double[] condensedShares,double[] bubbleShares) {
             this.inputStates=inputStates;this.suctionFloors=suctionFloors;this.zoneEdges=zoneEdges;this.drawnStreams=drawnStreams;this.suctionCheckpoint=suctionCheckpoint;
             this.vapourLocked=vapourLocked;this.heldOpenings=heldOpenings;this.standing=standing;this.series=series;
             this.supplyGraph=supplyGraph;this.supplyDuration=supplyDuration;this.supplyDensities=supplyDensities;
             this.readControls=readControls;this.suctionMovers=suctionMovers;this.npshDesigns=npshDesigns;
-            this.liquidDensities=liquidDensities;this.wetShares=wetShares;this.vapourShares=vapourShares;this.condensedShares=condensedShares;
+            this.liquidDensities=liquidDensities;this.wetShares=wetShares;this.vapourShares=vapourShares;this.condensedShares=condensedShares;this.bubbleShares=bubbleShares;
         }
         /** A fresh solver's, before any solve: every array empty, no series, no supply graph. */
         static SolveConstants none() {
             return new SolveConstants(List.of(),new double[0],new double[0],new InletPhase.Drawn[0],()->{},new boolean[0],new double[0],new BitSet(),null,null,0,new double[0],
-                    new FlowControl[0],new FlowControl.Mover[0],new com.wormzjl.icheme.science.machine.Npsh[0],new double[0],new double[0],new double[0],new double[0]);
+                    new FlowControl[0],new FlowControl.Mover[0],new com.wormzjl.icheme.science.machine.Npsh[0],new double[0],new double[0],new double[0],new double[0],new double[0]);
         }
         /** A solve's (or the mint's) on {@code edges} connections, its suction readings and vapour lock not yet written: no
-         * floor and no zone edge (positive infinity), no supply density read (NaN), no condensed share (NaN), the rest empty. */
+         * floor and no zone edge (positive infinity), no supply density read (NaN), no condensed share and no bubble share (NaN), the rest empty. */
         static SolveConstants of(List<FluidThermodynamics.State> inputStates,int edges,Runnable checkpoint,double[] heldOpenings,BitSet standing,int[] series,
                                  PassiveNetwork supplyGraph,double supplyDuration) {
             double[] floors=new double[edges];Arrays.fill(floors,Double.POSITIVE_INFINITY);double[] zoneEdges=new double[edges];Arrays.fill(zoneEdges,Double.POSITIVE_INFINITY);
             double[] supplyDensities=new double[edges];Arrays.fill(supplyDensities,Double.NaN);double[] condensedShares=new double[edges];Arrays.fill(condensedShares,Double.NaN);
+            double[] bubbleShares=new double[edges];Arrays.fill(bubbleShares,Double.NaN);
             return new SolveConstants(inputStates,floors,zoneEdges,new InletPhase.Drawn[edges],checkpoint,new boolean[edges],heldOpenings,standing,series,supplyGraph,supplyDuration,supplyDensities,
-                    new FlowControl[edges],new FlowControl.Mover[edges],new com.wormzjl.icheme.science.machine.Npsh[edges],new double[edges],new double[edges],new double[edges],condensedShares);
+                    new FlowControl[edges],new FlowControl.Mover[edges],new com.wormzjl.icheme.science.machine.Npsh[edges],new double[edges],new double[edges],new double[edges],condensedShares,bubbleShares);
         }
         /** These constants with the input states {@code next}, every other value the same object. */
         SolveConstants withInputStates(List<FluidThermodynamics.State> next) {
             return new SolveConstants(next,suctionFloors,zoneEdges,drawnStreams,suctionCheckpoint,vapourLocked,heldOpenings,standing,series,supplyGraph,supplyDuration,supplyDensities,
-                    readControls,suctionMovers,npshDesigns,liquidDensities,wetShares,vapourShares,condensedShares);
+                    readControls,suctionMovers,npshDesigns,liquidDensities,wetShares,vapourShares,condensedShares,bubbleShares);
         }
     }
     /** The constants of the solve in progress, or of the last one ({@link SolveConstants}); a fresh solver's are empty. */
@@ -1941,7 +1944,8 @@ public final class PassiveStepSolver {
         public PipeObservation withFlowSamples(List<FlowSample> samples){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,samples,npshRatio,dry,gasRatio,npshRequired,vapourShare,valveDrop,cavitation,condensedShare);}
         /** This row with a liquid pump's suction read (W10b, W10c, W10d): its NPSHA over NPSH3 (NaN: none), whether it runs dry,
          * its suction's vapour share in Turpin onsets, {@code r = α/α_T} (NaN: none), its NPSH3 at the accepted flow (m; NaN:
-         * none) and its suction's vapour volume share α (NaN: none). The pump page reads the last two. */
+         * none) and its suction's vapour volume share α (NaN: none). The pump page reads the last two. A liquid pump's ratio is of
+         * bubbles: NaN for one dense fluid, which holds none (S5); its α is the head share's, which follows the density. */
         public PipeObservation withSuction(double ratio,boolean value,double gas,double required,double share){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,ratio,value,gas,required,share,valveDrop,cavitation,condensedShare);}
         /** This row with a valve's read: its own pressure drop (Pa) and, for a flowing liquid, its cavitation. */
         public PipeObservation withValve(double drop,Cavitation c){return new PipeObservation(pipe,firstPressure,secondPressure,firstElevation,secondElevation,columnDensity,temperature,flowing,lengths,losses,massFlow,density,flowSamples,npshRatio,dry,gasRatio,npshRequired,vapourShare,drop,c,condensedShare);}

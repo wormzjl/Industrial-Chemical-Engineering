@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.client.gui.flowsheet;
 
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
+import com.wormzjl.icheme.client.gui.common.DenseLabel;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.ArrayList;
@@ -12,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * What a stream's meters read (batch 2026-11-02-process-simulator, W6_SCREEN_PLAN.md section 6), from the state its run left, read only.
  *
- * @param vapour        mole % gas
+ * @param vapour        mole % gas; NaN for one dense fluid ({@link Phases#denseFluid}), which has none
  * @param moles         mol/s
  * @param mass          kg/s
  * @param liquidVolume  m³/s as liquid at each component's reference density
@@ -23,9 +24,22 @@ import org.jetbrains.annotations.Nullable;
  * @param enthalpy      J/kg
  */
 public record StreamProps(double temperature, double pressure, double vapour, double moles, double mass, double liquidVolume, double density, double liquidMu, double gasMu, double weight, double enthalpy, Phases phases) {
-    /** Mole % in each phase. */
-    public record Phases(double organic, double aqueous, double gas, double solid) {
+    /**
+     * Mole % in each phase, and the share that holds one dense fluid ({@link DenseLabel#row}: 0 organic, 1 aqueous, 2 gas), which
+     * reads "Dense"; -1 for any other stream.
+     */
+    public record Phases(double organic, double aqueous, double gas, double solid, int dense) {
         public static final Phases NONE = new Phases(0, 0, 0, 0);
+
+        /** The phases of a stream that is no dense fluid. */
+        public Phases(double organic, double aqueous, double gas, double solid) {
+            this(organic, aqueous, gas, solid, -1);
+        }
+
+        /** Whether the stream reads "Dense fluid" ({@link DenseLabel#dense}). */
+        public boolean denseFluid() {
+            return dense >= 0;
+        }
     }
 
     /** The world's package as the screen reads it: its thermo, its list, a component's display name. */
@@ -67,8 +81,10 @@ public record StreamProps(double temperature, double pressure, double vapour, do
         double mu = oil > 0 ? model.slotViscosity(s, s.slot(FluidThermodynamics.OIL), null, null) : aqueous > 0 ? model.slotViscosity(s, s.slot(FluidThermodynamics.AQUEOUS), null, null) : Double.NaN;
         double gas = vapour > 0 ? model.slotViscosity(s, FluidThermodynamics.State.VAPOR, null, null) : Double.NaN;
         double total = Math.max(all, Double.MIN_NORMAL);
-        var phases = new Phases(100 * oil / total, 100 * aqueous / total, 100 * vapour / total, 0);
-        return new StreamProps(s.temperature(), s.pressure(), 100 * vapour / total, all, s.mass(), volume, s.volume() > 0 ? s.mass() / s.volume() : Double.NaN, mu, gas, all == 0 ? 0 : s.mass() / all * 1000, s.mass() == 0 ? 0 : s.enthalpy() / s.mass(), phases);
+        // One dense fluid (S5): its share reads "Dense", and it has no vapour share: the slot it sits in is the network's slot
+        // rule, which moves it at reduced density 1.
+        var phases = new Phases(100 * oil / total, 100 * aqueous / total, 100 * vapour / total, 0, DenseLabel.row(s));
+        return new StreamProps(s.temperature(), s.pressure(), phases.denseFluid() ? Double.NaN : 100 * vapour / total, all, s.mass(), volume, s.volume() > 0 ? s.mass() / s.volume() : Double.NaN, mu, gas, all == 0 ? 0 : s.mass() / all * 1000, s.mass() == 0 ? 0 : s.enthalpy() / s.mass(), phases);
     }
 
     /** The parts a stream holds, by {@code phase}: 0 organic, 1 aqueous, 2 gas, 3 none (a door lists the solids from {@link FlowStream#solids}), any other the whole stream. */

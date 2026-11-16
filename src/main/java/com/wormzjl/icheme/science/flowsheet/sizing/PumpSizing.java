@@ -49,8 +49,11 @@ public final class PumpSizing {
      * @param edge     the clean zone's edge E of its liquid ({@link FlowThermo#zoneEdge}) over the pressure {@code npsh} counts
      *                 from, m; positive infinity where it has none
      * @param boils    whether its liquid has a p_v
+     * @param reducedDensity its suction's reduced density {@code v_c / v} where it is one dense fluid ({@code State.dense()},
+     *                 S5 of batch 2026-11-15-supercritical-fluids), which {@link Limit#PUMP_DENSITY} reads; NaN for any other
+     *                 suction, which reads no such row
      */
-    public record Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils) {
+    public record Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils, double reducedDensity) {
         /** A pump with no flow: no size, no lamp. */
         public static final Load NONE = new Load(0, 0, 0, null, Double.NaN);
 
@@ -62,6 +65,11 @@ public final class PumpSizing {
         /** A pump on a liquid that holds no gas: its NPSH counts from its vapour pressure and it has no edge above that. */
         public Load(double flow, double head, double mostHead, @Nullable Double npsh, double density) {
             this(flow, head, mostHead, npsh, density, Double.POSITIVE_INFINITY, true);
+        }
+
+        /** A pump on a suction that is no dense fluid. */
+        public Load(double flow, double head, double mostHead, @Nullable Double npsh, double density, double edge, boolean boils) {
+            this(flow, head, mostHead, npsh, density, edge, boils, Double.NaN);
         }
 
         /**
@@ -85,12 +93,13 @@ public final class PumpSizing {
         public static Load of(LineSizing.Line suction, LineSizing.Size size, FlowStream liquid, double rise, @Nullable Double height, FlowThermo thermo) {
             if (!suction.flows()) return NONE;
             double weight = suction.density() * PassiveStepSolver.GRAVITY, reference = thermo.model().pumpReferenceDensity() * PassiveStepSolver.GRAVITY;
-            if (height == null) return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, null, suction.density());
+            double dense = liquid.state() != null && liquid.state().dense() ? liquid.state().reducedDensity() : Double.NaN;
+            if (height == null) return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, null, suction.density(), Double.POSITIVE_INFINITY, true, dense);
             double vapour = thermo.vapourPressure(liquid.temperature(), liquid.pressure(), liquid.amountsView()), edge = thermo.zoneEdge(liquid.temperature(), liquid.pressure(), liquid.amountsView());
             boolean boils = vapour < Double.POSITIVE_INFINITY;
             double from = boils ? vapour : 0, at = liquid.pressure() + weight * height - 1e5 * LineSizing.drop(suction, size, suction.length());
             return new Load(suction.volume() * 3600, rise / weight, Limit.PUMP_HEAD.value() / reference, (at - from) / weight, suction.density(),
-                    edge < Double.POSITIVE_INFINITY ? (edge - from) / weight : Double.POSITIVE_INFINITY, boils);
+                    edge < Double.POSITIVE_INFINITY ? (edge - from) / weight : Double.POSITIVE_INFINITY, boils, dense);
         }
 
         boolean flows() {
@@ -151,6 +160,7 @@ public final class PumpSizing {
             readings.add(Limit.PUMP_NPSH.against(npsh, required + Limit.PUMP_NPSH.value()));
         }
         readings.add(Limit.PUMP_RATED.read(100 * load.flow() / UnitRatings.pumpFlow(size.discharge())));
+        if (Double.isFinite(load.reducedDensity())) readings.add(Limit.PUMP_DENSITY.read(load.reducedDensity()));
         return new Rating(readings);
     }
 

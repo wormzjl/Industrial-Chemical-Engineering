@@ -70,6 +70,8 @@ final class StepObservations {
                 }
                 observed=observed.withFlowSamples(meters);
             }
+            // A running liquid pump's suction: its gas ratio reads bubbles, none in one dense fluid (S5); its page's share and its gas
+            // lock read the head share's vapour share, which follows the density (the page names it by the client's dense label).
             if(pipe.control() instanceof FlowControl.Mover mover&&mover.liquid()&&mover.targetVolumeFlow()>0&&solver.suctions.read(e.graph,edge))
                 observed=observed.withSuction(npshRatio(e,edge,states,flows[edge]),dry(edge,mover,modes.get(edge),flows[edge],states.get(a).pressure()),gasRatio(edge,mover,states.get(a).pressure()),
                         npshRequired(edge,flows[edge]),solver.constants.vapourShares[edge]);
@@ -153,11 +155,12 @@ final class StepObservations {
     /**
      * W10c (owner decision D35): a running centrifugal pump's suction vapour share in Turpin onsets, {@code r = α/α_T} at its
      * suction node's pressure ({@link com.wormzjl.icheme.science.machine.GasEntrainment#onset}), the share this solve read
-     * ({@link MoverSuction#readSuctions}); NaN for a set-flow pump, which has no head factor, or no suction pressure. Observational.
+     * ({@link MoverSuction#readSuctions}), of bubbles ({@code bubbleShares}); NaN for a set-flow pump, which has no head factor,
+     * no suction pressure, or one dense fluid, which holds no bubbles (S5). Observational.
      */
     double gasRatio(int edge,FlowControl.Mover mover,double suctionPressure) {
         if(!(mover instanceof FlowControl.Machine)||!(suctionPressure>0))return Double.NaN;
-        return solver.constants.vapourShares[edge]/com.wormzjl.icheme.science.machine.GasEntrainment.onset(suctionPressure);
+        return solver.constants.bubbleShares[edge]/com.wormzjl.icheme.science.machine.GasEntrainment.onset(suctionPressure);
     }
     /**
      * W10b (owner decision D34): whether a liquid pump whose driver is on runs dry at the accepted point: vapour-locked

@@ -82,7 +82,7 @@ public final class SimulatorRender {
     static final HeatControlColumn.Texts T = (key, a) -> HeatDiagramRender.tr("gui.icheme." + key, a).replace("%%", "%");
     static final MaterialCatalog CATALOG = MaterialCatalog.bundled();
     static final String NETWORK = CATALOG.presets().network().packageId();
-    static final V3ColumnInput BASE = CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()).input(CATALOG);
+    static final V3ColumnInput BASE = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(CATALOG.presets().column(CATALOG.presets().network().defaultColumnPreset()), CATALOG);
     static StreamProps.Fluids FLUIDS;
     /** The display units the sheets show: the default's, with the flow's basis from {@code -Dbasis=MOLE|MASS|VOLUME}. */
     // -Dpressure=KILOPASCAL, -Dtime=PER_MINUTE and -Dbasis=MASS draw every sheet on those display keys. -Dconditions=true latches the P, T key.
@@ -937,6 +937,42 @@ public final class SimulatorRender {
     }
 
     /**
+     * A pump on carbon dioxide at 310 K, reduced density 0.8 and 1.2 (batch 2026-11-15-supercritical-fluids, S5): the feed's door
+     * ("Dense" in the phase shares), the pump's door (its status line) and the Sizing tab with the pump selected (the Suction
+     * density row, yellow below 0.86).
+     */
+    private static void dense(Path out) throws Exception {
+        var model = FluidThermodynamics.forNetwork(CATALOG, NETWORK);
+        var thermo = new FlowThermo(model, CATALOG, NETWORK, () -> {
+        });
+        double[] co2 = new double[model.componentCount()];
+        co2[model.components().indexOf("CarbonDioxide")] = 1;
+        for (double delta : new double[]{.8, 1.2}) {
+            double lo = 1e5, hi = 8e7;
+            for (int i = 0; i < 200 && hi - lo > 1e-13 * hi; i++) {
+                double mid = (lo + hi) / 2;
+                if (MaterialRuntime.with(CATALOG, NETWORK, () -> model.flashTP(310, mid, co2, () -> {
+                })).reducedDensity() < delta) lo = mid;
+                else hi = mid;
+            }
+            double p = (lo + hi) / 2;
+            var sheet = new Sheet().unit("P-1", "pump", 220, 90, SheetEditor.defaults("pump", () -> null))
+                    .feed("CO2", "P-1", "in", new Flowsheet.Feed(310, p, new LinkedHashMap<>(java.util.Map.of("CarbonDioxide", 100.)), List.of()), 100, 100).product("OUT", "P-1", "out", 360, 100).build();
+            var run = FlowsheetEngine.run(sheet, CATALOG, () -> {
+            }, null, FlowsheetSolver.Progress.NONE);
+            var all = MaterialRuntime.with(CATALOG, NETWORK, () -> Proposal.sizeAll(sheet, run, thermo, FlowsheetSolver.Progress.NONE));
+            var pump = all.sized().units().get("P-1");
+            System.out.printf("dense %.1f: %.6g Pa, run %s, pump %s%n", delta, p, run.status(), pump == null ? "unsized" : pump.rating().readings());
+            var finished = new SimulatorHost.Finished(all.sheet(), all.run(), 1);
+            var host = new Sized(finished, new SimulatorRunner.Rated(all.sheet(), finished, all.sized(), true), null);
+            String tag = String.format(java.util.Locale.ROOT, "%.1f", delta).replace('.', '_');
+            grid(out, "dense-" + tag + "-doors", DW, DH, List.of("CO2 at 310 K, reduced density " + delta + ": the feed", "The pump"),
+                    List.of(stream(sheet, run, "CO2", 0), unit(sheet, run, "P-1", 0)));
+            sheet(out, "dense-" + tag + "-sizing", W, H, List.of("Sizing: the pump on reduced density " + delta), List.of(sized(host, s -> s.sizing.unit = "P-1")));
+        }
+    }
+
+    /**
      * S5's sheets (batch 2026-11-02-process-simulator): Send to block on the Sizing tab after one Size all of the sample and after a second, with
      * what its hover says; then the constructor's Import page listing the designs Send to block stores, Import on the choice page, and
      * the condenser landed on the draft.
@@ -1285,6 +1321,11 @@ public final class SimulatorRender {
         // -Donly=member-counts: S3b's two sheets alone.
         if ("member-counts".equals(System.getProperty("only"))) {
             memberCounts(out, sheet, run, seconds);
+            return;
+        }
+        // -Donly=dense: a pump on dense carbon dioxide (batch 2026-11-15-supercritical-fluids, S5).
+        if ("dense".equals(System.getProperty("only"))) {
+            dense(out);
             return;
         }
         // -Donly=sizing: S4b's sheets alone.

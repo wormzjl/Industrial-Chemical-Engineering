@@ -372,7 +372,7 @@ final class MoverSuction {
         int edges=graph.pipes().size();
         var readControls=c.readControls;var suctionMovers=c.suctionMovers;var npshDesigns=c.npshDesigns;
         var liquidDensities=c.liquidDensities;var wetShares=c.wetShares;var vapourShares=c.vapourShares;var drawnStreams=c.drawnStreams;
-        var condensedShares=c.condensedShares;
+        var condensedShares=c.condensedShares;var bubbleShares=c.bubbleShares;
         for(int edge=0;edge<edges;edge++) {
             var pipe=graph.pipes().get(edge);
             if(!(pipe.control() instanceof FlowControl.Mover mover))continue;
@@ -384,7 +384,7 @@ final class MoverSuction {
             if(mover.liquid())drawnStreams[edge]=InletPhase.drawn(model,graph,edge,mover.targetVolumeFlow(),0);
             if(mover instanceof FlowControl.Machine machine) {
                 var supply=mover.liquid()&&!(duration>0)?drawnStreams[edge].supply():InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration);
-                if(machine.liquid())vapourShares[edge]=supply.vapourVolumeShare();
+                if(machine.liquid()){vapourShares[edge]=supply.vapourVolumeShare();bubbleShares[edge]=supply.bubbleVolumeShare();}
                 if(machine.liquid())suctionMovers[edge]=machine.withHeadShare(com.wormzjl.icheme.science.machine.GasEntrainment.headShare(supply.vapourVolumeShare(),graph.reservoirs().get(pipe.first()).state().pressure()));
                 // A vacuum pump (batch 2026-11-10-vacuum-pump) counts the suction mixture's volume as a set-flow mover does; a dry
                 // screw keeps its vapour share for its wear and liquid noise (owner V6 B).
@@ -394,7 +394,7 @@ final class MoverSuction {
                 else{wetShares[edge]=wetShare(supply);condensedShares[edge]=supply.dropletMassShare();}
             }
             // W10d: a set-flow pump's suction vapour share, for its page's gas reading only (its law counts the mixture already).
-            else if(mover.liquid())vapourShares[edge]=(duration>0?InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration):drawnStreams[edge].supply()).vapourVolumeShare();
+            else if(mover.liquid()){var supply=duration>0?InletPhase.supply(model,graph,edge,mover.targetVolumeFlow(),duration):drawnStreams[edge].supply();vapourShares[edge]=supply.vapourVolumeShare();bubbleShares[edge]=supply.bubbleVolumeShare();}
             if(mover.liquid()){npshDesigns[edge]=mover.npsh();liquidDensities[edge]=InletPhase.liquidDensity(model,graph,edge,mover.targetVolumeFlow(),duration);}
         }
     }
