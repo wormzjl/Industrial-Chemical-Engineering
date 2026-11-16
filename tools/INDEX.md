@@ -9,6 +9,8 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
 | [code-guide/](code-guide/README.md) | Code map: files and lines per package, the layer import matrix, the guide README's module counts (`--readme`, `--check`) | `2026-11-13-codebase-review` | In use since 2026-11-13 |
+| [supercritical-probes/](supercritical-probes/README.md) | Dense and supercritical fluid probes per stage: laws, slot rule, machine shares and E, plunger geometry, CoolProp numbers | `2026-11-15-supercritical-fluids` | Kept for reference since 2026-11-16 |
+| [plunger-forms/](plunger-forms/README.md) | Candidate forms of an equipment model drawn with the kit, and their option sheets | `2026-11-15-supercritical-fluids` | Kept for reference since 2026-11-16 |
 | [fluid-step-cost/](fluid-step-cost/README.md) | Fluid step cost: the Jacobian pattern census, CPU by stack from a JFR, the bench scripts and readers | `2026-11-15-fluid-step-cost` | Kept for reference since 2026-11-15 |
 | [codebase-review-bench/](codebase-review-bench/README.md) | B1 CPU, allocation and heap profile of the fluid step, the column and 20 shaft trains, with JFR; the after-wave-B and Rust band solve measurements | `2026-11-13-codebase-review` | In use since 2026-11-13 |
 | [tutorial-recordings/](tutorial-recordings/README.md) | Writes the tutorial's four recordings from the mod's data and models | `2026-11-12-tutorial-system` | In use since 2026-11-12 |

@@ -80,6 +80,11 @@ Status: Concluded 2026-10-19 (batch in 0.9.0). Index: [../INDEX.md](../INDEX.md)
 - 2026-11-15 (same batch): the parity and reference tables rewritten one record per line (`compact_json.py`, which both
   generators now write with): 46,361 lines to 2,734, 1.27 MB to 1.12 MB; the parsed documents and every number's text
   are identical (`tmp/coolprop-compact/compare.js`). The CoolProp fluid files stay byte-identical to upstream
+- 2026-11-16 (same batch, merge preparation): S0's scratch scripts kept in `supercritical-s0/`: `terms.py` (the term
+  types of fetched fluid files: which the oracle must read), `probe_mix.py` (CoolProp mixture flashes at 5-30 MPa, the
+  premise of `mixture-density-reference.json`), `tables.py` (the `G3 F11` rows of a test log as the review's tables),
+  `compare.py` (a regenerated fixture holds the old rows and only appends), `compare_compact.js` (the compact layout
+  check above). Run each from the worktree root with the paths its header or arguments give.
 
 ### Notes
 

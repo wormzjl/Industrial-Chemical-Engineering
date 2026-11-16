@@ -133,6 +133,17 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   against the scratch). Form A changed for three equipment gates (owner: "Keep both"); the pump page's head share only
   on a centrifugal curve (`9195b5161`); main's reservation commit `ab6298d03` merged. Decisions in the plan's section
   2b, points 19 to 21.
+- 2026-11-16: merge preparation (sub-thread; owner: "Approve all"), by `merge-prep`. CHANGELOG entry under `[Unreleased]`
+  (`daa117a40`); the translation commit, 35 keys in zh_cn, fr_fr, es_es, ja_jp (`7b98b9567`); the plunger pump's relief
+  line, in en_us too: its bare `% p` broke `String.format` and it was 534 px against the datasheet's 411, both found by
+  `UnitTextTest`, which S8 had left for this commit (`7ae07f423`, `3307722ab`); the code guide at `9195b5161`, 23
+  chapters' snapshot lines, line counts, `ReleasePressure.lowestHeld` and a mover's device kind by its law (`55f338e3f`;
+  checked, no text change: `effects.md`, `runtime-engine.md`, `tutorial.md`); the tooling cleanup with
+  [THREAD_BRIEFS.md](THREAD_BRIEFS.md) and [OWNER_DECISIONS.md](OWNER_DECISIONS.md) (the next commit).
+  `main-reach.pl`: the six older classes, none of this batch. Runs, the classes `affected.mjs select` names for the lang
+  files, on the final text: `test` 75 classes, 516 tests; `equipmentGates` `UnitTextTest`; `holdGates` 8 suites, 57
+  tests; `columnGates` 2 classes (up to date after run 1); none failed (`LanguageFilesTest`, `SizingPageTest` among
+  them). Not run: `EngineDigestTest` (the lane re-records line 313), chain-100, the GameTests, the campaign.
 
 ## Documents
 
@@ -163,6 +174,10 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   readers of a liquid machine, the equipment and its polygons, the simulator, the dense GameTest, the runs, the owner items.
 - [MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md): the merge of main 0.33.0: conflicts, the revision tokens of the 33
   records both sides changed, the rare gases' critical volumes, the digest measurement, main's slot readers, the runs.
+- [S1_ENGINE_REVIEW.md](S1_ENGINE_REVIEW.md): S1, the band boxes 3 and 4 removed, the phase traits, the digest lines that moved.
+- [THREAD_BRIEFS.md](THREAD_BRIEFS.md): the briefs of every sub-thread (common rules, S0 to S4b, the merge of main 0.33.0,
+  S8, the merge preparation), as written.
+- [OWNER_DECISIONS.md](OWNER_DECISIONS.md): the main thread's note of the owner's standing instructions and answers.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
   recommended pressure ranges and the sizes of the open decisions.
 - Earlier: [../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md](../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md)
@@ -174,6 +189,11 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 `science/thermo/phase/` (band, traits), `science/fluid/thermo/` and `science/fluid/network/` (slot mapping, laws on
 traits, "no saturation"), `science/fluid/transport/MixtureViscosity`, `science/machine/`, `science/flowsheet/`,
 dataset records under `data/icheme/materials/properties/`, the device screens' phase rows.
+
+Tool folders: [`tools/supercritical-probes/`](../../tools/supercritical-probes/README.md) (the stages' probes and number
+scripts), [`tools/plunger-forms/`](../../tools/plunger-forms/README.md) (the form option sheets of S8),
+[`tools/coolprop-parity/`](../../tools/coolprop-parity/README.md) (S0's generators; its scratch scripts in `supercritical-s0/`),
+[`tools/compound-import/`](../../tools/compound-import/README.md) (`critical-volume.mjs`, S3).
 
 ## Open items
 
@@ -204,6 +224,32 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
 - Not checked: liquids M8 cannot reach (ethane at Tr 0.96-1 inside its domain, any liquid between Tr 0.95 and Tc); the
   effect of O9's pairs on mixtures; the error of a cut's estimated constants (qualification review, "Not measured").
   The campaigns do not cover the dense window (limits review, last section).
-- The briefs are in `tmp/supercritical-briefs/BRIEFS.md` in the worktree, not tracked (the hook refuses the main
-  checkout's `research/`): to be moved there. Its M4 line states the viscosity coefficients ten times too large; the
+- The briefs are tracked since the merge preparation ([THREAD_BRIEFS.md](THREAD_BRIEFS.md)). Its M4 line states the viscosity coefficients ten times too large; the
   test and the qualification review use the published ones.
+
+- For the owner (S5, [S5_PRESENTATION_REVIEW.md](S5_PRESENTATION_REVIEW.md) section 7): items 1 to 8 (the client's catalog
+  on a datapack server, the sight glass, the level transmitter, the line service, a two-phase head share, the density
+  row's hover, the share's colour, a dense aqueous tank).
+- For the owner (the column's feed, [COLUMN_FEED_REVIEW.md](COLUMN_FEED_REVIEW.md), "Options for the owner"): O1 (the feeds
+  still refused as one phase) and O2 (the 181 one-phase answers by the Wilson endpoint test). Implemented: O1 A.
+- For the owner: S1's open line ([S1_ENGINE_REVIEW.md](S1_ENGINE_REVIEW.md), "Open"); S3's not-done list
+  ([S3_DATA_REVIEW.md](S3_DATA_REVIEW.md) section 6).
+- For the final lane ([MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md) section 9): re-record the engine digest once
+  (line 313, the grade token); chain-100 and the fluid GameTests are due. For the main thread there: the burst-pipe
+  release reads the slot (section 6).
+- To copy to `research/2026-11-15-supercritical-fluids/` in the main checkout (the session hook refuses that write from
+  the batch worktree). From the worktree's `tmp/`:
+  - `supercritical-s5/renders/` (S5's device and sizing renders) and `supercritical-s8/renders/` (S8's plunger pump page
+    and sizing renders);
+  - `plunger-forms/`: the option sheets (`forms-30.png`, `forms-sizes.png`, `form-a.png`, `form-a-before.png`) and the
+    geometry folders (`geometry*/`); the source and the renderer are in `tools/plunger-forms/`;
+  - `equipment-drawings/20261116-043157-cdb869/` (the plunger pump scenes) and `tutorial-renders/` (the plunger pump icon);
+  - the probes' outputs: `supercritical-s2/probe/*.txt`, `supercritical-s4/probe/*.txt`, `supercritical-s4b/before/`,
+    `after/` and `after-pump/`, `supercritical-s8/probe/plunger-co2-310K.txt`, `supercritical-s8/geom/out/`,
+    `dense-pump-research/*.txt`, `supercritical-merge/tokens.txt` and `engine-digest-recorded.txt`;
+  - S0's tables and M8 rows (`supercritical-s0/tables/`, `m8/`) and S3's `cv_table.md`;
+  - the GameTest logs (`supercritical-s2/dense*-logs/`, `gametest-s2c-gt*/`, the later stages' `runs/gametest.log`):
+    compressed, as `tools/<folder>/logs/<name>-logs-<date>.tar.gz` in the main checkout (AGENTS.md, "Documentation").
+  The CoolProp environment (`coolprop-venv/`, its cache) and the DWSIM extract (`dwsim-data/`) stay as downloaded tools
+  and data; the edit scripts, Gradle logs, stored results and compiled classes stay in `tmp/` until the main thread
+  cleans it after the merge.
