@@ -360,24 +360,23 @@ final class ServiceTest {
     }
 
     /**
-     * One dense fluid into a pump (S4 of batch 2026-11-15-supercritical-fluids) has no bubble pressure: its suction is
-     * boiling where its vapour share 1 - w reaches the clean share, as the world's pump reads it, else cold. Carbon dioxide
-     * at 310 K: boiling on both sides of reduced density 1 and at 1.1, cold at 1.2 and 1.6. Its edge E on the sheet's trial
-     * is its own pressure where it is boiling and a density above the critical pressure where it is not.
+     * One dense fluid into a pump (S4b of batch 2026-11-15-supercritical-fluids) has no bubble pressure and, at its own
+     * temperature, no flash: every trial of the sheet's isothermal search is one dense fluid, which releases no vapour. So
+     * its suction is cold and it has no edge E on the sheet. Carbon dioxide at 310 K on both sides of reduced density 1, at
+     * 1.1, 1.2 and 1.6, and at 320 K and 15 MPa (where the world's isenthalpic E is the flash at 6.52 MPa). As first
+     * implemented (S4) it was boiling to reduced density 1.1 and its E was its own pressure there, a density above it.
      */
-    @Test void aDenseSuctionIsBoilingByItsDensity() {
+    @Test void aDenseSuctionIsColdAndHasNoEdgeOnTheSheet() {
         on(() -> {
             double[] co2 = pure(AXIS.indexOf("CarbonDioxide"));
-            double[][] cases = {{8.325088e6, 1}, {8.326483e6, 1}, {8.476988e6, 1}, {8.680271e6, 0}, {10.982639e6, 0}};
+            double[][] cases = {{310, 8.325088e6}, {310, 8.326483e6}, {310, 8.476988e6}, {310, 8.680271e6}, {310, 10.982639e6}, {320, 15e6}};
             for (var c : cases) {
-                var stream = at(310, c[0], co2);
+                var stream = at(c[0], c[1], co2);
                 assertTrue(stream.state().dense());
-                boolean boiling = c[1] == 1;
                 if (stream.state().oneFluidSlot() == FluidThermodynamics.State.LIQUID)
-                    assertEquals(boiling ? Service.SUCTION_BOILING : Service.SUCTION_COLD, service(stream, PUMP), "at " + c[0]);
-                double edge = THERMO.zoneEdge(310, c[0], co2);
-                if (boiling) assertEquals(c[0], edge, 0, "its E is its own pressure at " + c[0]);
-                else assertTrue(edge > 7.383e6 && edge < c[0], "its E is a density above the critical pressure at " + c[0] + ": " + edge);
+                    assertEquals(Service.SUCTION_COLD, service(stream, PUMP), "at " + c[1]);
+                assertEquals(Double.POSITIVE_INFINITY, THERMO.zoneEdge(c[0], c[1], co2), 0, "no edge on the sheet at " + c[1]);
+                assertEquals(Double.POSITIVE_INFINITY, THERMO.vapourPressure(c[0], c[1], co2), 0, "no vapour pressure at " + c[1]);
             }
             return null;
         });

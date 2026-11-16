@@ -14,7 +14,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * S4_MACHINES_REVIEW.md): its vapour share {@code 1 - w} and condensed share {@code w} on its liquid-like weight, whichever
  * slot holds it, so the pump's head share and the compressor's wet efficiency follow its density across the slot line,
  * and are the slots' own values to the bit outside reduced densities 0.5 to 1.5. A gas that is no dense fluid's window
- * reads what it read before; neither share refuses a machine.
+ * reads what it read before; neither share refuses a machine. What needs a second phase does not occur in one dense fluid
+ * (S4b): a pump drawing it through a line is not vapour-locked by its density, it has no vapour pressure, and a
+ * compressor sees no droplets in it, while its wet efficiency still reads {@code w}.
  */
 class DenseMachineSharesTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
@@ -78,7 +80,7 @@ class DenseMachineSharesTest {
             assertEquals(1.0,supply.vapourVolumeShare(),0);assertEquals(0.0,supply.condensedMassShare(),0);
             assertEquals(GasEntrainment.headShare(1,p),head(supply,p),0);assertEquals(1.0,wet(supply),0);
             assertFalse(InletPhase.of(model,s,null).condensed(),"no liquid to give the pump an edge");
-            assertTrue(Double.isNaN(ReleasePressure.vapourVolumeShare(s))||ReleasePressure.vapourVolumeShare(s)==1,"a trial gas: no liquid");
+            assertEquals(0,ReleasePressure.vapourVolumeShare(s),0,"a dense trial releases no vapour (S4b; NaN before S4)");
         }
     }
 
@@ -92,6 +94,66 @@ class DenseMachineSharesTest {
                         List.of(new PassiveNetwork.Pipe(10,0,1,List.of(new PipeResistance.Geometry(10,.05,.000045,0)),mover,0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK)));
                 assertFalse(InletPhase.decide(model,graph,null,1)[0],mover+" at reduced density "+delta);
             }
+        }
+    }
+
+    /**
+     * A centrifugal pump drawing carbon dioxide at 310 K from a generator through a 10 m line and a junction, lifting it
+     * 20 kPa into a void (S4b). As first implemented (S4) the pump's edge was its supplier's own pressure from reduced
+     * density 0.5 to about 1.1, so it was vapour-locked there and delivered nothing; one dense fluid has no second phase, so
+     * it runs on its head share {@code M(1 - w)} at every density. At 1.1 its isenthalp flashes from the bubble side at
+     * 7.35 MPa, 1.1 MPa under the suction: an edge, and no lock.
+     */
+    @Test void aPumpDrawingDenseCarbonDioxideThroughALineIsNotVapourLocked() {
+        double[] co2=pure("CarbonDioxide");var law=new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7);
+        for(double delta:new double[]{.6,.8,1.0,1.1}) {
+            var s=at(310,pressureAt(310,co2,delta),co2);double p=s.pressure();
+            var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,s,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,s,PassiveNetwork.NodeKind.JUNCTION),
+                    new PassiveNetwork.Reservoir(3,0,at(310,p+2e4,co2),PassiveNetwork.NodeKind.VOID)),
+                    List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(10,.05,.000045,0),new FlowControl.Passive()),new PassiveNetwork.Pipe(11,1,2,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Machine(law,1,true))));
+            var solver=new PassiveStepSolver(model);var result=solver.solve(graph,1,()->{});
+            assertFalse(solver.suctions.vapourLocked(1),"not vapour-locked at reduced density "+delta);
+            assertNotEquals(FlowControl.Mode.CLOSED,result.modes().get(1),"the pump runs at "+delta);
+            assertTrue(result.massFlows()[1]>0,"it delivers at "+delta+": "+result.massFlows()[1]);
+            double w=FluidThermodynamics.liquidLikeWeight(s);
+            var running=(com.wormzjl.icheme.science.machine.CentrifugalPump)((FlowControl.Machine)solver.suctions.mover(graph,1)).law();
+            assertEquals(GasEntrainment.headShare(1-w,p),running.ratedHead()/law.ratedHead(),1e-12,"its head share M(1 - w) at "+delta);
+            double limit=solver.suctions.suctionLimitPressure(graph,1,0);
+            if(delta<1.05)assertEquals(Double.POSITIVE_INFINITY,limit,0,"no suction limit without a flash at "+delta);
+            else assertEquals(7.3526e6,limit,7.3526e6*2e-4,"the bubble-side flash at "+delta);
+        }
+    }
+
+    /**
+     * A centrifugal compressor on dense carbon dioxide at 310 K (S4b): its observed droplet share, which its wet gas wear
+     * and its WET GAS word read, is 0 at every density, while its wet efficiency still reads its liquid-like weight. As
+     * first implemented the wear read {@code w} and eroded fully from reduced density about 0.65.
+     */
+    @Test void aCompressorOnADenseFluidSeesNoDroplets() {
+        double[] co2=pure("CarbonDioxide");
+        for(double delta:new double[]{.7,1.0,1.4}) {
+            var s=at(310,pressureAt(310,co2,delta),co2);double w=FluidThermodynamics.liquidLikeWeight(s);
+            var machine=new FlowControl.Machine(new CentrifugalCompressor(.02,24400,CentrifugalCompressor.DEFAULT_EFFICIENCY),1,true);
+            var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,s,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,at(310,1.2*s.pressure(),co2),PassiveNetwork.NodeKind.VOID)),
+                    List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(1,.1,.000045,0),machine)));
+            var result=new PassiveStepSolver(model).solve(graph,1,()->{});
+            double observed=result.observations().getFirst().condensedShare();
+            assertEquals(0,observed,0,"no droplets at "+delta);
+            assertEquals(0,Wear.wetGas(observed),0,"no wet gas wear at "+delta);
+            assertEquals(CentrifugalCompressor.wetEfficiency(1,w),PassiveStepSolver.wetShare(model,graph,0,1),0,"the wet efficiency reads w at "+delta);
+            assertEquals(w,InletPhase.bulk(model,s).condensedMassShare(),0);
+        }
+    }
+
+    /** A dense natural gas at 300 K (methane 0.90, ethane 0.06, propane 0.03, nitrogen 0.01) has no vapour pressure in either
+     * slot (S4b): in the liquid slot it read the bubble pressure of its ethane and propane, 2.66 MPa. */
+    @Test void aDenseNaturalGasHasNoVapourPressureInEitherSlot() {
+        double[] g=new double[model.componentCount()];var c=model.components();g[c.indexOf("Methane")]=.90;g[c.indexOf("Ethane")]=.06;g[c.indexOf("Propane")]=.03;g[c.indexOf("Nitrogen")]=.01;
+        var solver=new PassiveStepSolver(model);
+        for(double delta:new double[]{.9995,1.0005,1.6}) {
+            var s=at(300,pressureAt(300,g,delta),g);
+            assertTrue(s.dense());
+            assertEquals(Double.POSITIVE_INFINITY,solver.suctions.release(s,()->{}),"no vapour pressure at reduced density "+delta+", slot "+s.oneFluidSlot());
         }
     }
 

@@ -10,10 +10,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * A pump drawing one dense fluid (S2c of batch 2026-11-15-supercritical-fluids, S2C_NETWORK_REVIEW.md): carbon dioxide
  * above its critical temperature has no vapour pressure ({@link ReleasePressure#leaveOutGases} leaves it out), so the pump
  * has no cavitation margin and no vapour-pressure floor; its suction limit is the clean zone's edge E alone, the lowest
- * pressure at which the stream at its own enthalpy keeps its vapour share within the clean share. One dense fluid's
- * vapour share is {@code 1 - w} on its liquid-like weight (S4): below the critical pressure E is a real flash (the
- * isenthalp enters the two-phase dome from the dense side); above it E is where the fluid thins to the clean share, a
- * density, not the slot line; and a fluid already that gas-like at its suction has its E at its own pressure.
+ * pressure at which the stream at its own enthalpy keeps its vapour share within the clean share. One dense fluid has no
+ * second phase (S4b): its E stands only where its isenthalp really flashes, from the bubble side of the critical point
+ * (below the critical pressure); an isenthalp that passes the critical point on the gas side enters the dome from the dew
+ * side, and the stream has no edge. So one seam is left, on the isenthalp through the critical point, where E goes from
+ * about the critical pressure to none. As first implemented (S4) a dense trial read {@code 1 - w}, and E was a density
+ * above the critical pressure, or the suction's own pressure below reduced density about 1.1: a pump drawing such a fluid
+ * through a line was vapour-locked.
  */
 class DenseFluidSuctionTest {
     private final FluidThermodynamics model=FluidTestSupport.networkModel();
@@ -22,8 +25,10 @@ class DenseFluidSuctionTest {
     private static final double CO2_CRITICAL_PRESSURE=7.383e6;
 
     private double[] co2(){double[] n=new double[model.componentCount()];n[model.components().indexOf("CarbonDioxide")]=1;return n;}
+    /** E of the whole fluid of one-fluid state {@code s}, drawn from the phase of its slot. */
     private double edge(FluidThermodynamics.State s) {
-        double[] drawn=new double[3];drawn[FluidThermodynamics.OIL]=FluidThermodynamics.phaseVolume(s,FluidThermodynamics.OIL);
+        int label=s.oneFluidSlot()==FluidThermodynamics.State.VAPOR?FluidThermodynamics.GAS:FluidThermodynamics.OIL;
+        double[] drawn=new double[3];drawn[label]=FluidThermodynamics.phaseVolume(s,label);
         return solver.suctions.zoneEdge(InletPhase.of(model,s,drawn),()->{});
     }
     private FluidThermodynamics.State along(FluidThermodynamics.State s,double p) {
@@ -50,27 +55,45 @@ class DenseFluidSuctionTest {
         for(int i=0;i<100;i++){double mid=(lo+hi)/2;if(model.flashTP(t,mid,co2(),()->{}).reducedDensity()<target)lo=mid;else hi=mid;}
         return model.flashTP(t,hi,co2(),()->{});
     }
-    private double share(FluidThermodynamics.State s){return 1-FluidThermodynamics.liquidLikeWeight(s);}
 
-    @Test void justAboveItsCriticalDensityTheFluidIsGasLikeEnoughThatEIsItsOwnPressure() {
-        var s=atDensity(310,1.0005);
-        assertEquals(FluidThermodynamics.State.LIQUID,s.oneFluidSlot());
-        // Its vapour share 1 - w = 0.499 is past the clean share at 8.33 MPa (0.322): the pump holds its suction at the
-        // supplier's pressure, as on any stream that gassy (before S4, the slot line on the isenthalp, 8.3178 MPa).
-        assertTrue(share(s)>=GasEntrainment.cleanShare(s.pressure()));
-        assertEquals(s.pressure(),edge(s),0,"E is the suction's own pressure");
+    /** Gas side: carbon dioxide at 310 K at reduced density 1.0005 (the liquid slot), 1.03 and 1.06, and at 0.6 (the vapour
+     * slot): its isenthalp stays dense down to the critical pressure and enters the dome from the dew side, at a vapour
+     * share near 0.9, past the clean share at once; the last passing trial is one dense fluid, so no edge and no limit.
+     * The seam at reduced density 0.5 (none to the suction's own pressure, S4) is gone. */
+    @Test void onTheGasSideOfTheCriticalPointADenseFluidHasNoEdge() {
+        for(double delta:new double[]{.49,.51,.6,1.0005,1.03,1.06}) {
+            var s=atDensity(310,delta);
+            assertTrue(s.dense());
+            assertEquals(Double.POSITIVE_INFINITY,edge(s),0,"no edge at reduced density "+delta);
+            assertEquals(Double.POSITIVE_INFINITY,ReleasePressure.limit(solver.suctions.release(s,()->{}),edge(s),0),0,"no suction limit at "+delta);
+        }
+        var s=atDensity(310,1.03);var below=along(s,7.375e6);
+        assertTrue(FluidThermodynamics.holdsPhase(below,FluidThermodynamics.GAS)&&FluidThermodynamics.holdsPhase(below,FluidThermodynamics.OIL),"it does split below the critical pressure");
+        assertTrue(ReleasePressure.vapourVolumeShare(below)>.8,"from the dew side: "+ReleasePressure.vapourVolumeShare(below));
     }
 
-    @Test void aboveTheCriticalPressureEIsWhereTheFluidThinsToTheCleanShare() {
+    /** Bubble side: carbon dioxide at 320 K, reduced density 1.25 (11.08 MPa), flashes below the critical pressure at
+     * 7.3093 MPa, where its vapour share rises from 0 at the bubble pressure (8.3612 MPa as first implemented, a density). */
+    @Test void onTheBubbleSideTheEdgeIsTheFlashBelowTheCriticalPressure() {
         var s=atDensity(320,1.25);
         double e=edge(s);
-        // Measured 2026-11-16 (tmp/supercritical-s4/probe/seam.txt in the batch's worktree): 8.3612 MPa; 7.3093 MPa before S4,
-        // where the slot line was crossed.
-        assertEquals(8.3612e6,e,8.3612e6*2e-4,"the clean zone's edge");
-        assertTrue(e>CO2_CRITICAL_PRESSURE&&e<s.pressure(),"above the critical pressure and below the suction");
+        // Measured 2026-11-16 (tmp/supercritical-s4b/after/S4SeamProbe.txt in the batch's worktree): 7.3093 MPa.
+        assertEquals(7.3093e6,e,7.3093e6*2e-4,"the clean zone's edge");
+        assertTrue(e<CO2_CRITICAL_PRESSURE,"below the critical pressure");
         var above=along(s,e*(1+1e-6));var below=along(s,e*(1-1e-3));
-        assertTrue(above.dense()&&below.dense(),"one dense fluid on both sides of E: no flash");
-        assertTrue(share(above)<=GasEntrainment.cleanShare(above.pressure()),"at E it holds the clean share");
-        assertTrue(share(below)>GasEntrainment.cleanShare(below.pressure()),"just below E it is past it");
+        assertTrue(ReleasePressure.vapourVolumeShare(above)>0&&ReleasePressure.vapourVolumeShare(above)<=GasEntrainment.cleanShare(above.pressure()),"at E it holds a vapour, at most the clean share");
+        assertTrue(ReleasePressure.vapourVolumeShare(below)>GasEntrainment.cleanShare(below.pressure()),"just below E it is past it");
+    }
+
+    /** The seam at 310 K: on the isenthalp through the critical point, between reduced densities 1.06 and 1.075, E goes
+     * from none to about the critical pressure; from 1.20 on it is the flash S4 measured, to the bisection's width. */
+    @Test void theSeamSitsOnTheIsenthalpThroughTheCriticalPoint() {
+        assertEquals(Double.POSITIVE_INFINITY,edge(atDensity(310,1.06)),0);
+        double near=edge(atDensity(310,1.075));
+        assertEquals(7.3772e6,near,7.3772e6*2e-4,"just past the seam, about the critical pressure");
+        assertTrue(near<CO2_CRITICAL_PRESSURE);
+        // tmp/supercritical-s4/probe/seam.txt (S4): 7.174059 MPa at 1.20, 6.524773 MPa at 1.475.
+        assertEquals(7.174059e6,edge(atDensity(310,1.20)),7.174059e6*2e-5);
+        assertEquals(6.524773e6,edge(atDensity(310,1.475)),6.524773e6*2e-5);
     }
 }
