@@ -13,13 +13,13 @@ import static org.junit.jupiter.api.Assertions.*;
  * clean side's laws the same instances or equal values, bit for bit.
  */
 class FoulingEffectTest {
-    /** The plan's table: Rf, then the liquid, two-phase and gas films behind it, the thickness (m) and the drop's ratio on a 20 mm passage. */
+    /** The plan's table: Rf, then the liquid (the reference liquid's since D15), two-phase and gas films behind it, the thickness (m) and the drop's ratio on a 20 mm passage. */
     private static final double[][] TABLE = {
-            {0, 2000, 5000, 100, 0, 1.00},
-            {.0002, 1429, 2500, 98, .0002, 1.11},
-            {.0005, 1000, 1429, 95, .0005, 1.29},
-            {.001, 667, 833, 91, .001, 1.69},
-            {.002, 400, 455, 83, .002, 3.05}};
+            {0, 5000, 5000, 100, 0, 1.00},
+            {.0002, 2500, 2500, 98, .0002, 1.11},
+            {.0005, 1429, 1429, 95, .0005, 1.29},
+            {.001, 833, 833, 91, .001, 1.69},
+            {.002, 455, 455, 83, .002, 3.05}};
 
     @Test
     void filmsBehindTheDepositFollowThePlansTable() {
@@ -69,7 +69,7 @@ class FoulingEffectTest {
         var air = (AirCooled) HeatSides.heatSide(HeatSides.Unit.AIR_COOLER, HeatSides.Side.PROCESS, area, 1, 0, 0, null, ExchangerType.STANDARD, 0);
         assertSame(HeatSides.AIR, air.air());
         var dirty = (AirCooled) HeatSides.heatSide(HeatSides.Unit.AIR_COOLER, HeatSides.Side.PROCESS, area, 1, 0, 0, null, ExchangerType.STANDARD, rf);
-        assertEquals(1000, dirty.air().process().liquid(), 1e-9);
+        assertEquals(1428.57, dirty.air().process().liquid(), .01);
         assertEquals(air.draught(), dirty.draught());
         assertTrue(dirty.films().wallLiquid() < air.films().wallLiquid());
         assertEquals(HeatSides.airFilms(1, rf), dirty.films());
@@ -89,7 +89,7 @@ class FoulingEffectTest {
         var air = HeatSides.AIR.fouled(.001);
         assertSame(HeatSides.AIR, HeatSides.AIR.fouled(0));
         assertEquals(new AirCooled.Air(air.temperature(), air.barePerFace(), air.film(), air.capacity(), air.natural(), HeatCurve.Films.DEFAULT.fouled(.001)), air);
-        // A liquid film of 2000 behind 1 m²K/kW leaves 667: less conductance per face at every draught.
+        // A liquid film of 5000 behind 1 m²K/kW leaves 833: less conductance per face at every draught.
         for (double draught : new double[]{.25, .6, 1}) assertTrue(air.films(draught).liquid() < HeatSides.AIR.films(draught).liquid());
     }
 }

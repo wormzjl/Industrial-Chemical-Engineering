@@ -365,12 +365,14 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         public Heat withFuel(Fuel value){return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,value,fouling,filmLeft);}
         /**
          * This side with its fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): {@code rf} m²K/W, and the share of a
-         * clean liquid film that remains behind it, {@code 1/(1 + 2000 rf)}.
+         * clean liquid film that remains behind it, {@code 1/(1 + 2000 rf)} ({@link #SHOWN_LIQUID_FILM}).
          */
         public Heat withFouling(double rf){
-            double film=com.wormzjl.icheme.science.fluid.network.HeatCurve.Films.DEFAULT.liquid();
-            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,rf,1/(1+film*rf));
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,rf,1/(1+SHOWN_LIQUID_FILM*rf));
         }
+        /** The clean liquid film the deposit's share is shown against, W/m²K: a typical process liquid's, the stream films'
+         * liquid film before decision D15 of batch 2026-11-16-fouling-corrosion (a light oil's is now about 1500, water's 5000). */
+        public static final double SHOWN_LIQUID_FILM=2000;
         /** The port of nozzle role {@code role}, or null. */
         public Port port(String role){for(var p:ports)if(p.role().equals(role))return p;return null;}
     }

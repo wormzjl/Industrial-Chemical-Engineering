@@ -488,8 +488,10 @@ class ExchangerCouplingTest {
     // ---- the exchanger's real lines (W8, plan section 7) ----
 
     private static final long BYPASS_VALVE=30,FEED_VALVE=31,INLET_TEE=120,OUTLET_TEE=121;
-    /** The bypass line's pipe: 0.1 m, so its valve can pass most of the stream. */
-    private static final PipeResistance.Geometry WIDE=new PipeResistance.Geometry(1,.1,.000045,0);
+    /** The bypass line's pipe: 0.15 m, so its valve can pass most of the stream. 0.1 m before decision D15 of batch
+     * 2026-11-16-fouling-corrosion: water's film of 5000 W/m²K heats the side to within 0.5 K of the hot inlet, and after the
+     * hot inlet's +15 K step the wide-open valve passed 11.29 of the 11.53 kg/s the 45 °C mix needs (it held 46.2 °C). */
+    private static final PipeResistance.Geometry WIDE=new PipeResistance.Geometry(1,.15,.000045,0);
     /**
      * The water pair with the cold side's real lines on its row: with {@code bypass}, an inlet tee before the side, a
      * bypass line through a control valve (at 1 kg/s to start) on the next row, and an outlet tee after it; else a control

@@ -279,7 +279,7 @@ final class FlowsheetUnitsTest {
         assertTrue(reading(run, "TO", "vapour") < 1e-4, "unflashed");
     }
 
-    /** Water both ways, so the answer is a textbook's: U = 1000 W/m²K from two 2000 films, Q / (U LMTD). */
+    /** Water both ways, so the answer is a textbook's: U = 2500 W/m²K from two 5000 films (warm water's, D15), Q / (U LMTD). */
     private static final String HOT_WATER = "{\"target\":\"outlet\",\"side\":\"tube\",\"temperature\":320}";
 
     private static Sheet waterPair(String settings) {
@@ -302,7 +302,7 @@ final class FlowsheetUnitsTest {
         var run = waterPair(HOT_WATER).run();
         double duty = reading(run, "E/tube", "duty");
         double lmtd = (40 - 20) / Math.log(40 / 20.);
-        assertEquals(duty / (1000 * lmtd), reading(run, "E/rating", "area_needed"), .02 * duty / (1000 * lmtd));
+        assertEquals(duty / (2500 * lmtd), reading(run, "E/rating", "area_needed"), .02 * duty / (2500 * lmtd));
         assertEquals(20, reading(run, "E/rating", "approach"), .5);
     }
 

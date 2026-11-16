@@ -533,29 +533,36 @@ class CrudeUnitSampleTest {
          * Since the end deposits are half the TEMA anchors (D14 of that batch) the dirty need is 1034 m², not 1422, 1241 with the
          * spare: a 1.25 m shell with 11 m tubes, 1289 m², not 2.00 × 6 m, 1800 m². The design factor on the clean 646.8 m² is
          * 1.60, not 2.20. The narrower shell's longer tubes lose more on both sides.
+         * Since the liquid film follows its liquid's conductivity and heat capacity too (D15 of that batch), against water at
+         * 5000 W/m²K, the oils' films fall by about a quarter (a 1 mPa·s oil, 0.12 W/mK and 2200 J/kgK, holds 1480 W/m²K where
+         * D13 gave it 2000): the clean need is 847.2 m², not 646.8, and the dirty need 1235 m², not 1034, 1482 with the spare: a
+         * 1.50 m shell with 9 m tubes, 1519 m², not 1.25 × 11 m, 1289 m². The design factor is 1.46, not 1.60. The wider shell's
+         * shorter tubes lose less on both sides.
          */
         @Test
         void e101() {
             var unit = alone.units().get("E-101");
-            assertEquals(new ExchangerSizing.Size(false, 1, 1.25, 11), unit.size(), "2.00 × 6 m before the halved end deposits (D14); 1.50 × 10 m before the viscous film (D13); 1.25 × 6 m before the design deposit (WP5)");
+            assertEquals(new ExchangerSizing.Size(false, 1, 1.5, 9), unit.size(), "1.25 × 11 m before the conductive film (D15); 2.00 × 6 m before the halved end deposits (D14); 1.50 × 10 m before the viscous film (D13); 1.25 × 6 m before the design deposit (WP5)");
             closest(unit.rating(), Limit.EXCHANGER_SURFACE);
             var surface = unit.rating().reading(Limit.EXCHANGER_SURFACE);
-            assertEquals(1289, surface.value(), ONE, "1800 before the halved end deposits (D14); 1688 before the viscous film (D13); 703 before the design deposit (WP5)");
-            assertEquals(1034.4, surface.low(), ONE, "the curves' surface on the design deposit; 1422 before the halved end deposits (D14); 1344 before the viscous film (D13); 569 clean, before WP5");
+            assertEquals(1519, surface.value(), ONE, "1289 before the conductive film (D15); 1800 before the halved end deposits (D14); 1688 before the viscous film (D13); 703 before the design deposit (WP5)");
+            assertEquals(1234.8, surface.low(), ONE, "the curves' surface on the design deposit; 1034.4 before the conductive film (D15); 1422 before the halved end deposits (D14); 1344 before the viscous film (D13); 569 clean, before WP5");
             assertEquals(575.0, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
             assertEquals(67.91, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
             assertEquals(32.64, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
             assertEquals(32.63, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
-            assertEquals(24.6, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE, "26.6 before the halved end deposits (D14); 25.5 before the viscous film (D13); 23.6 before the design deposit (WP5)");
+            assertEquals(23.0, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE, "24.6 before the conductive film (D15); 26.6 before the halved end deposits (D14); 25.5 before the viscous film (D13); 23.6 before the design deposit (WP5)");
             var drops = unit.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
-            assertEquals(.371, drops.get(0).value(), HUNDREDTH, "the tube side on 1.25 × 11 m; 0.049 on 2.00 × 6 m before the halved end deposits (D14); 0.44 on 1.00 × 6 m; 0.17 before O4's crude viscosity; 0.20 on 1.25 × 6 m clean, before the design deposit (WP5); 0.21 on 1.50 × 10 m, before the viscous film (D13)");
-            assertEquals(.169, drops.get(1).value(), HUNDREDTH, "the shell side on 1.25 × 11 m; 0.024 on 2.00 × 6 m before the halved end deposits (D14); 0.15 on 1.00 × 6 m; 0.07 on 1.25 × 6 m clean, before the design deposit (WP5); 0.11 on 1.50 × 10 m, before the viscous film (D13)");
+            assertEquals(.163, drops.get(0).value(), HUNDREDTH, "the tube side on 1.50 × 9 m; 0.371 on 1.25 × 11 m before the conductive film (D15); 0.049 on 2.00 × 6 m before the halved end deposits (D14); 0.44 on 1.00 × 6 m; 0.17 before O4's crude viscosity; 0.20 on 1.25 × 6 m clean, before the design deposit (WP5); 0.21 on 1.50 × 10 m, before the viscous film (D13)");
+            assertEquals(.074, drops.get(1).value(), HUNDREDTH, "the shell side on 1.50 × 9 m; 0.169 on 1.25 × 11 m before the conductive film (D15); 0.024 on 2.00 × 6 m before the halved end deposits (D14); 0.15 on 1.00 × 6 m; 0.07 on 1.25 × 6 m clean, before the design deposit (WP5); 0.11 on 1.50 × 10 m, before the viscous film (D13)");
         }
 
         /**
          * D13 of batch 2026-11-16-fouling-corrosion: a liquid's film follows its viscosity, so the clean needs of the crude and
          * residue services rise above the reference film's (E-101 569 m², E-102 732.5 m² before WP5), and the same design deposit
-         * weighs less against them. The sizing's dirty needs are these clean curves behind the services' design deposits.
+         * weighs less against them. The sizing's dirty needs are these clean curves behind the services' design deposits. Since
+         * D15 the films follow the oils' conductivity and heat capacity too: E-101 847.2 m² clean, 1234.8 dirty, factor 1.46 (646.8,
+         * 1034.4 and 1.60 before); E-102 1199.1 and 1313.4, factor 1.10 (1016.1, 1129.3 and 1.11).
          */
         @Test
         void theViscousFilmRaisesTheCleanNeeds() {
@@ -653,15 +660,19 @@ class CrudeUnitSampleTest {
             // Since the end deposits are half the TEMA anchors (D14 of that batch) the need is 1129 m², not 1243, 1355 with the spare:
             // three trains of four 5.5 × 6 m bays, 1362 m², not six trains of four 4.0 × 5 m bays, 1493 m². The design factor on the
             // clean 1016.1 m² is 1.11, not 1.22. Each train carries a third of the residue and loses 0.057 bar, not 0.039.
-            assertEquals(new AirCoolerSizing.Size(5.5, 6, new ProcessUnit.Bank(3, 4), 1), unit.size(), "S4c: the least face that holds 1.2 × the curve's need on the design deposit, 1355 m²; 4.0 × 5 m, bank 6 × 4, before the halved end deposits (D14); 5.5 × 9 m, bank 2 × 3, before the viscous film (D13); 6 × 12 m, bank 1 × 3, on the clean 869 m² before WP5; 6 × 4 bays of 2.0 × 5 m held the bare need");
+            // Since the film follows the residue's conductivity and heat capacity too (D15 of that batch) it falls further: the clean
+            // need is 1199.1 m², not 1016.1, the dirty 1313 m², not 1129, 1576 with the spare: six trains of four 2.0 × 9 m bays,
+            // 1581 m², not three trains of four 5.5 × 6 m bays, 1362 m². The design factor is 1.10. Each train carries a sixth of
+            // the residue on 36 m of narrow bays and loses 0.124 bar, not 0.057.
+            assertEquals(new AirCoolerSizing.Size(2.0, 9, new ProcessUnit.Bank(6, 4), 1), unit.size(), "S4c: the least face that holds 1.2 × the curve's need on the design deposit, 1576 m²; 5.5 × 6 m, bank 3 × 4, before the conductive film (D15); 4.0 × 5 m, bank 6 × 4, before the halved end deposits (D14); 5.5 × 9 m, bank 2 × 3, before the viscous film (D13); 6 × 12 m, bank 1 × 3, on the clean 869 m² before WP5; 6 × 4 bays of 2.0 × 5 m held the bare need");
             closest(unit.rating(), Limit.AIR_COOLER_SURFACE);
             var surface = unit.rating().reading(Limit.AIR_COOLER_SURFACE);
-            assertEquals(1362, surface.value(), ONE, "1493 before the halved end deposits (D14); 1146 before the viscous film (D13); 883 before the design deposit (WP5)");
-            assertEquals(1129.3, surface.low(), ONE, "the curve's surface on the design deposit; 1243.4 before the halved end deposits (D14); 953.9 before the viscous film (D13); 732.5 clean, before WP5");
-            assertEquals(750.2, probesBareSurface(), ONE, "the probe's one capacity, from the same streams");
+            assertEquals(1581, surface.value(), ONE, "1362 before the conductive film (D15); 1493 before the halved end deposits (D14); 1146 before the viscous film (D13); 883 before the design deposit (WP5)");
+            assertEquals(1313.4, surface.low(), ONE, "the curve's surface on the design deposit; 1129.3 before the conductive film (D15); 1243.4 before the halved end deposits (D14); 953.9 before the viscous film (D13); 732.5 clean, before WP5");
+            assertEquals(662.1, probesBareSurface(), ONE, "the probe's one capacity, from the same streams, on the air cooler's reference liquid film; 750.2 on the 2000 W/m²K film before the conductive film (D15)");
             itsCapacityRises("S-10", run.streams().get("S-10").temperature(), run.streams().get("RESIDUE").temperature());
             assertEquals(45, read(unit.rating(), Limit.AIR_COOLER_OUTLET), TENTH);
-            assertEquals(.057, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH, "0.039 on six trains of four 4.0 × 5 m bays before the halved end deposits (D14); 0.112 on two trains of three 5.5 × 9 m bays before the viscous film (D13); 0.218 on one train before the design deposit (WP5)");
+            assertEquals(.124, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH, "0.057 on three trains of four 5.5 × 6 m bays before the conductive film (D15); 0.039 on six trains of four 4.0 × 5 m bays before the halved end deposits (D14); 0.112 on two trains of three 5.5 × 9 m bays before the viscous film (D13); 0.218 on one train before the design deposit (WP5)");
         }
 
         private static double probesBareSurface() {
@@ -677,7 +688,8 @@ class CrudeUnitSampleTest {
          * design deposit (WP5 of batch 2026-11-16-fouling-corrosion) the need is 954 m²: the kept face is short of it and rates RED
          * on its surface. The deposit narrows the tubes: 0.069 bar, not 0.05. Since the film follows the residue's viscosity (D13)
          * the need is 1243 m², not 954: the bank is shorter still. Since the end deposits are half the TEMA anchors (D14) the need
-         * is 1129 m², not 1243; the kept 752 m² stays short of it.
+         * is 1129 m², not 1243; the kept 752 m² stays short of it. Since the film follows the conductivity and heat capacity too
+         * (D15) the need is 1313 m², not 1129.
          */
         @Test
         void theProbesBankIsShortOfSurfaceOnTheDirtyService() {
@@ -686,7 +698,7 @@ class CrudeUnitSampleTest {
             assertEquals(Lamp.RED, kept.rating().lamp());
             assertSame(Limit.AIR_COOLER_SURFACE, kept.rating().closest().limit());
             assertEquals(752, read(kept.rating(), Limit.AIR_COOLER_SURFACE), ONE);
-            assertEquals(1129.3, kept.rating().reading(Limit.AIR_COOLER_SURFACE).low(), ONE, "the need on the design deposit; 1243.4 before the halved end deposits (D14); 953.9 before the viscous film (D13)");
+            assertEquals(1313.4, kept.rating().reading(Limit.AIR_COOLER_SURFACE).low(), ONE, "the need on the design deposit; 1129.3 before the conductive film (D15); 1243.4 before the halved end deposits (D14); 953.9 before the viscous film (D13)");
             assertEquals(.060, read(kept.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH, "0.069 before the halved end deposits (D14) narrowed the tubes less; 0.05 before O4's crude viscosity: the residue cooled to 45 C; 0.05 before the design deposit (WP5)");
         }
 
@@ -814,7 +826,9 @@ class CrudeUnitSampleTest {
          * 766 m², not 509: Auto's shell stands, and the probe's three shells, 1406 m², now hold 83 % over the need, under the 100 %
          * advisory, so they rate GREEN, not YELLOW. Since the end deposits are half the TEMA anchors (D14 of that batch) the curves
          * need 640 m², not 766, a design factor of 1.26 on the clean 509: Auto's shell stands, and the probe's three shells hold
-         * 118 % over the need, over the 100 % advisory again, so they rate YELLOW.
+         * 118 % over the need, over the 100 % advisory again, so they rate YELLOW. Since the liquid film follows conductivity and
+         * heat capacity (D15 of that batch) the cooling water's film is 5000 W/m²K, not 2000: the curves need 424 m², not 640.
+         * Auto's shell stands. The door's one 1.25 × 4 m shell, 469 m², now holds its 432 m² and rates YELLOW on its drops, not RED.
          */
         @Test
         void theCondenserIsSetByItsShellDrop() {
@@ -825,7 +839,7 @@ class CrudeUnitSampleTest {
             assertTrue(condenser.rating().reading(Limit.EXCHANGER_DROP_LIQUID).met());
             assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).met());
             assertFalse(condenser.rating().reading(Limit.EXCHANGER_OVER_NEED).met());
-            assertEquals(640, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8, "766 before the halved end deposits (D14); 509 before the design deposit (WP5)");
+            assertEquals(423.9, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8, "640 before the conductive film (D15); 766 before the halved end deposits (D14); 509 before the design deposit (WP5)");
             assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).value() >= 1.2*condenser.rating().reading(Limit.EXCHANGER_SURFACE).low());
             var single = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, 2.5, 8), null, null, false)));
             var singleRating = size(sheet, run, thermo, single).units().get(SheetSizing.member(T, "condenser")).rating();
@@ -838,7 +852,7 @@ class CrudeUnitSampleTest {
             assertEquals(.13, read(kept, Limit.EXCHANGER_DROP_GAS), HUNDREDTH, "over 0.20 on Tia Juana (O3)");
             var one = size(sheet, run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
             assertEquals(new ExchangerSizing.Size(false, 1, 1.25, 4), one.size(), "the door's one shell");
-            assertEquals(Lamp.RED, one.rating().lamp(), () -> text(one.rating()));
+            assertEquals(Lamp.YELLOW, one.rating().lamp(), () -> "RED, short of surface, before the conductive film (D15): " + text(one.rating()));
         }
 
         /** The probe held the boot as a cylinder, 7.0 min; the world's boot has its head too, and holds 7.7. The drum is the same. */
@@ -891,13 +905,17 @@ class CrudeUnitSampleTest {
          * Since the end deposits are half the TEMA anchors (D14 of that batch) the dirty needs are 354, 330 and 212 m², not 400,
          * 385 and 271, 425, 396 and 254 with the spare: PA 1 and PA 2 take 1.00 × 6 m, 450 m², not 1.25 × 5 m and 1.25 × 4 m,
          * and PA 3 1.00 × 4 m, 300 m², not 1.00 × 5 m. The pumps stand.
+         * Since the film follows the oils' conductivity and heat capacity too (D15 of that batch) both oils' films fall: the dirty
+         * needs are 450, 399 and 242 m², not 354, 330 and 212, 540, 479 and 291 with the spare: PA 1 and PA 2 take a 1.25 m shell
+         * with 5 m tubes, 586 m², not 1.00 × 6 m; PA 3 stands. The pumps stand.
          */
         @Test
         void eachPumparoundTakesItsCoolerAndPump() {
+            // Before the conductive film (D15): needs 354.5, 330.1, 211.5; 1.00 × 6, 1.00 × 6 and 1.00 × 4 m, 450, 450 and 300 m².
             // Before the halved end deposits (D14): needs 400.4, 385.2, 271.2; 1.25 × 5, 1.25 × 4 and 1.00 × 5 m, 585.9, 468.8 and 375 m².
             // Before the viscous film (D13): needs 290, 348, 270; PA 1 1.00 × 5 m, 375 m².
-            double[] needs = {354.5, 330.1, 211.5}, rated = {109, 107, 92}, pumps = {.25, .3, .25}, surfaces = {450, 450, 300}, shells = {1, 1, 1};
-            int[] tubes = {6, 6, 4};
+            double[] needs = {449.9, 398.9, 242.2}, rated = {109, 107, 92}, pumps = {.25, .3, .25}, surfaces = {585.9, 585.9, 300}, shells = {1.25, 1.25, 1};
+            int[] tubes = {5, 5, 4};
             for (int i = 0; i < 3; i++) {
                 var cooler = unit("pa " + (i + 1) + " cooler");
                 assertEquals(new ExchangerSizing.Size(false, 1, shells[i], tubes[i]), cooler.size(), "PA " + (i + 1));
@@ -1172,17 +1190,22 @@ class CrudeUnitSampleTest {
          * <p>Since the end deposits are half the TEMA anchors (D14 of that batch) four steps move with their units' smaller sizes:
          * PA 1's cooler 0.519 bar, not 0.262; PA 2's 0.558, not 0.186; PA 3's 0.357, not 0.413; E-101's 1.25 × 11 m 0.320, not
          * 0.037. The path loses 3.52 bar, not 2.66.
+         *
+         * <p>Since the film follows the oils' conductivity and heat capacity too (D15 of that batch) three steps move with their
+         * units' larger sizes: PA 1's cooler 0.262 bar, not 0.519; PA 2's 0.220, not 0.558; E-101's 1.50 × 9 m 0.141, not 0.320.
+         * The path loses 2.74 bar, not 3.52.
          */
         @Test
         void p101sPathIsTheProbesStair() {
             var path = path(proposal, "P-101");
             String[] items = {"S-1", "T-101/pa 1 cooler", "S-2", "T-101/pa 2 cooler", "S-3", "T-101/pa 3 cooler", "S-4", "E-101", "S-5", "H-101", "S-6"};
+            // Before the conductive film (D15): PA 1's cooler 0.519, PA 2's 0.558, E-101 0.320.
             // Before the halved end deposits (D14): PA 1's cooler 0.262, PA 2's 0.186, PA 3's 0.413, E-101 0.037.
             // Before the viscous film (D13): PA 1's cooler 0.452, E-101 0.154.
-            double[] lost = {.12, .519, .10, .558, .04, .357, .04, .320, .04, 1.388, .025};
+            double[] lost = {.12, .262, .10, .220, .04, .357, .04, .141, .04, 1.388, .025};
             assertEquals(List.of(items), path.steps().stream().map(PressurePath.Step::item).toList());
             for (int i = 0; i < lost.length; i++) assertEquals(lost[i], path.steps().get(i).lost(), HUNDREDTH, items[i]);
-            assertEquals(3.52, path.lost(), HUNDREDTH, "2.66 before the halved end deposits (D14); 2.97 before the viscous film (D13); 3.06 before the design deposit (WP5)");
+            assertEquals(2.74, path.lost(), HUNDREDTH, "3.52 before the conductive film (D15); 2.66 before the halved end deposits (D14); 2.97 before the viscous film (D13); 3.06 before the design deposit (WP5)");
             assertEquals(14.00, path.from(), HUNDREDTH);
             assertTrue(path.set());
             assertEquals("V-101", path.taker());
@@ -1205,6 +1228,8 @@ class CrudeUnitSampleTest {
          * not 0.064, and E-102's six trains of four 4.0 × 5 m bays 0.029, not 0.084. The path loses 0.30, not 0.41.
          * Since the end deposits are half the TEMA anchors (D14 of that batch) both units are smaller: E-101's 1.25 × 11 m 0.132,
          * not 0.014, and E-102's three trains of four 5.5 × 6 m bays 0.050, not 0.029. The path loses 0.44, not 0.30.
+         * Since the film follows the conductivity and heat capacity too (D15 of that batch) E-101's 1.50 × 9 m loses 0.058, not
+         * 0.132, and E-102's six trains of four 2.0 × 9 m bays 0.108, not 0.050. The path loses 0.425, not 0.44.
          */
         @Test
         void theResiduesPathIsTheProbes() {
@@ -1213,13 +1238,14 @@ class CrudeUnitSampleTest {
             // E-102: 0.22 bar on three 6 × 12 m bays in series since the larger bays (batch 2026-11-15-equipment-visual-design), not 0.045;
             // 0.084 on two trains of three 5.5 × 9 m bays since the design deposit (WP5 of batch 2026-11-16-fouling-corrosion);
             // 0.029 on six trains of four 4.0 × 5 m bays since the viscous film (D13); 0.050 on three trains of four 5.5 × 6 m bays
-            // since the halved end deposits (D14). E-101 0.064 before D13, 0.014 before D14.
-            double[] lost = {.005, .132, .093, .050, .16};
+            // since the halved end deposits (D14); 0.108 on six trains of four 2.0 × 9 m bays since the conductive film (D15).
+            // E-101 0.064 before D13, 0.014 before D14, 0.132 before D15.
+            double[] lost = {.005, .058, .093, .108, .16};
             for (int i = 0; i < lost.length; i++) assertEquals(lost[i], residue.steps().get(i).lost(), HUNDREDTH, residue.steps().get(i).item());
             assertEquals(.48, residue.head(), HUNDREDTH);
             assertEquals(2.21, residue.to(), HUNDREDTH);
             assertEquals(.98, residue.available(), HUNDREDTH);
-            assertEquals(.44, residue.lost(), HUNDREDTH, "0.30 before the halved end deposits (D14); 0.41 before the viscous film (D13); 0.550 before the design deposit (WP5)");
+            assertEquals(.425, residue.lost(), HUNDREDTH, "0.44 before the conductive film (D15); 0.30 before the halved end deposits (D14); 0.41 before the viscous film (D13); 0.550 before the design deposit (WP5)");
             assertFalse(residue.set());
             assertSame(com.wormzjl.icheme.science.flowsheet.sizing.Rating.NONE, residue.rating());
         }
@@ -1262,6 +1288,11 @@ class CrudeUnitSampleTest {
          * <p>Since the end deposits are half the TEMA anchors (D14 of that batch) the coolers and E-101 are smaller and lose 0.86
          * bar more at design flow: S-6 stands at 11.44 bar after sizing, not 12.28, more crude flashes (0.430, not 0.403), the
          * furnace fires 67.82 MW, not 67.37, and the feed reaches the column at 347.67 °C, not 346.70. Before sizing nothing moves.
+         *
+         * <p>Since the film follows the oils' conductivity and heat capacity too (D15 of that batch) PA 1's and PA 2's coolers and
+         * E-101 are larger again and lose 0.78 bar less at design flow: S-6 stands at 12.21 bar after sizing, not 11.44, less crude
+         * flashes (0.405, not 0.430), the furnace fires 67.41 MW, not 67.82, and the feed reaches the column at 346.79 °C, not
+         * 347.67. Before sizing nothing moves.
          */
         @Test
         void theSampleSizedMovesAsThePlanSays() {
@@ -1269,14 +1300,14 @@ class CrudeUnitSampleTest {
             var after = all.run().streams();
             assertEquals(FlowsheetRun.Status.STEADY, all.run().status());
             assertEquals(5.00, before.get("S-6").pressure() / 1e5, HUNDREDTH);
-            assertEquals(11.44, after.get("S-6").pressure() / 1e5, .15, "12.28 before the halved end deposits (D14); 11.9 before the viscous film (D13)");
+            assertEquals(12.21, after.get("S-6").pressure() / 1e5, .15, "11.44 before the conductive film (D15); 12.28 before the halved end deposits (D14); 11.9 before the viscous film (D13)");
             assertEquals(73.05, run.reports().get("H-101").readings().get("duty") / 1e6, HUNDREDTH,
                     "73.06 before W3b's derived pairs: methane and ethane in the crude's liquid carry 3.9 kW more residual enthalpy into the coil");
-            assertEquals(67.82, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1, "67.37 before the halved end deposits (D14); 67.58 before the viscous film (D13)");
+            assertEquals(67.41, all.run().reports().get("H-101").readings().get("duty") / 1e6, .1, "67.82 before the conductive film (D15); 67.37 before the halved end deposits (D14); 67.58 before the viscous film (D13)");
             assertEquals(358.5, before.get("S-7").temperature() - 273.15, .1);
-            assertEquals(347.67, after.get("S-7").temperature() - 273.15, .15, "346.70 before the halved end deposits (D14); 347.1 before the viscous film (D13)");
+            assertEquals(346.79, after.get("S-7").temperature() - 273.15, .15, "347.67 before the conductive film (D15); 346.70 before the halved end deposits (D14); 347.1 before the viscous film (D13)");
             assertEquals(.67, run.reports().get("H-101").readings().get("vapour"), HUNDREDTH);
-            assertEquals(.430, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH, "0.403 before the halved end deposits (D14); 0.415 before the viscous film (D13)");
+            assertEquals(.405, all.run().reports().get("H-101").readings().get("vapour"), HUNDREDTH, "0.430 before the conductive film (D15); 0.403 before the halved end deposits (D14); 0.415 before the viscous film (D13)");
         }
 
         /** Nothing is sized twice: every Auto item holds the size Size all proposed, and that is the size its rating reads. */

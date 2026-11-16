@@ -31,9 +31,10 @@ public final class FoulingLaw {
 
     /**
      * The game's end deposit as a share of the TEMA anchor: the owner's decision of 2026-11-16 (D14, "Yes, halve them").
-     * The game's liquid film for a thin hydrocarbon, 2000 W/m²K, is about twice a real one, so a TEMA deposit weighs
-     * about twice as heavy against it as in a real plant; half the deposit gives a real plant's loss of duty and design
-     * factor. The anchors ({@link #WATER}, {@link #HOT_CRUDE}, {@link #SOLIDS_CAP}, the crude cuts' fouling numbers)
+     * It was set against the game's fixed liquid film of 2000 W/m²K, about twice a real thin hydrocarbon's, against which a
+     * TEMA deposit weighed about twice as heavy as in a real plant. Since the liquid film follows the liquid's viscosity,
+     * conductivity and heat capacity (D13, D15: a 1 mPa·s light oil about 1460 W/m²K, warm water 5000) that reason is the
+     * owner's to weigh again; the share stands as decided. The anchors ({@link #WATER}, {@link #HOT_CRUDE}, {@link #SOLIDS_CAP}, the crude cuts' fouling numbers)
      * stay at their TEMA values.
      */
     public static final double PLACEHOLDER_SHARE = .5;
@@ -45,8 +46,10 @@ public final class FoulingLaw {
      */
     public static final double STEP = 5e-5;
     /**
-     * The deposit from which a side's status line says {@code FOULED}, m²K/W (plan section 12): the reference 2000 W/m²K
-     * liquid film down to a half. 0.001 (a third) before the halved end deposits (D14).
+     * The deposit from which a side's status line says {@code FOULED}, m²K/W (plan section 12): the 2000 W/m²K
+     * liquid film the heat panel shows the deposit against ({@code FluidView.Heat.SHOWN_LIQUID_FILM}) down to a half. On
+     * the films of D15 a 1 mPa·s light oil's (about 1460 W/m²K) is then down to 58 %, warm water's (5000) to 29 %. 0.001 (a
+     * third) before the halved end deposits (D14).
      */
     public static final double FOULED = 5e-4;
     /** The deposit's thermal conductivity, W/mK: its thickness is {@code Rf k_d}. */

@@ -82,9 +82,9 @@ class HeatCurveTest {
         // The plateau's edges are bisected to HeatCurve.BOUNDARY_KELVIN, so the 10 K of driving temperature are known to that:
         // -499.999997 W where the boundary was bisected to 1e-5 K gave -500.000000 (L-F11).
         assertEquals(-500,curve.march(middle,1,.01,saturation-10)-middle,500*HeatCurve.BOUNDARY_KELVIN/10);
-        // In series with a liquid film of 2000 W/m2K the overall coefficient is 1/(1/5000 + 1/2000) = 1428.6 W/m2K.
+        // In series with the reference liquid film of 5000 W/m2K (D15) the overall coefficient is 1/(1/5000 + 1/5000) = 2500 W/m2K.
         double u=1/(1/curve.filmAt(middle)+1/HeatCurve.Films.DEFAULT.liquid());
-        assertEquals(1428.57,u,.01);
+        assertEquals(2500,u,1e-9);
     }
     @Test void aSideMarchesItsCellsInFlowOrderWithItsBypassAndGiveBack() {
         var curve=sensible();

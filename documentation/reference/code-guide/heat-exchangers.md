@@ -41,11 +41,11 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | [`FiredCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/FiredCoil.java) | A fired heater's radiant coil: `setTemperature`, `duty`, `firing` (β), `limit` (the share its burners can fire), `partner`; `planned` | 50 |
 | [`ConvectionCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ConvectionCoil.java) | The convection coil: counterflow against the flue gas leaving the radiant box; `conductance`, `radiant`, `flue`; `FLAME`, `BRIDGEWALL`, `flueOf(radiantHeat)`, `stackTemperature` | 61 |
 | [`ExhaustCoil`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ExhaustCoil.java) | A gas turbine's steam coil, designed to its pinch: `APPROACH`, `PINCH`, `COLD` | 59 |
-| [`HeatCurve`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatCurve.java) | One stream's h-T-film curve, fixed for a step: `sample`, `of`, `march` (exact per segment), `temperatureAt`, `enthalpyAt` (a plateau's vapour end), `lowestEnthalpyAt` (its liquid end), `temperatureSlope`, `withFilms`, `liquidLikeWeight`, `viscous(mu)`, `viscous(knot)`; `Films` (`DEFAULT`, `at(x, w)`, `at(x, w, viscous)`, `fouled`, `Outer`, `wallLiquid`); `LIQUID_UNTIL`, `GAS_FROM`, `FILM_GAS_UNTIL`, `FILM_LIQUID_FROM`, `BOUNDARY_KELVIN`, `VISCOUS_REFERENCE`, `VISCOUS_EXPONENT`, `VISCOUS_MOST` | 388 |
+| [`HeatCurve`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatCurve.java) | One stream's h-T-film curve, fixed for a step: `sample`, `of`, `march` (exact per segment), `temperatureAt`, `enthalpyAt` (a plateau's vapour end), `lowestEnthalpyAt` (its liquid end), `temperatureSlope`, `withFilms`, `liquidLikeWeight`, `liquidResistance(mu, k, cp)`, `liquidResistance(knot)`, `waterConductivity`, `oilConductivity`; `Films` (`DEFAULT`, `at(x, w)`, `at(x, w, resistance)`, `fouled`, `Outer`, `wallLiquid`); `LIQUID_UNTIL`, `GAS_FROM`, `FILM_GAS_UNTIL`, `FILM_LIQUID_FROM`, `BOUNDARY_KELVIN`, `CHORD_KELVIN`, `VISCOUS_REFERENCE`, `CONDUCTIVITY_REFERENCE`, `HEAT_CAPACITY_REFERENCE` and their exponents, `LIQUID_RESISTANCE_MOST`, `OIL_CONDUCTIVITY_FLOOR` | 496 |
 | [`ExchangerRelay`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/ExchangerRelay.java) | The relay as pure functions: `Partner` (the other side as read, or a kettle's pool as a `Bath`; `model`, `withModel`), `Read` (`NONE`, `column`, `heating`, `withOperation`, `gives`), `Operation` (`bypass`, `feed`, `column`), `plan`, `wall`, `planPool`, `bathWall`, `capacityRate`, `TOLERANCE` | 372 |
 | [`CrossflowHeat`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/CrossflowHeat.java), [`HeatRouting`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatRouting.java) | A two-pass tube bundle against a shell mixed between crossflow rows, on the relay's wall solver; the routings `SERIES`, `TWO_PASS_TUBES`, `MIXED_CROSSFLOW` (`grid`) | 123, 112 |
 | [`HeatControl`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/HeatControl.java) | The built-in controller: `Target` MANUAL, OUTLET_TEMPERATURE, DUTY; `value`, `lowLimit`, `manual`; `Limit` NONE, LOWEST, HIGHEST, LOW_LIMIT; `setting` (an Illinois root on the side's own law) | 76 |
-| [`Pool`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/Pool.java) | A kettle's pool on its vessel's `Inventory`: facts `id`, `partner`, `area`, the bundle's `bottom` and diameter; slice inputs `wall`, `giveBack` (W), `active`; `wetted`, `film`, `heat` | 124 |
+| [`Pool`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/Pool.java) | A kettle's pool on its vessel's `Inventory`: facts `id`, `partner`, `area`, the bundle's `bottom` and diameter; slice inputs `wall`, `giveBack` (W), `active`; `wetted`, `film`, `heat` | 127 |
 | **`science/equipment/`** | | |
 | [`HeatSides`](../../../src/main/java/com/wormzjl/icheme/science/equipment/HeatSides.java) | `Unit` EXCHANGER, KETTLE, AIR_COOLER, FIRED_HEATER, PRIME_MOVER; `Side` TUBE, SHELL, PROCESS, CONVECTION, RADIANT, EXHAUST; `unit(kind)`, `of(shape)` (each side's nozzle roles, surface and passage, in registration order), `pool(kind)`, `kettleBundle`, `kettleShell`, `heatSide(...)`, `coilDuty`, `airFilms`, `fanPower`, `airCoolerSurface`; `AIR`, `AIR_TEMPERATURE`, `EXCHANGER_CELLS`, `CONVECTION_U`, `NATURAL_DRAUGHT`; the cooling utilities the column and the simulator share: `AIR_SPLIT_TEMPERATURE`, `airSplit`, `TOWER_WATER_TEMPERATURE`, `WATER_RANGE`, `WATER_APPROACH`, `coolingWaterOutlet` | 251 |
 | [`ExchangerType`](../../../src/main/java/com/wormzjl/icheme/science/equipment/ExchangerType.java) | The exchanger configuration catalog (`CATALOG`: `STANDARD`, `CROSSFLOW`), saved by name: `key`, `cells`, `routing(side)`, `Layout`, `tubePassage`, `shellPassage` | 71 |
@@ -141,18 +141,27 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
 
 ## Laws and constants
 
-- **Films** (`HeatCurve.Films.DEFAULT`): liquid 2000, boiling or condensing 5000, gas 100 W/m²K. Each knot carries the
+- **Films** (`HeatCurve.Films.DEFAULT`): liquid 5000 (the reference liquid, water at 20 °C), boiling or condensing
+  5000, gas 100 W/m²K. A kettle's tubes under a pool with no vapour over it take `Pool.STILL_LIQUID_FILM`, 2000. Each knot carries the
   film of its vapour fraction: liquid below `LIQUID_UNTIL`, the two-phase film to `GAS_FROM`, gas at 1, linear between;
   those knots give a pure component's plateau the two-phase film. A point of one fluid carries its liquid-like weight
   `w = smoothstep((delta − FILM_GAS_UNTIL)/(FILM_LIQUID_FROM − FILM_GAS_UNTIL))` of its reduced density (gas film at or
   below 0.5, liquid from 1.5, `Films.at(x, w)`) and the vapour coordinate `1 − w`, so a dense fluid's film follows its
   density across its slot line. An inserted knot takes the weight only between points of one continuous fluid (the same
   slot, or both dense); on a plateau it keeps the two-phase film.
-- **Viscous liquid film** (D13 of batch 2026-11-16-fouling-corrosion): a liquid's film is 2000 × min(1, (1 mPa·s/μ)^0.4),
-  never below the gas film, held as a resistance `HeatCurve.viscous(μ)` = (1/φ − 1)/2000 in series with the liquid film
-  (`Films.at(x, w, viscous)`). `HeatCurve.sample` reads μ (the one fluid's slot viscosity, or the held liquid slots'
-  volume-weighted) only at points where the liquid film has weight; an inserted knot interpolates it; a refused liquid
-  keeps the reference film. Each knot keeps its resistance, so `withFilms` re-films without a flash. At 0 the film is
+- **Liquid film** (D13 and D15 of batch 2026-11-16-fouling-corrosion): a liquid's film is 5000 × φ, φ =
+  min(1, (k/0.6)^0.6 (cp/4180)^0.4 (1 mPa·s/μ)^0.4) (Dittus–Boelter at one mass flow and bore, no density term), never
+  below the gas film, held as a resistance `HeatCurve.liquidResistance(μ, k, cp)` = (1/φ − 1)/5000 in series with the
+  liquid film (`Films.at(x, w, resistance)`); a non-finite or non-positive property takes the reference's factor. Warm
+  water keeps 5000; a light oil (1 mPa·s, 0.126 W/mK, 2000 J/kgK) gets 1459, a 50 mPa·s oil 298. `HeatCurve.sample`
+  reads, only at points where the liquid film has weight, μ (the one fluid's slot viscosity, or the held liquid slots'
+  volume-weighted) and k from the temperature over the same slots (`waterConductivity`, a quadratic fit to saturated
+  water held outside 0 to 300 °C, for the phase labelled aqueous or a one fluid at least half water; `oilConductivity`,
+  0.164 − 1.277e-4 T, at least 0.05, for any other). After refinement each such point takes cp = Δh/ΔT of a chord that is
+  all one liquid (both ends of several phases at vapour fraction 0, or one continuous fluid), centred where it can, at
+  least `CHORD_KELVIN` long; a boiling point (0 < x < `LIQUID_UNTIL`) takes the nearest point's, a curve with none the
+  reference. No flash beyond the sampling's. An inserted knot interpolates the resistance; a refused viscosity keeps
+  its reference factor. Each knot keeps its resistance, so `withFilms` re-films without a flash. At 0 the film is
   bit for bit `at(x, w)`. An air cooler's `Air.films(draught)` are the tube-side process films with the air as their
   `Films.Outer` (a value record: the curve cache compares films by value), so the resistance lies inside the tubes;
   `wallLiquid`, `wallTwoPhase`, `wallGas` give the wall's effective films.

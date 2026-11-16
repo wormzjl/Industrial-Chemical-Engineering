@@ -48,7 +48,7 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
          * capacity rate; the air's film and capacity scale with its flow. Shut louvers leave the films' limit at no air,
          * which is zero: they are kept just above it, as a curve's films are positive, and move no heat a march can see.
          * The films returned are the {@link #process} films with this air as their {@link HeatCurve.Films.Outer}, so a
-         * liquid's viscous resistance (decision D13 of batch 2026-11-16-fouling-corrosion) lies inside the tubes; the wall's
+         * liquid film's resistance (decisions D13 and D15 of batch 2026-11-16-fouling-corrosion) lies inside the tubes; the wall's
          * effective films are {@link HeatCurve.Films#wallLiquid} and its siblings.
          */
         public HeatCurve.Films films(double draught) {
