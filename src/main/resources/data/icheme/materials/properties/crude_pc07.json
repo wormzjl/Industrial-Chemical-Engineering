@@ -67,6 +67,14 @@
     "source": "NIOSH Pocket Guide to Chemical Hazards, Petroleum distillates (naphtha) (npgd0492, https://www.cdc.gov/niosh/npg/npgd0492.html, read 2026-11-15): IDLH 1100 ppm [10%LEL]. CDC material, in the public domain. The petroleum-distillate value stands for the cut (estimated). The toxic channel's reference (batch 2026-11-15-pollution-system).",
     "revision": "npg-idlh-naphtha-r1"
   },
+  "corrosion": {
+    "sulfur_mass_percent": 0.02,
+    "acid_number": 0,
+    "fouling": 0.0005,
+    "estimated": true,
+    "source": "Estimated. Sulfur and acid number fitted by tools/fouling-corrosion/fit-cuts.mjs: one set, non-decreasing over the twelve shared cuts, that minimises the largest relative miss of the four assays' whole crudes (sulfur 0.2, 1.5, 3 and 3.74 wt%; acid number 0.1, 0.3, 1.5 and 2.5 mg KOH/g; the shared cuts cannot meet all four; the script prints the residuals). Fouling number from the TEMA rows: light cuts 0, crude and heavy cuts 0.0005, residue 0.0018 m2K/W. Data for the integrity laws (batch 2026-11-16-fouling-corrosion); in no identity.",
+    "revision": "corrosion-fit-r1"
+  },
   "combustion": {
     "lower_heating_value_j_per_mol": 12106993.999933537,
     "estimated": true,

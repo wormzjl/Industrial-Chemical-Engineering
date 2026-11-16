@@ -234,6 +234,8 @@ public final class MachineHealth {
                     case LOW_FLOW -> share;
                     case WET_GAS -> wet;
                     case WET_EXHAUST -> exhaust;
+                    // The solid share of the stream: read in WP2 of batch 2026-11-16-fouling-corrosion; no machine lists the fault yet.
+                    case SOLIDS -> Double.NaN;
                 };
                 double i = fault.intensity(q);
                 if (fault.type == Wear.FaultClass.EROSION) {
