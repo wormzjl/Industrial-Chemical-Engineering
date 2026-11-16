@@ -57,6 +57,12 @@ public final class PollutionEffectsGameTests {
                 .thenWaitUntil(() -> helper.assertTrue(service.index(dimension, cube, Channel.TOXIC) > Exposure.HIGH,
                         "Waiting for the pass to install the toxic cube; index " + service.index(dimension, cube, Channel.TOXIC)))
                 .thenExecute(() -> {
+                    // The seed alone holds HIGH for one field pass (100 ticks): exactly the five hits the cow needs, so a
+                    // pass job that installs a few ticks late left four (run `union`, batch 2026-11-16-fouling-corrosion).
+                    // The same release again, for the next pass, keeps the cube at HIGH or above through a second window.
+                    for (long c : cubes) {
+                        service.add(dimension, c, Channel.TOXIC, 3.0);
+                    }
                     cow[0] = helper.spawn(EntityType.COW, new BlockPos(2, 2, 2));
                     cow[0].setNoAi(true);
                     zombie[0] = helper.spawn(EntityType.ZOMBIE, new BlockPos(4, 2, 2));
