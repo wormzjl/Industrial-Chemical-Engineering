@@ -64,8 +64,14 @@ The vacuum pump casing is the worked precedent (batch `documentation/2026-11-10-
   A motor at 1,500 rpm drives it through the gearbox.
 - Layout: a baseplate, the power end, the liquid end with the suction nozzle low and the discharge nozzle on top,
   the shaft end at the side. `EquipmentLayoutGoldenTest` gets its rows.
-- Model, moving parts and sound by `.claude/skills/models-and-sfx/SKILL.md`: two to four forms rendered side by side
-  for the owner before one is built; the crank and plungers move with the train's speed; a reciprocating sound.
+- Model, moving parts and sound by `.claude/skills/models-and-sfx/SKILL.md`. The form (owner, 2026-11-16: "Form A",
+  from three scratch forms rendered side by side: A monoblock, B valve pots and bottles, C vertical): a horizontal
+  triplex. Its crankcase has the crank along the shaft line and bearing covers at both ends; three crosshead guides
+  leave its nose; an open cradle shows the three plungers in their stuffing boxes; the liquid end is one forged block
+  with a bolted cylinder cover in front of each plunger and a valve cover on top of each, overhanging the skid; the
+  suction manifold lies under the block; a bladder dampener stands on the discharge. The plungers slide and the shaft
+  end turns with the train's speed; a reciprocating sound. The main thread draws it (owner: "model the pump head
+  here"); the stage's thread builds the rest round it.
 - Drawings by `tools/equipment-drawings/README.md` (`update.ps1 -Check`, then `-Only`).
 - Texts in `en_us.json` only: the constructor's entry and hint, the vessel title and kind line, the assembly's
   "wanted" line, the tutorial's equipment entry.
@@ -94,5 +100,5 @@ The vacuum pump casing is the worked precedent (batch `documentation/2026-11-10-
 
 ## 7. Open for the owner after the build
 
-The model's form (from the rendered options); whether Auto's rule for the sheet's type is right; the clearance term and
+Whether Auto's rule for the sheet's type is right; the clearance term and
 the real work as their own batch, with the reciprocating compressor.
