@@ -150,6 +150,13 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   0.33.0 lane, refusals 0. Not clean: 4 unannounced moved printed results, no asserted one (`WaterIntoCryogenicMethaneTest`
   interval 6, `HoldClassWorldsTest` 778 flow, `PumpBottomPortDrainTest` last digits, `G4F2` grade label), for the main
   thread. [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md).
+- 2026-11-16: the trace of moves 1 to 3 (sub-thread; owner: "Trace first"). No code or test changed. Five runs of the
+  three classes in `.claude/worktrees/supercritical-trace-scratch`: P4, P2, P1, the fork point main 0.31.0 (`e9edc974b`;
+  the batch's P1 to P4 sit on it, and 0.31.1 moved all three lines), and P5. Fork = P1 = P2; P4 moves cases 2 and 3; P5
+  equals the head. So S2b or S2c (P3 not run) moved them, meeting 0.31.1's path: cases 2 and 3 at rounding level, case 1
+  by one step-path split onto main 0.31.0's own path, each inside `NEWTON_TOLERANCE` or `STATE_CAP`. No defect found;
+  owner options A (accept, recommended) and B (an instrumented trace, then B1).
+  [MOVED_RESULTS_TRACE_REVIEW.md](MOVED_RESULTS_TRACE_REVIEW.md).
 
 ## Documents
 
@@ -180,6 +187,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   readers of a liquid machine, the equipment and its polygons, the simulator, the dense GameTest, the runs, the owner items.
 - [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane: the digest re-record, tests, chain-100, GameTests, junction
   lines, the campaign against the 0.33.0 lane, every printed line that moved and its reason.
+- [MOVED_RESULTS_TRACE_REVIEW.md](MOVED_RESULTS_TRACE_REVIEW.md): the trace of the final lane's moves 1 to 3: the bisection
+  by stage, the fork-point reference, the mechanism read from S2b/S2c, each value's bound, the owner options.
 - [MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md): the merge of main 0.33.0: conflicts, the revision tokens of the 33
   records both sides changed, the rare gases' critical volumes, the digest measurement, main's slot readers, the runs.
 - [S1_ENGINE_REVIEW.md](S1_ENGINE_REVIEW.md): S1, the band boxes 3 and 4 removed, the phase traits, the digest lines that moved.
