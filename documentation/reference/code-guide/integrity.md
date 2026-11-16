@@ -130,13 +130,14 @@ stopped, the column runs again), `FluidFactsCompatTest` (the facts, older images
   are state and are not saved; so is the level a side's graph carries (WP5: the level is read from the facts).
 - Fluid checkpoint state format 52 (WP5): an air cooler's law carries its process films; a fouled exchanger side's films
   and a narrowed passage were already in the checkpoint.
-- Config: `corrosion.enabled`, `corrosion.yearProcessHours` (20), `corrosion.external`, `erosion.enabled`,
-  `fouling.enabled`, `fouling.asymptoteProcessHours` (10). A switch off stops its part of the rate at once and nothing
+- Config: `corrosion.enabled`, `corrosion.yearProcessHours` (200), `corrosion.external`, `erosion.enabled`,
+  `fouling.enabled`, `fouling.asymptoteProcessHours` (100). The two defaults live once, in
+  `WallState.DEFAULT_YEAR_PROCESS_HOURS` and `FoulingLaw.DEFAULT_TIME_PROCESS_HOURS`. A switch off stops its part of the rate at once and nothing
   fails while corrosion and erosion are both off.
 
 ## Laws and constants
 
-- Rates in mm/y; one corrosion year is `corrosion.yearProcessHours` (20 process hours). Every rate is finite, 0 for NaN
+- Rates in mm/y; one corrosion year is `corrosion.yearProcessHours` (200 process hours by default). Every rate is finite, 0 for NaN
   or negative inputs, at most `CorrosionLaw.MAX_RATE` (1e4 mm/y).
 - M1 sulfidation `1.3 exp(−8698 (1/T − 1/643)) (S_e/0.6)^0.4` from 503 K; M2 naphthenic acid; M3 to M7 the wet
   mechanisms, each a partial-pressure term times a temperature term. Material factors multiply M1 to M7 and M9;
