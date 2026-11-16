@@ -57,6 +57,7 @@ The Node scripts run with `node <script>` from the worktree root, with the argum
 | `dense-pump` | `pump_numbers.py` | An isentropic pump step on dense fluids against the mod's `rho_s g H` | `DENSE_PUMP_RESEARCH_REVIEW.md` |
 | `dense-pump` | `pd_numbers.py` | A reciprocating pump's clearance loss on a compressible fluid | `PD_PUMP_RESEARCH_REVIEW.md` |
 | `p3/src` | `P3FormsProbe`, run by `p3/run.sh coarse\|dense tmp/<name>` | The column feed flash's forms F1, F2, F3 and D, the production flash (classification by the stability test) on the grids of `COLUMN_FEED_REVIEW.md`, against the frozen flash, the D1 flash and the engine; its dense output gives `V3FeedFlashStabilityTest`'s states. Batch `2026-11-16-supercritical-followups`, base `3a48e08b4` | `2026-11-16-supercritical-followups/P3_COLUMN_FEED_REVIEW.md` |
+| `p3/src` (lane fixes) | `P3WetProbe`, run by `p3/run.sh wet tmp/<name>`; `V3FeedFlashD1`, `V3FeedFlashP3` (frozen copies) | The wet grid (ethanol/water, ethanol/water/n-hexane, Tia Juana crude with water; 570 states) and the dry two-liquid scan (207 states): the frozen, 0.34.0, lane and production flashes per state, the guarantee counts (`LANE_FIXES_REVIEW.md`) |
 
 The scripts keep the `tmp/` paths they ran with (`tmp/supercritical-*`, `tmp/plunger-forms/`); give the new paths when
 you run one again. None was recompiled after its stage's last commit.
@@ -64,5 +65,7 @@ you run one again. None was recompiled after its stage's last commit.
 ## History
 
 - 2026-11-16: `p3/` added by package P3 of batch `2026-11-16-supercritical-followups` (the column feed flash's forms).
+- 2026-11-16: `p3/` gains `P3WetProbe` (`run.sh wet`) and the frozen copies `V3FeedFlashD1` (0.34.0) and `V3FeedFlashP3`
+  (the lane's flash) for the lane fixes (`LANE_FIXES_REVIEW.md`); `P3FormsProbe` counts engine splits answered as one phase.
 - 2026-11-16: gathered from the batch's `tmp/` folders at the merge preparation (the cleanup of `merge-prep`). Edit
   scripts, Gradle logs, stored results, compiled classes and outputs stayed in `tmp/`.

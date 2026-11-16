@@ -155,6 +155,18 @@ public final class P3FormsProbe {
             for (int f = 1; f <= 3; f++) forms[f - 1] = form(f, context, t, p, z);
             forms[3] = current; // form D: the production flash
             tally.count(eng, String.valueOf(result.classification()), ref, current, forms);
+            // Lane fixes, rule B: an engine split the production flash answers as one phase, by the engine's lighter phase.
+            if (eng.equals("two") && current.result != null && current.result.phase() != V3FeedPhase.TWO_PHASE) {
+                PhaseAmounts light = null;
+                for (var ph : result.phases()) {
+                    if (light == null || ph.kind() == com.wormzjl.icheme.science.thermo.phase.PhaseKind.VAPOR
+                            || light.kind() != com.wormzjl.icheme.science.thermo.phase.PhaseKind.VAPOR && ph.traits() != null && light.traits() != null
+                            && ph.traits().reducedDensity() < light.traits().reducedDensity()) light = ph;
+                }
+                boolean supercritical = light != null && light.traits() != null && light.traits().supercriticalIsotherm();
+                tally.counts.merge("D_one_on_engine_two|" + result.classification() + "|ref_" + ref.cls() + "|lighter_supercritical_" + supercritical
+                        + (current.result.detail().endsWith(V3FeedFlash.SECOND_LIQUID) ? "|second_liquid" : "|" + current.result.detail()), 1, Integer::sum);
+            }
             // Agreement of the column's own two-phase answers with F3's engine on the same states (the stop rule).
             if (current.result != null && current.result.phase() == V3FeedPhase.TWO_PHASE) {
                 V3FlashResult engineAnswer = engineSplit(context, t, p, z, new Outcome(), 0);
