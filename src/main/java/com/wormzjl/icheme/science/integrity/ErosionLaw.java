@@ -10,8 +10,8 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * <li><b>Wall</b> (a heat side, by its passage speed): {@code (φ/0.01) (v/10 m/s)^2.6} mm/y on carbon steel, times the
  * material's erosion factor (1, 0.8, 0.5, 0.4). At 1 wt%: 0.015 mm/y at 2 m/s, 0.16 at 5 m/s.</li>
  * <li><b>Control valve trim</b>: speed {@code sqrt(2 Δp/ρ)} from its own drop (16 m/s at 1 bar, 800 kg/m³); health lost
- * per process second {@code (φ/0.01) (v/30 m/s)^2.6 / (year)}, the year {@code corrosion.yearProcessHours} (20 h): at 1 wt%
- * 860 process hours at 0.2 bar, 106 at 1 bar, 13 at 5 bar, 2.2 at 20 bar.</li>
+ * per process second {@code (φ/0.01) (v/30 m/s)^2.6 / (year)}, the year {@code corrosion.yearProcessHours} (200 h by default): at 1
+ * wt% 8600 process hours at 0.2 bar, 1060 at 1 bar, 130 at 5 bar, 22 at 20 bar.</li>
  * <li><b>Pump</b> ({@code Wear.Fault.SOLIDS}, the erosion class): intensity {@code clamp((φ − 0.001)/0.05, 0, 1)}; 1 wt%
  * reads 0.18, 44 process hours at the default erosion life.</li>
  * </ul>

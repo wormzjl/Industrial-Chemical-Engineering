@@ -4,11 +4,18 @@ package com.wormzjl.icheme.science.integrity;
  * A wall's stage and life (batch 2026-11-16-fouling-corrosion, plan sections 6.5 and 7). The used allowance
  * {@code u = loss / CA}: {@link Stage#SOUND} below 0.5, {@link Stage#THIN} to 0.9 ({@code THIN WALL}), {@link Stage#WEEPING}
  * to 1 (drips, no fluid leaves), {@link Stage#THROUGH} from 1 (the device fails by the failure its kind has). Loss is
- * booked as {@code rate × Δt_process / year}, one corrosion year {@code corrosion.yearProcessHours} long (owner D3: 20 h):
- * a 3 mm wall lasts 600 process hours at 0.1 mm/y, 46 at 1.3 mm/y, 12 at 5 mm/y. Pure; no state.
+ * booked as {@code rate × Δt_process / year}, one corrosion year {@code corrosion.yearProcessHours} long
+ * ({@link #DEFAULT_YEAR_PROCESS_HOURS} by default): a 3 mm wall lasts 6000 process hours at 0.1 mm/y, 460 at 1.3 mm/y, 120 at
+ * 5 mm/y. Pure; no state.
  */
 public final class WallState {
     private WallState() {}
+
+    /**
+     * The default corrosion year, process hours ({@code corrosion.yearProcessHours}): the owner's decision of 2026-11-16 (D12,
+     * "10x"), ten times D3's 20 h. 50 hours of play at the default time factor 4.
+     */
+    public static final double DEFAULT_YEAR_PROCESS_HOURS = 200;
 
     /** The stages of a wall; saved by name later: append-only. */
     public enum Stage { SOUND, THIN, WEEPING, THROUGH }

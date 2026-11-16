@@ -2289,7 +2289,7 @@
   "gui.icheme.fluid.wall_left": "Wall",
   "gui.icheme.fluid.wall_left.hint": "The share of the wall's corrosion allowance left. Below 50 % the line says THIN WALL, below 10 % WEEPING; at 0 the wall is through.",
   "gui.icheme.fluid.wall_rate": "Rate",
-  "gui.icheme.fluid.wall_rate.hint": "How fast the wall thins, mm per corrosion year (20 process hours by default), from the governing mechanism, the outside air and the particles the flow carries.",
+  "gui.icheme.fluid.wall_rate.hint": "How fast the wall thins, mm per corrosion year (200 process hours by default), from the governing mechanism, the outside air and the particles the flow carries.",
   "gui.icheme.fluid.wall_life.hint": "Minutes of play until the wall is through at its present rate; — while it does not thin. It thins over process time, which runs the server's time factor times faster than play.",
   "gui.icheme.fluid.wall_mechanism": "Cause: %s",
   "gui.icheme.fluid.wall_mechanism.hint": "The mechanism that thins the wall most at its present service.",

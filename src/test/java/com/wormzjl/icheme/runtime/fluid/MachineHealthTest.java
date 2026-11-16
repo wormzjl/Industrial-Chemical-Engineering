@@ -724,8 +724,9 @@ class MachineHealthTest {
         assertTrue(MachineHealth.trim(new Trim(1).ledger.active().get(VALVE)));
         var trim = new Trim(1);
         trim.health.booked(1, 0, 100, trim.result);
-        // A tenth of the mass is sand at 28 m/s through the trim.
-        double rate = com.wormzjl.icheme.science.integrity.ErosionLaw.trim(.1, com.wormzjl.icheme.science.integrity.ErosionLaw.trimSpeed(DROP, DENSITY), 20);
+        // A tenth of the mass is sand at 28 m/s through the trim; the default year of 200 process hours (D12; 20 h before, ten
+        // times the rate).
+        double rate = com.wormzjl.icheme.science.integrity.ErosionLaw.trim(.1, com.wormzjl.icheme.science.integrity.ErosionLaw.trimSpeed(DROP, DENSITY), 200);
         assertTrue(rate > 0);
         assertEquals(rate, trim.health.rate(VALVE), 1e-15);
         assertEquals(1 - rate * 100 / 20.0, trim.health.health(VALVE), 1e-12);
@@ -745,11 +746,11 @@ class MachineHealthTest {
         worn.wear = new Wear.Settings(false, 1, 1);
         worn.health.booked(1, 0, 100, worn.result);
         assertEquals(0, worn.health.rate(VALVE));
-        // A shorter process year wears it faster.
+        // A shorter process year wears it faster: 10 h against the default 200 h (2 times the rate at the old default 20 h).
         var fast = new Trim(1);
         fast.integrity = new Integrity.Settings(true, 10, true, true, true, 10);
         fast.health.booked(1, 0, 100, fast.result);
-        assertEquals(2 * rate, fast.health.rate(VALVE), 1e-15 + 1e-12 * rate);
+        assertEquals(20 * rate, fast.health.rate(VALVE), 1e-15 + 1e-12 * rate);
     }
 
     @Test

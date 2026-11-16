@@ -32,18 +32,14 @@ import java.util.Set;
  * material of construction, from the streams on its ports, by the world's own laws ({@link CorrosionLaw}, {@link ErosionLaw}). A
  * structure has one material, so its worst stream governs. A control valve has no wall: its row is its trim's life. Mixers,
  * splitters and filters are pipe fittings with no wall and get no row. The corrosive air (M9) is not rated: a sheet has no place in
- * the world. State, rebuilt with every rating, never saved: the player's choice is a sizing fact ({@code SizingFacts.UnitFacts#material}).
+ * the world. Lives run on the server's default corrosion year ({@link WallState#DEFAULT_YEAR_PROCESS_HOURS}, 200 process hours): the
+ * simulator is a client tool and reads no server setting. State, rebuilt with every rating, never saved: the player's choice is a sizing fact ({@code SizingFacts.UnitFacts#material}).
  * Pure; no Minecraft types.
  */
 public final class SheetMetallurgy {
     private SheetMetallurgy() {
     }
 
-    /**
-     * Process hours per corrosion year: the server's default ({@code corrosion.yearProcessHours}, owner D3). The simulator is a client
-     * tool and reads no server setting, so it rates at the default; a gate holds the two equal.
-     */
-    public static final double YEAR_PROCESS_HOURS = 20;
     /** The rates, mm/y, up to which a row's lamp is green and yellow (amber); above, red. */
     public static final double GREEN = .1, AMBER = .5;
     /** The sheet unit types that become a constructed structure with a fluid device, and so have a wall. */
@@ -150,7 +146,7 @@ public final class SheetMetallurgy {
                 governing = erosion > inside.rate() ? Mechanism.EROSION : inside.mechanism();
             }
         }
-        double life = WallState.lifeProcessSeconds(0, material.allowance(), worst, YEAR_PROCESS_HOURS) / 3600;
+        double life = WallState.lifeProcessSeconds(0, material.allowance(), worst, WallState.DEFAULT_YEAR_PROCESS_HOURS) / 3600;
         return new Rated(material, governing, worst, life, lamp(worst));
     }
 
@@ -175,7 +171,7 @@ public final class SheetMetallurgy {
     /** A control valve's trim at drop {@code dropPa} on a liquid of {@code density} with inert solid share {@code solidShare}. */
     public static Trim trim(double dropPa, double density, double solidShare) {
         double speed = ErosionLaw.trimSpeed(dropPa, density);
-        double perSecond = ErosionLaw.trim(solidShare, speed, YEAR_PROCESS_HOURS);
+        double perSecond = ErosionLaw.trim(solidShare, speed, WallState.DEFAULT_YEAR_PROCESS_HOURS);
         return new Trim(dropPa, density, solidShare, speed, perSecond > 0 ? 1 / perSecond / 3600 : Double.POSITIVE_INFINITY);
     }
 

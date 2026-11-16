@@ -9,7 +9,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * of what a cycle took: the inert solids it moved to the bottoms over the feed mass it took plus those solids.
  * <ul>
  * <li><b>Tray fouling</b> {@code f}, 0 to 1: while solids pass, {@code f} approaches {@code f∞ = min(1, φ / 0.02)} with the
- * fouling time {@code τ} ({@code fouling.asymptoteProcessHours}, 10 h); it never falls by itself.</li>
+ * fouling time {@code τ} ({@code fouling.asymptoteProcessHours}, 100 h by default); it never falls by itself.</li>
  * <li><b>Tray capacity</b> {@code c = 1 − 0.4 f}: the flood fraction the cycle reads is divided by it. At 1 wt% the column
  * settles at 80 % of its clean capacity; from 2 wt% at 60 %.</li>
  * <li><b>Solids wear</b> {@code min(5, 0.5 φ / 0.01)} mm/y on carbon steel, times the material's erosion factor: 1 wt% wears

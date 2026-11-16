@@ -106,9 +106,9 @@ class MaterialSelectionTest {
             assertEquals(CorrosionLaw.inside(m, hot).mechanism(), both.mechanism(), m.name());
             assertEquals(both.rate(), SheetMetallurgy.rate(m, List.of(stream(hot), stream(light)), false).rate(), 0, "order does not matter");
         }
-        // A life is the allowance over the rate, at 20 process hours a year.
+        // A life is the allowance over the rate, at 200 process hours a year (D12; 20 before: ten times the old life).
         var steel = SheetMetallurgy.rate(Metallurgy.CARBON_STEEL, List.of(stream(hot)), false);
-        assertEquals(3 / steel.rate() * 20, steel.life(), 1e-9);
+        assertEquals(3 / steel.rate() * 200, steel.life(), 1e-9);
     }
 
     @Test
@@ -145,15 +145,19 @@ class MaterialSelectionTest {
 
     @Test
     void aSlurryThroughAControlValveGivesThePlansTrimLives() {
-        assertEquals(105, SheetMetallurgy.trim(1e5, 800, .01).life(), 105 * .05);
-        assertEquals(13, SheetMetallurgy.trim(5e5, 800, .01).life(), 13 * .05);
+        // At the default year of 200 process hours (D12): ten times the 105 h and 13 h at the old 20 h.
+        assertEquals(1050, SheetMetallurgy.trim(1e5, 800, .01).life(), 1050 * .05);
+        assertEquals(130, SheetMetallurgy.trim(5e5, 800, .01).life(), 130 * .05);
         assertEquals(16, SheetMetallurgy.trim(1e5, 800, .01).speed(), .5);
         assertEquals(Double.POSITIVE_INFINITY, SheetMetallurgy.trim(1e5, 800, 0).life(), "no solids: no wear");
     }
 
     @Test
     void theYearIsTheServersDefault() {
-        assertEquals(com.wormzjl.icheme.runtime.fluid.Integrity.Settings.DEFAULT.yearProcessHours(), SheetMetallurgy.YEAR_PROCESS_HOURS);
+        // The owner's decision of 2026-11-16 (D12): 200 process hours, 20 before.
+        assertEquals(200, com.wormzjl.icheme.science.integrity.WallState.DEFAULT_YEAR_PROCESS_HOURS);
+        assertEquals(com.wormzjl.icheme.runtime.fluid.Integrity.Settings.DEFAULT.yearProcessHours(), com.wormzjl.icheme.science.integrity.WallState.DEFAULT_YEAR_PROCESS_HOURS);
+        assertEquals(100, com.wormzjl.icheme.runtime.fluid.Integrity.Settings.DEFAULT.asymptoteProcessHours());
     }
 
     // ---- The sheet ----

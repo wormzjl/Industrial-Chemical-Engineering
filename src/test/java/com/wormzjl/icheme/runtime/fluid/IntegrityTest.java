@@ -234,14 +234,15 @@ class IntegrityTest {
             var rig = plant(factor, nitrogen(101325), 0, 0, false);
             rig.integrity.rate(VESSEL, 2, Mechanism.AERATED_WATER);
             rig.cadence(100);
-            // 100 online ticks are 5 s at factor 1, 20 s at factor 4; 2 mm per process year of 20 h.
+            // 100 online ticks are 5 s at factor 1, 20 s at factor 4; 2 mm per process year of 200 h, the default (D12; a year of
+            // 20 h before: a tenth of the old loss).
             double seconds = 100 / 20.0 * factor;
             assertEquals(seconds, rig.coordinator.time().seconds(100), 1e-12);
-            assertEquals(2 * seconds / (20 * 3600), rig.integrity.wall(VESSEL).loss(), 1e-15, "factor " + factor);
-            // A process year of 10 h books twice as fast.
+            assertEquals(2 * seconds / (200 * 3600), rig.integrity.wall(VESSEL).loss(), 1e-15, "factor " + factor);
+            // A process year of 10 h books twenty times as fast.
             rig.settings = new Integrity.Settings(true, 10, true, true, true, 10);
             rig.cadence(100);
-            assertEquals(2 * seconds / (20 * 3600) + 2 * seconds / (10 * 3600), rig.integrity.wall(VESSEL).loss(), 1e-15);
+            assertEquals(2 * seconds / (200 * 3600) + 2 * seconds / (10 * 3600), rig.integrity.wall(VESSEL).loss(), 1e-15);
             var wall = rig.integrity.wall(VESSEL);
             assertEquals(Mechanism.AERATED_WATER, wall.mechanism());
             assertEquals(Metallurgy.CARBON_STEEL.allowance(), wall.allowance());
@@ -327,8 +328,9 @@ class IntegrityTest {
         assertEquals(0, rig.integrity.fouling(SIDE), "the first cadence only reads the flow");
         rig.cadence(20 * 3600);
         double rf = rig.integrity.fouling(SIDE);
-        // An hour of flowing water at 25 °C: 1 - e^(-1/10) of the asymptote.
-        assertEquals(FoulingLaw.step(0, FoulingLaw.WATER, 3600, 10), rf, 1e-12);
+        // An hour of flowing water at 25 °C: 1 - e^(-1/100) of the asymptote at the default 100 h (D12): 3.48e-6 m²K/W, where
+        // the old 10 h gave 1 - e^(-1/10), 3.33e-5.
+        assertEquals(FoulingLaw.step(0, FoulingLaw.WATER, 3600, 100), rf, 1e-12);
         assertTrue(rf > 0 && rf < FoulingLaw.WATER);
         assertEquals(rf, rig.ledger.integrity().get(SIDE).fouling(), 1e-18);
         // A side no flow passes keeps its deposit.
@@ -460,11 +462,13 @@ class IntegrityTest {
     /**
      * WP5 (plan section 12): the graph sees a deposit only in whole steps of 0.0001 m²K/W. Flowing water at 25 °C grows towards
      * 0.00035 with a 10 h time constant: under the first step for three process hours, over it in the fourth (1.15e-4), so one
-     * restate is queued then, after the facts reached the ledger; none in the hour after, still at that step.
+     * restate is queued then, after the facts reached the ledger; none in the hour after, still at that step. The rig runs the old
+     * 10 h time constant explicitly: at the default 100 h (D12) the first step comes only after 34 process hours.
      */
     @Test
     void aDepositStepQueuesOneRestateAfterItsFactsReachTheLedger() {
         var rig = plant(1, nitrogen(101325), 1, 0, false);
+        rig.settings = new Integrity.Settings(true, 20, true, true, true, 10);
         rig.booked();
         rig.cadence(MachineHealth.CADENCE);
         for (int hour = 1; hour <= 3; hour++) {

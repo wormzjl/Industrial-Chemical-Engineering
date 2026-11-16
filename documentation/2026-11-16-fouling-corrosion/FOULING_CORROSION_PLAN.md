@@ -1,6 +1,8 @@
-# Fouling, corrosion and erosion system: plan (revision 7)
+# Fouling, corrosion and erosion system: plan (revision 8)
 
 Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0), rebased on `main` at `66a87f9d5` (0.33.0) on 2026-11-16 (the owner's word). Status: plan, no code.
+
+Revision 8 (owner, 2026-11-16: "10x", decision D12): corrosion and fouling ten times slower by default, the corrosion year 200 process hours and the fouling time constant 100 (sections 6.5, 8, 12, 13.1, 15).
 
 Revision 7 (owner, 2026-11-16: "when column handles solids, add both fouling and corrosion to it depending on the solid fraction"): a running column's trays foul and its wall is lost with the solid share of what it takes (section 13.1, WP8).
 
@@ -213,14 +215,16 @@ Later, with their species: HCl overhead corrosion and chloride cracking, amine a
 
 ### 6.5 Time
 
-**Decided (D3): one corrosion year is 20 process hours** (5 hours of play at `fluid.timeScale` 4), config `corrosion.yearProcessHours`. Loss booked: `rate × Δt_process / 20 h`.
+**Decided (D3): one corrosion year is 20 process hours** (5 hours of play at `fluid.timeScale` 4), config `corrosion.yearProcessHours`. Loss booked: `rate × Δt_process / year`.
 
-| Rate | Carbon steel wall (3 mm) lasts |
+**Decided (D12, owner 2026-11-16: "10x"): one corrosion year is 200 process hours** (50 hours of play at `fluid.timeScale` 4), ten times D3's 20 h; the fouling time constant is 100 process hours, ten times O1's 10 h (section 12). Why: at D3's and O1's pace a carbon steel wall in hot crude was through after 11.5 hours of play and a clean exchanger fouled in 2.5, too fast for a plant to be built and run. Erosion of walls and valve trims is booked per corrosion year, so it slows with it. Only the two defaults change (`WallState.DEFAULT_YEAR_PROCESS_HOURS`, `FoulingLaw.DEFAULT_TIME_PROCESS_HOURS`); no rate law, factor, asymptote, cap, saved field or format. Saved loss and deposits are amounts and stand; they advance more slowly. The pure-law gates (`FoulingAndWallTest`, `ErosionLawTest`) still check D3's rows at an explicit 20 h; each life below is ten times theirs.
+
+| Rate | Carbon steel wall (3 mm) lasts (D12, 200 h year) |
 |---|---|
-| 0.1 mm/y (acceptable) | 600 process hours: 150 hours of play |
-| 0.3 mm/y | 200 process hours: 50 hours of play |
-| 1.3 mm/y (crude at 370 °C) | 46 process hours: 11.5 hours of play |
-| 5 mm/y (the cap of most rows) | 12 process hours: 3 hours of play |
+| 0.1 mm/y (acceptable) | 6000 process hours: 1500 hours of play |
+| 0.3 mm/y | 2000 process hours: 500 hours of play |
+| 1.3 mm/y (crude at 370 °C) | 460 process hours: 115 hours of play |
+| 5 mm/y (the cap of most rows) | 120 process hours: 30 hours of play |
 
 ## 7. The wall: state, failure, pollution
 
@@ -258,14 +262,14 @@ One law, `ErosionLaw`, on what a connection carried in its last committed slice:
 
 A compressor and a dry screw already refuse solids (`InletPhase.decide`).
 
-**Control valve trim.** A new health record per control valve, 1 (new) to 0, kept by `MachineHealth` beside the pumps' (a fact below 1). Rate per process second: `(φ / 0.01) × (v / 30)^2.6 / (20 h)`.
+**Control valve trim.** A new health record per control valve, 1 (new) to 0, kept by `MachineHealth` beside the pumps' (a fact below 1). Rate per process second: `(φ / 0.01) × (v / 30)^2.6 / (year)`, the corrosion year of 200 process hours (D12; 20 h under D3, a tenth of each life below).
 
 | Drop (liquid of 800 kg/m³) | Trim speed | Life at 1 wt% | Life at 5 wt% |
 |---|---|---|---|
-| 0.2 bar | 7 m/s | 860 process hours | 172 |
-| 1 bar | 16 m/s | 105 process hours | 21 |
-| 5 bar | 35 m/s | 13 process hours | 2.6 |
-| 20 bar | 71 m/s | 2.1 process hours | 0.4 |
+| 0.2 bar | 7 m/s | 8600 process hours | 1720 |
+| 1 bar | 16 m/s | 1050 process hours | 210 |
+| 5 bar | 35 m/s | 130 process hours | 26 |
+| 20 bar | 71 m/s | 21 process hours | 4 |
 
 - From health 0.25: `ERODED TRIM` on its status line.
 - At 0: `TRIM FAILED`. The valve no longer throttles: it stands as an unconfigured control valve does (`ControlValve.unconfigured()`, open), its settings kept. The loop it served loses control; nothing leaks. A valve that the engine plans (a burner's, a column port's) fails the same way, so its unit sees an uncontrolled line; a column's port valve failing trips the column by its existing closure check.
@@ -308,7 +312,7 @@ At the cadence the service reads `PollutionService.index(dimension, origin, CORR
 - Sizing: the simulator's exchanger, cooler and heater rows size on a design `Rf` per side (the service's asymptote), so a unit sent to the block meets its duty dirty. This closes the two `SIZING_PLAN.md` rows.
 - Words: `FOULED` from `Rf` ≥ 0.001; the heat page shows `Rf` and the clean-to-now duty ratio.
 
-**Decided (O1, owner 2026-11-16): a placeholder grows `Rf` until the reaction module exists.** Kern–Seaton, `dRf/dt = (Rf∞ − Rf)/τ` while the side flows, `τ` = 10 process hours (config), `Rf∞` from the digest:
+**Decided (O1, owner 2026-11-16): a placeholder grows `Rf` until the reaction module exists.** Kern–Seaton, `dRf/dt = (Rf∞ − Rf)/τ` while the side flows, `τ` = 100 process hours (config; D12, 10 under O1: 25 hours of play at time factor 4 to 63 % of `Rf∞`), `Rf∞` from the digest:
 
 | Stream on the side | `Rf∞` (m²K/W) | Anchor |
 |---|---|---|
@@ -347,7 +351,7 @@ Today: a column is not a fluid device (`EquipmentShape.fluidDevice()` is false f
 Proposal (**D10**, the owner's request; the numbers the agent's):
 
 - `φ`: the solid mass share of what a cycle took, the inert solids it moved to the bottoms over the feed mass it took. Both are in the cycle already.
-- **Tray fouling** `f`, 0 to 1, a fact of the column unit. While solids pass: `df/dt = (f∞ − f)/τ`, `f∞ = min(1, φ/0.02)`, `τ` the fouling time (10 process hours). It never falls by itself. Effect: the trays' capacity is `1 − 0.4 f`, so the flood fraction the cycle reads is divided by it; `HIGH LOAD` and then `FLOODING` (the feed taken is limited) come earlier. At 1 wt% solids the column settles at 80 % of its clean capacity; from 2 wt% at 60 %. Word: `TRAYS FOULED` from `f` ≥ 0.5.
+- **Tray fouling** `f`, 0 to 1, a fact of the column unit. While solids pass: `df/dt = (f∞ − f)/τ`, `f∞ = min(1, φ/0.02)`, `τ` the fouling time (100 process hours, D12; 10 before). It never falls by itself. Effect: the trays' capacity is `1 − 0.4 f`, so the flood fraction the cycle reads is divided by it; `HIGH LOAD` and then `FLOODING` (the feed taken is limited) come earlier. At 1 wt% solids the column settles at 80 % of its clean capacity; from 2 wt% at 60 %. Word: `TRAYS FOULED` from `f` ≥ 0.5.
 - **Wall loss**, mm, a fact of the column unit, on the column's material (its shape's `material`, taken at Start): a solids term `min(5, 0.5 · φ/0.01)` mm/y times the material's erosion factor (1 wt%: 0.5 mm/y on carbon steel, 0.25 on stainless), plus the matrix of section 6 on the bottoms liquid of the installed table (its composition and temperature, the column's pressure), computed once per installed table. A column without solids therefore corrodes as a vessel holding its bottoms would.
 - Stages as section 7 (`THIN WALL`, `WEEPING`). Through: a new `Condition.LEAKING` of rank `TRIP`; the column takes nothing until it is repaired.
 - Repair and cleaning: the constructor's Repair on a stopped column sets its wall loss to 0; Clean on a stopped column sets `f` to 0. A wrecked column (blast) is deconstructed, as every structure. On the column's Operation page (layout B, owner 2026-11-16) the wear is a table on the glass after the last solve and Clean a footer key between Close and Apply; the door keeps Control and Set points.
@@ -374,6 +378,7 @@ The owner's, 2026-11-16:
 - **O4** Format numbers reserved on `main` (`ab6298d03`); the delegations approved one by one.
 - D8: repairs of constructed equipment with the constructor; the repair kit kept for in-line pumps and compressors and control valve trims.
 - D11 (owner, 2026-11-16: "Yes, 0.06"): chrome steel's sulfidation factor is 0.06, not 0.12. At 0.12 a crude heater at 365 °C read 0.19 mm/y on chrome steel, over the 0.1 mm/y the Materials tab calls green, so Auto took stainless; at 0.06 chrome steel stays green to about 380 °C at 0.6 wt% sulfur (0.14 at 400 °C).
+- D12 (owner, 2026-11-16: "10x"; section 6.5): ten times slower by default. The corrosion year is 200 process hours (D3's 20 h), the fouling time constant 100 process hours (O1's 10 h); the column's trays use the same constant. A carbon steel wall in crude at 370 °C is through after 460 process hours, 115 hours of play, where it was 11.5.
 - D10 (section 13.1): a column that carries solids fouls its trays and loses wall with the solid share; the numbers are the agent's, open to the owner.
 - Revision 2: a smaller material list (four); columns pass inert particles and stop only for freezing; particulate erosion, control valves first.
 
@@ -431,7 +436,7 @@ New package `src/main/java/com/wormzjl/icheme/science/integrity/`, pure (no Mine
 - `Mechanism`: `SULFIDATION`, `NAPHTHENIC_ACID`, `SOUR_WATER`, `WET_CO2`, `AMMONIUM_BISULFIDE`, `ACID_CONDENSATE`, `AERATED_WATER`, `OVERHEATING`, `CORROSIVE_AIR`, `HYDROGEN_ATTACK`, `OXYGEN_FIRE`, `EROSION`.
 - `CorrosionStandard`: built once per compound list, as `HazardStandard` is: per compound its molar mass, sulfur mass share (formula, else the sub-record), acid number, fouling number, and the indices of H2S, CO2, SO2, NH3, O2, H2 and water found by formula. `digest(moles, temperature, pressure, oilMoles, aqueousMoles)` returns a `CorrosionDigest` record (section 6.1). No allocation beyond the record.
 - `CorrosionLaw`: `rate(Mechanism, CorrosionDigest)` for carbon steel (section 6.2), `inside(Metallurgy, CorrosionDigest)` returning the governing mechanism and rate, `outside(Metallurgy, index)`. Every rate finite and ≥ 0 for any finite digest; NaN inputs give 0.
-- `ErosionLaw` (section 8): `wall(Metallurgy, solidShare, speed)` in mm/y; `trimSpeed(drop, density)`; `trim(solidShare, speed)` in health per process second at a year of 20 h, scaled by the caller's `yearProcessHours`; `solidsIntensity(solidShare)` for the pump fault. 0 for a share or speed that is 0, negative or NaN.
+- `ErosionLaw` (section 8): `wall(Metallurgy, solidShare, speed)` in mm/y; `trimSpeed(drop, density)`; `trim(solidShare, speed)` in health per process second at the caller's `yearProcessHours` (200 h by default, D12); `solidsIntensity(solidShare)` for the pump fault. 0 for a share or speed that is 0, negative or NaN.
 - `Wear.Fault.SOLIDS` (`FaultClass.EROSION`), intensity `ErosionLaw.solidsIntensity`. `MachineHealth` reads it in WP2; in WP1 only the enum constant, its `intensity` case and `WearTest` rows. No existing fault's numbers move.
 - `FoulingLaw`: `asymptote(CorrosionDigest, solidShare)`, `step(rf, asymptote, dt, tau)`, `level(rf)` (steps of 1e-4, cap 0.002), `thickness(rf)`. `fouled(Films, rf)` belongs to `HeatCurve` (WP5).
 - `WallState`: `stage(loss, allowance)` to `SOUND`, `THIN`, `WEEPING`, `THROUGH`; `lifeSeconds(loss, allowance, rate, yearProcessHours)`.

@@ -29,7 +29,7 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 public final class CorrosionLaw {
     private CorrosionLaw() {}
 
-    /** The largest rate any law gives, mm/y: a 3 mm wall in 22 process seconds at a 20 h year. Keeps every rate finite. */
+    /** The largest rate any law gives, mm/y: a 3 mm wall in 216 process seconds at the default 200 h year. Keeps every rate finite. */
     public static final double MAX_RATE = 1e4;
     /** M1: its onset, K; its reference temperature, K, and rate, mm/y, at 0.6 wt%; its activation, K; the sulfur cap, wt%; H2S as sulfur, wt% per bar. */
     static final double SULFIDATION_ONSET = 503, SULFIDATION_REFERENCE = 643, SULFIDATION_RATE = 1.3, SULFIDATION_ACTIVATION = 8698,
