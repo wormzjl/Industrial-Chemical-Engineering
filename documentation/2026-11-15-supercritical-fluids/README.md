@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1, S2, S3, S4, S4b and S5 done). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
+Status: **In progress** since 2026-11-15 (S0, S1, S2, S3, S4, S4b and S5 done; main 0.33.0 merged in 2026-11-16). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0), main merged at `66a87f9d5` (0.33.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -117,6 +117,11 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   researched and planned at the owner's request; three forms of its model rendered (`tmp/plunger-forms/`), the owner
   chose form A. S3's four moved grade pins: three test cases moved to 36 MPa, the engine digest left to the final lane.
   Decisions in the plan's section 2b, points 13 to 17.
+- 2026-11-16: main 0.33.0 (`66a87f9d5`) merged into the branch (sub-thread; owner: "uh merge main first"): merge commit
+  `dfc9d9e55`, three document conflicts; no revision token needed a new value. The merge left main's five rare gases
+  without S3's `critical_volume`: added with S3's tool (`0f4230144`). `test` 373 classes (1 failed, that check), column 75,
+  equipment 3, hold 10 classes green; after the fix 30 classes green. Digest: line 313 only, the grade token. Finding: the
+  burst-pipe release splits by slot. [MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md).
 
 ## Documents
 
@@ -143,6 +148,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   simulator, the tests.
 - [S5_PRESENTATION_REVIEW.md](S5_PRESENTATION_REVIEW.md): S5, what the player reads on one dense fluid: the survey,
   the rule and its client evaluation, the pump's head share, the before and after table, the renders, the owner items.
+- [MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md): the merge of main 0.33.0: conflicts, the revision tokens of the 33
+  records both sides changed, the rare gases' critical volumes, the digest measurement, main's slot readers, the runs.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
   recommended pressure ranges and the sizes of the open decisions.
 - Earlier: [../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md](../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md)
