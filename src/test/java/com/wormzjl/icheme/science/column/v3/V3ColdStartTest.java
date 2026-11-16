@@ -20,14 +20,13 @@ import org.junit.jupiter.api.Test;
  * no accepted state, cache, or prior attempt seeds a later point. Numerical failure is recorded as a typed outcome
  * rather than pretending every in-range combination is feasible.
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3ColdStartTest {
-    private static final String CDU17 = "icheme:cdu17_tjl_acs2018";
+    private static final String CRUDE = V3TestInputs.MEDIUM_CRUDE_PACKAGE;
     private static final long REAL_CRUDE_CASE_BUDGET_NANOS = 5_000_000_000L;
     private static final long LOW_PRESSURE_CASE_BUDGET_NANOS = 45_000_000_000L;
 
     /**
-     * The registered two-stage PR pilot: topology and PC03/PC10 composition fixed while covering practical setup
+     * The registered two-stage PR pilot: topology and the binary's two cuts fixed while covering practical setup
      * edits exposed by the V3 screen.
      */
     @Test
@@ -55,10 +54,20 @@ class V3ColdStartTest {
         assertEquals(matrix.size(), outcomes.size(), "Every cold-sweep case must have a unique stable name");
     }
 
-    /** This old accepted root closes MESH by labelling a dense liquid as both phases. */
+    /**
+     * This old accepted root closes MESH by labelling a dense liquid as both phases. On the medium crude the root is the
+     * zero-duty {@code crude_pc03}/{@code crude_pc10} binary's: with no boil-up the tray below the feed holds a liquid only.
+     */
     @Test
     void nearby551KelvinCollapsedRootFailsTheFreshPhaseIdentityGate() {
-        V3ColumnInput input = binaryPilot(100.0, 551.0, 250.0, 750.0, 300.0, 2.0, 0.0);
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CRUDE);
+        double[] feedFlows = new double[thermo.componentBasis().componentCount()];
+        feedFlows[V3TestInputs.index(thermo, "crude_pc03")] = 50.0;
+        feedFlows[V3TestInputs.index(thermo, "crude_pc10")] = 50.0;
+        V3ColumnInput input = V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, thermo.packageId(), "test:registered-pr-binary",
+                thermo.componentBasis(), feedFlows, 551.0, 2, 1, 250_000.0, 750.0,
+                List.of(new V3ColumnSpecification.CondenserOutletTemperature(300.0),
+                        new V3ColumnSpecification.OrganicRefluxRatio(2.0), new V3ColumnSpecification.ReboilerDuty(0.0)));
 
         V3ColumnOutcome outcome = V3TestInputs.calculate(input);
         var failure = assertInstanceOf(V3ColumnOutcome.Failure.class, outcome, outcome::toString);
@@ -74,8 +83,8 @@ class V3ColdStartTest {
      */
     @Test
     void v1ScaleRealCrudeColdMatrixReportsInitialResidualsAndBoundedOutcomes() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CDU17);
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CRUDE);
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         List<RealCrudeCase> cases = List.of(
                 new RealCrudeCase("two_stage", 2, 1),
                 new RealCrudeCase("four_stage", 4, 3),
@@ -101,23 +110,26 @@ class V3ColdStartTest {
         assertTrue(report.size() == cases.size());
     }
 
-    /** The client-reported low-top-pressure condenser operating region. */
+    /**
+     * The client-reported low-top-pressure condenser operating region. The medium crude carries methane and ethane, which a
+     * 323 K condenser at 1.1 to 1.5 bar does not condense: the condenser is partial and the light ends leave as its gas.
+     */
     @Test
-    void onePointFiveBarTotalCondenserConvergesWithoutOutletGas() {
-        assertTotalCondenser(lowPressure(150_000.0));
+    void onePointFiveBarCondenserConvergesWithTheLightEndsAsOutletGas() {
+        assertPartialCondenser(lowPressure(150_000.0));
     }
 
     @Test
-    void onePointOneBarTotalCondenserConvergesWithoutOutletGas() {
-        assertTotalCondenser(lowPressure(110_000.0));
+    void onePointOneBarCondenserConvergesWithTheLightEndsAsOutletGas() {
+        assertPartialCondenser(lowPressure(110_000.0));
     }
 
-    private static void assertTotalCondenser(V3ColumnOutcome.Success success) {
+    private static void assertPartialCondenser(V3ColumnOutcome.Success success) {
         assertTrue(success.result().acceptanceAudit().accepted());
         assertTrue(success.result().convergenceEvidence().satisfiesGates());
         assertTrue(success.diagnostics().solvePath().contains("continuation"));
-        assertEquals(V3CondenserPhaseBranch.LIQUID_ONLY, success.result().problem().topology().condenserPhaseBranch());
-        assertFalse(success.result().streams().stream().anyMatch(stream -> stream.streamId().equals("overhead_vapor")));
+        assertEquals(V3CondenserPhaseBranch.TWO_PHASE, success.result().problem().topology().condenserPhaseBranch());
+        assertTrue(success.result().streams().stream().anyMatch(stream -> stream.streamId().equals("overhead_vapor")));
         assertTrue(success.result().streams().stream().anyMatch(stream -> stream.streamId().equals("distillate_liquid")));
     }
 
@@ -134,7 +146,7 @@ class V3ColdStartTest {
     }
 
     private static V3ColumnInput lowPressureInput(double topPressurePascal) {
-        V3CrudeFeed crude = V3PengRobinsonThermo.fromRegisteredPackage(CDU17).crudeFeed("icheme:tia_juana_light_kl1976");
+        V3CrudeFeed crude = V3PengRobinsonThermo.fromRegisteredPackage(CRUDE).crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         double totalFlowMolPerSecond = 2_000.0 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlowMolPerSecond;
@@ -147,24 +159,25 @@ class V3ColdStartTest {
 
     private static List<Case> reasonableMatrix() {
         List<Case> cases = new ArrayList<>();
-        add(cases, "nominal", 100.0, 550.0, 250.0, 0.75, 300.0, 2.0, 0.0);
+        double D = V3TestInputs.BINARY_REBOILER_DUTY_WATTS / 1.0e6;
+        add(cases, "nominal", 100.0, 550.0, 250.0, 0.75, 300.0, 2.0, D);
 
         // One-factor cold edits centred on the accepted pilot. Values reflect the exposed UI units.
-        for (double flow : List.of(75.0, 125.0)) add(cases, "flow_" + flow, flow, 550.0, 250.0, 0.75, 300.0, 2.0, 0.0);
+        for (double flow : List.of(75.0, 125.0)) add(cases, "flow_" + flow, flow, 550.0, 250.0, 0.75, 300.0, 2.0, D);
         for (double temperature : List.of(545.0, 548.0, 551.0, 552.0, 555.0)) {
-            add(cases, "feed_k_" + temperature, 100.0, temperature, 250.0, 0.75, 300.0, 2.0, 0.0);
+            add(cases, "feed_k_" + temperature, 100.0, temperature, 250.0, 0.75, 300.0, 2.0, D);
         }
-        for (double pressure : List.of(225.0, 275.0)) add(cases, "top_kpa_" + pressure, 100.0, 550.0, pressure, 0.75, 300.0, 2.0, 0.0);
-        for (double drop : List.of(0.0, 1.5)) add(cases, "drop_kpa_" + drop, 100.0, 550.0, 250.0, drop, 300.0, 2.0, 0.0);
-        for (double condenser : List.of(295.0, 305.0)) add(cases, "condenser_k_" + condenser, 100.0, 550.0, 250.0, 0.75, condenser, 2.0, 0.0);
-        for (double reflux : List.of(1.5, 2.5)) add(cases, "reflux_" + reflux, 100.0, 550.0, 250.0, 0.75, 300.0, reflux, 0.0);
-        for (double duty : List.of(0.02, 0.05)) add(cases, "reboiler_mw_" + duty, 100.0, 550.0, 250.0, 0.75, 300.0, 2.0, duty);
+        for (double pressure : List.of(225.0, 275.0)) add(cases, "top_kpa_" + pressure, 100.0, 550.0, pressure, 0.75, 300.0, 2.0, D);
+        for (double drop : List.of(0.0, 1.5)) add(cases, "drop_kpa_" + drop, 100.0, 550.0, 250.0, drop, 300.0, 2.0, D);
+        for (double condenser : List.of(295.0, 305.0)) add(cases, "condenser_k_" + condenser, 100.0, 550.0, 250.0, 0.75, condenser, 2.0, D);
+        for (double reflux : List.of(1.5, 2.5)) add(cases, "reflux_" + reflux, 100.0, 550.0, 250.0, 0.75, 300.0, reflux, D);
+        for (double duty : List.of(0.1, 0.3)) add(cases, "reboiler_mw_" + duty, 100.0, 550.0, 250.0, 0.75, 300.0, 2.0, duty);
 
         // Combined corners distinguish coupled thermal/pressure sensitivity from individual one-factor effects.
-        add(cases, "low_corner", 75.0, 545.0, 225.0, 0.0, 295.0, 1.5, 0.0);
-        add(cases, "high_corner", 125.0, 555.0, 275.0, 1.5, 305.0, 2.5, 0.0);
-        add(cases, "cool_high_reflux", 125.0, 545.0, 250.0, 0.75, 295.0, 2.5, 0.0);
-        add(cases, "hot_low_reflux", 75.0, 555.0, 250.0, 0.75, 305.0, 1.5, 0.0);
+        add(cases, "low_corner", 75.0, 545.0, 225.0, 0.0, 295.0, 1.5, D);
+        add(cases, "high_corner", 125.0, 555.0, 275.0, 1.5, 305.0, 2.5, D);
+        add(cases, "cool_high_reflux", 125.0, 545.0, 250.0, 0.75, 295.0, 2.5, D);
+        add(cases, "hot_low_reflux", 75.0, 555.0, 250.0, 0.75, 305.0, 1.5, D);
         return List.copyOf(cases);
     }
 
@@ -175,13 +188,13 @@ class V3ColdStartTest {
                 condenserTemperature, reflux, reboilerDutyMegawatt * 1_000_000.0)));
     }
 
-    /** The registered two-tray PC03/PC10 binary at the given conditions. */
+    /** The registered two-tray binary ({@link V3TestInputs#crudeBinary}'s cuts) at the given conditions. */
     private static V3ColumnInput binaryPilot(double feedFlow, double feedTemperature, double topPressureKpa,
             double dropPascal, double condenserTemperature, double reflux, double reboilerDutyWatts) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CDU17);
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CRUDE);
         double[] feedFlows = new double[thermo.componentBasis().componentCount()];
-        feedFlows[6] = feedFlow / 2.0;
-        feedFlows[13] = feedFlow / 2.0;
+        feedFlows[V3TestInputs.index(thermo, V3TestInputs.BINARY_LIGHT)] = feedFlow / 2.0;
+        feedFlows[V3TestInputs.index(thermo, V3TestInputs.BINARY_HEAVY)] = feedFlow / 2.0;
         return V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, thermo.packageId(), "test:registered-pr-binary",
                 thermo.componentBasis(), feedFlows, feedTemperature, 2, 1, topPressureKpa * 1_000.0, dropPascal,
                 List.of(new V3ColumnSpecification.CondenserOutletTemperature(condenserTemperature),

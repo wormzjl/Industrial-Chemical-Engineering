@@ -5,11 +5,10 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3ColumnDisplayResultTest {
     @Test
     void acceptedResultCreatesOnlyABoundedPresentationCertificate() {
-        V3ColumnInput input = V3TestInputs.cdu17Binary("test:registered-pr-binary");
+        V3ColumnInput input = V3TestInputs.crudeBinary("test:registered-pr-binary");
         double[] feedFlows = input.feedComponentMolarFlowsMolPerSecond();
 
         V3ColumnOutcome.Success success = (V3ColumnOutcome.Success) V3TestInputs.calculate(input);

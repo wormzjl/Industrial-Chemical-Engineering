@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 /** The interactive aggressive route uses a bounded closure while retaining the normal acceptance audit. */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3AggressiveStrategyTest {
     @Test
     void coldFeatureColumnPublishesTheBoundedFastCertificate() {

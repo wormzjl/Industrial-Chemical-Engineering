@@ -8,30 +8,30 @@ import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3OperatingDomainValidatorTest {
-    private static final String PACKAGE_ID = "icheme:cdu17_tjl_acs2018";
+    private static final String PACKAGE_ID = V3TestInputs.MEDIUM_CRUDE_PACKAGE;
 
     @Test
-    void admitsTheInclusiveFiftyKilopascalPackageBoundaryBeforeNumericalWork() {
+    void admitsTheInclusiveOneKilopascalPackageBoundaryBeforeNumericalWork() {
+        // The medium crude's package declares 1 kPa to 2 MPa.
         V3OperatingDomainValidator.Assessment.Eligible eligible = assertInstanceOf(
-                V3OperatingDomainValidator.Assessment.Eligible.class, assess(50_000.0, 750.0));
+                V3OperatingDomainValidator.Assessment.Eligible.class, assess(1_000.0, 750.0));
 
         assertEquals(V3OperatingDomainValidator.Assessment.Lane.LOW_PRESSURE_HYBRID, eligible.lane());
-        assertEquals(50_000.0, eligible.minimumNodePressurePascal());
-        assertEquals(71_750.0, eligible.maximumNodePressurePascal());
-        assertEquals(50_000.0, eligible.packageMinimumPressurePascal());
+        assertEquals(1_000.0, eligible.minimumNodePressurePascal());
+        assertEquals(22_750.0, eligible.maximumNodePressurePascal());
+        assertEquals(1_000.0, eligible.packageMinimumPressurePascal());
         assertEquals(2_000_000.0, eligible.packageMaximumPressurePascal());
     }
 
     @Test
-    void rejectsTheOneKilopascalVacuumRequestWithAStableVduAdvisory() {
+    void rejectsARequestBelowThePackageFloorWithAStableVduAdvisory() {
         V3OperatingDomainValidator.Assessment.Rejected rejected = assertInstanceOf(
-                V3OperatingDomainValidator.Assessment.Rejected.class, assess(1_000.0, 750.0));
+                V3OperatingDomainValidator.Assessment.Rejected.class, assess(999.0, 750.0));
 
         assertEquals(V3OperatingDomainValidator.Assessment.Reason.BELOW_PACKAGE_PRESSURE, rejected.reason());
         assertTrue(rejected.detail().contains("VDU_REQUIRED"));
-        assertEquals(1_000.0, rejected.minimumNodePressurePascal());
+        assertEquals(999.0, rejected.minimumNodePressurePascal());
     }
 
     @Test
@@ -46,7 +46,7 @@ class V3OperatingDomainValidatorTest {
     @Test
     void calculatorReturnsTheTypedPreflightFailureWithoutEnteringTheSolver() {
         V3ColumnOutcome.Failure failure = assertInstanceOf(V3ColumnOutcome.Failure.class,
-                V3TestInputs.calculate(input(49_999.0, 0.0)));
+                V3TestInputs.calculate(input(999.0, 0.0)));
 
         assertEquals(V3SolverFailureCode.PROPERTY_OUT_OF_RANGE, failure.code());
         assertEquals("admission", failure.diagnostics().solvePath());
@@ -71,7 +71,7 @@ class V3OperatingDomainValidatorTest {
     private static V3ColumnInput input(double topPressurePascal, double stageDropPascal) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE_ID);
         double[] feed = new double[thermo.componentBasis().componentCount()];
-        feed[6] = 1.0;
+        feed[V3TestInputs.index(thermo, V3TestInputs.BINARY_LIGHT)] = 1.0;
         return V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, PACKAGE_ID, "test:hybrid-admission",
                 thermo.componentBasis(), feed, 550.0, 30, 24, topPressurePascal, stageDropPascal, List.of(
                         new V3ColumnSpecification.CondenserOutletTemperature(323.15),

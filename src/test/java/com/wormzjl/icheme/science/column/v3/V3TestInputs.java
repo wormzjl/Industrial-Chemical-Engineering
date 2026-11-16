@@ -151,21 +151,32 @@ public final class V3TestInputs {
                 V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
     }
 
+    /** The light cut of the binary: {@code crude_pc02}, normal boiling point 383.5 K. */
+    public static final String BINARY_LIGHT = "crude_pc02";
+    /** The heavy cut of the binary: {@code crude_pc06}, normal boiling point 577.9 K. */
+    public static final String BINARY_HEAVY = "crude_pc06";
     /**
-     * The registered {@code crude_pc03}/{@code crude_pc10} binary of the medium crude's package (50 mol/s each) at 550 K:
-     * two interior trays, feed on tray 1, 250 kPa top, 750 Pa per tray, a 300 K condenser, reflux ratio 2 and no reboiler
-     * duty.
+     * The binary's reboiler duty, 0.2 MW. Without it the bottom stage boils nothing and the tray below the feed holds a liquid
+     * with no vapour to separate, which the audit's interior phase identity rejects on this package (it passed on the removed
+     * zero-pair test package). With it the binary and every one-factor edit of the cold-start matrix converge.
+     */
+    public static final double BINARY_REBOILER_DUTY_WATTS = 2.0e5;
+
+    /**
+     * The registered {@link #BINARY_LIGHT}/{@link #BINARY_HEAVY} binary of the medium crude's package (50 mol/s each) at
+     * 550 K: two interior trays, feed on tray 1, 250 kPa top, 750 Pa per tray, a 300 K condenser, reflux ratio 2 and
+     * {@link #BINARY_REBOILER_DUTY_WATTS}.
      */
     public static V3ColumnInput crudeBinary(String assayId) {
         V3PengRobinsonThermo thermo = mediumCrudeThermo();
         double[] feed = new double[thermo.componentBasis().componentCount()];
-        feed[index(thermo, "crude_pc03")] = 50.0;
-        feed[index(thermo, "crude_pc10")] = 50.0;
+        feed[index(thermo, BINARY_LIGHT)] = 50.0;
+        feed[index(thermo, BINARY_HEAVY)] = 50.0;
         return dry(V3ColumnInput.SCHEMA_VERSION, thermo.packageId(), assayId, thermo.componentBasis(),
                 feed, 550.0, 2, 1, 250_000.0, 750.0, List.of(
                         new V3ColumnSpecification.CondenserOutletTemperature(300.0),
                         new V3ColumnSpecification.OrganicRefluxRatio(2.0),
-                        new V3ColumnSpecification.ReboilerDuty(0.0)));
+                        new V3ColumnSpecification.ReboilerDuty(BINARY_REBOILER_DUTY_WATTS)));
     }
 
     /** Removed with the cdu17 fixture (batch 2026-11-16-cdu17-fixture-removal); kept until its users have moved. */
