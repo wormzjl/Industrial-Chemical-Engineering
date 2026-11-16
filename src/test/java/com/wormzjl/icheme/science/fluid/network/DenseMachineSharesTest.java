@@ -129,6 +129,48 @@ class DenseMachineSharesTest {
     }
 
     /**
+     * A centrifugal pump on dense carbon dioxide at 310 K, reduced density 0.6 (S5, owner 2026-11-16, decision 2): its
+     * observed row reads no bubbles (gas ratio NaN), so it does not churn and its page says no GAS (at r = 1.45 it churned at
+     * 255 and said GAS); its row's share, which the page shows as its head share, and its head share still read the density's
+     * vapour share {@code 1 - w_pump}. The same pump on
+     * water with nitrogen bubbles reads its vapour share as before: the row's share is the solve's, the ratio that over the onset.
+     */
+    @Test void aPumpOnADenseSupplyReadsNoBubbles() {
+        double[] co2=pure("CarbonDioxide");var law=new com.wormzjl.icheme.science.machine.CentrifugalPump(.01,50,.7);
+        var s=at(310,pressureAt(310,co2,.6),co2);double p=s.pressure();
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,s,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,at(310,p+2e4,co2),PassiveNetwork.NodeKind.VOID)),
+                List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Machine(law,1,true))));
+        var solver=new PassiveStepSolver(model);var result=solver.solve(graph,1,()->{});
+        var row=result.observations().getFirst();
+        assertTrue(Double.isNaN(row.gasRatio()),"no gas ratio: "+row.gasRatio());
+        assertEquals(0,GasEntrainment.churn(row.gasRatio()),0,"no churn");
+        assertFalse(row.gasRatio()>GasEntrainment.CLEAN_ONSETS,"no GAS word");
+        double w=FluidThermodynamics.pumpLiquidLikeWeight(s);
+        assertEquals(1-w,solver.constants.vapourShares[0],0,"the head share's vapour share is the density's");
+        assertEquals(1-w,row.vapourShare(),0,"the row carries it to the page");
+        var running=(com.wormzjl.icheme.science.machine.CentrifugalPump)((FlowControl.Machine)solver.suctions.mover(graph,0)).law();
+        assertEquals(GasEntrainment.headShare(1-w,p),running.ratedHead()/law.ratedHead(),1e-12,"its head share M(1 - w_pump)");
+        // At or below reduced density 0.5 the dense fluid is the gas it is and reads as before: its share 1 over the onset.
+        var thin=at(310,pressureAt(310,co2,.4),co2);
+        var gasLine=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,thin,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,at(310,thin.pressure()+2e4,co2),PassiveNetwork.NodeKind.VOID)),
+                List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Machine(law,1,true))));
+        var gasSolver=new PassiveStepSolver(model);var gasRow=gasSolver.solve(gasLine,1,()->{}).observations().getFirst();
+        assertEquals(1,gasSolver.constants.vapourShares[0],0,"all gas at 0.4");
+        assertEquals(1/GasEntrainment.onset(thin.pressure()),gasRow.gasRatio(),0,"its gas ratio as before");
+        assertTrue(gasRow.gasRatio()>GasEntrainment.CLEAN_ONSETS,"GAS as before");
+        // Bubbles: water at 298.15 K with nitrogen over it, drawn whole.
+        double[] wet=new double[model.componentCount()];wet[model.components().indexOf("Nitrogen")]=.002;wet[wet.length-1]=1;
+        var two=at(298.15,2e5,wet);assertEquals(-1,two.oneFluidSlot(),"gas and water");
+        var line=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,two,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,at(298.15,2.2e5,wet),PassiveNetwork.NodeKind.VOID)),
+                List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(1,.05,.000045,0),new FlowControl.Machine(law,1,true))));
+        var bubbly=new PassiveStepSolver(model);var observed=bubbly.solve(line,1,()->{}).observations().getFirst();
+        double alpha=bubbly.constants.vapourShares[0];
+        assertTrue(alpha>0,"it draws bubbles: "+alpha);
+        assertEquals(alpha,observed.vapourShare(),0,"its page reads the solve's share");
+        assertEquals(alpha/GasEntrainment.onset(two.pressure()),observed.gasRatio(),0,"its gas ratio, over the onset");
+    }
+
+    /**
      * A centrifugal compressor on dense carbon dioxide at 310 K (S4b): its observed droplet share, which its wet gas wear
      * and its WET GAS word read, is 0 at every density, while its wet efficiency still reads its liquid-like weight. As
      * first implemented the wear read {@code w} and eroded fully from reduced density about 0.65.
