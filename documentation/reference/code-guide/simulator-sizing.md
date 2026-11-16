@@ -124,6 +124,13 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
   duty is a failed rating. The type travels with the size into sent designs, Import and column member choices.
 - **Air coolers** (`AirCoolerSizing.fans`): the fan speed (0..1) that holds the load on the chosen face; power goes
   with the cube of the speed; `Sized.fanPower()` is the sheet's total.
+- **Design fouling** (batch 2026-11-16-fouling-corrosion, WP5): each heat side is rated dirty, at the deposit the
+  world's walls grow towards on its service (`SheetMetallurgy.designFouling`: `FoulingLaw.asymptote` of the hotter
+  end's digest and solid share; a kettle's pool none). `Load.tubeFouling`, `shellFouling` and `AirCoolerSizing.Load.fouling`
+  carry it: the curves take `ExchangerRating.Side.fouled`, the air cooler `HeatSides.airFilms(fans, fouling)`, and the
+  design drops the narrowed passages (`SizedPassages.tube`, `shell`, `bank` with `rf`). The run's drops stay the clean
+  plant's. A clean service (gas, steam, a light clean liquid) rates as before; a fired heater sizes on its duty and
+  reads no film.
 - **Stills** (`StillSizing`): the pot from the constructor's list; the heater at 25 kW/m², the worm at the full boil-up
   plus 20 % at 40 K, the column at an F-factor of 1.5 Pa^0.5; one fill threshold, `BatchStill.FILL`.
 - **Chimneys** (`ChimneySizing`): the smallest diameter passing `AUTO_SPARE` over the design flow at the form's velocity,
