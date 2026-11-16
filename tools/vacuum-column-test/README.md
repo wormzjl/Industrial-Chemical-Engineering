@@ -46,7 +46,7 @@ To capture a new trajectory, use `trace.ps1 -Settings <case.json> -OutputName <s
 ./tools/vacuum-column-test/probe.ps1 -Mode baseline -SourceRoot <own-baseline-worktree-at-494d3e45>
 ```
 
-`baseline` uses the old test helper through reflection to capture states and actual convergence certificates. It requires the exact historical head. The checked-in `src/test/resources/column/invalid-binary-roots.json` preserves that original capture; current gate tests freshly re-evaluate it and verify that a numerical certificate cannot bypass phase rejection. Positive hot-start/recovery fixtures use live boilup and retain all conservation and acceptance gates.
+`baseline` uses the old test helper through reflection to capture states and actual convergence certificates. It requires the exact historical head. The checked-in `src/test/resources/column/invalid-binary-roots.json` held that original capture until 2026-11-16 and now holds the medium crude's (`capture-roots.sh`, below); current gate tests freshly re-evaluate it and verify that a numerical certificate cannot bypass phase rejection. Positive hot-start/recovery fixtures use live boilup and retain all conservation and acceptance gates.
 
 ## Bulk cold-start screen
 
@@ -98,3 +98,4 @@ The recorded old/new heads are `494d3e45` and `9c0ce21f` (production `dba4ba45`)
 - 2026-10-29: added the full-chain conditioning control and reproducible bulk cold-start screen/report tools. Population results and the separate coupling failure are recorded in the batch's bulk review; production equations are unchanged.
 - 2026-10-29: added the full positive-reflux CDU population, frozen-input revision comparison and isolated budget replay; matched acceptance 129→131/200 and full updated acceptance 682/1,000. Findings and load limits are in the CDU review. No production source was detached and no gate suite changed.
 - Run outputs: the `tmp/` folders the reviews name are in `.claude/worktrees/vacuum-column-test/tmp/`, local and not tracked. No log archive was stored in the main checkout's `tools/vacuum-column-test/logs/`.
+- 2026-11-16: `BinaryPhaseProbe.java` reads the cdu17 test fixture, removed by batch 2026-11-16-cdu17-fixture-removal; last runnable at `ee13d1034`. `capture-roots.sh` with `InvalidBinaryRootCapture.java` captures `invalid-binary-roots.json` again on the medium crude (batch 2026-11-16-cdu17-fixture-removal): the `crude_pc03`/`crude_pc10` binary of `V3ExactWarmStartSweepTest` on the two-phase condenser branch at its five matrix points, each a converged numerical root the audit rejects on its phase checks. Run it after `./gradlew --offline testClasses --max-workers 4`: `bash tools/vacuum-column-test/capture-roots.sh tmp/<name>`.

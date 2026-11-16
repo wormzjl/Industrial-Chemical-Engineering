@@ -28,7 +28,6 @@ import org.junit.jupiter.api.Test;
  * <p>The tests switch the ceiling with the package-private hook {@link NativeColumnSolver#ceilingForTest}, so the Java
  * reference ({@code off}) and the library ({@code band}) run in one JVM; each restores the ceiling it found.</p>
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class NativeColumnSolverTest {
     /** A library must load where the build packed one or a path names one; elsewhere the test skips. */
     private static void assumeLibrary() {
@@ -238,8 +237,8 @@ class NativeColumnSolverTest {
     @Test
     void aColumnPublishesTheSameBitsWithTheBandSolveInTheLibrary() {
         assumeLibrary();
-        V3CrudeFeed crude = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018")
-                .crudeFeed("icheme:tia_juana_light_kl1976");
+        V3CrudeFeed crude = V3TestInputs.mediumCrudeThermo()
+                .crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         for (int component = 0; component < flows.length; component++) flows[component] *= 2_610.7 * 1_000.0 / 3_600.0;
         V3ColumnInput input = V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, crude.packageId(), crude.assayId(),

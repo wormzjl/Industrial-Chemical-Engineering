@@ -16,16 +16,18 @@ import java.util.List;
 import java.util.concurrent.CancellationException;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3ColumnInitializerTest {
-    private static final String CDU17 = "icheme:cdu17_tjl_acs2018";
+    private static final String CRUDE = V3TestInputs.MEDIUM_CRUDE_PACKAGE;
 
     @Test
     void registeredTiaJuanaCrudeFlashesAndBuildsAnExactZeroAwareFiniteSeed() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CDU17);
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CRUDE);
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] feedFlows = crude.moleFractions();
         for (int component = 0; component < feedFlows.length; component++) feedFlows[component] *= 100.0;
+        // The medium crude holds every compound of its package; without its methane one component is absent, which the
+        // zero-aware seed must leave out (the removed sixteen-component package's crude had no methane).
+        feedFlows[V3TestInputs.index(thermo, "Methane")] = 0.0;
         V3ColumnInput input = V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, crude.packageId(), crude.assayId(),
                 crude.componentBasis(), feedFlows, 638.15, 4, 2, 266_500.0, 750.0, List.of(
                         new V3ColumnSpecification.CondenserOutletTemperature(332.15),
@@ -48,7 +50,7 @@ class V3ColumnInitializerTest {
 
     @Test
     void bubblePointProjectionOfTheMaterialClosedSeedIsFiniteAndPositive() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CDU17);
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CRUDE);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(bubblePointInput(), V3CondenserPhaseBranch.TWO_PHASE);
         V3DryMeshState materialClosed = V3ColumnInitializer.initialize(
                 problem, thermo, thermo.newWorkspace(), V3ColumnInitializer.Mode.MATERIAL_CLOSED).state();
@@ -71,7 +73,7 @@ class V3ColumnInitializerTest {
 
     @Test
     void cancellationEscapesTheBubblePointProjectionRatherThanKeepingThePreviousSeed() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CDU17);
+        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(CRUDE);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(bubblePointInput(), V3CondenserPhaseBranch.TWO_PHASE);
         V3DryMeshState materialClosed = V3ColumnInitializer.initialize(
                 problem, thermo, thermo.newWorkspace(), V3ColumnInitializer.Mode.MATERIAL_CLOSED).state();
@@ -83,7 +85,7 @@ class V3ColumnInitializerTest {
     }
 
     private static V3ColumnInput bubblePointInput() {
-        return V3TestInputs.cdu17Binary("test:bubble-point");
+        return V3TestInputs.crudeBinary("test:bubble-point");
     }
 
     @Test

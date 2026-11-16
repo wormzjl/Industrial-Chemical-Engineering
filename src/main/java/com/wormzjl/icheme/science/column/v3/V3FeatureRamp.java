@@ -59,7 +59,7 @@ final class V3FeatureRamp {
      * heat increment ({@code midpointHeatStep}), a recovery whose seed is the failed state and whose whole
      * point is that the rung got as far as it did. Measured on the 40 MW return-tray case, whose heat rungs
      * descend slowly and unevenly — 0.048 to 0.140 and back to 0.077 over twelve iterations — stopping them
-     * early turns an accepted solve into a NONCONVERGENCE, and on the three-draw cooled CDU17 case it moves
+     * early turns an accepted solve into a NONCONVERGENCE, and on a three-draw cooled crude case it moves
      * the published state. A draw rung has no retry of its own but shares the heat rungs' slow descent, and
      * neither pays: on the wet preset the steam ramp is what the continuation spends its time in.</p>
      *
@@ -554,7 +554,7 @@ final class V3FeatureRamp {
         }
         if (hasDraws) {
             // Cooling has already changed the liquid traffic arriving at every draw tray, so a quarter of the
-            // authored withdrawal is a larger perturbation here than on a heat-free column. The 30-stage CDU17
+            // authored withdrawal is a larger perturbation here than on a heat-free column. A 30-stage crude
             // column with sump steam, three pumparounds and the three preset draws stalls at 1.5e-2 on the
             // last of four rungs and converges on eight.
             for (int step = 1; step <= HEAT_BEARING_DRAW_RAMP_STEPS; step++) {

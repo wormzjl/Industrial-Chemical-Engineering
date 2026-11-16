@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3ColumnCalculatorTest {
     @Test
     void registeredPrBinaryPilotPublishesOnlyAFreshlyAuditedSuccess() {
@@ -101,7 +100,7 @@ class V3ColumnCalculatorTest {
     @Test
     void registeredPilotWithSumpSteamAndColdCondenserPublishesFreeWater() {
         long started = System.nanoTime();
-        V3ColumnInput preset = com.wormzjl.icheme.science.material.Cdu17TestCatalog.pilotInput();
+        V3ColumnInput preset = V3TestInputs.mediumCrudeDry();
         V3ColumnInput cold = new V3ColumnInput(preset.schemaVersion(), preset.packageId(), preset.assayId(),
                 preset.componentBasis(), preset.feedComponentMolarFlowsMolPerSecond(), preset.feedTemperatureKelvin(),
                 preset.stageCount(), preset.feedStageNumber(), preset.topPressurePascal(), preset.stagePressureDropPascal(),
@@ -117,7 +116,9 @@ class V3ColumnCalculatorTest {
         V3ColumnOutcome.Success success = assertInstanceOf(V3ColumnOutcome.Success.class, outcome, outcome::toString);
 
         assertTrue(success.result().acceptanceAudit().accepted());
-        assertEquals(V3CondenserPhaseBranch.LIQUID_ONLY, success.result().problem().topology().condenserPhaseBranch());
+        // The medium crude's methane and ethane leave a 323 K condenser as gas: the condenser is two-phase (it was
+        // liquid-only on the removed methane-free test package) and the free water settles from its liquid.
+        assertEquals(V3CondenserPhaseBranch.TWO_PHASE, success.result().problem().topology().condenserPhaseBranch());
         assertTrue(success.result().streams().stream().anyMatch(stream -> stream.streamId().equals("free_water")
                 && stream.molarFlowMolPerSecond() > 0.0));
     }
@@ -261,12 +262,12 @@ class V3ColumnCalculatorTest {
     }
 
     private static V3ColumnInput registeredBinaryPilot() {
-        return V3TestInputs.cdu17Binary("test:registered-pr-binary");
+        return V3TestInputs.crudeBinary("test:registered-pr-binary");
     }
 
     private static V3ColumnInput registeredRealCrudeThirtyStagePilot() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] feedFlows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < feedFlows.length; component++) feedFlows[component] *= totalFlow;
@@ -278,7 +279,7 @@ class V3ColumnCalculatorTest {
     }
 
     private static V3ColumnInput registeredSteamStrippingPilot() {
-        V3ColumnInput dryPilot = com.wormzjl.icheme.science.material.Cdu17TestCatalog.pilotInput();
+        V3ColumnInput dryPilot = V3TestInputs.mediumCrudeDry();
         return new V3ColumnInput(dryPilot.schemaVersion(), dryPilot.packageId(), dryPilot.assayId(),
                 dryPilot.componentBasis(), dryPilot.feedComponentMolarFlowsMolPerSecond(), dryPilot.feedTemperatureKelvin(),
                 dryPilot.stageCount(), dryPilot.feedStageNumber(), dryPilot.topPressurePascal(), dryPilot.stagePressureDropPascal(),
@@ -286,12 +287,12 @@ class V3ColumnCalculatorTest {
     }
 
     private static V3ColumnInput realCrudePilot(double condenserTemperatureKelvin, double methaneFeedFlow) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] feedFlows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < feedFlows.length; component++) feedFlows[component] *= totalFlow;
-        feedFlows[0] = methaneFeedFlow;
+        feedFlows[V3TestInputs.index(thermo, "Methane")] = methaneFeedFlow;
         return V3TestInputs.dry(V3ColumnInput.SCHEMA_VERSION, crude.packageId(), crude.assayId(), crude.componentBasis(),
                 feedFlows, 638.15, 30, 24, 250_000.0, 750.0, List.of(
                         new V3ColumnSpecification.CondenserOutletTemperature(condenserTemperatureKelvin),

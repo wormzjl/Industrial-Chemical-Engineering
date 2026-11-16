@@ -18,7 +18,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3SimultaneousColumnSolverTest {
     /** The default fallbacks without the damped certificate cascade: a rung whose state is a seed. */
     private static final V3SimultaneousColumnSolver.RungBudget NO_VERIFICATION_CASCADE =
@@ -67,8 +66,8 @@ class V3SimultaneousColumnSolverTest {
 
     @Test
     void registeredTiaJuanaPrNewtonAttemptIsBoundedAndRecordsItsActualConvergenceState() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        V3CrudeFeed crude = thermo.crudeFeed("icheme:tia_juana_light_kl1976");
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        V3CrudeFeed crude = thermo.crudeFeed(V3TestInputs.MEDIUM_CRUDE_ASSAY);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(realCrudeInput(crude), V3CondenserPhaseBranch.TWO_PHASE);
         V3FlashResult feedFlash = thermo.flashTP(problem.input().feedTemperatureKelvin(),
                 problem.nodePressurePascal(problem.topology().feedTrayNumber()), crude.moleFractions(), thermo.newWorkspace());
@@ -96,13 +95,8 @@ class V3SimultaneousColumnSolverTest {
 
     @Test
     void registeredPrBinaryNumericalTwoPhaseRootCannotPassTheIndependentPhaseGate() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        var base = V3TestInputs.cdu17Binary("test:registered-pr-binary");
-        var input = V3TestInputs.dry(1, base.packageId(), base.assayId(), base.componentBasis(),
-                base.feedComponentMolarFlowsMolPerSecond(), 550, 2, 1, 250000, 750, List.of(
-                        new V3ColumnSpecification.CondenserOutletTemperature(300),
-                        new V3ColumnSpecification.OrganicRefluxRatio(2),
-                        new V3ColumnSpecification.ReboilerDuty(50000)));
+        V3PengRobinsonThermo thermo = V3TestInputs.mediumCrudeThermo();
+        var input = V3ExactWarmStartSweepTest.binaryInput(100.0, 550.0, 250_000.0, 750.0, 300.0, 2.0, 50_000.0);
         V3ColumnProblem problem = V3ColumnProblemResolver.resolve(input,V3CondenserPhaseBranch.TWO_PHASE);
         V3FlashResult feedFlash = thermo.flashTP(problem.input().feedTemperatureKelvin(),
                 problem.nodePressurePascal(problem.topology().feedTrayNumber()),

@@ -21,9 +21,11 @@ class MaterialCatalogTest {
         resources.put(ROOT+path,json.toString()); return resources;
     }
     @Test void immutableCatalogRetainsSeparateDatasetsForSharedChemicalIdentity() {
-        var c=MaterialCatalog.bundled(); var pilot=Cdu17TestCatalog.catalog().requirePackage("icheme:cdu17_tjl_acs2018"); var literature=c.requirePackage(ID);
-        assertEquals("Ethane",pilot.properties().get(1).component()); assertEquals("Ethane",literature.properties().get(1).component());
-        assertNotEquals(pilot.properties().get(1).molecularWeight(),literature.properties().get(1).molecularWeight());
+        var c=MaterialCatalog.bundled(); var pilot=PilotCryogenicTestCatalog.withPilot().requirePackage(PilotCryogenicTestCatalog.PACKAGE_ID); var literature=c.requirePackage(ID);
+        var pilotEthane=pilot.properties().get(pilot.components().indexOf("Ethane")); var literatureEthane=literature.properties().get(literature.components().indexOf("Ethane"));
+        assertEquals("Ethane",pilotEthane.component()); assertEquals("Ethane",literatureEthane.component());
+        assertNotEquals(pilotEthane.id(),literatureEthane.id());
+        assertNotEquals(pilotEthane.minimumTemperature(),literatureEthane.minimumTemperature());
         assertThrows(UnsupportedOperationException.class,()->literature.properties().clear());
         assertThrows(UnsupportedOperationException.class,()->literature.interactions().get(0).set(0,9.0));
         assertEquals("Ethane",c.name("Ethane").english());

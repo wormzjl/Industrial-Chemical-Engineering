@@ -12,13 +12,14 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3FlashTruncationTest {
-    private static final String PACKAGE_ID = "icheme:cdu17_tjl_acs2018";
-    private static final String ASSAY_ID = "icheme:tia_juana_light_kl1976";
+    private static final String PACKAGE_ID = com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_PACKAGE;
+    private static final String ASSAY_ID = com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_ASSAY;
     private static final double CUTOFF = 1.0e-6;
-    private static final int ETHANE = 1;
-    private static final int PC12 = 15;
+    private static final int ETHANE = com.wormzjl.icheme.science.column.v3.V3TestInputs.index(
+            com.wormzjl.icheme.science.column.v3.V3TestInputs.mediumCrudeThermo(), "Ethane");
+    private static final int PC12 = com.wormzjl.icheme.science.column.v3.V3TestInputs.index(
+            com.wormzjl.icheme.science.column.v3.V3TestInputs.mediumCrudeThermo(), "crude_pc12");
 
     @Test
     void explicitOffPreservesUnrestrictedValuesAndInputExactly() {
@@ -83,11 +84,12 @@ class V3FlashTruncationTest {
     void hotCrudeRetainsPc12WhenItsVaporCompositionExceedsTheCutoff() {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(PACKAGE_ID);
         double[] feed = thermo.crudeFeed(ASSAY_ID).moleFractions();
-        V3FlashResult reference = thermo.flashTP(638.15, 137_250.0, feed, thermo.newWorkspace());
+        // 740 K: the medium crude's crude_pc12 holds 4.5e-6 of the vapour (2.0e-9 at 638.15 K).
+        V3FlashResult reference = thermo.flashTP(740.0, 137_250.0, feed, thermo.newWorkspace());
         assertEquals(V3FeedPhase.TWO_PHASE, reference.phase());
         assertTrue(reference.vaporComposition()[PC12] > CUTOFF);
 
-        V3FlashResult requested = thermo.flashTP(638.15, 137_250.0, feed,
+        V3FlashResult requested = thermo.flashTP(740.0, 137_250.0, feed,
                 TraceTruncationPolicy.of(CUTOFF), thermo.newWorkspace());
 
         assertEquals("NO_CANDIDATES", requested.truncationEvidence().status().name());

@@ -28,3 +28,4 @@ The build neither compiles nor runs these files. The scripts have already run, a
 ## History
 
 - 2026-11-04: folder created at the batch's tooling cleanup, from the batch's scratch folder. `PackageReworkProbe.java` was never committed under `src/test`; it moved here before the final lane so that `test` does not run it. The one-off edit helpers, code fragments and Gradle logs stayed in the scratch folder.
+- 2026-11-16: `migrate-cdu17.mjs` reads the cdu17 test fixture, removed by batch 2026-11-16-cdu17-fixture-removal; last runnable at `ee13d1034`.

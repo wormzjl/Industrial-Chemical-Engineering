@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Test;
  * {@link ColumnWire}: side draws, steam feeds,
  * pumparounds and the duty ledger, the convergence closure, the column diameter and the tray hydraulics.
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class ColumnWireTest {
     private static final List<V3PumparoundSpec> PUMPAROUNDS = List.of(
             new V3PumparoundSpec(1, 1, -2_500_000.0, V3PumparoundSpec.Split.RETURN_TRAY),
@@ -35,7 +34,7 @@ class ColumnWireTest {
 
     @Test
     void roundedServerDefaultPublishesAndSolvesTheQualifiedLiteratureSideDraws() throws Exception {
-        V3ColumnInput input = com.wormzjl.icheme.science.material.Cdu17TestCatalog.pilotInput();
+        V3ColumnInput input = V3TestInputs.mediumCrudeDry();
 
         assertEquals(29, input.stageCount());
         assertEquals(150_000.0, input.topPressurePascal());

@@ -10,7 +10,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 /** Manufactured allocation checks isolate conservation/error policy from any particular crude data fit. */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
 class V3TruncatedFlashNumericsTest {
     private static final double TRACE = 1.0e-8;
     private static final double[] OVERALL = {0.4, 0.2, 0.4};
@@ -137,8 +136,8 @@ class V3TruncatedFlashNumericsTest {
 
     @Test
     void unavailableReferenceNeverGetsRescuedByAnApproximateFlash() {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        double[] feed = thermo.crudeFeed("icheme:tia_juana_light_kl1976").moleFractions();
+        V3PengRobinsonThermo thermo = com.wormzjl.icheme.science.column.v3.V3TestInputs.mediumCrudeThermo();
+        double[] feed = thermo.crudeFeed(com.wormzjl.icheme.science.column.v3.V3TestInputs.MEDIUM_CRUDE_ASSAY).moleFractions();
         V3ThermoException failure = assertThrows(V3ThermoException.class,
                 () -> thermo.flashTP(6001.0, 250000.0, feed, POLICY, thermo.newWorkspace()));
         assertEquals(V3ThermoException.Code.DOMAIN, failure.code());

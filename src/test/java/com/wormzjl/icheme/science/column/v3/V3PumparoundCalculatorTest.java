@@ -17,14 +17,14 @@ import org.junit.jupiter.api.Test;
  * <p>Every case is a fresh cold solve with no warm state; the elapsed time of each is printed so the extra
  * continuation rungs stay visible.</p>
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3PumparoundCalculatorTest {
     private static final long BUDGET_NANOS = 180_000_000_000L;
 
     @Test
     void revisionsGainAStageHeatVariantOnlyWhenAPumparoundIsPresent() {
-        V3ColumnInput heatFree = v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of());
-        V3ColumnInput heated = v1ScaleInput("icheme:cdu17_tjl_acs2018",
+        V3ColumnInput heatFree = v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of());
+        V3ColumnInput heated = v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE,
                 List.of(new V3PumparoundSpec(8, 12, -5.0e6, V3PumparoundSpec.Split.UNIFORM)));
 
         // -derived-pairs-r1: the kernel takes the network's derived pairs (W5 D1 of batch 2026-11-11-aqueous-solvents).
@@ -40,8 +40,8 @@ class V3PumparoundCalculatorTest {
 
     @Test
     void aOneKilowattPumparoundReproducesTheHeatFreeProductStreams() {
-        Run base = run("base", v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of()));
-        Run perturbed = run("minus-1-kW", v1ScaleInput("icheme:cdu17_tjl_acs2018",
+        Run base = run("base", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of()));
+        Run perturbed = run("minus-1-kW", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE,
                 List.of(new V3PumparoundSpec(8, 12, -1_000.0, V3PumparoundSpec.Split.UNIFORM))));
 
         V3ColumnOutcome.Success baseSuccess = base.success();
@@ -63,8 +63,8 @@ class V3PumparoundCalculatorTest {
 
     @Test
     void uniformFiveMegawattPumparoundRemovesItsDutyFromTheCondenser() {
-        Run base = run("base", v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of()));
-        Run cooled = run("uniform-5-MW", v1ScaleInput("icheme:cdu17_tjl_acs2018",
+        Run base = run("base", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of()));
+        Run cooled = run("uniform-5-MW", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE,
                 List.of(new V3PumparoundSpec(8, 12, -5.0e6, V3PumparoundSpec.Split.UNIFORM))));
 
         V3ColumnDutyLedger ledger = cooled.success().result().dutyLedger().orElseThrow();
@@ -85,9 +85,9 @@ class V3PumparoundCalculatorTest {
 
     @Test
     void returnTraySplitMatchesTheUniformSplitCondenserDuty() {
-        Run uniform = run("uniform-5-MW", v1ScaleInput("icheme:cdu17_tjl_acs2018",
+        Run uniform = run("uniform-5-MW", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE,
                 List.of(new V3PumparoundSpec(8, 12, -5.0e6, V3PumparoundSpec.Split.UNIFORM))));
-        Run returnTray = run("return-tray-5-MW", v1ScaleInput("icheme:cdu17_tjl_acs2018",
+        Run returnTray = run("return-tray-5-MW", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE,
                 List.of(new V3PumparoundSpec(8, 12, -5.0e6, V3PumparoundSpec.Split.RETURN_TRAY))));
 
         V3ColumnDutyLedger ledger = returnTray.success().result().dutyLedger().orElseThrow();
@@ -104,7 +104,7 @@ class V3PumparoundCalculatorTest {
     @Test
     void impossibleCoolingIsRejectedByTheStaticAdmissionGateWithoutASolve() {
         long started = System.nanoTime();
-        V3ColumnOutcome outcome = V3TestInputs.calculate(v1ScaleInput("icheme:cdu17_tjl_acs2018",
+        V3ColumnOutcome outcome = V3TestInputs.calculate(v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE,
                 List.of(new V3PumparoundSpec(8, 12, -200.0e6, V3PumparoundSpec.Split.UNIFORM))));
         System.out.printf(Locale.ROOT, "static gate: %.3f s; %s%n", (System.nanoTime() - started) / 1.0e9, outcome);
 
@@ -124,7 +124,7 @@ class V3PumparoundCalculatorTest {
      */
     @Test
     void aHeaterCreditWidensTheStaticGateWithoutWaivingIt() {
-        V3ColumnOutcome outcome = V3TestInputs.calculate(v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of(
+        V3ColumnOutcome outcome = V3TestInputs.calculate(v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of(
                 new V3PumparoundSpec(8, 12, -200.0e6, V3PumparoundSpec.Split.UNIFORM),
                 new V3PumparoundSpec(8, 13, 1.0e6, V3PumparoundSpec.Split.RETURN_TRAY))));
 
@@ -148,7 +148,7 @@ class V3PumparoundCalculatorTest {
      */
     @Test
     void aCoolerCancelledByAnEqualHeaterReachesTheHeatFreePresetState() {
-        V3ColumnInput preset = com.wormzjl.icheme.science.material.Cdu17TestCatalog.pilotInput();
+        V3ColumnInput preset = V3TestInputs.mediumCrudeDry();
         V3ColumnInput cancelling = withPumparounds(preset, List.of(
                 new V3PumparoundSpec(8, 10, -1.0e9, V3PumparoundSpec.Split.RETURN_TRAY),
                 new V3PumparoundSpec(8, 11, 1.0e9, V3PumparoundSpec.Split.RETURN_TRAY)));
@@ -187,11 +187,11 @@ class V3PumparoundCalculatorTest {
      */
     @Test
     void theCondenserDutyBoundCreditsAnEqualHeaterOnTheSameTray() {
-        Run base = run("base", v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of()));
+        Run base = run("base", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of()));
         double baseCondenser = Math.abs(base.success().result().dutyLedger().orElseThrow().condenserWatts());
         double cooling = 1.02 * baseCondenser;
         Run cancelled = run("condenser-bound-cancelling-pair",
-                v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of(
+                v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of(
                         new V3PumparoundSpec(8, 12, -cooling, V3PumparoundSpec.Split.RETURN_TRAY),
                         new V3PumparoundSpec(8, 13, cooling, V3PumparoundSpec.Split.RETURN_TRAY))));
 
@@ -214,10 +214,10 @@ class V3PumparoundCalculatorTest {
      */
     @Test
     void coolingAboveTheBaseCondenserDutyStopsTheSolveWithThatDutyNamed() {
-        Run base = run("base", v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of()));
+        Run base = run("base", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of()));
         double baseCondenser = Math.abs(base.success().result().dutyLedger().orElseThrow().condenserWatts());
         long started = System.nanoTime();
-        V3ColumnOutcome outcome = V3TestInputs.calculate(v1ScaleInput("icheme:cdu17_tjl_acs2018",
+        V3ColumnOutcome outcome = V3TestInputs.calculate(v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE,
                 List.of(new V3PumparoundSpec(8, 12, -1.02 * baseCondenser, V3PumparoundSpec.Split.UNIFORM))));
         System.out.printf(Locale.ROOT, "condenser-bound gate: %.3f s; Q_cond0=%.4g MW; %s%n",
                 (System.nanoTime() - started) / 1.0e9, baseCondenser / 1.0e6, outcome);
@@ -233,7 +233,7 @@ class V3PumparoundCalculatorTest {
 
     @Test
     void threeDefaultSideDrawsAndOnePumparoundExerciseTheWholeRungOrder() {
-        V3ColumnInput preset = com.wormzjl.icheme.science.material.Cdu17TestCatalog.pilotInput();
+        V3ColumnInput preset = V3TestInputs.mediumCrudeDry();
         V3ColumnInput heated = new V3ColumnInput(preset.schemaVersion(), preset.packageId(), preset.assayId(),
                 preset.componentBasis(), preset.feedComponentMolarFlowsMolPerSecond(), preset.feedTemperatureKelvin(),
                 preset.stageCount(), preset.feedStageNumber(), preset.topPressurePascal(), preset.stagePressureDropPascal(),
@@ -256,7 +256,7 @@ class V3PumparoundCalculatorTest {
      * <p>Ledezma-Martinez, <em>Design of Crude Oil Distillation Systems with Preflash Units</em> (University of
      * Manchester, 2019), section 1.2 and tables A4/A6: the column carries three pumparounds, each drawn at a
      * side-product stage and returned two to four stages above it, of 12.84, 17.89 and 11.20 MW — 41.93 MW in
-     * total spread over three sections, never on one tray. Transferred to the 30-tray CDU17 column the draw
+     * total spread over three sections, never on one tray. Transferred to the 30-tray medium crude column the draw
      * stages are 8, 15 and 22 and the returns are 6, 13 and 20.</p>
      *
      * <p>Measured on this column at the thesis operating point: with the side draws the whole 41.93 MW
@@ -266,7 +266,7 @@ class V3PumparoundCalculatorTest {
      */
     @Test
     void theThesisThreeCoolerArrangementCarriesItsWholeDutyWithTheSideDraws() {
-        Run base = run("base", v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of()));
+        Run base = run("base", v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of()));
         Run arranged = run("thesis-3-coolers-plus-draws", thesisArrangedInput());
 
         V3ColumnDutyLedger ledger = arranged.success().result().dutyLedger().orElseThrow();
@@ -288,19 +288,19 @@ class V3PumparoundCalculatorTest {
     }
 
     /**
-     * The thesis arrangement transferred to the 30-tray CDU17 column: coolers drawn at the side-product stages
+     * The thesis arrangement transferred to the 30-tray medium crude column: coolers drawn at the side-product stages
      * 8, 15 and 22 and returned two stages above, at the thesis duties, with the preset draw rates on those
      * same stages. The preset itself authors its three draws on trays 13, 17 and 22; the rates are the
      * preset's, moved onto the stages the thesis pairs each cooler with.
      */
     private static V3ColumnInput thesisArrangedInput() {
-        List<V3SideDrawSpec> presetRates = com.wormzjl.icheme.science.material.Cdu17TestCatalog.pilotInput().sideDraws();
+        List<V3SideDrawSpec> presetRates = V3TestInputs.mediumCrudeDry().sideDraws();
         int[] thesisStages = {8, 15, 22};
         List<V3SideDrawSpec> draws = new java.util.ArrayList<>();
         for (int index = 0; index < thesisStages.length; index++) {
             draws.add(new V3SideDrawSpec(thesisStages[index], presetRates.get(index).molarFlowMolPerSecond()));
         }
-        V3ColumnInput heated = v1ScaleInput("icheme:cdu17_tjl_acs2018", List.of(
+        V3ColumnInput heated = v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE, List.of(
                 new V3PumparoundSpec(6, 8, -12.84e6, V3PumparoundSpec.Split.UNIFORM),
                 new V3PumparoundSpec(13, 15, -17.89e6, V3PumparoundSpec.Split.UNIFORM),
                 new V3PumparoundSpec(20, 22, -11.20e6, V3PumparoundSpec.Split.UNIFORM)));
@@ -335,7 +335,7 @@ class V3PumparoundCalculatorTest {
      */
     @Test
     void aStalledDropOnlyFloorRefreshCostsABoundedRepeatOnTheFortyMegawattCase() {
-        V3ColumnInput input = v1ScaleInput("icheme:cdu17_tjl_acs2018",
+        V3ColumnInput input = v1ScaleInput(V3TestInputs.MEDIUM_CRUDE_PACKAGE,
                 List.of(new V3PumparoundSpec(8, 12, -40.0e6, V3PumparoundSpec.Split.RETURN_TRAY)));
         long[] checkpoints = new long[1];
         long started = System.nanoTime();
@@ -399,7 +399,8 @@ class V3PumparoundCalculatorTest {
 
     private static V3ColumnInput v1ScaleInput(String packageId, List<V3PumparoundSpec> pumparounds) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
-        V3CrudeFeed crude = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(packageId));
+        V3CrudeFeed crude = thermo.crudeFeed("icheme:tjl19_dwsim".equals(packageId)
+                ? com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.LITERATURE_ASSAY_ID : V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         double totalFlow = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= totalFlow;

@@ -14,14 +14,14 @@ import org.junit.jupiter.params.provider.ValueSource;
  * Contract of the authored convergence closure.
  *
  * <p>The five cases are the evaluation set of {@code documentation/V3_TRUNCATION_EVALUATION.md} and
- * {@code build/pkgcmp/RefreshProbe.java}: A a dry CDU17 base column, B dry preset draws with a 3 MW cooler,
+ * {@code build/pkgcmp/RefreshProbe.java}: A a dry base column on the medium crude, B dry preset draws with a 3 MW cooler,
  * C the wet TJL19 column with three pumparounds and three draws, D a 40 MW return-tray duty (a typed failure
- * from the phase-mask work package until the heat-rung energy-shift predictor recovered it) and E dry CDU17
- * with three draws.</p>
+ * from the phase-mask work package until the heat-rung energy-shift predictor recovered it) and E the dry
+ * medium crude with three draws (the removed sixteen-component test package's cases until 2026-11-16).</p>
  */
-@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.Cdu17FixtureExtension.class)
+@org.junit.jupiter.api.extension.ExtendWith(com.wormzjl.icheme.science.material.TiaJuanaExtension.class)
 class V3ConvergenceClosureTest {
-    private static final String CDU = "icheme:cdu17_tjl_acs2018";
+    private static final String CDU = V3TestInputs.MEDIUM_CRUDE_PACKAGE;
     private static final String TJL = "icheme:tjl19_dwsim";
     private static final double STEAM_MOL_PER_SECOND = 1_200.0 * 1_000.0 / 3_600.0;
     private static final double LOOSE_CLOSURE = 1.0e-3;
@@ -39,14 +39,18 @@ class V3ConvergenceClosureTest {
      * the pre-closure byte stream from the accepted problem rather than by a hex literal: the default must
      * produce exactly the digest of a build that has no closure field at all. The published hex values are
      * recorded in {@code documentation/V3_CLOSURE_AND_BAND_REVIEW.md}.</p>
+     *
+     * <p>Cases A, B, D and E were re-pinned on the medium crude (batch 2026-11-16, the removal of the sixteen-component test
+     * package): A 0 to 1, B 2 to 3, D 7 to 0 iterations, E 3. The medium crude's methane and ethane keep the condenser two-phase,
+     * so no case ends on the liquid-only condenser or a condenser phase correction.</p>
      */
     @ParameterizedTest
     @CsvSource({
-            "A, SUCCESS, 0, cold/stage-continuation/4-8-15-30/fine-fd/liquid-only-condenser",
-            "B, SUCCESS, 2, cold/stage-continuation/4-8-15-30/fine-fd/draw-ramp-1.0/liquid-only-condenser/draws-3/heat-1",
+            "A, SUCCESS, 1, cold/stage-continuation/4-8-15-30/fine-fd",
+            "B, SUCCESS, 3, cold/stage-continuation/4-8-15-30/fine-fd/draw-ramp-1.0/draws-3/heat-1",
             "C, SUCCESS, 3, cold/stage-continuation/4-8-15-30/fine-fd/draw-ramp-1.0/liquid-only-condenser/draws-3/steam-1/heat-3",
-            "D, SUCCESS, 7, cold/stage-continuation/4-8-15-30/fine-fd/heat-ramp-1.0/condenser-phase-correction/heat-1",
-            "E, SUCCESS, 3, cold/stage-continuation/4-8-15-30/fine-fd/draw-ramp-1.0/liquid-only-condenser/draws-3"})
+            "D, SUCCESS, 0, cold/stage-continuation/4-8-15-30/fine-fd/heat-ramp-1.0/heat-1",
+            "E, SUCCESS, 3, cold/stage-continuation/4-8-15-30/fine-fd/draw-ramp-1.0/draws-3"})
     void theDefaultClosureLeavesEveryEvaluationCaseExactlyWhereItWas(
             String label, String kind, int newtonIterations, String solvePath) {
         V3ColumnInput input = evaluationCase(label);
@@ -74,7 +78,7 @@ class V3ConvergenceClosureTest {
      * than the acceptance bar.
      */
     @ParameterizedTest
-    @CsvSource({"A, 0", "B, 2", "C, 3", "D, 7", "E, 3"})
+    @CsvSource({"A, 1", "B, 3", "C, 3", "D, 0", "E, 3"})
     void aLooseClosureAcceptsEveryCaseWithinItsOwnScaledLimits(String label, int defaultNewtonIterations) {
         V3ColumnInput input = evaluationCase(label);
         V3ColumnOutcome outcome = V3ColumnCalculator.calculate(input, boundedControl(), 0.0, LOOSE_CLOSURE, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO);
@@ -223,7 +227,8 @@ class V3ConvergenceClosureTest {
     private static V3ColumnInput input(
             String packageId, List<V3PumparoundSpec> pumparounds, List<V3SideDrawSpec> draws, boolean wet) {
         V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage(packageId);
-        V3CrudeFeed crude = thermo.crudeFeed(com.wormzjl.icheme.science.material.Cdu17TestCatalog.tiaJuanaAssay(packageId));
+        V3CrudeFeed crude = thermo.crudeFeed(TJL.equals(packageId) ? com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.LITERATURE_ASSAY_ID
+                : V3TestInputs.MEDIUM_CRUDE_ASSAY);
         double[] flows = crude.moleFractions();
         double total = 2_610.7 * 1_000.0 / 3_600.0;
         for (int component = 0; component < flows.length; component++) flows[component] *= total;
@@ -239,6 +244,6 @@ class V3ConvergenceClosureTest {
 
     /** Cheap admission-only fixture; the range checks reject before any property call. */
     private static V3ColumnInput binaryInput() {
-        return V3TestInputs.cdu17Binary("test:closure-range");
+        return V3TestInputs.crudeBinary("test:closure-range");
     }
 }

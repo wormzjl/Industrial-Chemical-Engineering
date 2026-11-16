@@ -44,8 +44,9 @@ line service and device pages, the column's feed flash by a stability test, the 
   `TWO_LIQUIDS` refusal is gone. Grids: dense and coarse equal to form D to the bit, the 207-state dry scan equal to the
   lane, the 570-state wet grid 0 frozen answers refused and 0 frozen splits one phase. The hexane column and the W5 sheet
   back to 0.34.0 (STEADY, two warnings); the three wash moves are the feed's small vapour fraction (β 7.67e-5); the packed
-  size moves with stored wall-clock seconds. Runs: 167 classes, 1,437 tests and one rerun class, 0 failures on the final
-  code. [LANE_FIXES_REVIEW.md](LANE_FIXES_REVIEW.md).
+  size moves with stored wall-clock seconds. Runs: 167 classes, 1,437 tests, one rerun class, and the 44 column-gate classes
+  once more on the owner's word to read their printed lines (262 tests, equal to the lane's), 0 failures on the final code.
+  [LANE_FIXES_REVIEW.md](LANE_FIXES_REVIEW.md).
 - 2026-11-16: the owner's decisions after the packages, and the merge, by the main thread. "Approve all" (merge preparation,
   the final lane, version 0.34.1); "auto merge" (merge without a further question on a clean lane); the lane was not clean
   (2 failures, 8 unannounced moved results), so the owner was asked: "Approve, then merge" (the fix thread, then the merge if
@@ -56,6 +57,8 @@ line service and device pages, the column's feed flash by a stability test, the 
   lane's flash only where it returns to the 0.34.0 answer. No second lane, GameTest or campaign ran after the fixes: the
   plunger substitution is bit for bit (`Math.log1p` and `expm1` are `StrictMath`'s) and the column fix does not reach the
   fluid network. Version 0.34.1 (the CHANGELOG heading, `mod_version`, this status, the index row) and the merge to `main`.
+  Afterwards the fix thread ran the 44 classes once more (262 tests, 0 failures): their printed lines equal the lane's and
+  0.34.0's line for line (`dffd7a19b`).
 
 ## Documents
 
@@ -78,11 +81,12 @@ line service and device pages, the column's feed flash by a stability test, the 
 
 - Item 6, the client's catalog on a datapack server: the "Dense" label, its colour and the head share follow the client's data. The owner answered "Not now" to the reservation of protocol `icheme-4`, then "Yes, run P2" without the wire field.
 - P3, for the owner: a feed that splits into two hydrocarbon liquids is answered as one liquid at the Wilson endpoint
-  (about 1.1 kJ/mol); the cold Tia Juana crude's heavy-cut second liquid (derived pairs) is its own item.
+  (about 1.1 kJ/mol). Closed by batch 2026-11-16-cdu17-fixture-removal: the cold Tia Juana crude's heavy-cut second liquid
+  was the test-only cdu17 package's extrapolated PC12; the package is removed and the medium crude is one liquid when cold.
 - Lane fixes: at the Wilson endpoint a failed restart keeps the endpoint's liquid (the hexane column's feed at 345 K and
   1 atm, while the same feed at 100 kPa splits β 0.336), and Wilson's K put some wet feeds whose own root is a vapour at the
   liquid endpoint; a wet feed towards a vapour that substitution does not converge stays refused off the endpoint (the
-  engine takes no water). The 44 other column-gate classes' printed lines of the fix run were not kept.
+  engine takes no water).
 - P2: a non-dense liquid that flashes on release (liquid propane) is still heard as a liquid spill (an owner option).
 - An in-game check of the plunger pump (constructor, model, sound) and of the dense readings, offered at the end.
 - Kept, open to the owner's veto: Auto's rule (item 2); "Dense" in the aqueous slot (item 13).
