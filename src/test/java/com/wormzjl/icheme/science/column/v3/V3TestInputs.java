@@ -179,19 +179,6 @@ public final class V3TestInputs {
                         new V3ColumnSpecification.ReboilerDuty(BINARY_REBOILER_DUTY_WATTS)));
     }
 
-    /** Removed with the cdu17 fixture (batch 2026-11-16-cdu17-fixture-removal); kept until its users have moved. */
-    public static V3ColumnInput cdu17Binary(String assayId) {
-        V3PengRobinsonThermo thermo = V3PengRobinsonThermo.fromRegisteredPackage("icheme:cdu17_tjl_acs2018");
-        double[] feed = new double[thermo.componentBasis().componentCount()];
-        feed[6] = 50.0; // PC03
-        feed[13] = 50.0; // PC10
-        return dry(V3ColumnInput.SCHEMA_VERSION, thermo.packageId(), assayId, thermo.componentBasis(),
-                feed, 550.0, 2, 1, 250_000.0, 750.0, List.of(
-                        new V3ColumnSpecification.CondenserOutletTemperature(300.0),
-                        new V3ColumnSpecification.OrganicRefluxRatio(2.0),
-                        new V3ColumnSpecification.ReboilerDuty(0.0)));
-    }
-
     /** A live-boilup binary whose interior phases pass the independent identity check. */
     public static V3ColumnInput crudeBoilingBinary(String assayId) {
         var original = crudeBinary(assayId);

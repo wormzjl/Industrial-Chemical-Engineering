@@ -25,7 +25,6 @@ class ViscosityTest {
     @Test void validityLimitsAndMissingDataAreExplicit() {
         var catalog = MaterialCatalog.bundled();
         assertTrue(catalog.viscosity(PACKAGE, "Water", ViscosityCorrelation.Phase.VAPOR).isEmpty());
-        assertTrue(Cdu17TestCatalog.catalog().viscosity("icheme:cdu17_tjl_acs2018", "cdu17_pc01", ViscosityCorrelation.Phase.LIQUID).isEmpty());
         assertThrows(IllegalArgumentException.class,()->catalog.viscosity(PACKAGE,"TJL_PC07",ViscosityCorrelation.Phase.LIQUID));
         assertThrows(IllegalArgumentException.class, () -> catalog.viscosity(PACKAGE, "NotAComponent", ViscosityCorrelation.Phase.LIQUID));
         var v = catalog.viscosity(PACKAGE, "Water", ViscosityCorrelation.Phase.LIQUID).orElseThrow();
@@ -180,7 +179,7 @@ class ViscosityTest {
             for(var record:report.getAsJsonArray("records")) {
                 var row=record.getAsJsonObject();if(!row.has("checks"))continue;
                 String id=row.get("property_id").getAsString();
-                if(id.contains("tjl19_pc")||id.contains("cdu17"))continue; // These liquid curves were intentionally replaced by the global Dalia family.
+                if(id.contains("tjl19_pc"))continue; // These liquid curves were intentionally replaced by the global Dalia family.
                 var p=catalog.packages().values().stream().filter(pkg->pkg.properties().stream().anyMatch(v->v.id().equals(id))).findFirst().orElseThrow();
                 properties.add(id);
                 String component=p.properties().stream().filter(v->v.id().equals(id)).findFirst().orElseThrow().component();
