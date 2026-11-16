@@ -150,6 +150,8 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         if(view.heat()!=null){var heat=view.heat();
             rows.add(meter("outlet_temperature",temperatureValue(heat.outletTemperature()),t));
             rows.add(new DeviceColumn.Meter("duty",value(Math.abs(heat.heatWatt())/1000),"kW",tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
+            // The unit's overall UA (batch 2026-11-16-fouling-corrosion, D16): both sides' films and deposits, its whole surface.
+            if(heat.ua()!=null)rows.add(new DeviceColumn.Meter("ua",value(heat.ua()/1000),"kW/K",tr("ua.hint")));
             // The control itself (mode, set point, low limit) is on the Control tab; this column keeps what the actuator does.
             var control=data.heatControl();
             if(heat.bypass()!=null)rows.add(new DeviceColumn.Meter("bypass",value(heat.bypass()*100),"%",tr("bypass.hint")));

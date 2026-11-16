@@ -302,7 +302,8 @@ public final class IntegrityGameTests {
      * A heat side's fouling deposit takes effect (batch 2026-11-16-fouling-corrosion, WP5): hot water through an air cooler at
      * natural draught (no power). The deposit set at its cap (0.002 m²K/W) recompiles the side's passage 4 mm narrower with
      * its process films behind the deposit, its status line says FOULED and it moves less heat. Its page's Clean, refused while
-     * water flows, is accepted once the supply and the drain are gone; refed, the clean passage moves its old heat again.
+     * water flows, is accepted once the supply and the drain are gone; refed, the clean passage moves its old heat again. Its
+     * page reads the bank's UA (decision D16): all of its clean UA while clean, less behind the deposit.
      */
     @GameTest(template = "empty", timeoutTicks = 6000, batch = "integrity_fouling")
     public static void aFouledCoolerMovesLessHeatUntilItIsCleaned(GameTestHelper helper) {
@@ -351,8 +352,9 @@ public final class IntegrityGameTests {
                     bore[0] = passage(world, side[0]).sections().getFirst().diameter();
                     var view = world.view(side[0]);
                     // Hot water lays down its deposit from the start, far below one step of the graph's (5e-5 m²K/W since D14) in these few minutes.
-                    if (view.heat().fouling() == null || !(view.heat().fouling() < com.wormzjl.icheme.science.integrity.FoulingLaw.STEP)
-                            || Math.abs(view.heat().filmLeft() - 1 / (1 + 2000 * view.heat().fouling())) > 1e-12) failure[0] = "a clean side's deposit reads " + view.heat().fouling();
+                    if (view.heat().fouling() == null || !(view.heat().fouling() < com.wormzjl.icheme.science.integrity.FoulingLaw.STEP)) failure[0] = "a clean side's deposit reads " + view.heat().fouling();
+                    if (failure[0] == null && !(view.heat().ua() != null && view.heat().uaClean() != null && view.heat().ua() > 0 && view.heat().ua().doubleValue() == view.heat().uaClean().doubleValue()))
+                        failure[0] = "a clean bank reads UA " + view.heat().ua() + " against its clean " + view.heat().uaClean();
                     if (!world.integrity().set(side[0], 0, com.wormzjl.icheme.science.integrity.FoulingLaw.CAP, false)) failure[0] = "the deposit was not set";
                 })
                 .thenWaitUntil(() -> {
@@ -366,8 +368,9 @@ public final class IntegrityGameTests {
                     duty[1] = Math.abs(view.heat().heatWatt());
                     if (failure[0] == null && !(duty[1] < .97 * duty[0])) failure[0] = "the fouled cooler moved " + duty[1] + " W against " + duty[0] + " W clean";
                     if (failure[0] == null && !view.status().contains("FOULED")) failure[0] = "the status line does not say FOULED: " + view.status();
-                    if (failure[0] == null && !(view.heat().fouling() >= com.wormzjl.icheme.science.integrity.FoulingLaw.FOULED && Math.abs(view.heat().filmLeft() - 1 / (1 + 2000 * view.heat().fouling())) < 1e-12))
-                        failure[0] = "deposit " + view.heat().fouling() + ", film left " + view.heat().filmLeft();
+                    if (failure[0] == null && !(view.heat().fouling() >= com.wormzjl.icheme.science.integrity.FoulingLaw.FOULED && view.heat().ua() != null && view.heat().uaClean() != null
+                            && view.heat().ua() / view.heat().uaClean() < 1))
+                        failure[0] = "deposit " + view.heat().fouling() + ", UA " + view.heat().ua() + " of clean " + view.heat().uaClean();
                     var air = ((com.wormzjl.icheme.science.fluid.network.AirCooled) passage(world, side[0]).heat()).air();
                     // 2000 W/m²K behind the cap's 0.002 is 400; behind 0.001 (FOULED's threshold before D14, now 0.0005), 667.
                     if (failure[0] == null && !(air.process().liquid() >= 400 - 1e-9 && air.process().liquid() < 2000 / 3.0)) failure[0] = "the fouled liquid film is " + air.process().liquid();

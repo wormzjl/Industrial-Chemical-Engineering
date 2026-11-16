@@ -25,7 +25,7 @@ class DeviceColumnTest {
     /** Every reading the screen shows (DeviceMeters.meters), each once. */
     private static final List<String> METERS = List.of("fans_state", "burners_state", "temperature", "pressure", "top_pressure", "bottom_pressure", "mass",
             "inlet_temperature", "suction_pressure", "inlet_pressure", "net_flow", "throughput", "velocity", "velocity_lowest", "velocity_highest", "gradient",
-            "gradient_lowest", "gradient_highest", "filter_load", "captured", "pressure_change", "outlet_temperature", "duty", "bypass", "fans_speed",
+            "gradient_lowest", "gradient_highest", "filter_load", "captured", "pressure_change", "outlet_temperature", "duty", "ua", "bypass", "fans_speed",
             "fan_power", "set_temperature", "duty_available", "pressure_ratio", "pressure_probe", "temperature_probe", "flowmeter", "boot_level", "body_level");
 
     private static List<DeviceColumn.Meter> meters(int count) {

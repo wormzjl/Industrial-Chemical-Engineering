@@ -1128,6 +1128,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             if(source.startsWith("port:")){var p=heat.port(source.substring(5));if(p==null)continue;t=p.temperature();f=p.temperature()==null?null:Math.abs(p.massFlow());}
             else if(source.startsWith("part:")){var p=heat.lines()==null?null:heat.lines().part(source.substring(5));if(p==null)continue;t=p.temperature();f=p.massFlow()==null?null:Math.abs(p.massFlow());}
             else if(source.equals("duty"))return quantity(Math.abs(heat.heatWatt())/1000,"kW");
+            else if(source.equals("ua")){if(heat.ua()==null)continue;return quantity(heat.ua()/1000,"kW/K");}
             else if(source.equals("air"))return Component.translatable(HeatDiagram.KEY+"air",quantity(temperatureUnit.display(com.wormzjl.icheme.science.equipment.HeatSides.AIR_TEMPERATURE),temperatureUnit.symbol())).getString();
             String temperature=t==null?null:quantity(temperatureUnit.display(t),temperatureUnit.symbol()),flow=f==null?null:quantity(flowRateUnit.display(f),flowRateUnit.unit("kg"));
             switch(value.show()){

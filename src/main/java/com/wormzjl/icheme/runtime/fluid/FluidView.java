@@ -326,14 +326,19 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      * screen names ({@link #ACTUATORS}), and its {@code effort}, 0 to 1 (the bypassed share, the fans' speed, the burners'
      * share of the coil's duty), or null; the controller's planned {@code limit} by its name; every inlet and outlet of the
      * unit, both sides ({@link Port}); and an exchanger's control lines ({@link Lines}), null for a unit without them.</p>
+     *
+     * <p>Batch 2026-11-16-fouling-corrosion: the side's fouling deposit {@code fouling} (m²K/W, WP5), and the unit's overall
+     * conductance as its last plan read it (decision D16): {@code ua}, W/K, both sides' films and deposits in series over the
+     * whole surface, and {@code uaClean}, W/K, the same without the deposits; each null where none is known (a fired coil, a
+     * side against a column, a side whose partner is not read or stopped, a step with no flow, a load before the first plan).</p>
      */
     public record Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,
                        Double burners,Double setPoint,Double maximumWatt,Double bypass,
-                       String actuator,Double effort,String limit,List<Port> ports,Lines lines,Fuel fuel,Double fouling,Double filmLeft) {
+                       String actuator,Double effort,String limit,List<Port> ports,Lines lines,Fuel fuel,Double fouling,Double ua,Double uaClean) {
         /** A side without its deposit's readings. */
         public Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,Double burners,Double setPoint,Double maximumWatt,Double bypass,
                     String actuator,Double effort,String limit,List<Port> ports,Lines lines,Fuel fuel) {
-            this(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,null,null);
+            this(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,null,null,null);
         }
         public Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,Double burners,Double setPoint,Double maximumWatt,Double bypass,
                     String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
@@ -355,24 +360,22 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
                     ||maximumWatt!=null&&!(maximumWatt>=0&&Double.isFinite(maximumWatt)))throw new IllegalArgumentException("Invalid heat side presentation");
             if(!ACTUATORS.contains(actuator)||effort!=null&&!(effort>=0&&effort<=1)||limit.length()>32||ports.size()>MAXIMUM_PORTS
                     ||ports.stream().map(Port::role).distinct().count()!=ports.size())throw new IllegalArgumentException("Invalid heat side control presentation");
-            if((fouling==null)!=(filmLeft==null)||fouling!=null&&!(fouling>=0&&Double.isFinite(fouling)&&filmLeft>0&&filmLeft<=1))throw new IllegalArgumentException("Invalid heat side deposit presentation");
+            if(fouling!=null&&!(fouling>=0&&Double.isFinite(fouling))||ua!=null&&!(ua>0&&Double.isFinite(ua))||uaClean!=null&&!(uaClean>0&&Double.isFinite(uaClean)))throw new IllegalArgumentException("Invalid heat side deposit presentation");
         }
         /** This side with its control's actuator and effort, its limit, the unit's ports and lines. */
         public Heat with(String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
-            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,fouling,filmLeft);
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,fouling,ua,uaClean);
         }
         /** A fired heater's side with its burners' readings. */
-        public Heat withFuel(Fuel value){return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,value,fouling,filmLeft);}
-        /**
-         * This side with its fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): {@code rf} m²K/W, and the share of a
-         * clean liquid film that remains behind it, {@code 1/(1 + 2000 rf)} ({@link #SHOWN_LIQUID_FILM}).
-         */
+        public Heat withFuel(Fuel value){return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,value,fouling,ua,uaClean);}
+        /** This side with its fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): {@code rf} m²K/W. */
         public Heat withFouling(double rf){
-            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,rf,1/(1+SHOWN_LIQUID_FILM*rf));
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,rf,ua,uaClean);
         }
-        /** The clean liquid film the deposit's share is shown against, W/m²K: a typical process liquid's, the stream films'
-         * liquid film before decision D15 of batch 2026-11-16-fouling-corrosion (a light oil's is now about 1500, water's 5000). */
-        public static final double SHOWN_LIQUID_FILM=2000;
+        /** This side with the unit's UA and clean UA, W/K, as last planned (decision D16), each null where none is known. */
+        public Heat withConductance(Double value,Double clean){
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,fouling,value,clean);
+        }
         /** The port of nozzle role {@code role}, or null. */
         public Port port(String role){for(var p:ports)if(p.role().equals(role))return p;return null;}
     }

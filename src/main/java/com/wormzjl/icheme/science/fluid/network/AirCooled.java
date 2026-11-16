@@ -17,8 +17,11 @@ import org.jetbrains.annotations.Nullable;
  * @param fanLimit the most of full speed the fans may turn at this slice (batch 2026-11-03-rotating-machinery W5: 0 when
  *                 the cooler's electric store runs empty, 1 otherwise): a dispatch input ({@link ShaftPlan}), not a fact; the
  *                 louvers stay open, so the air falls to natural draught, and a controller short of its target reports it
+ * @param conductance the bank's UA as the step's plan read it ({@link #conductance(HeatCurve,double,double)}, decision D16 of
+ *                    batch 2026-11-16-fouling-corrosion), null where none was planned: a reading for the heat page, not an
+ *                    input to the side's equations, so it takes no part in {@link #equals}
  */
-public record AirCooled(double area,Air air,double draught,@Nullable HeatControl control,HeatControl.Limit limit,double fanLimit) implements HeatLaw {
+public record AirCooled(double area,Air air,double draught,@Nullable HeatControl control,HeatControl.Limit limit,double fanLimit,@Nullable ExchangerRelay.Conductance conductance) implements HeatLaw {
     /**
      * The air of an air cooler's bank, per m² of its bundle face: at {@code temperature} K, over {@code barePerFace} m² of
      * bare tube; at full fans the air's film on the fins ({@code film}, W/K) and its heat capacity rate ({@code capacity},
@@ -54,12 +57,13 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
         public HeatCurve.Films films(double draught) {
             if(!(draught>=0&&draught<=1))throw new IllegalArgumentException("Invalid air share "+draught);
             double share=Math.max(draught,SHUT),air=film*share,rate=capacity*share;
-            return new HeatCurve.Films(process.liquid(),process.twoPhase(),process.gas(),new HeatCurve.Films.Outer(barePerFace,air,rate));
+            return process.withOuter(new HeatCurve.Films.Outer(barePerFace,air,rate));
         }
     }
     /** The air share the films take for shut louvers: a curve's films are positive. */
     private static final double SHUT=1e-12;
     public AirCooled(double area,Air air,double draught,@Nullable HeatControl control,HeatControl.Limit limit){this(area,air,draught,control,limit,1);}
+    public AirCooled(double area,Air air,double draught,@Nullable HeatControl control,HeatControl.Limit limit,double fanLimit){this(area,air,draught,control,limit,fanLimit,null);}
     public AirCooled {
         Objects.requireNonNull(air);Objects.requireNonNull(limit);
         if(!(area>0)||!Double.isFinite(area)||!(draught>=0&&draught<=1)||!(fanLimit>=0&&fanLimit<=1))throw new IllegalArgumentException("Invalid air cooler side");
@@ -81,9 +85,36 @@ public record AirCooled(double area,Air air,double draught,@Nullable HeatControl
     public double fans(){return Math.max(0,(airShare()-air.natural())/(1-air.natural()));}
     /** The louvers' opening, 0 shut to 1 open: open once the fans turn. */
     public double louvers(){return Math.min(1,airShare()/air.natural());}
-    public AirCooled withDraught(double value,HeatControl.Limit why){return new AirCooled(area,air,value,control,why,fanLimit);}
+    public AirCooled withDraught(double value,HeatControl.Limit why){return new AirCooled(area,air,value,control,why,fanLimit,conductance);}
     /** This side with its fans held at most at {@code value} of full speed (W5's dispatch input). */
-    public AirCooled withFanLimit(double value){return value==fanLimit?this:new AirCooled(area,air,draught,control,limit,value);}
+    public AirCooled withFanLimit(double value){return value==fanLimit?this:new AirCooled(area,air,draught,control,limit,value,conductance);}
+    /** This side with the bank's UA as planned, {@code value} (null for none). */
+    public AirCooled withConductance(@Nullable ExchangerRelay.Conductance value){return value==conductance?this:new AirCooled(area,air,draught,control,limit,fanLimit,value);}
+    /** The pieces of the bank's surface its UA is summed over ({@link #conductance(HeatCurve,double,double)}). */
+    public static final int PIECES=8;
+    /**
+     * The bank's UA, W/K, for a stream drawing {@code massFlow} (kg/s) at {@code inlet} (J/kg) on {@code curve}, a sampled
+     * curve of its stream (decision D16 of batch 2026-11-16-fouling-corrosion): the films its march uses, the process film
+     * inside the tubes in series with the air at the bank's air share ({@link #films}, {@link HeatCurve.Films.Outer}), summed
+     * over {@link #PIECES} equal pieces of its surface, each at the film of the mean of the specific enthalpies the stream
+     * enters and leaves it with; its clean UA the same with the clean process films ({@link HeatCurve.Films#clean}). No
+     * flash: the curve is re-filmed. Null without flow.
+     */
+    public @Nullable ExchangerRelay.Conductance conductance(HeatCurve curve,double inlet,double massFlow) {
+        double mass=Math.abs(massFlow);if(mass==0)return null;
+        var films=films();
+        return new ExchangerRelay.Conductance(bank(curve.withFilms(films),inlet,mass),bank(curve.withFilms(films.clean()),inlet,mass));
+    }
+    private double bank(HeatCurve curve,double inlet,double mass) {
+        double piece=area/PIECES,h=inlet,ua=0;
+        for(int k=0;k<PIECES;k++){double out=curve.march(h,mass,piece,air.temperature());ua+=piece*curve.filmAt((h+out)/2);h=out;}
+        return ua;
+    }
+    @Override public boolean equals(Object other) {
+        return other instanceof AirCooled c&&Double.compare(area,c.area)==0&&air.equals(c.air)&&Double.compare(draught,c.draught)==0&&java.util.Objects.equals(control,c.control)
+                &&limit==c.limit&&Double.compare(fanLimit,c.fanLimit)==0;
+    }
+    @Override public int hashCode(){return Objects.hash(area,air,draught,control,limit,fanLimit);}
     /**
      * This side with its louvers and fans planned for a step that starts drawing {@code massFlow} (kg/s) at {@code inlet}
      * (J/kg) on {@code curve}, a sampled curve with this side's films ({@link HeatControl#setting}: each trial share re-films

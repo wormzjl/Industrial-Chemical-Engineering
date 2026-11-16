@@ -195,6 +195,25 @@ class DeviceMetersTest {
         assertEquals(java.util.Set.of(), lines.missing);
     }
 
+    /**
+     * Decision D16 of batch 2026-11-16-fouling-corrosion: a heat side's page reads the unit's overall UA right after its
+     * duty, in kW/K (42 500 W/K: "42.5"), where the view carries one; none where it does not.
+     */
+    @Test
+    void aHeatSideReadsItsUnitsUaAfterItsDuty() {
+        var state = state(200000, 330, 0.002, 2.0, new double[]{0.002, 0, 0}, new double[][]{{20, 5}, {0, 0}, {0, 0}}, 0.002);
+        var heat = new FluidView.Heat("EXCHANGER", "TUBE", true, 320, -1e6, null, null, null, null, null, .25);
+        var view = new FluidView(1, 1, 0, 0, "STEADY: flowing", state, 2.0, List.of()).withHeat(heat.withFouling(2e-4).withConductance(42_500.0, 50_000.0));
+        var meters = new DeviceMeters(new DeviceMeters.Data(Kind.HEAT_SIDE, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.VOLUME,
+                TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_SECOND, false, T).meters();
+        var keys = meters.stream().map(DeviceColumn.Meter::key).toList();
+        assertEquals(keys.indexOf("duty") + 1, keys.indexOf("ua"), "UA directly after Duty: " + keys);
+        assertEquals(meter("ua", "42.5", "kW/K", "ua.hint"), meters.get(keys.indexOf("ua")));
+        var none = new DeviceMeters(new DeviceMeters.Data(Kind.HEAT_SIDE, new FluidView(1, 1, 0, 0, "STEADY: flowing", state, 2.0, List.of()).withHeat(heat), AXIS, WEIGHTS, true, null, false, List.of()), null,
+                PhaseRatioBasis.VOLUME, TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_SECOND, false, T).meters();
+        assertTrue(none.stream().noneMatch(m -> m.key().equals("ua")), "no UA known, no meter");
+    }
+
     @Test
     void theMetersNameNoMinecraftClass() throws Exception {
         var source = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/client/gui/common/DeviceMeters.java"));
