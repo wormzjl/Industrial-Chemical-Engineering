@@ -188,6 +188,15 @@ Decisions after S2b's stop conditions (2026-11-15):
    had missed this. Main is at 0.33.0 (`d756e121a`: schema 27, `icheme-3`), so main is merged into the branch before
    S8, and the numbers are reserved on main (`66a87f9d5`, with `icheme-4` in case a constructor payload changes). This
    batch's version proposal is 0.34.0.
+19. **Main 0.33.0 merged into the branch** (`dfc9d9e55`, the rare gases' critical volumes `0f4230144`;
+   [MERGE_MAIN_0_33_REVIEW.md](MERGE_MAIN_0_33_REVIEW.md)). Checked by the main thread: the three commits, the numbers
+   (0.33.0, facts schema 27, checkpoint 50), the stored results (no failure left), a clean status. The scratch form A
+   compiles and runs unchanged on the merged kit; the kit's relief nuts take each model from 1,989 to 1,275 polygons.
+   One reader of the slot is new on main: the burst release splits a vessel's contents by slot and sends a liquid's
+   volatile share to the air. For a dense fluid in the liquid slot that share is `min(1, Psat(298.15 K) / 1 atm)`
+   per compound, so carbon dioxide, nitrogen, methane, ethane, propane, ethylene and hydrogen go to the air whole, and
+   a dense hexane or toluene (hot) spills as the liquid it becomes at ambient. The amounts are right; only the burst
+   block's word and the two reported masses say "liquid" for it. No change; an owner item.
 
 ## 3. Stages
 
