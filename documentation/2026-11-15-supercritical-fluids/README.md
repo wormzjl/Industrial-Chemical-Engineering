@@ -108,6 +108,15 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   6 failed, none from S5 (S3's ranges against 4 thermo pins, 2 `FORMATS.md` rows of the pollution batch, the
   translations); columnGates 379, equipmentGates 244, holdGates 136 green; chain-100 deviation 0; dense GameTests
   `s5-dense1` 3 of 3. [S5_PRESENTATION_REVIEW.md](S5_PRESENTATION_REVIEW.md).
+- 2026-11-16: the column's feed (D1, D2; sub-thread on `claude/supercritical-column-feed-b49e05`; owner: "Approve
+  both"). `V3FeedFlash` answers a feed with no two-phase split as one phase (2,412 of the review grid's 10,602 states,
+  no real split among them); the tray audit's text names the critical point. Column gates 62 classes, `test` 41 classes,
+  none failed. [COLUMN_FEED_REVIEW.md](COLUMN_FEED_REVIEW.md). Merged into the batch branch by the main thread after its
+  check (`30498aaf1`).
+- 2026-11-16: the main thread checked S5 (the diff, the stored results, the renders). The plunger pump (stage S8)
+  researched and planned at the owner's request; three forms of its model rendered (`tmp/plunger-forms/`), the owner
+  chose form A. S3's four moved grade pins: three test cases moved to 36 MPa, the engine digest left to the final lane.
+  Decisions in the plan's section 2b, points 13 to 17.
 
 ## Documents
 
@@ -126,6 +135,12 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 - [DENSE_PUMP_RESEARCH_REVIEW.md](DENSE_PUMP_RESEARCH_REVIEW.md): how a real centrifugal pump behaves on a supercritical
   fluid (sources, the rise on the suction's density, options); option 1 B carried out in S4b.
 - [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md): S2c, the slot rule by density and its moved states, what still reads the slot, the dense pump's suction edge, the "no saturation" callers, the GameTests, the campaign draws.
+- [COLUMN_FEED_REVIEW.md](COLUMN_FEED_REVIEW.md): the column's feed flash on a feed with no two-phase split (D1) and the
+  tray text (D2): the grids against the equilibrium engine, the enthalpy against the engine, the owner options O1 and O2.
+- [PD_PUMP_RESEARCH_REVIEW.md](PD_PUMP_RESEARCH_REVIEW.md): how a reciprocating pump behaves on a compressible fluid
+  (sources, the clearance loss in numbers, the mod against the sources, options).
+- [PLUNGER_PUMP_PLAN.md](PLUNGER_PUMP_PLAN.md): stage S8, the plunger pump: the law, the equipment and its form, the
+  simulator, the tests.
 - [S5_PRESENTATION_REVIEW.md](S5_PRESENTATION_REVIEW.md): S5, what the player reads on one dense fluid: the survey,
   the rule and its client evaluation, the pump's head share, the before and after table, the renders, the owner items.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the

@@ -155,6 +155,34 @@ Decisions after S2b's stop conditions (2026-11-15):
    density, 0.91 at 0.73, the gas rule at 0.5. The compressor and the film keep 0.5 and 1.5. Not decided, from the same
    review: a minimum-density row on the simulator's pump sheet (S5), the rise on the average density (its own batch),
    the pump's bubble readers on a dense fluid (the churn, the `GAS` word: S5).
+13. **S5: what the player reads (owner, 2026-11-16: "Accept all").** One dense fluid above reduced density 0.5 reads
+   "Dense fluid" in either slot, "Vapor" at or below. A pump on it makes no churn and gets no `GAS` word, and its page
+   shows the head share. The simulator's pump sheet has a row "Suction density", at least 0.86. Two choices were the main
+   thread's: the label's source is the client's own catalog (no wire field; the fallback is the old label), and the pump
+   page reads "Head share". Checked by the main thread: the diff (the server's part is one observed array), the stored
+   results (every gate group, chain-100 deviation 0, dense GameTests 3 of 3), the renders
+   ([S5_PRESENTATION_REVIEW.md](S5_PRESENTATION_REVIEW.md), with its eight owner items).
+14. **The column's feed (D1, D2; owner, 2026-11-16: "Approve both").** A feed with no two-phase split is answered as one
+   phase, labelled by the slot rule; a tray at or above its mixture's critical point keeps its refusal with a text that
+   names the cause. Built on its own branch and merged into the batch branch after the main thread's check (`30498aaf1`).
+   One assertion moved: the Tia Juana crude at 901 K and 250 kPa, refused before, is a vapour. Two owner options stay
+   open: O1 (102 one-phase feeds still refused) and O2 (181 real splits answered as one phase since before the batch)
+   ([COLUMN_FEED_REVIEW.md](COLUMN_FEED_REVIEW.md)).
+15. **A plunger pump (owner, 2026-11-16: "add a positive displacement pump head for supercritical service, research
+   first", then "Accept all").** A reciprocating plunger pump of its own on the existing displacement law, with no
+   clearance term, the work as flow times rise, no chilled head, and a sheet type with no minimum-density row
+   ([PD_PUMP_RESEARCH_REVIEW.md](PD_PUMP_RESEARCH_REVIEW.md), [PLUNGER_PUMP_PLAN.md](PLUNGER_PUMP_PLAN.md): stage S8).
+   Its model is the main thread's ("model the pump head here"); of three rendered forms the owner chose "Form A", the
+   horizontal monoblock. Order ("Pump first, merge last"): S8 is built on the branch as it stands; main is merged into
+   the branch at the very end, before the final lane.
+16. **Main is at 0.32.0** (the pollution system batch, `f305ac6b0`: `icheme-2`, facts schema 26). This batch's version
+   proposal is 0.33.0. Two `FormatsTableTest` cases fail on the branch until that merge: `FORMATS.md` holds the pollution
+   batch's two reserved rows, whose constants arrive with main.
+17. **S3's ranges moved four grade pins**, found by S5's run. A state at 12 MPa was beyond the 10 MPa envelope and read
+   `EXTRAPOLATED`; inside the 30 MPa envelope it reads `ESTIMATED_DECLARED_ERROR`, every number the same to the bit.
+   The three test cases (`FluidTpEquilibriumTest`, `FluidTpEquilibriumPhUvTest`) now ask at 36 MPa, beyond the new
+   envelope, and one asserts that 12 MPa is inside. The engine digest's reference (`EngineDigestTest`, first at request
+   313) is re-recorded once by the final lane: only the grade token of states between 10 and 30 MPa may differ.
 
 ## 3. Stages
 
