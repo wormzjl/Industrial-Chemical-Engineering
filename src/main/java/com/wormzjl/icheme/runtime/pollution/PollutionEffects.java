@@ -236,7 +236,7 @@ public final class PollutionEffects {
                 if (!(perSecond > 0) || source == null || !entity.isAlive()) {
                     continue;
                 }
-                double amount = perSecond * EFFECT_TICKS / 20.0;
+                double amount = perSecond * com.wormzjl.icheme.science.fluid.SimulationTime.playSeconds(EFFECT_TICKS);
                 if (amount < 1) {
                     // 1 HP every few passes: 0.5 HP/s is 1 HP every second pass. No per-entity state.
                     int every = (int) Math.round(1.0 / amount);

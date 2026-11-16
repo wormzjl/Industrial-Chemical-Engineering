@@ -228,7 +228,7 @@ public final class IChemE {
                 .defineInRange("explosionPowerCap", 8.0, 1.0, 32.0);
         // WP9: the pollution overlay on the FTB Chunks map (a client with FTB Chunks asks while its map is open).
         POLLUTION_MAP_OVERLAY = builder.comment("Who sees pollution on the FTB Chunks map (one square per polluted chunk): METER, only a player who carries a pollution meter anywhere in the inventory; ALL, every player; OFF, no one. Read at each answer.")
-                .defineInList("mapOverlay", "METER", java.util.List.of("METER", "ALL", "OFF"));
+                .defineInList("mapOverlay", "METER", java.util.Arrays.asList("METER", "ALL", "OFF"));
         builder.pop();
         CONFIG_SPEC = builder.build();
     }
