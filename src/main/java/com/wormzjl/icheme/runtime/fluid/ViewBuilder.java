@@ -326,7 +326,25 @@ final class ViewBuilder {
             // Independent boundary islands can have different intervals: combine rates, expressed as one second of transport.
             view=view.withPipeInfo(PipePresentation.boundaryInflow(id,sources,authority.componentNames.size()),1);
         }
+        // The wall's Integrity group and a control valve's Trim (batch 2026-11-16-fouling-corrosion, WP4): reads of what the walls
+        // and the machine health last booked. Their words are on the status line already (above, and the valve's trim clause).
+        var integrity=wall(id,registration);var trim=trim(id,registration);
+        if(integrity!=null||trim!=null)view=view.withIntegrity(integrity,trim);
         return view;
+    }
+    /** Device {@code id}'s wall as its Integrity group shows it, or null for a device whose wall is not booked. */
+    FluidView.Integrity wall(long id,WorldTopologyLedger.Registration registration){
+        var w=authority.integrity.wall(id);if(w==null)return null;
+        double used=w.allowance()>0?Math.clamp(w.loss()/w.allowance(),0,1):0;
+        double life=w.rate()>0?w.life()/authority.model.time().factor():Double.NaN;
+        return new FluidView.Integrity(used,Double.isFinite(w.rate())?Math.max(0,w.rate()):0,w.mechanism()==null?"":w.mechanism().name(),finite(life),registration.spec().metallurgy().name());
+    }
+    /** Control valve {@code id}'s trim as its Trim group shows it, or null for a device that is no trimmed control valve. */
+    FluidView.Trim trim(long id,WorldTopologyLedger.Registration registration){
+        if(!MachineHealth.trim(registration))return null;
+        Double recorded=authority.health.health(id);double h=recorded==null?1:Math.clamp(recorded,0,1);
+        double rate=authority.health.rate(id),life=h>0&&rate>0?h/rate/authority.model.time().factor():Double.NaN;
+        return new FluidView.Trim(h,finite(life));
     }
     /**
      * Why a mover is refused (decision D6), as the solver's inlet check states it on the committed state the next slice

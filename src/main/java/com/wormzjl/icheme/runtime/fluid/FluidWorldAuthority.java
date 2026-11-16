@@ -1003,6 +1003,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
             return service.isEmpty()?0:service.get().index(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),com.wormzjl.icheme.science.pollution.Channel.CORROSIVE);
         }
         @Override public com.wormzjl.icheme.science.integrity.CorrosionStandard standard(List<String> compounds){return standards.apply(compounds);}
+        /** A weeping wall (WP4) marks its device's loaded shell cell; the cell sends a change to the clients that track it. Never loads a chunk. */
+        @Override public void weeping(long id,boolean on) {
+            var r=registrations().get(id);if(r==null)return;var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));if(level==null)return;
+            var pos=new BlockPos(p.x(),p.y(),p.z());if(!level.hasChunkAt(pos))return;
+            if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)shell.weeping(id,on);
+        }
     }
     /** A pollution release (WP4) to the pollution service of this server; nothing while the service is off. */
     private void releasePollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {

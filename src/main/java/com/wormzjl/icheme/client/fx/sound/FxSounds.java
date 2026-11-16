@@ -101,7 +101,7 @@ public final class FxSounds {
         var point=mc.player.position();var emitters=new ArrayList<SoundBudget.Emitter>();
         for(var s:noise){var p=s.position();emitters.add(new SoundBudget.Emitter(kind(s.kind()),p.asLong(),p.getX()+.5,p.getY()+.5,p.getZ()+.5,s.level(),s.pitch()));}
         flares(emitters);stills(emitters);
-        MoverSounds.emitters(point,emitters);DriverSounds.emitters(point,emitters);com.wormzjl.icheme.client.AlarmBeaconSounds.emitters(point,emitters);
+        MoverSounds.emitters(point,emitters);DriverSounds.emitters(point,emitters);com.wormzjl.icheme.client.AlarmBeaconSounds.emitters(point,emitters);com.wormzjl.icheme.client.WallWeeps.emitters(point,emitters);
         var playing=new HashSet<String>();for(var e:LOOPS.entrySet())if(!e.getValue().fading&&mc.getSoundManager().isActive(e.getValue()))playing.add(e.getKey());
         var merged=SoundBudget.merge(emitters);var chosen=SoundBudget.choose(merged,point.x,point.y,point.z,playing);
         FxStats.set(FxStats.Counter.SOUND_SOURCES,emitters.size());FxStats.set(FxStats.Counter.SOUND_GROUPS,merged.size());

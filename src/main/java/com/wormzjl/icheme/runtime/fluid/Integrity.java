@@ -92,6 +92,14 @@ public final class Integrity {
 
         /** The corrosion standard of compound list {@code compounds} (an island's own list), or null when it cannot be built. */
         CorrosionStandard standard(List<String> compounds);
+
+        /**
+         * Device {@code id}'s wall weeps ({@link WallState.Stage#WEEPING}) or no longer does (batch 2026-11-16-fouling-corrosion,
+         * WP4): its structure's drips and weep loop. Called at every cadence for each weeping wall and once when one stops; the
+         * host sends only a change. No fluid leaves.
+         */
+        default void weeping(long id, boolean weeping) {
+        }
     }
 
     /** A queued repair or cleaning. */
@@ -332,7 +340,32 @@ public final class Integrity {
                 w.failed = true;
             }
         }
+        weeps();
         flush();
+    }
+
+    /** The walls that weep, as last told to the host (state, not saved: the first cadence after a load tells them again). */
+    private final java.util.Set<Long> weeping = new java.util.HashSet<>();
+
+    /** Tells the host which walls weep (WP4): each weeping wall at every cadence, a wall that stopped once. */
+    private void weeps() {
+        var active = topology.active();
+        var now = new java.util.HashSet<Long>();
+        for (var e : walls.entrySet()) {
+            var w = e.getValue();
+            if (w.kind == null || w.wrecked) continue;
+            var r = active.get(e.getKey());
+            if (r != null && WallState.stage(w.loss, r.spec().metallurgy().allowance()) == WallState.Stage.WEEPING) now.add(e.getKey());
+        }
+        for (long id : weeping) if (!now.contains(id)) host.weeping(id, false);
+        for (long id : now) host.weeping(id, true);
+        weeping.clear();
+        weeping.addAll(now);
+    }
+
+    /** Whether device {@code id}'s wall weeps, as the last cadence or repair told the host. */
+    public boolean weeping(long id) {
+        return weeping.contains(id);
     }
 
     /** Books {@code w}'s rate and, on a flowing heat side, its deposit, from its last booking to {@code now}. */
@@ -512,6 +545,8 @@ public final class Integrity {
             }
             q.reply().accept(outcome);
         }
+        // A repaired wall stops weeping at once (WP4).
+        if (!weeping.isEmpty()) weeps();
         flush();
     }
 

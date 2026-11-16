@@ -132,6 +132,8 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> BURNER_ROAR=loop("burner_roar");
     public static final DeferredHolder<SoundEvent,SoundEvent> FIRE_DRAUGHT=loop("fire_draught");
     public static final DeferredHolder<SoundEvent,SoundEvent> POT_BOIL=loop("pot_boil");
+    /** A weeping wall's thin hiss and drips (batch 2026-11-16-fouling-corrosion, WP4, sounds set A). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> WALL_WEEP=loop("wall_weep");
     /**
      * The plant's other sources (batch 2026-11-10-custom-shader-system, PROCESS_SOUNDS_REVIEW.md table 1): a gas or steam
      * valve's and a vent's hiss, a liquid valve's rush, its cavitation (the pump's crackle) and its
