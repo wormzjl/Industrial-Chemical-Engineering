@@ -183,6 +183,11 @@ Decisions after S2b's stop conditions (2026-11-15):
    The three test cases (`FluidTpEquilibriumTest`, `FluidTpEquilibriumPhUvTest`) now ask at 36 MPa, beyond the new
    envelope, and one asserts that 12 MPa is inside. The engine digest's reference (`EngineDigestTest`, first at request
    313) is re-recorded once by the final lane: only the grade token of states between 10 and 30 MPa may differ.
+18. **The order changed, and three numbers (owner, 2026-11-16: "Keep the order", then "uh merge main first").** The
+   plunger pump's law is saved, so it needs fluid facts schema 28 and checkpoint state format 51; the pump's plan
+   had missed this. Main is at 0.33.0 (`d756e121a`: schema 27, `icheme-3`), so main is merged into the branch before
+   S8, and the numbers are reserved on main (`66a87f9d5`, with `icheme-4` in case a constructor payload changes). This
+   batch's version proposal is 0.34.0.
 
 ## 3. Stages
 

@@ -19,14 +19,21 @@ gas's volume, as the reciprocating compressor does.
   (`EquipmentShape`, `UnitDesign`, `world/**`), client (the constructor, the device screen), flowsheet (the sizing).
   Hot files: `EquipmentShape`, `ShaftTrains`, `FluidDeviceScreen`, `SheetSizing`.
 - S5 writes the client and the sizing now, so this stage starts after S5 is checked.
-- Main moved to 0.32.0 (the pollution system batch, 200 files). The owner's order (2026-11-16: "Pump first, merge
-  last"): this stage is built on the branch as it stands, and main is merged into the branch at the very end, before
-  the final lane. So the new kind's lines in `EquipmentShape`, the constructor and the lang file are appended in the
-  batch's own block, where a later merge keeps both sides (COLLABORATION.md section 2, rule 3).
-- No number is planned: no facts field, no shape field, no payload change. `EquipmentShape.Kind` is saved by name and
-  the constant goes at the end of the enum. If the build finds that a number is needed (a facts schema for a new law
-  tag, a shape field, a protocol version for the constructor), it stops and reports; the number is then reserved on
-  `main` first (COLLABORATION.md section 3; facts 27 and `icheme-3` are the next free ones).
+- Main is at 0.33.0 (`d756e121a`: the pollution system, fluid interfaces and equipment visual design batches). The
+  owner first chose "Pump first, merge last"; after the numbers below were found, "uh merge main first" (2026-11-16).
+  So main is merged into the branch before this stage, and the pump is built on main's numbers.
+- Numbers. This plan first said none was needed: wrong. A casing's law is saved in the fluid facts by type name
+  (`FluidFacts.control`, the machine record: `centrifugal_pump`, `centrifugal_compressor`, `vacuum_pump`) and in a
+  solved graph by a tag (`FluidCheckpointCodec`, tags 5 and 8); the vacuum pump's law took facts schema 19 and
+  checkpoint 44. The plunger pump's law takes **fluid facts schema 28** (the type `plunger_pump` in the record's
+  existing fields: the displacement in the rated flow's place, the relief rise in the head's, the efficiency, the
+  rated speed) and **checkpoint state format 51** (a new tag). Both are reserved on `main`, with protocol `icheme-4`
+  in case the new kind changes a constructor payload (`66a87f9d5`, a documentation-only commit; a row not used is
+  removed). A corpus image goes under `src/test/resources/compat/fluid/schema-28/`. No shape field: the kind is saved
+  by name, at the end of the enum.
+- Why not the set-flow `FlowControl.Pump`, which needs no number: its rise limit is a head, scaled by the suction's
+  density over the reference's (decision D11 A2). 25 MPa would be about 8 MPa on carbon dioxide at reduced density
+  0.7, against the pump's purpose.
 
 ## 3. The law
 
