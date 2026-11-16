@@ -1,6 +1,6 @@
 # Supercritical follow-ups
 
-Status: **Planned** 2026-11-16. Branch `claude/supercritical-fluid-support-d0ffa4`, base `dfbdc583c` (main 0.34.0).
+Status: **In progress** since 2026-11-16 (P1 and P3 merged into the batch branch; P2 and P4 not started). Branch `claude/supercritical-fluid-support-d0ffa4`, base `dfbdc583c` (main 0.34.0).
 
 Purpose: the open owner items of [2026-11-15-supercritical-fluids](../2026-11-15-supercritical-fluids/README.md), on the
 owner's "fix them": the plunger pump's clearance loss and work, one dense fluid in the level, sight glass, release,
@@ -17,22 +17,28 @@ line service and device pages, the column's feed flash by a stability test, the 
 - 2026-11-16: P3 tightening (main thread): rule D reads the engine's split by the engine's own lighter phase, not on the
   forced vapour root (CO2/pc03 at 220 K was split as vapour-liquid, now one liquid as before); dense grid unchanged;
   12 classes, 35 tests, 0 failures. [P3_COLUMN_FEED_REVIEW.md](P3_COLUMN_FEED_REVIEW.md).
+- 2026-11-16: P1, sub-thread (branch `claude/gallant-leavitt-f29f1e`): the plunger pump's clearance loss and isentropic work
+  on the suction's isentropic exponent (`NetworkStreams.isentropicExponent`, `suctionKappa`), the run and sizing of a
+  plunger-typed Pump tile (`Passages.pumpType`). Six reference rows within 0.35 % of η_v. Stop decisions: exponent by
+  differences (1 A), a pump with no type runs centrifugal (2, narrowed), the view and transport read `suctionKappa` (3).
+  [P1_PLUNGER_REVIEW.md](P1_PLUNGER_REVIEW.md).
 
 ## Documents
 
 - [FOLLOWUPS_PLAN.md](FOLLOWUPS_PLAN.md): the items, the common rules, packages P1 to P4, the order.
 - [P3_COLUMN_FEED_REVIEW.md](P3_COLUMN_FEED_REVIEW.md): P3, the feed flash by a stability test: forms, moved answers, the two-liquid limit.
+- [P1_PLUNGER_REVIEW.md](P1_PLUNGER_REVIEW.md): P1, the plunger pump's clearance and work: reference rows, moved values, runs.
 
 ## Code areas (planned)
 
-- P1: `science/machine/PlungerPump`, the solve's `suctionKappa`, the simulator's `MoverUnit` and `PumpSizing`.
+- P1: `science/machine/PlungerPump` (and `PositiveDisplacement.share`), `NetworkStreams.isentropicExponent`, the solve's `suctionKappa` (read by `ConservativeTransport` and `ViewBuilder` too), the simulator's `MoverUnit`, `PumpSizing`, `Passages` and `SizedPassages`.
 - P2: `runtime/fluid` views and releases, the level readers, `network`, `client`, `Service`.
 - P3: `science/column/v3/thermo` (`V3FeedFlash`, new `V3FeedEngine`, the PR session and package), `build.gradle`'s column gate group.
 - P4: the mover sounds.
 
 ## Open items
 
-- The owner's approval of the four threads; the reservation of protocol `icheme-4` on `main` before P2's code.
+- The owner approved the four threads ("Approve all", 2026-11-16). Open: the reservation of protocol `icheme-4` on `main` before P2's code.
 - Kept, open to the owner's veto: Auto's rule (item 2); "Dense" in the aqueous slot (item 13).
 - P3, for the owner: two hydrocarbon liquids are answered as one liquid at the Wilson endpoint (about 1.1 kJ/mol); the cold
   Tia Juana crude's heavy-cut second liquid (derived pairs) is its own item.

@@ -64,6 +64,24 @@ class PlungerSizingTest {
         assertTrue(Double.isNaN(duty.npsh()), "no NPSH3 of its own");
     }
 
+    /** On a compressible suction (P1 of batch 2026-11-16-supercritical-followups): the duty is the flow times the isentropic work
+     * over 0.88, and the flow is rated against the displacement times the clearance's share. Carbon dioxide at 310 K from
+     * 8.5 MPa, a rise of 16.5 MPa, its exponent 2.6 (about the model's). */
+    @Test void onACompressibleSuctionItsDutyIsTheIsentropicWorkAndItsRatingTheDelivery() {
+        double p = 8.5e6, n = 2.6, rise = 16.5e6, density = 470, head = rise / (density * G);
+        var load = new PumpSizing.Load(20, head, MOST, null, density, Double.POSITIVE_INFINITY, true, 1.1, p, n);
+        var rating = PumpSizing.rate(load, new PumpSizing.Plunger(3));
+        double etaV = com.wormzjl.icheme.science.machine.PlungerPump.volumetricEfficiency(rise, p, n);
+        assertTrue(etaV < .97 && etaV > .9, "the clearance costs delivery: " + etaV);
+        assertEquals(100 * 24 / (30 * etaV), rating.reading(Limit.PUMP_RATED).value(), 1e-9);
+        var duty = PumpSizing.Duty.of(rating);
+        assertNotNull(duty);
+        assertEquals(20 / 3600. * com.wormzjl.icheme.science.machine.PlungerPump.isentropicWork(rise, p, n) / .88, duty.shaft(), 1e-6);
+        assertTrue(duty.shaft() < 20 / 3600. * rise / .88, "below Q dP");
+        var liquid = new PumpSizing.Load(20, head, MOST, null, density, Double.POSITIVE_INFINITY, true, Double.NaN);
+        assertEquals(80, PumpSizing.rate(liquid, new PumpSizing.Plunger(3)).reading(Limit.PUMP_RATED).value(), 1e-9, "no suction given: the displacement");
+    }
+
     @Test void aPlungerSizeAndItsTypeComeBackFromTheSheetFile() {
         var facts = SizingFacts.NONE.with("p1", new SizingFacts.UnitFacts(SizingFacts.Mode.FIXED, UnitType.PLUNGER, new PumpSizing.Plunger(4), null, new JsonObject(), new JsonObject()))
                 .with("p2", new SizingFacts.UnitFacts(SizingFacts.Mode.FIXED, UnitType.CENTRIFUGAL_PUMP, new PumpSizing.Size(.3), null, new JsonObject(), new JsonObject()));

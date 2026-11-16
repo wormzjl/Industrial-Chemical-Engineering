@@ -594,7 +594,7 @@ public final class ConservativeTransport {
                     boundaries.add(new BoundaryTransfer(pipe.id(),new double[components],work,SolidInventory.EMPTY,0,BoundaryTransfer.Kind.SHAFT));
                 } else {
                 var mover=(FlowControl.Mover)pipe.control();
-                double kappa=mover.liquid()?1.4:model.heatCapacityRatio(graph.reservoirs().get(pipe.first()).state());
+                double kappa=PassiveStepSolver.suctionKappa(model,mover,graph.reservoirs().get(pipe.first()).state());
                 work=switch(mover) {
                     case FlowControl.Pump pump->rates==null?dt*flows[edge]*suction.volume()/suction.mass()*Math.max(0,heads[edge])
                             :dt*flows[edge]*specificVolume*Math.max(0,heads[edge]);
