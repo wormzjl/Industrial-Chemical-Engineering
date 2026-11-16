@@ -41,7 +41,7 @@ the snapshot. "pp" = package-private.
 | [`SizingFacts`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SizingFacts.java), [`DesignBasis`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/DesignBasis.java) | What the player keeps of sizing (facts of the sheet): the design basis, each item's mode, type and size; the basis's three entries (`DEFAULT`: 1.10 design flow, 50 m line length, 60 K pumparound fall) | 166, 23 |
 | [`LineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/LineSizing.java), [`Service`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Service.java) | A line's bore and runs (`rate`, `auto`), its drop on the network's viscosity; what a line carries, which picks its rows (the stream gives it, the player may choose) | 188, 108 |
 | [`ColumnSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ColumnSizing.java) | A column's diameter in the world's half metres, each rated by the real solver (`ColumnSolve.calculate`, the sheet's `ColdStart.LEARNED`) | 216 |
-| [`PumpSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PumpSizing.java) | The smallest discharge whose rated flow fits the window; `Duty` (flow, head, shaft power, NPSH3, proposed motor), `Load` (`npsh`, `edge`, `boils`) | 171 |
+| [`PumpSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PumpSizing.java) | The smallest discharge whose rated flow fits the window; `Duty` (flow, head, shaft power, NPSH3, proposed motor), `Load` (`npsh`, `edge`, `boils`, `reducedDensity`) | 181 |
 | [`CompressorSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/CompressorSizing.java) | The type by its inlet flow, then the smallest frame; stages here alone; the discharge one stage's polytropic estimate on the world's exponent | 135 |
 | [`TurbineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/TurbineSizing.java) | A steam turbine's design point, rated power, inlet steam class and exhaust | 103 |
 | [`ExchangerSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ExchangerSizing.java) | An exchanger or a kettle on `ExchangerRating`, over shells, shell sizes, tubes and the `ExchangerType` catalog (a kettle Standard only) | 216 |
@@ -92,7 +92,8 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
 - **Pumps** (`PumpSizing`): NPSH available over the liquid's p_v, or over zero pressure where it has none;
   `PUMP_NPSH_WORLD` against the greater of the clean zone's edge and 0.85 NPSH3 (`ReleasePressure.limit` as heads over
   p_v; no row where neither exists), `PUMP_NPSH` against NPSH3 plus its margin. A drum liquid saturated with gas has the
-  head over its vapour pressure.
+  head over its vapour pressure. On one dense suction (`State.dense()`) `PUMP_DENSITY` (SHOULD) reads its reduced density
+  against 0.86, the lightest suction pumps run on carbon dioxide; no other suction reads it.
 - **Release pressures** (`FlowThermo`, the world's rule on its own trial, a TP flash at the stream's temperature, from
   100 Pa to a ratio of 1.0005, no cache): `vapourPressure` (p_v, the compounds above their critical temperature left
   out), `zoneEdge` (E: at most the clean share of vapour), `storagePressure` (as much vapour as liquid by volume) and

@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1, S2, S3, S4 and S4b done; S5 next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
+Status: **In progress** since 2026-11-15 (S0, S1, S2, S3, S4, S4b and S5 done). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -100,6 +100,14 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 - 2026-11-16: the main thread checked S4b (the diff, the stored results, the review); one stale number in a comment of
   `MoverSuction.zoneEdge` corrected (the seam at 310 K is at reduced density 1.07). Decisions in the plan's section 2b,
   points 11 and 12.
+- 2026-11-16: S5 (sub-thread; owner: "Accept all"; main thread: label source A, pump page form ii). One dense fluid above
+  reduced density 0.5 reads "Dense fluid" in either slot, "Vapor" at or below; no word changes at δ 1. The client evaluates
+  the shown contents' one root on its own catalog, once per published view (`DenseLabel`), and keeps today's label where
+  it cannot; no wire field. A pump on one dense fluid has no bubbles (gas ratio NaN, no churn, no `GAS`); its page reads the
+  head share. The simulator's pump sheet reads `PUMP_DENSITY` against 0.86. Results: `test` 468 classes, 2,874 tests,
+  6 failed, none from S5 (S3's ranges against 4 thermo pins, 2 `FORMATS.md` rows of the pollution batch, the
+  translations); columnGates 379, equipmentGates 244, holdGates 136 green; chain-100 deviation 0; dense GameTests
+  `s5-dense1` 3 of 3. [S5_PRESENTATION_REVIEW.md](S5_PRESENTATION_REVIEW.md).
 
 ## Documents
 
@@ -118,6 +126,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 - [DENSE_PUMP_RESEARCH_REVIEW.md](DENSE_PUMP_RESEARCH_REVIEW.md): how a real centrifugal pump behaves on a supercritical
   fluid (sources, the rise on the suction's density, options); option 1 B carried out in S4b.
 - [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md): S2c, the slot rule by density and its moved states, what still reads the slot, the dense pump's suction edge, the "no saturation" callers, the GameTests, the campaign draws.
+- [S5_PRESENTATION_REVIEW.md](S5_PRESENTATION_REVIEW.md): S5, what the player reads on one dense fluid: the survey,
+  the rule and its client evaluation, the pump's head share, the before and after table, the renders, the owner items.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
   recommended pressure ranges and the sizes of the open decisions.
 - Earlier: [../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md](../2026-09-24-coolprop-low-temperature/SUPERCRITICAL_SUPPORT_REVIEW.md)
