@@ -139,6 +139,20 @@ public final class WorldTopologyLedger {
      * name (N1; empty for none). The text is made once per edit ({@link #of}), so a save writes it as it stands and encodes
      * nothing.
      */
+    /**
+     * A constructed device's wall facts (facts schema 29, batch 2026-11-16-fouling-corrosion, WP2): its corrosion and erosion
+     * loss, mm (0 or more, finite), its fouling deposit, m²K/W (0 to {@code FoulingLaw.CAP}), and whether a blast wrecked it
+     * (owner: final, deconstruct and rebuild). {@link #NEW} for a device without an entry; only one away from it is saved.
+     */
+    public record IntegrityFacts(double wallLoss,double fouling,boolean wrecked) {
+        public static final IntegrityFacts NEW=new IntegrityFacts(0,0,false);
+        /** The largest wall loss read, mm: far above any allowance, keeps every number finite. */
+        public static final double MAX_LOSS=1e3;
+        public IntegrityFacts{
+            if(!(wallLoss>=0&&wallLoss<=MAX_LOSS)||!(fouling>=0&&fouling<=com.wormzjl.icheme.science.integrity.FoulingLaw.CAP))throw new IllegalArgumentException("Invalid wall facts "+wallLoss+" mm, "+fouling+" m2K/W");
+        }
+        public boolean isNew(){return wallLoss==0&&fouling==0&&!wrecked;}
+    }
     public record Structure(com.wormzjl.icheme.science.equipment.EquipmentShape shape,com.wormzjl.icheme.science.equipment.Paint paint,String text,String name) {
         public Structure{
             Objects.requireNonNull(shape);Objects.requireNonNull(paint);Objects.requireNonNull(text);Objects.requireNonNull(name);
@@ -156,7 +170,10 @@ public final class WorldTopologyLedger {
     }
     public record Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,
                            MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,
-                           Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,Builds builds,Map<Long,StillUnit> stills,Map<Long,ConverterUnit> converters) {
+                           Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,Builds builds,Map<Long,StillUnit> stills,Map<Long,ConverterUnit> converters,
+                           Map<Long,IntegrityFacts> integrity) {
+        /** Without wall facts (fluid facts before schema 29, batch 2026-11-16-fouling-corrosion): every wall new and clean. */
+        public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,Builds builds,Map<Long,StillUnit> stills,Map<Long,ConverterUnit> converters){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,converters,Map.of());}
         /** Without fluid converters (fluid facts before schema 24, batch 2026-11-12-fluid-conversion). */
         public Snapshot(long onlineTick,long nextIdentity,Map<Long,Registration> active,List<Event> events,MaterialTotal constructed,MaterialTotal destroyed,FluidBasis basis,Map<UUID,RecoveredSolid> recoveries,Restated restated,Map<Long,ColumnUnit> columns,Map<Long,ShaftUnit> shafts,Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores,Map<Long,Double> health,Builds builds,Map<Long,StillUnit> stills){this(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,Map.of());}
         /** Without batch stills (fluid facts before schema 16, batch 2026-11-09-batch-distiller). */
@@ -193,17 +210,17 @@ public final class WorldTopologyLedger {
                 if(changed==null)changed=new HashMap<>(active);
                 changed.put(r.device().id(),new Registration(r.device().withHeat(heat.withTransit(joule)),r.spec(),r.revision()));
             }
-            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,converters);
+            return changed==null?this:new Snapshot(onlineTick,nextIdentity,changed,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,converters,integrity);
         }
         /** These facts on {@code basis}, which holds the same compounds ({@link FluidBasis#sameAs}): a load names the current package. */
         public Snapshot withBasis(FluidBasis basis){
             if(!this.basis.sameAs(basis))throw new IllegalArgumentException("Another basis needs a restatement, not a new name");
             // Every unit and store goes along (batch 2026-11-09-batch-distiller: the shaft units, stores and pump health were left behind).
-            return new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,converters);
+            return new Snapshot(onlineTick,nextIdentity,active,events,constructed,destroyed,basis,recoveries,restated,columns,shafts,stores,health,builds,stills,converters,integrity);
         }
         public Snapshot {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologySnapshots);
-            recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);shafts=Map.copyOf(shafts);stores=Map.copyOf(stores);health=Map.copyOf(health);stills=Map.copyOf(stills);converters=Map.copyOf(converters);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
+            recoveries=Map.copyOf(recoveries);columns=Map.copyOf(columns);shafts=Map.copyOf(shafts);stores=Map.copyOf(stores);health=Map.copyOf(health);stills=Map.copyOf(stills);converters=Map.copyOf(converters);integrity=Map.copyOf(integrity);if(recoveries.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Recovery queue is full");
             if(onlineTick<0||nextIdentity<1||events.size()>MAXIMUM_EVENTS)throw new IllegalArgumentException("Invalid world topology snapshot");
             active=Map.copyOf(active);events=List.copyOf(events);Objects.requireNonNull(constructed);Objects.requireNonNull(destroyed);Objects.requireNonNull(restated);
             Objects.requireNonNull(basis);int count=basis.components().size();
@@ -233,6 +250,8 @@ public final class WorldTopologyLedger {
             for(long id:stores.keySet())if(id<=0||id>=nextIdentity)throw new IllegalArgumentException("Invalid electric store identity "+id);
             // A pump's health (W10b): keyed by its device's identity, 0 to 1; a pump without an entry is new.
             for(var e:health.entrySet())if(e.getKey()<=0||e.getKey()>=nextIdentity||!(e.getValue()>=0&&e.getValue()<=1))throw new IllegalArgumentException("Invalid pump health "+e.getKey()+"="+e.getValue());
+            // A wall's facts (schema 29, batch 2026-11-16-fouling-corrosion): keyed by its device's identity; a device without an entry is new and clean.
+            for(var e:integrity.entrySet())if(e.getKey()<=0||e.getKey()>=nextIdentity||e.getValue()==null)throw new IllegalArgumentException("Invalid wall facts "+e.getKey()+"="+e.getValue());
             // A batch still (batch 2026-11-09-batch-distiller): keyed by its pot (registered, or queued to be); its accounts on the basis.
             for(var e:stills.entrySet()){var u=e.getValue();if(e.getKey()!=u.id()||u.id()>=nextIdentity||u.head().moles().length!=count||u.venting().moles().length!=count)throw new IllegalArgumentException("Invalid batch still "+e.getKey());}
             // A fluid converter (batch 2026-11-12-fluid-conversion): keyed by its vessel's identity, its ports' identities given.
@@ -291,6 +310,8 @@ public final class WorldTopologyLedger {
     private Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> stores=Map.of();
     // The machines' health (W10b, M-12) as last handed over: the engine keeps it live ({@link MachineHealth}) and sets it here.
     private Map<Long,Double> health=Map.of();
+    // The walls' facts (batch 2026-11-16-fouling-corrosion, WP2) as last handed over: the engine keeps them live ({@link Integrity}) and sets them here.
+    private Map<Long,IntegrityFacts> integrity=Map.of();
     // The batch stills (batch 2026-11-09-batch-distiller), by their pots' identities.
     private final LinkedHashMap<Long,StillUnit> stills=new LinkedHashMap<>();
     // The fluid converters (batch 2026-11-12-fluid-conversion), by their vessels' identities.
@@ -313,7 +334,7 @@ public final class WorldTopologyLedger {
         latest.putAll(active);latestAt.putAll(activeAt);
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
-        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);for(var u:shafts.values())shaftAt.put(u.position(),u.id());stores=restored.stores;health=restored.health;stills.putAll(restored.stills);converters.putAll(restored.converters);
+        recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);for(var u:shafts.values())shaftAt.put(u.position(),u.id());stores=restored.stores;health=restored.health;integrity=restored.integrity;stills.putAll(restored.stills);converters.putAll(restored.converters);
         paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());racks.putAll(restored.builds.racks());names.putAll(restored.builds.names());builds=restored.builds;
         shared=restored;sharedVersion=version;
     }
@@ -322,8 +343,8 @@ public final class WorldTopologyLedger {
     public Snapshot snapshot() {
         owned();
         if(builds==null)builds=new Builds(paints,structures,racks,names);
-        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),Map.copyOf(shafts),stores,health,builds,Map.copyOf(stills),Map.copyOf(converters));sharedVersion=version;}
-        else if(shared.onlineTick!=onlineTick||shared.builds!=builds)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,shared.shafts,shared.stores,shared.health,builds,shared.stills,shared.converters);
+        if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),Map.copyOf(shafts),stores,health,builds,Map.copyOf(stills),Map.copyOf(converters),integrity);sharedVersion=version;}
+        else if(shared.onlineTick!=onlineTick||shared.builds!=builds)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,shared.shafts,shared.stores,shared.health,builds,shared.stills,shared.converters,shared.integrity);
         return shared;
     }
     /** The build facts as the next snapshot holds them. */
@@ -513,6 +534,10 @@ public final class WorldTopologyLedger {
     public Map<Long,Double> health(){owned();return health;}
     /** Sets the pumps' health (W10b): the engine's live values, handed over at its cadence and before a save. */
     public void health(Map<Long,Double> value){owned();var copy=Map.copyOf(value);if(!copy.equals(health)){health=copy;version++;}}
+    /** The walls' facts (WP2 of batch 2026-11-16-fouling-corrosion) as last set, by device identity: only walls away from new and clean. */
+    public Map<Long,IntegrityFacts> integrity(){owned();return integrity;}
+    /** Sets the walls' facts: the engine's live values ({@link Integrity}), handed over at its cadence, after an event and before a save. */
+    public void integrity(Map<Long,IntegrityFacts> value){owned();var copy=Map.copyOf(value);if(!copy.equals(integrity)){integrity=copy;version++;}}
     /** Removes shaft unit {@code id}; a part holds no stock, so nothing is booked. */
     public void removeShaft(long id){owned();var old=shafts.remove(id);if(old!=null){shaftAt.remove(old.position());version++;}}
     /** The batch stills (batch 2026-11-09-batch-distiller): a copy, by their pots' identities. */

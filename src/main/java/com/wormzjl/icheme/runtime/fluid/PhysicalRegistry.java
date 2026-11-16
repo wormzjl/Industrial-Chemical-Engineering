@@ -106,6 +106,12 @@ public final class PhysicalRegistry {
         for(var r:records)if(r.spec().relief()>0)reliefs.put(r.device().id(),new PhysicalFluidTopology.Relief(r.spec().relief(),r.spec().reliefFace()));
         return reliefs;
     }
+    /** Every heat side among {@code records} whose wall failed (batch 2026-11-16-fouling-corrosion, WP2: its spec breached): its passage compiles closed. */
+    static Set<Long> closedSides(Collection<WorldTopologyLedger.Registration> records) {
+        var closed=new HashSet<Long>();
+        for(var r:records)if(r.spec().breached()&&r.device().kind()==com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.HEAT_SIDE)closed.add(r.device().id());
+        return closed;
+    }
     /** Compiles the loaded registry once and binds every device to the island a checkpoint restored for it. */
     public void load() {
         var islands=host.coordinator().snapshots();
@@ -125,7 +131,7 @@ public final class PhysicalRegistry {
         for(var entry:stock.entrySet()){var r=active.get(entry.getKey());if(r!=null&&r.device().fixed()){fixedStates.put(entry.getKey(),entry.getValue());fixedModels.put(entry.getKey(),stockModels.get(entry.getKey()));}}
         // A disconnected filter's ports stand at the ambient (NetworkReduction.ambient), as an empty vessel does.
         var compiled=PhysicalFluidTopology.compile(active.values().stream().map(WorldTopologyLedger.Registration::device).toList(),stock,cakes,
-                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(active.values()));
+                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(active.values()),closedSides(active.values()));
         diagnostics.putAll(compiled.diagnostics());pipeViews.putAll(compiled.pipeViews());tankFaces.putAll(compiled.tankFaces());
         for(var island:compiled.islands()) {
             var graph=island.graph();
@@ -527,7 +533,7 @@ public final class PhysicalRegistry {
             }
         }
         var compiled=PhysicalFluidTopology.compile(component.values().stream().map(WorldTopologyLedger.Registration::device).toList(),componentStock,componentCakes,
-                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(component.values()));
+                com.wormzjl.icheme.science.fluid.network.NetworkReduction.ambient(model),flowmeters,reliefs(component.values()),closedSides(component.values()));
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologyBatches);FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.topologyEvents,events.size());
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.compiledDevices,component.size());
         // The islands this batch splits: an original whose devices land in two or more of the new islands (owner decision

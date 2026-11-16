@@ -81,7 +81,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - The blast burns up to index 2. Energy: 44 kJ per mole of mixture, yield 3 %, TNT 4.6 MJ/kg; power = 4 × (m/50 kg)^(1/3), capped by `pollution.explosionPowerCap`. Below power 0.5 the pocket burns without a blast.
 - Each flammable face neighbour follows 3 ticks later; at most 4 blasts a tick and dimension.
 - A one-block fluid device breaks as an ordinary block (resistance 3.5) and releases what it holds.
-- Constructed equipment loses no block. A blast of strength ≥ 2 at one of its cells (`strengthAt`) sets `FluidDeviceSpec.breached` on its closed vessels: the graph sees them open (`vented()`), through the registry's respecify edit, so they keep their contents and then vent and spill by the open-vessel law. A machine with a health record fails. One repair kit clears a breach. Not breached: still pots, kettle shells, members of a running column.
+- Constructed equipment loses no block. A blast of strength ≥ 2 at one of its cells (`strengthAt`) sets `FluidDeviceSpec.breached` on its closed vessels: the graph sees them open (`vented()`), through the registry's respecify edit, so they keep their contents and then vent and spill by the open-vessel law. A machine with a health record fails; heat sides close and release their holdup once. Every device of the structure is wrecked (`Integrity.wreck`): the Equipment Constructor refuses to repair it, it is deconstructed and rebuilt ([integrity.md](integrity.md)). Not breached: still pots, kettle shells, members of a running column.
 
 ## The map overlay (FTB Chunks, optional)
 
@@ -95,7 +95,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 ## Formats
 
 - `PollutionStore#SCHEMA` 1: state the engine cannot compute again, so it is saved, but under its own rule: a damaged store is copied aside (`icheme_pollution.damaged-<n>.dat`) or, when that fails, erased, and the dimension starts clean. A damaged cube is dropped alone. Corpus: `src/test/resources/compat/pollution/`.
-- `FluidDeviceSpec.breached` is a fluid fact (schema 26, [runtime-saves.md](runtime-saves.md)).
+- `FluidDeviceSpec.breached` is a fluid fact (schema 26, [runtime-saves.md](runtime-saves.md)); `wrecked` is one of the integrity facts (schema 29).
 - The monitor adds no control fact: its socket is an ordinary sensor port; `Sensor.Kind.ANALYSER` and `Sensor.Unit.INDEX` are appended and saved by name.
 - The map payloads moved the wire protocol to `icheme-2` (`NetworkProtocol#VERSION`); they add no saved format.
 - Rows: [FORMATS.md](../FORMATS.md).

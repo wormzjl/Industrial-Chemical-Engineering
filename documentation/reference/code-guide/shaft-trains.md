@@ -48,7 +48,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | [`runtime/fluid/MachineView`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachineView.java), [`MachinePresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/MachinePresentation.java) | One part's page view (status, speed, shaft power, electric power and FE/t, settings, trip, rating, store share and seconds left, governor valve, gearbox ratio, turbine steam, `Coupling`, `Fuel`); sessions: replay on open, the buckets after, one unanswered edit per session | 129, 101 |
 | `world/level/block/ShaftBlock`, `ShaftParts`, `ShaftCommand`, `CreativeMotorBlock` | The `shaft` block (drawn size from the train's torque, `ProcessUnit.shaftPixels`; before its train draws it `ProcessUnit.SHAFT_DEFAULT_SIZE`; no block entity); the queued part events; `/icheme shaft` (operators: list, settings, start, stop, reset, ratio); the `creative_motor` block | 81, 150, 93, 97 |
 | `world/level/block/entity/TerminalEnergy` | The FE capability on a structure's terminal cell, every face; consumers receive, a generator extracts | 90 |
-| `world/item/RepairKitItem` | `repair_kit`: queues `MachineHealth.Repair` on a mover casing cell, a steam turbine cell or an in-line device; consumed only when accepted | 98 |
+| `world/item/RepairKitItem` | `repair_kit`: queues `MachineHealth.Repair` on an in-line pump's, compressor's or control valve's pipe block; refused and kept on constructed equipment; consumed only when accepted | 103 |
 | [`network/MachineNetwork`](../../../src/main/java/com/wormzjl/icheme/network/MachineNetwork.java), `world/inventory/MachineMenu` | `machine_state`, `machine_edit` (checked at receipt, queued as a shaft event), `machine_open_driver` (a casing's or turbine's page opens its driver's), `machine_datasheet` | 425, 124 |
 | `client/gui/screens/inventory/MachineScreen`, `client/gui/common/MachineColumn`, `PumpCurve`, `MotorCurve` | The machine page and its door; the pump's curve (H(Q), NPSH3(Q), 4 × NPSH3 dashed, NPSHA); the motor's curve | 400, 283, 201, 72 |
 | `client/DriverSounds`, `client/MoverSounds` | The drivers' and movers' loops on their watches, handed to the one sound budget ([effects.md](effects.md)) | 135, 117 |
@@ -96,6 +96,9 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
   admission shut, its settings kept. `ShaftTrains.failures` merges the health plans into the trains': a health
   `FAILED 1` (a repaired pump back on) never replaces a `FAILED 0` already planned (an unpowered in-line pump's close), a
   health `FAILED 0` replaces anything. After a repair a turbine's `GOVERNOR` plan opens it again.
+- Solids wear liquid movers and liquid ring pumps (`SOLIDS`), and a control valve's trim (`MachineHealth.trim`, its
+  record made at its first wear): a failed trim stands open (`ShaftPlan.Kind.TRIM`), a kit works only while no flow
+  passes (`NOT_IDLE`), and constructed machines are repaired with the Equipment Constructor ([integrity.md](integrity.md)).
 
 **Electricity.**
 

@@ -17,8 +17,14 @@ Up: [code guide](README.md)
 `CorrosionStandard` built per compound list turns a node's state into a `CorrosionDigest` (temperature, wet and oil
 flags, the oil's sulfur, acid and fouling numbers, partial pressures of H2S, CO2, SO2, NH3, O2, H2). `CorrosionLaw`
 gives a wall's inside rate on it for one of four materials (`Metallurgy`) and the outside rate from the corrosive air
-index; `ErosionLaw` gives particle erosion; `FoulingLaw` the Kern–Seaton deposit; `WallState` the stage and life. Since
-WP1 nothing in the runtime reads them yet (WP2 to WP6 book them).
+index; `ErosionLaw` gives particle erosion; `FoulingLaw` the Kern–Seaton deposit; `WallState` the stage and life.
+
+`runtime/fluid/Integrity` books them on the walls of constructed equipment: a device a structure registers with its
+nozzle ports (never a one-block device, a pipe or a port lane) that is a closed vessel, a heat side or a machine that
+wears. Each has a wall loss (mm), a fouling deposit (m²K/W) and `wrecked` as facts; its rates are state. A wall through
+fails by the failure its kind already has; a blast wrecks the structure for good; the Equipment Constructor's repair
+and cleaning are queued engine events, accepted only while every device is idle and every vessel empty. A control
+valve's trim and a mover's `SOLIDS` fault wear the machine health of [shaft-trains.md](shaft-trains.md).
 
 ## Class map
 
@@ -36,6 +42,41 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `science/integrity/WallState` | `SOUND`, `THIN`, `WEEPING`, `THROUGH` at u = 0.5, 0.9, 1; the life in process seconds |
 | `science/machine/Wear.Fault.SOLIDS` | The pump's erosion-class fault; its intensity is `ErosionLaw.solidsIntensity` |
 | `science/material/MaterialCatalog.Corrosion` | The `corrosion` sub-record; `corrosion(...)`, `sulfurShares`, `acidNumbers`, `foulingNumbers` |
+| `runtime/fluid/Integrity` | The walls: `kind`/`constructed` (which devices), `booked` (keeps an island's last result), `cadence`, `wreck`, `queueRepair`/`queueClean`/`apply`, `Settings`, reads `wall`, `fouling`, `foulingLevel`, `wrecked`, `kindOf`, `status`, `fires`; `set` for the command and the tests |
+| `runtime/fluid/WorldTopologyLedger.IntegrityFacts`, `IntegritySection` | The facts: one entry per device away from new (loss, fouling, wrecked), the last facts section |
+| `runtime/fluid/FluidDeviceSpec.metallurgy` | A device's material, a fact (carbon steel by default) |
+| `runtime/fluid/FluidWorldAuthority` | Builds `Integrity` with its `IntegrityHost` (close = breach, open = repair, release = `releaseContents`, the corrosive air index, `corrosionStandards`); `queueStructureRepair`, `queueClean`, `closable`; drains the events at the tick, runs the cadence after the health's |
+| `runtime/fluid/PhysicalRegistry.closedSides` | A breached heat side's passage compiles with fitting mask 3 (closed both ways) |
+| `runtime/fluid/MachineHealth` | `trim`, `tracked`, `solidShare`; trims and `SOLIDS` in `booked`; `ShaftPlan.trim` in `plans`; `trimStatus`; `renew`; a kit only while `idle` |
+| `science/fluid/network/ShaftPlan.Kind.TRIM` | A failed trim stands as `ControlValve.unconfigured()`; a repaired one takes its registered control back |
+| `runtime/pollution/Breaches` | Wrecks every device of a blasted structure; heat sides close and release once |
+| `runtime/pollution/IntegrityCommands` | `/icheme integrity get`, `set <loss> <fouling> <wrecked>`, `clear`, by `id <device>` or `at <pos>` |
+| `world/item/RepairKitItem` | Refused on constructed equipment (`USE_CONSTRUCTOR`); queues a `MachineHealth.Repair` on an in-line pump's, compressor's or control valve's pipe block |
+
+## Flow
+
+1. Every commit or replay reaches `ShaftTrains`, which hands the island's result to `MachineHealth.booked` (wear of
+   movers and trims) and `Integrity.booked` (keeps the result and its end tick; no arithmetic).
+2. At the cadence (`MachineHealth.CADENCE`), after the health's: discovery sweeps at most 4096 registrations; every record
+   books `rate × Δt / year` and a flowing heat side its deposit (`FoulingLaw.step`), Δt in process seconds at the time
+   factor; at most 256 records whose island booked a new span are evaluated round-robin from a cursor: the digest of the
+   vessel's node or of the hotter end of a heat side's passage or a machine's connection, the inside rate, the corrosive
+   air (`PollutionService.index`, `CORROSIVE`), a heat side's erosion on an island that moved solids. A wall through fails
+   once: a vessel's spec is breached, a heat side's spec is breached (its passage compiles closed) and its holdup released,
+   a machine's health is breached. The facts go to the ledger.
+3. A repair or cleaning is queued (`queueStructureRepair`, `queueClean`) and applied at the tick drain: `WRECKED`,
+   `NOTHING_TO_REPAIR`, `NOT_IDLE` (a connection at the device's node, or a heat side's passage, moved more than 1e-10
+   kg/s over the island's last slice, or a mover of it runs), `NOT_EMPTY` (a vessel with 1 % of its volume liquid or
+   more than 0.2 bar from the ambient), else `REPAIRED` (loss 0, breach closed, machine health 1) or `CLEANED`.
+
+## Formats
+
+- Fluid facts schema 29: `FluidDeviceSpec.metallurgy` (by name) and the `IntegritySection` (see
+  [runtime-saves.md](runtime-saves.md) and [FORMATS.md](../FORMATS.md)). Rates, mechanisms, asymptotes and the cursor
+  are state and are not saved.
+- Config: `corrosion.enabled`, `corrosion.yearProcessHours` (20), `corrosion.external`, `erosion.enabled`,
+  `fouling.enabled`, `fouling.asymptoteProcessHours` (10). A switch off stops its part of the rate at once and nothing
+  fails while corrosion and erosion are both off.
 
 ## Laws and constants
 
@@ -57,7 +98,10 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 formula's own value where the plan rounds further), the factor table, monotony and the NaN guards.
 `MaterialCorrosionTest` holds the twelve records, the assays, refusals and the no-identity check; `WearTest` the
 `SOLIDS` row; `LayeringTest` keeps `science/integrity` below the machine, network, column, plant, sheet and equipment
-packages.
+packages. `runtime/fluid/IntegrityTest` holds the runtime (rates at the time factor, the 256 bound and the round-robin,
+failures once by kind, wrecked, idle-and-empty, cleaning, corrosive air, the switches); `MachineHealthTest` the trims;
+`HeatSideTopologyTest` the closed passage; `IntegrityGameTests` a corroded drum repaired once drained and a failed trim
+standing open; `PollutionBreachGameTests` a wrecked drum; `PumpHealthGameTests` the kit refused on a casing.
 
 ## Traps
 
@@ -68,8 +112,17 @@ packages.
 - `Metallurgy` and `WallState.Stage` are saved by name later: append, never rename.
 - The crude cuts' sulfur cannot meet all four assays within 20 % (the heavy crude's cuts dominate the dilbit's); the
   fit's residuals are in `tools/fouling-corrosion/README.md`.
+- Facts are keyed by device identity. A layout refresh keeps the identity (`world.edit`), so the walls follow; a respec
+  that rebuilds a `FluidDeviceSpec` from its fields must carry `metallurgy` as it carries `breached`.
+- An island keeps the controls its last slice solved with: a failed trim's island holds the unconfigured valve until the
+  `TRIM` plan carrying the registered control restores it.
+- A heat side is a connection, not a node: its idle test reads its passage (`sideIdentity`), not a node's pipes.
+- A failure is applied once per record (`failed`), whatever the timing of its queued edit; a wall set below through and
+  through again fails again.
+- `Integrity.idle` and `MachineHealth.idle` read the island's stored last result; nothing solves.
 
 ## Snapshot
 
-2026-11-16, WP1: the laws, the four materials, the `corrosion` sub-record on `crude_pc01` to `crude_pc12`
-(`corrosion-fit-r1`) and `Wear.Fault.SOLIDS`, read by nothing yet.
+2026-11-16, WP2: the laws (WP1) booked on vessels, heat sides and machines of constructed equipment, trims and `SOLIDS`
+on machine health, wrecked blasts, the structure repair and cleaning events, the config and the command. The pages
+(WP4), the films' fouling (WP5) and the constructor's repair button (WP3) read them next.

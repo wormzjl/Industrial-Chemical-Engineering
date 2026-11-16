@@ -161,6 +161,8 @@ final class ViewBuilder {
             if(registration.device().actuator())for(int i:ix.incident(nodeIndex)){var pipe=snapshot.graph().pipes().get(i);if(pipe.first()==nodeIndex&&!(pipe.control() instanceof FlowControl.Passive)){flow=q[i];devicePressureChange=result.endpointHeads()[i];var mode=result.endpointModes().get(i);
                 if(pipe.control() instanceof FlowControl.Valve&&ix.dependent().get(i))status+=" / CONTROL_CONFLICT: dependent control constraints; holding last accepted opening";
                 else if(pipe.control() instanceof FlowControl.Valve&&ix.standing().get(i))status+=" / STANDING_OPEN: a lower flow target on this line regulates";
+                // A control valve's trim (batch 2026-11-16-fouling-corrosion): ERODED TRIM, or TRIM FAILED while it stands open.
+                if(pipe.control() instanceof FlowControl.ControlValve){var trim=authority.health.trimStatus(id);if(!trim.isEmpty())status+=" / "+trim;}
                 if(pipe.control() instanceof FlowControl.Mover mover) {
                     String inlet=mode==FlowControl.Mode.INLET_WRONG_PHASE?inletReason(snapshot.graph(),i,result.advancedSeconds()):"";
                     // The share of its set flow a set-flow mover moved, on its suction's density; a machine has no set flow.
@@ -169,7 +171,7 @@ final class ViewBuilder {
                             :q[i]/(drawn.state().mass()/drawn.state().volume())/mover.targetVolumeFlow();
                     if(mover.liquid())status=PipePresentation.pumpStatus(status,mover,mode,inlet,delivered);
                     if(!mover.liquid()){status+=" / "+mode;if(!inlet.isEmpty())status+=" / "+inlet;var shortfall=PipePresentation.shortfall(mover,mode,delivered);if(!shortfall.isEmpty())status+=" / "+shortfall;}
-                    status=FluidWorldAuthority.withHealth(status,mover,authority.health.status(id));
+                    status=FluidWorldAuthority.withHealth(status,mover,authority.health.status(id),Integrity.constructed(registration));
                     // The limit the mover's law holds: a set-flow pump's setting is the rise for water and scales with its
                     // supply's density, the stream its supply walk ends at (owner decision D11, A2); a compressor's is the ratio over
                     // the suction pressure; a machine's reads the suction stream it draws (decision D4).
@@ -179,7 +181,7 @@ final class ViewBuilder {
                         status+=String.format(java.util.Locale.ROOT,mover.liquid()?" (limit %.0f Pa on this fluid)":" (limit %.0f Pa at this suction)",limit);}
                 }else{status+=" / "+mode;
                     // A steam turbine's health word (N4): WET EXHAUST, or FAILED first.
-                    if(pipe.control() instanceof FlowControl.Turbine)status=FluidWorldAuthority.withHealth(status,pipe.control(),authority.health.status(id));}}}
+                    if(pipe.control() instanceof FlowControl.Turbine)status=FluidWorldAuthority.withHealth(status,pipe.control(),authority.health.status(id),Integrity.constructed(registration));}}}
         }
         // A generator or a void in several islands (owner decision D17) reads the status of its owner (the lowest island) and
         // the net flow of all of them.
@@ -205,8 +207,14 @@ final class ViewBuilder {
         if(filter!=null&&filter.clogged())status="filter clogged / "+status;
         var closures=snapshot.lastResult().map(PassiveIntervalSolver.Result::rejectionReasons).orElse(Map.of());
         for(var mapping:mappings){Integer p=ix.pipes.get(mapping.pipeId());if(p==null)continue;var pipe=snapshot.graph().pipes().get(p);if(pipe.blockedDirections()!=0&&pipe.filter()==null)status=FluidWorldAuthority.solidClosure(mapping.pipeId(),closures)+" / "+status;}
-        // A vessel a blast breached (batch 2026-11-15-pollution-system, WP6b) stands open until a repair kit closes it.
-        if(registration.spec().breached())status="BREACHED: open to the air, use a repair kit / "+status;
+        // A vessel a blast or corrosion breached (batch 2026-11-15-pollution-system, WP6b) stands open until the Equipment
+        // Constructor repairs it; a heat side so failed stands closed (batch 2026-11-16-fouling-corrosion, WP2). The wall's own
+        // words (THIN WALL, WEEPING, LEAKING, WRECKED) come first.
+        String wall=authority.integrity.status(id);
+        boolean heatSide=registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE;
+        if(registration.spec().breached()&&!heatSide)status="BREACHED: open to the air, repair with the Equipment Constructor / "+status;
+        else if(registration.spec().breached()&&wall.isEmpty())status="LEAKING: tube leak / "+status;
+        if(!wall.isEmpty())status=wall+" / "+status;
         if(authority.registry.diagnostic(id)!=null)status=authority.registry.diagnostic(id)+" / "+status;
         var active=authority.topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
         if(authority.unboundBindings.contains(id))status="UNBOUND: saved inventory retained / "+status;
