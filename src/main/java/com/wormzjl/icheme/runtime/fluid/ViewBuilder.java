@@ -142,6 +142,26 @@ final class ViewBuilder {
         if(index==null||index.snapshot!=snapshot){index=new ViewIndex(snapshot);viewIndexes.put(island,index);}
         return index;
     }
+    /**
+     * The liquid-like weight of what device {@code id} shows, on the server's own state of the island {@code islands} presents
+     * ({@link DenseReadings}): a node's contents, else the stream its pipes moved over the last interval (each side from the
+     * node it left; a junction's own contents). NaN where that is not one dense fluid, or where the device is in no island.
+     * It reads the island's presented snapshot on the island's own list, which {@link #view} pads onto the world's: the weight
+     * is the one fluid's root's (its traits carry over the padding) and does not depend on the list. A scan of the snapshot,
+     * outside the bucket's index cache: no solve, no remapping.
+     */
+    double denseWeight(long id) {
+        var registration=authority.registrations().get(id);Long owner=authority.registry.owner(id);if(registration==null||owner==null)return Double.NaN;
+        var snapshot=authority.runtime.coordinator().presentation(owner);var graph=snapshot.graph();
+        int at=-1;for(int i=0;i<graph.reservoirs().size();i++)if(graph.reservoirs().get(i).id()==id){at=i;break;}
+        if(at>=0&&(registration.device().kind()!=TopologyCompiler.Kind.PIPE||graph.reservoirs().get(at).junction()))return DenseReadings.weight(graph,at);
+        var result=snapshot.lastResult().orElse(null);if(result==null)return Double.NaN;
+        double[] sums=new double[3];
+        for(var mapping:authority.registry.pipeViews(id))for(var pipe:graph.pipes()){if(pipe.id()!=mapping.pipeId())continue;
+            for(var t:result.pipeTransfers())if(t.pipeId()==pipe.id())DenseReadings.add(graph,pipe,t,sums);
+            break;}
+        return DenseReadings.moved(sums);
+    }
     FluidView view(long id,Map<Long,IslandCoordinator.Snapshot> islands) {
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.viewBuilds);var registration=authority.registrations().get(id);if(registration==null)return new FluidView(id,0,0,authority.topology.onlineTick(),"REMOVED",null,0,List.of());
         Long owner=authority.registry.owner(id);if(owner==null)return new FluidView(id,registration.revision(),0,authority.topology.onlineTick(),heldClause(id,null)+islandless(registration.device(),id),null,0,List.of(),null,0,List.of(),null);

@@ -380,7 +380,7 @@ final class Displays {
     }
     void publishSightGlass(WorldTopologyLedger.Registration record,net.minecraft.server.level.ServerLevel level,BlockPos pos,FluidView view) {
         long id=record.device().id();
-        var sample=PipePresentation.sightGlass(view,authority.componentNames,authority.model.molecularWeights(),authority.catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(authority.catalog),authority.registry.pipeViews(id));
+        var sample=PipePresentation.sightGlass(view,authority.componentNames,authority.model.molecularWeights(),authority.catalog,com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(authority.catalog),authority.registry.pipeViews(id),authority.denseWeight(id));
         sightGlassDisplay.publish(id,pos,new com.wormzjl.icheme.network.FluidNetwork.Target(pos,id),sample,level);
     }
     private static boolean inRange(net.minecraft.server.level.ServerPlayer player,BlockPos pos){return player.position().distanceToSqr(pos.getCenter())<=com.wormzjl.icheme.network.FluidNetwork.WATCH_RANGE*com.wormzjl.icheme.network.FluidNetwork.WATCH_RANGE;}
