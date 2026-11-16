@@ -14,7 +14,7 @@ Batch `2026-11-16-solute-reaction-system`, 2026-11-16. Research only: no code, n
    - Standard entropy (or Gibbs energy of formation) of the real compounds: every equilibrium (SMR, shift, isomerization, reforming, aromatics saturation). The `thermochemistry` sub-record holds the formation enthalpy only.
    - Ideal-gas heat capacity above 900 K: steam cracking and SMR run at 1 100 to 1 200 K, and the fits end at 900 K (held constant beyond).
    - Reaction heats of lumped reactions: the cuts' formation enthalpies are a Cragoe CHx estimate, too rough for a difference between cuts.
-   - Compounds: four C6 isomers and methylcyclopentane (isomerization), acetylene (steam cracking), elemental sulfur (a later Claus unit); a coke solid record.
+   - Compounds: hydrogen chloride (this batch), four C6 isomers and methylcyclopentane (isomerization), acetylene (steam cracking), elemental sulfur (a later Claus unit); a coke solid record.
    - Catalyst records and the reactor kinds' volumes (bed, riser, drum, coil).
 6. **Not lacking:** every SMR, shift and hydrotreating species; the FCC light products; formation enthalpies of all 52 datasets; oil viscosity, passage geometry and film temperature for the surface laws; the unit-on-accounts pattern for reactors.
 7. **Open:** the acid chloride anchors (API RP 581's table was not reached); the Ebert–Panchal constants; the heat of coking. Section 5 lists them.
@@ -71,7 +71,7 @@ Later, with the same frame: amine treating and caustic washing (a `dissolved` ta
 | 7 | Ideal-gas heat capacity above 900 K | Steam cracking, SMR, the FCC regenerator | Fits to 900 K, held beyond | Refit the light compounds to 1 500 K (a data change with its revisions; it moves identities, so its own batch) |
 | 8 | Heats of lumped reactions | Hydrocracking, FCC, coking | Estimated formation enthalpies of the cuts | A stated heat per kg converted on each reaction record; Hess's law only between real compounds |
 | 9 | Hydrogen content that changes | Hydrotreating, hydrocracking | A fixed CHx per cut | Hydrogen consumed by a stated ratio; mass exact, the element balance approximate |
-| 10 | Compounds | Isomerization, steam cracking, Claus | 51 compounds | Four C6 isomers, methylcyclopentane, acetylene, sulfur, with the unit that needs them (`tools/compound-import`) |
+| 10 | Compounds | Hydrolysis; isomerization, steam cracking, Claus | 51 compounds | Hydrogen chloride in this batch (owner, 2026-11-16; plan 8.3), with chlorine as a formula element. Four C6 isomers, methylcyclopentane, acetylene, sulfur, with the unit that needs them (`tools/compound-import`) |
 | 11 | A coke solid and its fuel record | Coking, FCC | `demo_particle`; fuel `coal_coke` | One `solids` record |
 | 12 | Catalysts | Every catalytic unit | Nothing | A material kind later: activity, decay, poisons, life |
 | 13 | Reactor volumes | Residence time of units without holdup | Drawn shapes of the reactor kinds | Bed, riser, drum and coil volumes as design numbers of each kind |
@@ -84,7 +84,8 @@ Later, with the same frame: amine treating and caustic washing (a `dissolved` ta
 
 Read at `adb413b4d`: `EnergyReference`, the `properties` datasets, `thermo-kernel.md`, `fluid-thermo-port.md`.
 
-- **This batch: nothing.** Tags and their transformations read temperature, pressure, phase amounts, densities and the oil's viscosity. They change no property and are in no identity.
+- **This batch: one compound, no model change.** Tags and their transformations read temperature, pressure, phase amounts, densities and the oil's viscosity. They change no property and are in no identity.
+- **Hydrogen chloride as a compound** (owner, 2026-11-16; plan 8.3) needs a dataset and pairs like any refinery compound, and chlorine as a formula element. It needs no electrolyte model: its pair with water is a stated `k_ij` = 0 and it carries no `henry_in_water`, because the acid in water is the tag `acid_chloride`, made from the compound in every holdup that has free water. `DerivedPairs` would otherwise fit a pair to the Henry constant and the cubic would hold the acid a second time. A compound at parts per million flashes as any other. It stays off the column's V3 axis.
 - **The kernel and the equilibrium engine stay as they are for the reactor units too.** A reactor's products are existing compounds and cuts, flashed as any stream. There is no reactive flash: the unit solves its kinetics or its chemical equilibrium on its own, in the ideal gas, and hands amounts to the engine.
 - **Energy datum.** The network's datum is sensible, zero at 298.15 K (`EnergyReference.sensible`, `formationDataQualified` false), so a stream's enthalpy holds no heat of formation. A reaction's heat is therefore booked by the unit as its own term (row 8, and the plan's section 14). The other form, formation offsets on the datum (`EnergyReference` carries per-compound offsets and a rebase), would restate every world and rest on the cuts' estimated values: not proposed.
 - **Heat capacity range** (row 7): every dataset's fit, the cubic water's too, ends at 900 K and is held beyond. Hydrotreating, hydrocracking, coking and FCC risers (to about 830 K) are inside. The FCC regenerator (about 1 000 K), steam cracking and SMR (1 100 to 1 200 K) are outside. A refit moves the fluid identity, so it is its own data batch.

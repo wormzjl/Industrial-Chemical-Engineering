@@ -1,4 +1,6 @@
-# Solute and reaction system: design (revision 1)
+# Solute and reaction system: design (revision 2)
+
+Revision 2 (owner, 2026-11-16: "I mean model the HCl as an components"): hydrogen chloride is a compound of the network package. A tag becomes the compound, and the compound a tag on water, at holdups (sections 4, 5.2, 7.4, 8.2, 8.3, 9, 12, 13, 15, 16, 17).
 
 Batch `2026-11-16-solute-reaction-system`, branch `claude/solute-reaction-system-01ef6c`, cut from `main` at `adb413b4d` (0.34.0). Status: design, no code. It builds on batch `2026-11-16-fouling-corrosion` (`science/integrity`, the walls, the column's wear), which is on `claude/fouling-corrosion-final-lane-f2943c` and not on `main` yet: no work package of this plan starts before that batch merges.
 
@@ -22,6 +24,7 @@ During the work (owner, 2026-11-16):
 
 - "solute 'tags' the pseudocomponent and water, and they retain their physical properties"
 - "compounds with different 'tag' can do mixing as they would"
+- On the first design's HCl as a tag on water: "I mean model the HCl as an components"
 
 ## 2. What exists today
 
@@ -57,10 +60,10 @@ None of these changes a stream's density, enthalpy or phase split by a part in 1
 | D1 | A solute is a **tag**: an amount (kg) carried by one carrier compound, a pseudocomponent or water. It has no mass, volume, heat capacity or pressure of its own. The carrier keeps its physical properties, so no flash, no step and no identity sees a tag. |
 | D2 | A stock holds one amount per (tag, carrier). Two stocks of a compound with different tags mix as one compound; the amounts add. A tag leaves a stock with its carrier, in proportion to the carrier's moles that leave. |
 | D3 | Phase affinity is three classes, not parameters: BOUND (with the carrier in every phase), DISSOLVED (with the carrier's liquid only), ACID GAS (with the carrier's liquid where it has one, else with its vapour). |
-| D4 | Tags move in a pass of their own after each solved interval, from the pipes' recorded transfers. The step solver, `ConservativeTransport` and the certificates are not changed. Nothing happens in a pipe. |
+| D4 | Tags move in a pass of their own after each solved interval, from the pipes' recorded transfers. The step's Newton, its booking and the certificates are not changed. Nothing happens in a pipe. |
 | D5 | A transformation is a data record: participants, a rate law, a condition window, the equipment classes it acts in. It is evaluated at the walls' 5 s cadence on the last committed state and applied by the tag pass. One cadence of lag. |
-| D6 | A transformation of this batch moves tags only, so it books no heat (each is below 1e-4 of its stream's enthalpy change, section 8.6). Heat belongs to the reactor units (section 14). |
-| D7 | HCl is a tag on water (ACID GAS): it rides the steam and stands in the liquid water where there is one. No compound is added. (The owner's wording was "gas phase component": option O1.) |
+| D6 | A transformation of this batch moves tags, and parts per million of one compound (7.4), so it books no heat of reaction (each is below 1e-4 of its stream's enthalpy change, section 8.6). Heat belongs to the reactor units (section 14). |
+| D7 | Hydrogen chloride is a compound, `HydrogenChloride`, in `icheme:refinery` (owner, revision 2). In a holdup with free water it becomes the tag `acid_chloride` on that water; in a holdup without, the tag becomes the compound. The cubic is not asked to model hydrochloric acid: no Henry record, no electrolyte term. |
 | D8 | A stock without tag data has its datasets' default contents. Only a stock that differs stores amounts, so a world without salted crude pays nothing and an old save needs no conversion. |
 | D9 | The electric desalter is a horizontal vessel of the fluid network with an electric store. Its law is the settling law every vessel has; the field only makes the drops larger. |
 | D10 | Corrosion is evaluated per part: each product zone of a column's shell and the process side of each of its exchangers has its own wall record. |
@@ -98,7 +101,7 @@ An assay gains an optional `content` block: whole-crude targets (sulfur wt%, nit
 | `resins` | cuts | dissolved (stay) | kg | Coke yield; asphaltene stability later |
 | `salt` | cuts, water | dissolved (heaviest cut) | kg Cl in stable chloride | Desalting; fouling later |
 | `hydrolysable_chloride` | cuts, water | dissolved (heaviest cut) | kg Cl in Mg and Ca chloride | Hydrolysis (8.2) |
-| `acid_chloride` | water, cuts | acid gas | kg Cl as HCl | Wet acid corrosion (M12) |
+| `acid_chloride` | water, cuts | acid gas | kg Cl as HCl | Hydrochloric acid in water (M12); the hydrolysis product on its way to the next holdup (7.4) |
 | `caustic` | water, cuts | dissolved (heaviest cut) | kg NaOH | Converts hydrolysable chloride; neutralises acid |
 | `coke_fines` | cuts | dissolved (stay), particulate | kg | Erosion, tray fouling |
 
@@ -176,6 +179,26 @@ A passage: `X = 1 − exp(−k τ)` of what passes.
 
 So a coefficient lags its site's state by at most one cadence, and the solver is not coupled.
 
+### 7.4 A tag that becomes a compound, and back
+
+Only at holdups, and in this batch only for hydrogen chloride (a reaction record names the compound in `makes` or `uses`):
+
+- **Release**: in a vessel without free water, the `acid_chloride` it holds becomes `HydrogenChloride`.
+- **Absorption**: in a vessel with free water, all its `HydrogenChloride`, in every phase, becomes `acid_chloride` on the water.
+
+How it is booked:
+
+1. `Reactions` plans, per vessel, the moles to release (the tag it held at the last commit) or the order to absorb. The island's command carries the plan.
+2. `PassiveIntervalSolver.solve` applies it once, at the interval's start, where the crystals' conversions run: the vessel's amounts change and the vessel is restated at its temperature and pressure (one TP flash, as `flushTraces` restates a node). The moles and the energy difference are a `BoundaryTransfer` of a new kind, `SOLUTE`.
+3. The tag pass reads the interval's `SOLUTE` transfers and books the same chlorine on the tag side. Chlorine closes exactly across compound and tags (`TagLedgerTest`).
+
+- Absorption takes what the vessel holds at the interval's start; what arrives within the interval is taken at the next one.
+- A unit on accounts does both on its accounts, with no solver part. A column gives all the `acid_chloride` and `HydrogenChloride` of its feed to its top product, as the compound (section 8.3).
+- An island that receives the compound and does not list it grows its list, as it does for a column outlet (`IslandSets`).
+- A junction, a pipe and a heat side exchange nothing. Between a heater and the next holdup the hydrolysis product travels as the tag.
+
+This is the one place where the interval changes: one conversion at its start, one enum constant in `ConservativeTransport`, and `SOLUTE` among the kinds a certificate replays as a rate (`IslandCertificate.rate`). The step's Newton and its booking do not change.
+
 ## 8. The transformations of this batch
 
 ### 8.1 Desalting (`transfer`, in every vessel that holds oil and free water)
@@ -219,13 +242,29 @@ Not modelled: the mix valve's pressure drop, demulsifier, water carried over in 
 | 340 °C | 3.8e-2 | 26 % | 90 % | 100 % |
 | 370 °C | 5.6e-2 | 36 % | 97 % | 100 % |
 
-The product goes to the stream's water (steam or liquid) if it has any, else to its lightest cut. The water the hydrolysis uses is not booked (below 1e-5 of the stream).
+The product is the tag `acid_chloride`, on the stream's water (steam or liquid) if it has any, else on its lightest cut; the next holdup makes it the compound (7.4). The water the hydrolysis uses is not booked (below 1e-5 of the stream).
 
 `caustic` (`transfer`, any site with oil): `hydrolysable_chloride` + `caustic` → `salt`, at once where both are present, 1.13 kg NaOH per kg Cl. This is the refinery's caustic injection after the desalter.
 
-### 8.3 Acid chloride in water
+### 8.3 Hydrogen chloride: the compound and the acid
 
-No transformation: the ACID GAS class is the rule. The tag rides the steam through the column and the overhead line; in a condenser or a reflux drum that holds liquid water it stands in that water and leaves through the water outlet. If the water boils away again, it rides the steam again.
+The path in a crude unit: the furnace makes the tag; the column's account turns it into the compound and gives it to the top product; it is a gas component in the overhead line and through the condenser; the reflux drum, which holds free water, takes it into `acid_chloride` on its water; the water outlet carries the acid away. A vessel that boils its water off gives the compound back.
+
+What the compound needs of the data and the thermo model:
+
+| Item | Requirement |
+|---|---|
+| Dataset | `chemsep_hydrogen_chloride` through `tools/compound-import` (a `selection-hcl.json`): PR78 constants (Tc 324.7 K, Pc 83.1 bar, acentric factor 0.13: recalled, the import decides), ideal-gas heat capacity fit, viscosity, `thermochemistry`, `freezing` (triple point 159 K, no crystal record) |
+| Formula | Chlorine joins `MaterialCatalog.FORMULA_ELEMENTS` and `Thermochemistry.ELEMENTS`. The heating value is 0 (it burns as an inert) |
+| Hazard | A `hazard` sub-record, so a vent, a flare or a leak of it reaches the air through the pollution system as it stands |
+| Pairs with hydrocarbons | The rule of the refinery compounds: DWSIM `kij_pr.dat`, else the DECHEMA value, else 0; hydrogen 0 by rule |
+| Pair with water | A library pair, `k_ij` = 0, with its reason. No `henry_in_water`: with one, `DerivedPairs` would fit a pair to the solubility and the cubic would hold hydrochloric acid beside the tag |
+| Flash | As any compound. At parts per million it needs no special case: the trace cutoff folds trace phases, not trace compounds, and the flush acts below 1e-24 |
+| Column | Not on V3's axis and in no neural seed: the running column and the simulator's column carry it on their accounts and give it whole to the top product, as inert particles go whole to the bottoms |
+| Identity | A compound added to a package moves no identity of a view without it: no world is restated |
+| Kernel, engine | No change: no electrolyte model, no new phase |
+
+At `k_ij` = 0 the cubic still puts some of the compound into the water of a wet stream, about as it does for hydrogen sulfide. That is harmless: the absorption takes the compound from every phase of a wet holdup.
 
 ### 8.4 Surface coking (`threshold_deposit`, a heat side that carries oil)
 
@@ -274,7 +313,8 @@ In a column the deposit raises the tray fouling that the fouling-corrosion batch
 Changes to `science/integrity`:
 
 - `CorrosionStandard.digest` takes `S` and `A` from the tags `sulfur` and `acid` of the oil it reads, no longer from the static sub-record. With default contents the numbers are those of today.
-- **M12, acid chloride** (`Mechanism.ACID_CHLORIDE`, appended): acts when free water holds `acid_chloride`. `m = (acid chloride − ammonia in the water − caustic) / kg of free water`, in mol/kg, not below 1e-7; `pH = −log10 m`. Carbon steel: `min(25, 2.5 · 10^(−0.5 (pH − 2.25))) · 2^((min(T, 366 K) − 311 K)/55 K)` mm/y, none above pH 5.5.
+- **M12, acid chloride** (`Mechanism.ACID_CHLORIDE`, appended): acts where free water meets chloride acid, as the tag `acid_chloride` on the water or as the compound not yet absorbed (the wet end of a condenser). `m = (acid chloride + hydrogen chloride − ammonia in the water − caustic) / kg of free water`, in mol/kg, not below 1e-7; `pH = −log10 m`.
+- A heat side reads both its ends: the hotter end for the dry mechanisms, as today, and the colder end for the wet ones. A condenser's acid attack is at its cold end, which the hotter-end digest of the fouling-corrosion batch does not see. Carbon steel: `min(25, 2.5 · 10^(−0.5 (pH − 2.25))) · 2^((min(T, 366 K) − 311 K)/55 K)` mm/y, none above pH 5.5.
 
 | pH | 38 °C | 93 °C |
 |---|---|---|
@@ -309,7 +349,7 @@ Each is computed once per installed table, as the bottoms' is today. A part thro
 
 ## 11. Simulator
 
-A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass tags by their recoveries, heat units apply hydrolysis and surface coking at their sized passage, the desalter its law. The Materials tab's digest reads the tags and M12. All on the client, as today.
+A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass tags by their recoveries, heat units apply hydrolysis and surface coking at their sized passage, the desalter its law. The Materials tab's digest reads the tags and M12. A vessel unit applies the release and the absorption of 7.4 to its outlet streams; the column gives hydrogen chloride to its top product. All on the client, as today.
 
 ## 12. Performance
 
@@ -317,7 +357,8 @@ A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass
 |---|---|---|
 | Tag transport | The island's worker, once per interval | Skipped without tags; one factorization without a phase draw; else one per carrier and class that holds a tag (at most 38) |
 | Transformation coefficients | Server thread, at the 5 s cadence | 256 sites a pass; a site outside its window costs one comparison |
-| Step solver, booking, flash, certificates | | No change |
+| Hydrogen chloride | Islands that carry it | One compound more in their flash (about 1 in 30 for an overhead system); one TP flash per exchanging vessel and interval |
+| The step's Newton, its booking, the certificates | | No change |
 | Column parts | Once per installed table | One digest per part |
 | Memory | Per stock with tags | 11 tags × 13 carriers doubles |
 
@@ -329,7 +370,8 @@ A sheet stream carries a `TagSet`; a feed takes its assay's contents. Units pass
 | Fluid checkpoint state format | 52 | 53: junction tags, site coefficients |
 | Wire protocol | `icheme-5` | `icheme-6`: views with contents, the desalter's page |
 | Simulator sheet file | 2 (3 reserved, to be released) | The next free number: stream tags |
-| Material data | | Kinds `solutes` and `reactions`; `content` sub-record; assay `content`. In no identity |
+| Material data | | Kinds `solutes` and `reactions`; `content` sub-record; assay `content`. In no identity. The compound `HydrogenChloride` with its dataset and pairs, in `icheme:refinery` (its revision bumped; `materials-index.json`) |
+| Interval result | | `BoundaryTransfer.Kind.SOLUTE`, appended |
 | Corpus | | `compat/fluid/schema-30` |
 
 Numbers are reserved on `main` when the build starts (COLLABORATION.md section 3), on the owner's word.
@@ -358,7 +400,8 @@ After `2026-11-16-fouling-corrosion` is on `main`. Five stages, each leaving `ma
 | A | WP2 | `TagTransport`; `Inventory.tags`; the result and commit wiring; the replay step; generator contents; facts schema 30, state format 53, the corpus image; `TagLedgerTest` | fluid laws, runtime: `FluidFacts`, `FluidCheckpointCodec`, `IslandCoordinator` |
 | A | WP3 | The digest on tags (`CorrosionStandard`); references exact with default contents | thermo |
 | B | WP4 | `science/reaction` (the three laws), `runtime/fluid/Reactions`, `TagPlan`; hydrolysis, caustic, bulk and surface coking; `FoulingLaw`'s oil rows removed | runtime: `FluidWorldAuthority` |
-| B | WP5 | M12 and its factors; `coke_fines` in the solid share | thermo |
+| B | WP4b | Hydrogen chloride: the compound's records and pairs, chlorine in the formula elements, the hazard; the exchange of 7.4 (`PassiveIntervalSolver.solve`, `Kind.SOLUTE`, the plan in the command, island growth); the ledger across compound and tag | thermo, fluid laws: `MaterialCatalog`, `ConservativeTransport` (one constant), `IslandCoordinator` |
+| B | WP5 | M12 and its factors; a heat side's colder end for the wet mechanisms; `coke_fines` in the solid share | thermo |
 | C | WP6 | The desalter: kind, design, model, registration, law, page, sound | equipment: `EquipmentShape`, `EquipmentStructure` |
 | D | WP7 | Tags through the column's, still's and converter's accounts; the column's parts and their facts; the Operation table | plant: `ColumnOperation`, `ColumnFacts` |
 | E | WP8 | Simulator: stream tags, the desalter unit, the Materials tab per part | flowsheet: `SheetSizing` |
@@ -370,7 +413,7 @@ Results that move: none in stage A (default contents give today's digest). Stage
 
 ## 16. Owner's options
 
-- **O1, HCl.** Designed: a tag on water (D7); no compound, no solver change. The other form, the owner's first wording: a compound `HydrogenChloride` in `icheme:refinery`. It adds one compound to every island downstream of hot salted crude, a new boundary kind in the interval (a compound made from and returned to a tag), and island growth where it appears. It would show HCl in gas compositions. The tag form reaches the air too, through its `hazard`.
+- **O1, HCl: decided** (owner, 2026-11-16, revision 2): a compound. Sections 7.4 and 8.3.
 - **O2, zone material.** One material per column today. A real column clads its top. Option: a second material for the top zone (one shape field).
 - **O3, coke fines.** Designed as a particulate tag. Option: turn them into a `SolidInventory` population at the next vessel, so that filters cake and beds settle. It needs a mass exchange with the heaviest cut in the vessel's refresh.
 - **O4, metals.** One tag (Ni + V). FCC models treat them apart; two tags cost one more row.
@@ -383,3 +426,6 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - A column product's wetness is read from `waterBelow` only; a tray below the dew point inside the top zone is not seen.
 - The desalter's numbers rest on typical viscosities; the mod's own viscosity model for the heavy cuts decides the real table, and the drop size is then fitted once.
 - M12's anchors are recalled, not read (section 9).
+- The exchange of 7.4 and the certificates: `IslandCertificate` reads a transfer of material at a vessel as a flush, which refuses the certificate, unless its kind is a rate a steady island repeats (`VENT`, `SPILL`, `ATMOSPHERE`: `IslandCertificate.rate`). `SOLUTE` must join those kinds, or a steady overhead drum would solve every slice; a replay then scales the exchange linearly with the span, as it scales the others. Whether `REPLAY_REVISION` moves with it is decided in WP4b.
+- Hydrogen chloride between a heater and the next holdup is a tag, so a gas composition read on that line does not show it.
+- A column whose top product is led to no vessel with free water never absorbs its hydrogen chloride; it stays a gas component to wherever the gas goes. That is the physics.
