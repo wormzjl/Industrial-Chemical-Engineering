@@ -35,6 +35,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 - 2026-11-16, WP7 reported and read by the main thread: `5fe177982` (code, tests, lang) and `b53467665` (code guide) on `claude/fouling-corrosion-wp7-columns-816993` (18 files, 389 lines added). Built: the simulator column sends inert particles to the bottoms with their sensible heat on the reboiler (a new `reboiler heat` link for a wired kettle, equal to the door duty with no solids), `column.solids.no_bottoms`; an arriving crystal melts into its compound, its energy offset booked; `ColumnSolve.Frozen` and `Condition.FROZEN` (rank TRIP, state only). Its runs: 84 tests in five classes, the `holdGates` column classes, 936 tests in the 113 classes `affected.mjs` selected plus `ColumnBlockSolidsTest`, `FlowsheetColumnTest` 11; all pass after two of its own new tests were replaced; every source set compiled; no reference moved (`FlowsheetExamplesTest` and the crude-unit sheets unchanged). Differences from the brief, accepted: a TP flash never books a crystal (decision D23), so `ColumnSolve.frozen` runs the package's crystal equilibrium at a product's enthalpy and pressure where crystals compete there (one more equilibrium per cold product per solve); a frozen solve of requested set points is `SETPOINT_REFUSED` and the accepted ones keep running; the stream's enthalpy holds only a crystal's sensible part, so the melt adds its offset as `ColumnOperation.melted` does. Not proven: the no-bottoms refusal (no test sheet reaches it); an arriving crystal in a world (by construction and by the unchanged `aCrystalMeltsAsTheColumnTakesIt`). Not run, the final lane's: `NativeColumnSolverTest` (`nativeSmoke`) and the fluid GameTests. The branch is not merged into the batch branch yet.
 
+- 2026-11-16, owner: "Merge WP7". `claude/fouling-corrosion-wp7-columns-816993` merged into the batch branch (`f4c7ea112`, no conflict). WP1 and WP7 changed disjoint files and nothing outside `MaterialCatalog` constructs the catalog, so no run was made on the union; the final lane is its first.
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.
@@ -42,10 +44,11 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 ## Code areas
 
 - `science/integrity/` (WP1): `Metallurgy`, `Mechanism`, `CorrosionDigest`, `CorrosionStandard`, `CorrosionLaw`, `ErosionLaw`, `FoulingLaw`, `WallState`; `Wear.Fault.SOLIDS`; `MaterialCatalog.Corrosion`; the twelve `crude_pc` datasets; `tools/fouling-corrosion/`; code guide `integrity.md`.
+- Columns and particles (WP7): `ColumnBlockSolve` (inert solids to the bottoms, the melt, `column.frozen`), `ColumnSolve.Frozen` and `ColumnSolve.frozen`, `Condition.FROZEN`, `ColumnOperation` (the trip and its clearing), `ColumnStatus`, `EquipmentAlarm`; tests `ColumnBlockSolidsTest`, `ColumnRunTest`, `ColumnSolveTest`, `FlowsheetColumnTest`.
 
 ## Open items
 
-- WP1 merged into the batch branch; WP7 done on its own branch, not merged.
+- WP1 and WP7 merged into the batch branch; the union not yet run (final lane). Next: WP2 and WP3, after the format reservation on `main`.
 - From WP7: a sheet feed cannot carry crystals (`FlowsheetCompiler` reads a feed's solids from `catalog.solids()`, which holds no crystal record), so the simulator column's melt is reached only at block level; V3 refuses a free-water receiver below the ice point (`column.failed`) before any product is tested, so that case never reads `column.frozen`.
 - O4: the format reservation on `main` (facts schema 29, shape fields 13, `icheme-5`, sheet file 3), needed before WP2; the owner's word.
 - `wall_weep` candidates (three, synthesised) once the build starts.
