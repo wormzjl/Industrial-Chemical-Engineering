@@ -27,6 +27,12 @@ vapour rule, the main thread's decision, open to the owner's veto).
    come from it); the engine's split by the engine's own lighter phase (`V3FeedEngine.Split`: labelled vapour, or those
    two traits), and only a passing split gets enthalpies. Two liquids keep the endpoint's one liquid at the Wilson
    endpoint (old answer, to the bit) and are refused, naming two liquids, elsewhere. `TRIVIAL_LOG_K` is deleted.
+   **Amended by the lane fixes** ([LANE_FIXES_REVIEW.md](LANE_FIXES_REVIEW.md), rule B): after an unstable verdict the
+   flash first reads the kind of instability from the test: where neither its stationary phase nor the feed (each on its
+   root) is the column's vapour by rule D, the feed is one liquid (the endpoint's answer at the Wilson endpoint, else
+   one phase by the label rule), with no restart and no engine call; a split into two liquids is one liquid everywhere;
+   the two-liquid refusal is gone, and at the Wilson endpoint no path refuses. A restart from a liquid trial had taken a
+   wet distillate at 320 K as 10 % vapour with 39 % water.
 4. **Measured** (`tools/supercritical-probes/p3`, each form once on each grid; counts and counters only). On the dense
    grid's 10,602 states every form answers no real split as one phase, moves no frozen answer but the 181, and keeps
    every answer of the D1 collapse rule to the bit. F1 refuses 898, F2 891, F3 and D none. D is F3 on both grids: every
@@ -80,7 +86,9 @@ at 110 to 267 kPa) into two liquids: the engine's `LIQUID_LIQUID`, a heavy-cut-r
 density 3.80 to 3.84 over the rest at 3.61 to 3.66, β independent of pressure. F3 would send that heavy liquid up the
 column as vapour. D keeps those feeds one liquid (unchanged to the bit) and takes the methane/heavy-cut splits, whose
 lighter phase is 99 % methane on a supercritical isotherm. The grids hold no water; `V3FeedEngine` takes no feed with
-water (the column keeps free water apart), so a wet unstable feed the iteration does not split stays refused.
+water (the column keeps free water apart), so a wet unstable feed the iteration does not split stays refused. (The lane
+fixes changed this: a wet feed unstable only towards a second liquid is one liquid, and an endpoint feed is never refused;
+see the amendment in the summary.)
 
 Why the engine's split is read by the engine's own phase (a tightening after the first D commit `322144b96`): that commit
 read every split's lighter composition on the forced vapour root. A subcritical lighter liquid whose composition also

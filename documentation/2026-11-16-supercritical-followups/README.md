@@ -38,6 +38,14 @@ line service and device pages, the column's feed flash by a stability test, the 
   114; junction lines 33 of 33 identical; campaign 0 refusals, four new wall-deadline holds (cold 6, bundled 47, 59, 707)
   all clean on their one replay; 8 unannounced moved results (the W5 aqueous sheet STEADY → FAILED, three ethanol flows or
   shares in the 4th to 5th digit, one packed size, three allocation counters). [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md).
+- 2026-11-16: the lane fixes, sub-thread (branch `claude/confident-elion-faef91`): `PlungerPump` on `DeterministicMath`
+  (no value can move); the feed flash reads the kind of instability first (rule B, the main thread's choice on the stop:
+  a liquid trial gave a wet 320 K distillate 10 % "vapour" with 39 % water) and never refuses at the Wilson endpoint; the
+  `TWO_LIQUIDS` refusal is gone. Grids: dense and coarse equal to form D to the bit, the 207-state dry scan equal to the
+  lane, the 570-state wet grid 0 frozen answers refused and 0 frozen splits one phase. The hexane column and the W5 sheet
+  back to 0.34.0 (STEADY, two warnings); the three wash moves are the feed's small vapour fraction (β 7.67e-5); the packed
+  size moves with stored wall-clock seconds. Runs: 167 classes, 1,437 tests and one rerun class, 0 failures on the final
+  code. [LANE_FIXES_REVIEW.md](LANE_FIXES_REVIEW.md).
 
 ## Documents
 
@@ -47,6 +55,7 @@ line service and device pages, the column's feed flash by a stability test, the 
 - [P4_SOUND_REVIEW.md](P4_SOUND_REVIEW.md): P4, the plunger pump's own sound: the real machine, the recipe, levels against the skill, the candidates.
 - [P2_READINGS_REVIEW.md](P2_READINGS_REVIEW.md): P2, one dense fluid in the level, sight glass, burst, line service and device pages: carbon dioxide at 310 K before and after, each point, runs.
 - [FINAL_LANE_REVIEW.md](FINAL_LANE_REVIEW.md): the final lane at `9b1dd2bd6`: selection, failures, moved results, campaign, GameTests.
+- [LANE_FIXES_REVIEW.md](LANE_FIXES_REVIEW.md): the two failures fixed, rule B, the wet grid, the three moves, the printed lines.
 
 ## Code areas
 
@@ -60,6 +69,10 @@ line service and device pages, the column's feed flash by a stability test, the 
 - Item 6, the client's catalog on a datapack server: the "Dense" label, its colour and the head share follow the client's data. The owner answered "Not now" to the reservation of protocol `icheme-4`, then "Yes, run P2" without the wire field.
 - P3, for the owner: a feed that splits into two hydrocarbon liquids is answered as one liquid at the Wilson endpoint
   (about 1.1 kJ/mol); the cold Tia Juana crude's heavy-cut second liquid (derived pairs) is its own item.
+- Lane fixes: at the Wilson endpoint a failed restart keeps the endpoint's liquid (the hexane column's feed at 345 K and
+  1 atm, while the same feed at 100 kPa splits β 0.336), and Wilson's K put some wet feeds whose own root is a vapour at the
+  liquid endpoint; a wet feed towards a vapour that substitution does not converge stays refused off the endpoint (the
+  engine takes no water). The 44 other column-gate classes' printed lines of the fix run were not kept.
 - P2: a non-dense liquid that flashes on release (liquid propane) is still heard as a liquid spill (an owner option).
 - An in-game check of the plunger pump (constructor, model, sound) and of the dense readings, offered at the end.
 - Kept, open to the owner's veto: Auto's rule (item 2); "Dense" in the aqueous slot (item 13).
