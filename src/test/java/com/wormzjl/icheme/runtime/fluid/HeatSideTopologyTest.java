@@ -89,7 +89,7 @@ class HeatSideTopologyTest {
     }
     /**
      * A fouled side (batch 2026-11-16-fouling-corrosion, WP5): at level 0 its passage compiles as before, the same geometry
-     * and an equal law; at level 10 (0.0005 m²K/W in steps of 5e-5, D14; level 5 of 1e-4 before) its films are the plan's 1000, 1429 and 95 W/m²K and its passage 1 mm
+     * and an equal law; at level 10 (0.0005 m²K/W in steps of 5e-5, D14; level 5 of 1e-4 before) its films are the plan's 1429, 1429 and 95 W/m²K (the liquid 1000 on the 2000 W/m²K film before D15) and its passage 1 mm
      * narrower, and the same line carries less flow. The levels the compile reads come from the walls' facts in the ledger.
      */
     @Test void aFouledSidesPassageCompilesWithItsFilmsBehindTheDepositAndNarrowed() {
