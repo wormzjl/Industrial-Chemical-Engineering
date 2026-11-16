@@ -92,7 +92,7 @@ Left out until their mechanism exists: Alloy 400 and titanium (HCl overheads, se
 
 **Decided (D2): one material per fluid device.** A structure has a body material (`material`) and, where it has tubes or coils (exchanger, kettle, air cooler, fired heaters), a tube material (`tubeMaterial`, default the body's). The shell-side device reads `material`, the tube-side device `tubeMaterial`. A tube wall is counted on its tube-side stream only.
 
-**Open (O2): the price of an alloy.** Construction is free today, so nothing stops Alloy 625 everywhere. See section 13.
+**Decided (O2, owner 2026-11-16): the cost index only.** Construction stays free in this batch; the index is shown in the simulator and on the datasheet, and a later survival-supplies batch charges it.
 
 ## 6. The corrosion matrix
 
@@ -213,7 +213,7 @@ A corroded vessel that leaks SO2 or H2S raises the index round its neighbours: t
 - Sizing: the simulator's exchanger, cooler and heater rows size on a design `Rf` per side (the service's asymptote), so a unit sent to the block meets its duty dirty. This closes the two `SIZING_PLAN.md` rows.
 - Words: `FOULED` from `Rf` ≥ 0.001; the heat page shows `Rf` and the clean-to-now duty ratio.
 
-**Open (O1): what grows `Rf` before the reaction module exists.** Recommended: a placeholder, Kern–Seaton, `dRf/dt = (Rf∞ − Rf)/τ` while the side flows, `τ` = 10 process hours (config), `Rf∞` from the digest:
+**Decided (O1, owner 2026-11-16): a placeholder grows `Rf` until the reaction module exists.** Kern–Seaton, `dRf/dt = (Rf∞ − Rf)/τ` while the side flows, `τ` = 10 process hours (config), `Rf∞` from the digest:
 
 | Stream on the side | `Rf∞` (m²K/W) | Anchor |
 |---|---|---|
@@ -223,7 +223,7 @@ A corroded vessel that leaks SO2 or H2S raises the index round its neighbours: t
 | Crude and heavy oil from 260 °C | 0.0009 | |
 | Residue (heaviest two cuts above half the liquid) | 0.0018 | TEMA fuel oil 0.0009, vacuum residue 0.0018 |
 
-"Heavy" is read from a per-cut `fouling` number in the same `corrosion` sub-record. The reaction module later replaces this rate source and nothing else. The other choice is effect only: `Rf` moves by command and test alone until then.
+"Heavy" is read from a per-cut `fouling` number in the same `corrosion` sub-record. The reaction module later replaces this rate source and nothing else.
 
 ## 12. Constructor and simulator
 
@@ -236,12 +236,12 @@ A corroded vessel that leaks SO2 or H2S raises the index round its neighbours: t
 
 Taken (the agent's, reversible until the first code commit that uses them): D1 equipment only; D2 one material per device, body and tubes; D3 the time scale; D4 failure by the existing failures; the eight materials; the matrix numbers; repair and cleaning rules as section 9.
 
-For the owner:
+The owner's, 2026-11-16:
 
-- **O1** Fouling growth before the reaction module: the Kern–Seaton placeholder (recommended), or effect only.
-- **O2** Alloy price: (a) none in this batch: the cost index is shown in the simulator and on the datasheet, and a later survival-supplies batch charges it (recommended; survival supplies is already an open item of the tutorial batch); (b) alloy plates as items now, consumed by the constructor in survival.
-- **O3** Sounds (section 14).
-- **O4** Format numbers on `main` (section 15) and the build's delegations (section 16).
+- **O1** Fouling growth before the reaction module: the Kern–Seaton placeholder.
+- **O2** Alloy price: the cost index only; no items in this batch.
+- **O3** Sounds: set A, the weep loop only.
+- **O4** Format numbers on `main` (section 15) and the build's delegations (section 16): not yet. The owner reviews the plan first; nothing starts.
 
 ## 14. Sounds (proposal; nothing made yet)
 
@@ -252,7 +252,7 @@ For the owner:
 | Repair accepted | The repair kit's sound of today | none |
 | Cleaning accepted | `exchanger_clean`: a two-second water-jet burst | 1 one-shot (optional) |
 
-Set A: the loop only. Set B: the loop and the cleaning one-shot. After the owner picks, three synthesised candidates per new sound go to the owner (`models-and-sfx` skill).
+Set A: the loop only. Set B: the loop and the cleaning one-shot. **Owner, 2026-11-16: set A.** Cleaning plays no new sound. Three synthesised candidates of `wall_weep` go to the owner once the build starts (`models-and-sfx` skill).
 
 ## 15. Formats and config
 
