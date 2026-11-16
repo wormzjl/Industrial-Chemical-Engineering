@@ -41,7 +41,7 @@ the snapshot. "pp" = package-private.
 | [`SizingFacts`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/SizingFacts.java), [`DesignBasis`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/DesignBasis.java) | What the player keeps of sizing (facts of the sheet): the design basis, each item's mode, type and size; the basis's three entries (`DEFAULT`: 1.10 design flow, 50 m line length, 60 K pumparound fall) | 169, 23 |
 | [`LineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/LineSizing.java), [`Service`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/Service.java) | A line's bore and runs (`rate`, `auto`), its drop on the network's viscosity; what a line carries, which picks its rows (the stream gives it, the player may choose) | 188, 110 |
 | [`ColumnSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ColumnSizing.java) | A column's diameter in the world's half metres, each rated by the real solver (`ColumnSolve.calculate`, the sheet's `ColdStart.LEARNED`) | 216 |
-| [`PumpSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PumpSizing.java) The Pump tile's two types (`type`: Auto's choice): the smallest discharge whose rated flow fits the window (`Size`), or the smallest plunger pump model that holds the spared flow (`Plunger`, `autoPlunger`); `Duty` (flow, head, shaft power, NPSH3, proposed motor; `plungerDuty`), `Load` (`npsh`, `edge`, `boils`, `reducedDensity`) | 257 |
+| [`PumpSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/PumpSizing.java) The Pump tile's two types (`type`: Auto's choice): the smallest discharge whose rated flow fits the window (`Size`), or the smallest plunger pump model that holds the spared flow (`Plunger`, `autoPlunger`); `Duty` (flow, head, shaft power, NPSH3, proposed motor; `plungerDuty`), `Load` (`npsh`, `edge`, `boils`, `reducedDensity`, `pressure`, `exponent`) | 288 |
 | [`CompressorSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/CompressorSizing.java) | The type by its inlet flow, then the smallest frame; stages here alone; the discharge one stage's polytropic estimate on the world's exponent | 152 |
 | [`TurbineSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/TurbineSizing.java) | A steam turbine's design point, rated power, inlet steam class and exhaust | 103 |
 | [`ExchangerSizing`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/sizing/ExchangerSizing.java) | An exchanger or a kettle on `ExchangerRating`, over shells, shell sizes, tubes and the `ExchangerType` catalog (a kettle Standard only) | 216 |
@@ -95,8 +95,9 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
   head over its vapour pressure. On one dense suction (`State.dense()`) `PUMP_DENSITY` (SHOULD) reads its reduced density
   against 0.86, the lightest suction pumps run on carbon dioxide; no other suction reads it.
 - **Plunger pumps** (`PumpSizing.Plunger`, the Pump tile's `PLUNGER` type): `PUMP_RATED` reads the spared flow against
-  the model's displacement, `PLUNGER_RISE` (SHOULD) the rise against the relief rise, 25 MPa; no head, density or NPSH
-  row. The duty's shaft power is Q·ΔP over 0.88. Auto (`PumpSizing.type`) takes a plunger pump at most 100 m³/h where the
+  the model's displacement times its clearance's share at the rise (`PlungerPump.volumetricEfficiency` on `Load.pressure`
+  and `Load.exponent`), `PLUNGER_RISE` (SHOULD) the rise against the relief rise, 25 MPa; no head, density or NPSH
+  row. The duty's shaft power is Q times the isentropic work over 0.88 (Q·ΔP on a load with no suction pressure). Auto (`PumpSizing.type`) takes a plunger pump at most 100 m³/h where the
   head is above the centrifugal casing's (`Load.mostHead`) or the suction is one dense fluid below 0.86, else the
   centrifugal pump. The player's type key acts on a Fixed item; a kept size gives its type (`UnitFacts.typeOf`).
 - **Release pressures** (`FlowThermo`, the world's rule on its own trial, a TP flash at the stream's temperature, from
