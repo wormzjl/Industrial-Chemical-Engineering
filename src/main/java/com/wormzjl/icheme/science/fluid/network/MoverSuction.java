@@ -225,7 +225,7 @@ final class MoverSuction {
      * 2026-11-15-supercritical-fluids): its supply's vapour share {@code 1 - w_pump} is a density, not a gas, so it never puts E
      * at the supplier's pressure, and its E stands only where its isenthalp really flashes, the stream holding a vapour at
      * the pressure found ({@link ReleasePressure#lowestHeld}); else none. Carbon dioxide at 320 K and 15 MPa flashes from the
-     * bubble side at 6.52 MPa; at 310 K below reduced density 1.19 its isenthalp passes the critical temperature on the gas
+     * bubble side at 6.52 MPa; at 310 K below reduced density 1.07 its isenthalp passes the critical temperature on the gas
      * side, and it has no edge (as first implemented, a pump drawing it through a line at reduced density 0.5 to 1.1 was
      * vapour-locked at its own pressure).</p>
      */

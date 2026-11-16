@@ -97,6 +97,10 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   each); chain-100 deviation 0; dense GameTests `s4b-dense1` 3 of 3. [S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md)
   (corrected sections 1, 3, 4, 6, 8, 10).
 
+- 2026-11-16: the main thread checked S4b (the diff, the stored results, the review); one stale number in a comment of
+  `MoverSuction.zoneEdge` corrected (the seam at 310 K is at reduced density 1.07). Decisions in the plan's section 2b,
+  points 11 and 12.
+
 ## Documents
 
 - [SUPERCRITICAL_LIMITS_REVIEW.md](SUPERCRITICAL_LIMITS_REVIEW.md): expected behaviour, what the code does, the

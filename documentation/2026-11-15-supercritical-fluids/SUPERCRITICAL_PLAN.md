@@ -140,6 +140,22 @@ Decisions after S2b's stop conditions (2026-11-15):
    ([S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md) section 8, options 1 and 5). Until the owner answers, S4 stands as
    implemented.
 
+11. **S4b: one dense fluid has no second phase at a machine (owner, 2026-11-16: "ok but use a new thread").** The
+   correction of point 10, on a new sub-thread. A pump's suction edge of one dense fluid stands only where its isenthalp
+   really flashes; it has no vapour pressure in either slot; a compressor reads no droplets in it. On the sheet a dense
+   stream has no edge and no bubble-point warning. The remaining seam in E is on the isenthalp through the critical
+   point (E about Pc on one side, none on the other; reduced density 1.07 at 310 K, 1.18 at 320 K, 1.31 at 330 K), with
+   the suction 1.0 to 6.5 MPa above it. Checked by the main thread: the diff, the stored results (test 235 classes and
+   1,533 tests, holdGates 136, none failed; chain-100 deviation 0; dense GameTests 3 of 3)
+   ([S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md)).
+12. **The pump's own bounds (owner, 2026-11-16: "Use 0.5 to 1.0").** The owner asked how a centrifugal pump really
+   behaves on a supercritical fluid. The research ([DENSE_PUMP_RESEARCH_REVIEW.md](DENSE_PUMP_RESEARCH_REVIEW.md)): it
+   keeps its head, its rise follows the density, and it is run down to about the critical density. So a pump's
+   liquid-like weight runs from reduced density 0.5 to 1.0 (`pumpLiquidLikeWeight`): the full head from the critical
+   density, 0.91 at 0.73, the gas rule at 0.5. The compressor and the film keep 0.5 and 1.5. Not decided, from the same
+   review: a minimum-density row on the simulator's pump sheet (S5), the rise on the average density (its own batch),
+   the pump's bubble readers on a dense fluid (the churn, the `GAS` word: S5).
+
 ## 3. Stages
 
 Each stage is one package for one thread, on its own worktree, in the lane named. Line numbers are not given: the
