@@ -1,6 +1,8 @@
-# Fouling, corrosion and erosion system: plan (revision 5)
+# Fouling, corrosion and erosion system: plan (revision 6)
 
 Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0). Status: plan, no code.
+
+Revision 6 (owner, 2026-11-16: "repairs needs to be performed with the constructor"): constructed equipment is repaired by a Repair key in the Equipment Constructor, not by the repair kit (sections 9, 10, 14, 17, 18).
 
 Revision 5 (owner, 2026-11-16: "how you deal with the combined P, T effect?"): the hydrogen limit falls with hydrogen pressure and the oxygen limit falls with temperature (sections 5 and 6.2).
 
@@ -27,6 +29,7 @@ After the first plan:
 - "Allow distillation column to handle inert particles and pass particulates to bottom output, only stop when something freezes."
 - "Add particulate erosion to equipment, especially control valves."
 - "How about hot hydrogen service and hp oxygen service?"
+- "Repairs needs to be performed with the constructor."
 
 ## 2. What exists today
 
@@ -269,18 +272,23 @@ A compressor and a dry screw already refuse solids (`InletPhase.decide`).
 
 ## 9. Blast damage is final
 
-`Breaches.breach` additionally marks every device of the structure `wrecked` (a fact). A wrecked device keeps the effect it has today (vessel open, machine failed; a heat side closed as in section 7), refuses the repair kit (`WRECKED: deconstruct and rebuild`) and is removed only by the constructor's deconstruction.
+`Breaches.breach` additionally marks every device of the structure `wrecked` (a fact). A wrecked device keeps the effect it has today (vessel open, machine failed; a heat side closed as in section 7), refuses the constructor's Repair (`WRECKED: deconstruct and rebuild`) and is removed only by the constructor's deconstruction.
 
 A vessel breached before this batch (schema 26, no `wrecked`) reads as not wrecked: it stays repairable. That is the behaviour before the field existed.
 
 ## 10. Repair and cleaning: idle and empty
 
-A repair kit on a structure cell queues one event for the structure (as today). It is accepted only when every device of the structure is:
+**Decided (D8, owner 2026-11-16): constructed equipment is repaired with the Equipment Constructor.** The constructor's group that names the nearest structure on its line (today "Deconstruction") gets a `Repair` key beside `Deconstruct`. The server selects the target again, checks reach and build rights as Deconstruct does, and queues one engine event for the structure; the answer comes on the engine schedule as a chat line and on the group's status row. It is accepted only when every device of the structure is:
 
 - **idle**: no flow through it in its last committed slice (|mass flow| below the solver's trace), a machine at no speed;
 - **empty**: a vessel holds less than 1 % of its volume as liquid and stands within 0.2 bar of the atmosphere; a heat side, a machine or a valve has no inventory, so idle is enough.
 
-Then: wall loss 0, health 1, breach closed, a failed heat side opened, a trim new. Otherwise the reply names what is missing (`NOT IDLE`, `NOT EMPTY`, `WRECKED`) and the kit is kept. This also holds for a worn machine that still runs: today's rule (a kit repairs a running pump) ends.
+Then: wall loss 0, health 1, breach closed, a failed heat side opened. Otherwise the reply names what is missing (`NOT IDLE`, `NOT EMPTY`, `WRECKED`, `NOTHING TO REPAIR`). Repair costs no item, as building costs none (O2); a later survival-supplies batch may charge it.
+
+The repair kit:
+
+- On a cell of constructed equipment it is refused and kept: "Repair this with the Equipment Constructor." This ends today's rules: a kit on a pump or compressor casing, on a steam turbine, or on a breached vessel.
+- It stays the repair of what the constructor does not build: an in-line pump or compressor and a control valve's trim, both pipe blocks. It is accepted only while no flow passes the device.
 
 Cleaning: a `Clean` key on a heat unit's page queues an event; same idle-and-empty rule; no item; fouling of both sides to 0.
 
@@ -328,6 +336,7 @@ Nothing in the V3 solver changes: particles are not on its axis.
 
 ## 14. Constructor and simulator
 
+- Constructor, the group of the structure in front: `Repair` beside `Deconstruct`; its target line also shows the structure's state (wall left, `LEAKING`, `FAILED`, `WRECKED`) from the last published snapshot.
 - Constructor, DESIGN page: one `Material` dropdown. The datasheet names it and the CA. Equipment shape fields 13: `material`, read by name in `ShapeRepair`, default `CARBON_STEEL`.
 - Device pages: an Integrity group (wall left as a meter, the rate in mm/y, the governing mechanism, the life left in hours of play) beside Health; a control valve's page a Trim meter; the words of sections 7 to 10.
 - Simulator: a fifth tab, `METALLURGY` (label "Materials"). One row per unit: its service (temperature, governing mechanism, erosion where a stream carries solids), the rate of the chosen material with a lamp (green ≤ 0.1 mm/y, amber ≤ 0.5, red above), Auto or Manual choice as Sizing has, the cost index. Auto takes the cheapest material that is green, else the lowest rate. A control valve row shows its trim life at the sheet's drop and solids. It runs `CorrosionLaw` and `ErosionLaw` on the sheet's streams on the client; nothing on the server. Send to block carries the choice in the shape. Sheet file format 3.
@@ -343,6 +352,7 @@ The owner's, 2026-11-16:
 - **O2** Alloy price: the cost index only; no items in this batch.
 - **O3** Sounds: set A, the weep loop only.
 - **O4** Format numbers on `main` (section 17) and the build's delegations (section 18): not yet.
+- D8: repairs of constructed equipment with the constructor.
 - Revision 2: a smaller material list (four); columns pass inert particles and stop only for freezing; particulate erosion, control valves first.
 
 ## 16. Sounds
@@ -351,7 +361,7 @@ The owner's, 2026-11-16:
 |---|---|---|
 | `WEEPING` wall | `wall_weep`: a thin hiss with irregular drips, heard to about 8 blocks, in the `FxSounds` loop budget | 1 loop |
 | Wall fails | The existing `pipe_burst_gas`, `pipe_burst_liquid`, `pipe_burst_empty`, chosen by what the device held | none |
-| Repair accepted | The repair kit's sound of today | none |
+| Repair accepted | The repair kit's sound of today, played at the structure | none |
 | Eroding valve | None new: a valve that throttles a slurry keeps its `valve_liquid` loop | none |
 
 **Owner, 2026-11-16: set A** (the loop only). Three synthesised candidates of `wall_weep` go to the owner once the build starts (`models-and-sfx` skill).
@@ -363,7 +373,7 @@ The owner's, 2026-11-16:
 | Fluid facts schema | 26 | 27: per device `wallLoss`, `fouling`, `wrecked` in `MachineFacts`, each written only when not at its default; a control valve's trim health in the health map that exists |
 | Column facts | in schema 26 | no new field: `FROZEN` is a condition, state, set again by the next solve |
 | Equipment shape fields | 12 | 13: `material` |
-| Wire protocol | `icheme-2` | `icheme-3`: views carry integrity and trim; the constructor payload carries the material |
+| Wire protocol | `icheme-2` | `icheme-3`: views carry integrity and trim; the constructor payload carries the material; `Repair` and its answer beside `Deconstruct` |
 | Simulator sheet file | 2 | 3 |
 | Material data | | `corrosion` sub-record with its own revision, in no identity |
 
@@ -381,7 +391,7 @@ About 4 500 lines of production code: four stages, each leaving `main` working (
 |---|---|---|---|---|
 | A | WP1 | `science/integrity/` (new, pure): `Metallurgy`, `CorrosionDigest`, `CorrosionLaw`, `ErosionLaw`, `FoulingLaw`, `WallState`; `Wear.Fault.SOLIDS`; `MaterialCatalog.Corrosion` and the data; tests | thermo, machines: `MaterialCatalog` | |
 | A | WP2 | `runtime/fluid/Integrity` beside `MachineHealth`: booking at the cadence, failures, `wrecked`, the repair and clean events, corrosive air, the valves' trim and the pumps' `SOLIDS` fault in `MachineHealth`, facts schema 27, `/icheme integrity`, corpus, GameTests | runtime, machines: `FluidFacts`, `FluidWorldAuthority`, `ShaftTrains`; `Breaches`, `RepairKitItem` | WP1 |
-| A | WP3 | Shape fields 13, `ShapeRepair`, the constructor's dropdown, the datasheet, the registration that hands a device its material | equipment, client: `EquipmentShape`, `EquipmentStructure` | WP1; beside WP2 |
+| A | WP3 | Shape fields 13, `ShapeRepair`, the constructor's dropdown and Repair key (`EquipmentNetwork.Repair`, target selection as `EquipmentDeconstruction.target`), the datasheet, the registration that hands a device its material | equipment, client: `EquipmentShape`, `EquipmentStructure` | WP1; beside WP2 |
 | A | WP4 | Integrity group and Trim meter on the device pages, status words, drip particles, the weep loop | client; runtime presentation | WP2, WP3 |
 | B | WP5 | Fouling: `Films.fouled`, the passage diameter, the level steps, cleaning, the heat page, sizing on design `Rf` | fluid laws, flowsheet: `SheetSizing` | stage A |
 | C | WP6 | Simulator `METALLURGY` tab, Auto and Manual, Send to block, sheet file 3, the tour and guide page | flowsheet, client | WP1, WP3 |
@@ -423,7 +433,7 @@ New package `src/main/java/com/wormzjl/icheme/science/integrity/`, pure (no Mine
 
 - `MaterialCatalog`, `FluidFacts`, `FluidWorldAuthority`, `EquipmentShape`, `SheetSizing` and `ColumnOperation` are hot files. The branches `claude/fluid-interfaces-*`, `claude/supercritical-*` and `claude/fluid-step-jacobian` exist; whether any holds these lanes is the owner's to say.
 - A heat side closed by a failure must not be reopened by its own built-in control or by a layout refresh (`StructureRegistration` must carry it, as it carries `breached`).
-- A repair-rule change is visible to existing worlds: a worn pump must now be stopped before its kit is accepted.
+- The repair-rule change is visible to existing worlds: a constructed pump, compressor, turbine or breached vessel no longer takes a repair kit; it is stopped, emptied and repaired from a constructor within reach (16 blocks on its line). An in-line pump must be stopped before its kit is accepted.
 - A trim that fails open can overfill or depressure what its loop held. That is the intended consequence; the status line and the DCS alarm name the valve.
 - D6 makes a running column trip where it ran on before, when a product of its solve would hold a crystal. A feed with ice or dry ice alone changes nothing.
 - The matrix and erosion numbers are fits. A change of a factor is a data edit in one table and moves no solver reference.

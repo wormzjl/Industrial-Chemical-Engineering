@@ -20,6 +20,8 @@ Lane: new package `science/integrity`; hot files touched, each in one work packa
 
 - 2026-11-16, owner: "how you deal with the combined P, T effect?". Answer: M1 to M7 were already a pressure term times a temperature term; M10 and M11 were steps. Plan revision 5: the hydrogen limit is a line in log pressure (carbon steel 260 °C at 7 bar, 45 K per decade, floor 205 °C; chrome steel 600 °C, 120 K per decade, floor 450 °C); the oxygen limit halves per 100 K above 150 °C, floor 0.3 bar.
 
+- 2026-11-16, owner: "repairs needs to be performed with the constructor". Plan revision 6 (D8): a Repair key in the constructor's group of the structure in front, beside Deconstruct, queues the structure's repair (idle and empty, no item); the repair kit is refused on constructed equipment and stays for in-line pumps and compressors and for control valve trims.
+
 ## Documents
 
 - [FOULING_CORROSION_PLAN.md](FOULING_CORROSION_PLAN.md): the request, the physics in numbers, scope and CPU, materials, the matrix, the wall and its failures, repair, fouling, GUI, sounds, formats, work packages.
