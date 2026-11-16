@@ -35,7 +35,6 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
-import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -81,6 +80,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
+
+import static com.wormzjl.icheme.fluid.gametest.ColumnOperationReviewWorld.extent;
 
 /**
  * The test world of batch 2026-11-10-column-failure-modes (stage 5, W8): a full-size crude column plant (plant A: the
@@ -162,29 +163,6 @@ public final class ColumnFailureModesReviewWorld {
                 new V3ColumnSpecification.OrganicRefluxRatio(B_REFLUX), new V3ColumnSpecification.ReboilerDuty(B_REBOILER));
         return new V3ColumnInput(t.schemaVersion(), t.packageId(), t.assayId(), t.componentBasis(), t.feedComponentMolarFlowsMolPerSecond(), t.feedTemperatureKelvin(),
                 B_STAGES, B_FEED_STAGE, t.topPressurePascal(), t.stagePressureDropPascal(), specs, List.of(), List.of(), List.of(), t.columnDiameterMetres());
-    }
-
-    /**
-     * The extent of {@code shape}'s cells and nozzle pipe blocks, {min x, max x, min y, max y, min z, max z}, from its origin;
-     * a shape that rasterizes no cells spans its size from the origin.
-     */
-    static int[] extent(EquipmentShape shape) {
-        int[] e = {Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE};
-        var layout = ShapeRasterizer.layout(shape);
-        var cells = new ArrayList<int[]>();
-        for (var c : layout.shell()) cells.add(new int[]{c.x(), c.y(), c.z()});
-        for (var c : layout.interior()) cells.add(new int[]{c.x(), c.y(), c.z()});
-        for (var p : ShapeRasterizer.ports(shape)) cells.add(new int[]{p.cell().x() + p.dx(), p.cell().y() + p.dy(), p.cell().z() + p.dz()});
-        if (cells.isEmpty()) return new int[]{0, shape.sizeX() - 1, 0, shape.sizeY() - 1, 0, shape.sizeZ() - 1};
-        for (var c : cells) {
-            e[0] = Math.min(e[0], c[0]);
-            e[1] = Math.max(e[1], c[0]);
-            e[2] = Math.min(e[2], c[1]);
-            e[3] = Math.max(e[3], c[1]);
-            e[4] = Math.min(e[4], c[2]);
-            e[5] = Math.max(e[5], c[2]);
-        }
-        return e;
     }
 
     /**
