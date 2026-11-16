@@ -1,6 +1,8 @@
-# Fouling, corrosion and erosion system: plan (revision 3)
+# Fouling, corrosion and erosion system: plan (revision 4)
 
 Batch `2026-11-16-fouling-corrosion`, branch `claude/fouling-corrosion-system-ba0275`, cut from `main` at `f305ac6b0` (0.32.0). Status: plan, no code.
+
+Revision 4 (owner, 2026-11-16: "how about hot hydrogen service and hp oxygen service?"): two mechanisms added, hydrogen attack (M10) and oxygen fire (M11), each a limit per material (sections 3.1, 5, 6, 7).
 
 Revision 3 (owner, 2026-11-16): a column stops only when a compound solidifies inside it; a frozen feed melts as today (section 13, WP7).
 
@@ -22,6 +24,7 @@ After the first plan:
 - "Need a smaller list of materials, keep in mind this is not for full realism."
 - "Allow distillation column to handle inert particles and pass particulates to bottom output, only stop when something freezes."
 - "Add particulate erosion to equipment, especially control valves."
+- "How about hot hydrogen service and hp oxygen service?"
 
 ## 2. What exists today
 
@@ -51,6 +54,9 @@ A wall loses thickness at a rate set by its material and the fluid on it. Design
 | Sour water, H2S 1 bar, 60 °C | 0.3 mm/y: 10 years | Stainless 0.003 mm/y |
 | Wet CO2, 1 bar, 60 °C | 1.4 mm/y | Stainless 0.007 mm/y |
 | Open cooling water, 35 °C | 0.3 mm/y: 10 years | Stainless |
+| Hydrogen at 30 bar, 300 °C | 3.5 mm/y equivalent: under a year | Chrome steel to 450 °C; stainless above |
+| Hydrogen at 30 bar with H2S, 370 °C | 1.3 mm/y or more | Stainless (chrome steel 0.8 mm/y) |
+| Oxygen at 10 bar | burns through in minutes | Stainless to 14 bar; nickel alloy to 69 bar |
 | Dry hydrocarbon gas, clean liquid, steam | 0 | Carbon steel |
 
 ### 3.2 Fouling
@@ -113,13 +119,22 @@ Named `Metallurgy` in code, because "material" already means a compound (`Materi
 | `STAINLESS_STEEL` | Stainless steel | 316L | 1.5 mm | 815 | 4 | Wet acid gas, naphthenic acid, hot H2S |
 | `NICKEL_ALLOY` | Nickel alloy | Alloy 625 | 1.5 mm | 980 | 15 | Everything, at a price |
 
+Service limits (section 6.2, M10 and M11):
+
+| Material | Hot hydrogen (`p_H2` ≥ 7 bar) up to | Oxygen (`p_O2`) up to |
+|---|---|---|
+| Carbon steel | 230 °C | 2 bar (air to about 10 bar) |
+| Chrome steel | 450 °C | 2 bar |
+| Stainless steel | no limit | 14 bar |
+| Nickel alloy | no limit | 69 bar |
+
 **Decided (D2, revision 2): one material per structure.** One dropdown in the constructor, one shape field. Every device of the structure reads it; an exchanger is rated on the worse of its two streams.
 
 **Decided (O2, owner 2026-11-16): the cost index only.** Construction stays free in this batch; the index is shown in the simulator and on the datasheet, and a later survival-supplies batch charges it.
 
 ## 6. The corrosion matrix
 
-Sources for the forms and anchors: API RP 571 (damage mechanisms), API RP 581 Part 2 Annex B (thinning rate tables), API RP 939-C and the modified McConomy curves (sulfidation; the 1986 revision divides the 1963 curves by 2.5; scatter about one order of magnitude), API RP 932-B (ammonium bisulfide), de Waard–Milliams 1975 (CO2), API Std 530 (tube metal temperature limits), ISO 9223 (atmospheres), DNV RP O501 (erosion). The numbers below are game-level fits to those anchors, not the tables themselves.
+Sources for the forms and anchors: API RP 571 (damage mechanisms), API RP 581 Part 2 Annex B (thinning rate tables), API RP 939-C and the modified McConomy curves (sulfidation; the 1986 revision divides the 1963 curves by 2.5; scatter about one order of magnitude), API RP 932-B (ammonium bisulfide), de Waard–Milliams 1975 (CO2), API Std 530 (tube metal temperature limits), ISO 9223 (atmospheres), DNV RP O501 (erosion), API RP 941 (the Nelson curves for hydrogen), Couper–Gorman (H2/H2S), EIGA Doc 13 and CGA G-4.4 (oxygen: exemption pressures per alloy). The numbers below are game-level fits to those anchors, not the tables themselves.
 
 ### 6.1 The digest of a device's fluid
 
@@ -132,7 +147,7 @@ From the device's node (a vessel: its own; a heat side or machine: the hotter en
 | `oil` | a hydrocarbon liquid is present | the state's liquid slot above a trace |
 | `S` | sulfur of the oil, wt% | Σ mass × sulfur share over the liquid's compounds; H2S, mercaptans and COS by their formulas, the crude cuts by their `corrosion` sub-record |
 | `A` | acid number of the oil, mg KOH/g | mass-weighted `corrosion.acid_number` |
-| `p_i` | `y_i · P`, bar, for H2S, CO2, SO2, NH3, O2 | overall mole fractions; the compounds found by formula, as `Releases.so2Reference` finds SO2 |
+| `p_i` | `y_i · P`, bar, for H2S, CO2, SO2, NH3, O2, H2 | overall mole fractions; the compounds found by formula, as `Releases.so2Reference` finds SO2 |
 
 ### 6.2 Mechanisms (carbon steel rate, mm/y)
 
@@ -147,14 +162,19 @@ From the device's node (a vessel: its own; a heat side or machine: the hotter en
 | M7 | Aerated water | `wet`, `p_O2` > 0 | `0.25 · min(2, p_O2/0.21) · 2^((min(T, 353) − 298)/30)` |
 | M8 | Overheating | `T` above the material's limit | `0.25 · 2^((T − T_limit)/25)`, for the material itself |
 | M9 | Corrosive air (outside) | the corrosive index `I` of the structure's cube ≥ 0.01 | `0.5 · min(I, 5)` |
+| M10 | Hydrogen attack | `p_H2` ≥ 7 bar and `T` above the material's hydrogen limit | `0.5 · 2^((T − T_H)/25)`, for the material itself. Carbon steel at 250 °C: 0.9; at 300 °C: 3.5 |
+| M11 | Oxygen fire | `p_O2` above the material's oxygen limit | `50 · p_O2/p_limit`, for the material itself: the wall is gone in minutes of play |
 
-The inside rate is the largest of M1 to M8 (the governing mechanism, as API 581 takes it); the status names it. The total is the inside rate plus M9 plus erosion (section 8).
+The inside rate is the largest of M1 to M8, M10 and M11 (the governing mechanism, as API 581 takes it); the status names it.
+
+M10 and M11 are not thinning in a real plant. Hydrogen attack is cracking after an incubation time, and an oxygen fire is an ignition. Both are booked as an equivalent wall loss so that one wall record and one failure path serve every mechanism. The Nelson curve is reduced to one temperature per material above 7 bar of hydrogen; the oxygen rule reads pressure only, not speed or particles. The total is the inside rate plus M9 plus erosion (section 8).
 
 ### 6.3 Material factors (rate = carbon steel rate × factor)
 
 | Mechanism | Carbon steel | Chrome steel | Stainless steel | Nickel alloy |
 |---|---|---|---|---|
 | M1 Sulfidation | 1 | 0.12 | 0.01 | 0.01 |
+| M1 with `p_H2` ≥ 7 bar (H2/H2S) | 1 | 0.6 | 0.01 | 0.01 |
 | M2 Naphthenic acid | 1 | 0.6 | 0.02 | 0.01 |
 | M3 Sour water | 1 | 1 | 0.01 | 0.005 |
 | M4 Wet CO2 | 1 | 0.3 | 0.005 | 0.002 |
@@ -164,9 +184,9 @@ The inside rate is the largest of M1 to M8 (the governing mechanism, as API 581 
 | M9 Corrosive air | 1 | 0.6 | 0.01 | 0.005 |
 | Erosion (section 8) | 1 | 0.8 | 0.5 | 0.4 |
 
-Each material keeps a case only it answers at the lowest cost: chrome steel for hot sulfur oil, stainless for acids and wet acid gas, nickel alloy for ammonium bisulfide and acid condensate above 0.5 mm/y on carbon steel.
+Each material keeps a case only it answers at the lowest cost: chrome steel for hot sulfur oil, stainless for acids, wet acid gas, hot hydrogen with H2S and oxygen to 14 bar, nickel alloy for oxygen above that, for ammonium bisulfide and acid condensate above 0.5 mm/y on carbon steel.
 
-Later, with their species: HCl overhead corrosion and chloride cracking, hydrogen attack, amine and caustic cracking.
+Later, with their species: HCl overhead corrosion and chloride cracking, amine and caustic cracking.
 
 ### 6.4 Data
 
@@ -200,6 +220,8 @@ One record per corroding device: `loss` (mm, a fact), `rate` and `mechanism` (st
 - Closed vessel: `FluidDeviceSpec.breached` is set through the registry's respecify edit, as a blast sets it. The vessel stands open: it vents to the atmosphere and spills by the open-vessel law, and `Releases` already turns that into pollution. This is the leak.
 - Machine: health 0 through `MachineHealth.breach`; its `FAILED` plan closes it.
 - Heat side: its connection is closed (the registry edit a shut fitting uses) and its holdup is released once through `FluidWorldAuthority.releaseContents`, as a burst pipe's is. Status `LEAKING: tube leak`.
+
+- A wall lost to an oxygen fire (M11 governing at the failure) also counts as one of the plant's flames for the next pollution pass (`FluidWorldAuthority.flames`), so a flammable cube round it ignites by the existing rule.
 
 A graded pinhole leak (an orifice row on the node) is not built: it would add a boundary law to the step for a small effect.
 
@@ -302,7 +324,7 @@ Nothing in the V3 solver changes: particles are not on its axis.
 
 ## 15. Decisions
 
-Taken by the agent (reversible until the first code commit that uses them): D1 constructed equipment, and control valves for erosion; D2 one material per structure; D3 the time scale; D4 failure by the existing failures; D5 a failed trim fails open; D6 (the owner's) a column stops only when a compound solidifies inside it; the matrix and erosion numbers; repair and cleaning rules as section 10.
+Taken by the agent (reversible until the first code commit that uses them): D1 constructed equipment, and control valves for erosion; D2 one material per structure; D3 the time scale; D4 failure by the existing failures; D5 a failed trim fails open; D7 hydrogen attack and oxygen fire as limits per material, booked as wall loss; D6 (the owner's) a column stops only when a compound solidifies inside it; the matrix and erosion numbers; repair and cleaning rules as section 10.
 
 The owner's, 2026-11-16:
 
@@ -361,9 +383,9 @@ WP7 touches no file of the others and no format, so it can merge on its own as a
 
 New package `src/main/java/com/wormzjl/icheme/science/integrity/`, pure (no Minecraft types, `DeterministicMath` for `exp`, `pow`, `log10`; `DeterministicMathSourceTest` bans the `Math` ones).
 
-- `Metallurgy`: the four constants of section 5 with `allowance()` (mm), `limit()` (K), `cost()`, `factor(Mechanism)` from section 6.3; `byName(String)` with an alias map (empty), default `CARBON_STEEL`.
-- `Mechanism`: `SULFIDATION`, `NAPHTHENIC_ACID`, `SOUR_WATER`, `WET_CO2`, `AMMONIUM_BISULFIDE`, `ACID_CONDENSATE`, `AERATED_WATER`, `OVERHEATING`, `CORROSIVE_AIR`, `EROSION`.
-- `CorrosionStandard`: built once per compound list, as `HazardStandard` is: per compound its molar mass, sulfur mass share (formula, else the sub-record), acid number, fouling number, and the indices of H2S, CO2, SO2, NH3, O2 and water found by formula. `digest(moles, temperature, pressure, oilMoles, aqueousMoles)` returns a `CorrosionDigest` record (section 6.1). No allocation beyond the record.
+- `Metallurgy`: the four constants of section 5 with `allowance()` (mm), `limit()` (K), `hydrogenLimit()` (K, infinite for none), `oxygenLimit()` (bar), `cost()`, `factor(Mechanism, boolean hydrogen)` from section 6.3; `byName(String)` with an alias map (empty), default `CARBON_STEEL`.
+- `Mechanism`: `SULFIDATION`, `NAPHTHENIC_ACID`, `SOUR_WATER`, `WET_CO2`, `AMMONIUM_BISULFIDE`, `ACID_CONDENSATE`, `AERATED_WATER`, `OVERHEATING`, `CORROSIVE_AIR`, `HYDROGEN_ATTACK`, `OXYGEN_FIRE`, `EROSION`.
+- `CorrosionStandard`: built once per compound list, as `HazardStandard` is: per compound its molar mass, sulfur mass share (formula, else the sub-record), acid number, fouling number, and the indices of H2S, CO2, SO2, NH3, O2, H2 and water found by formula. `digest(moles, temperature, pressure, oilMoles, aqueousMoles)` returns a `CorrosionDigest` record (section 6.1). No allocation beyond the record.
 - `CorrosionLaw`: `rate(Mechanism, CorrosionDigest)` for carbon steel (section 6.2), `inside(Metallurgy, CorrosionDigest)` returning the governing mechanism and rate, `outside(Metallurgy, index)`. Every rate finite and ≥ 0 for any finite digest; NaN inputs give 0.
 - `ErosionLaw` (section 8): `wall(Metallurgy, solidShare, speed)` in mm/y; `trimSpeed(drop, density)`; `trim(solidShare, speed)` in health per process second at a year of 20 h, scaled by the caller's `yearProcessHours`; `solidsIntensity(solidShare)` for the pump fault. 0 for a share or speed that is 0, negative or NaN.
 - `Wear.Fault.SOLIDS` (`FaultClass.EROSION`), intensity `ErosionLaw.solidsIntensity`. `MachineHealth` reads it in WP2; in WP1 only the enum constant, its `intensity` case and `WearTest` rows. No existing fault's numbers move.
