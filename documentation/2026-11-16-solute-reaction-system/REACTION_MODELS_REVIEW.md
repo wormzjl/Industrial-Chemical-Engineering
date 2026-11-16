@@ -17,7 +17,8 @@ Batch `2026-11-16-solute-reaction-system`, 2026-11-16. Research only: no code, n
    - Compounds: hydrogen chloride (this batch), four C6 isomers and methylcyclopentane (isomerization), acetylene (steam cracking), elemental sulfur (a later Claus unit); a coke solid record.
    - Catalyst records and the reactor kinds' volumes (bed, riser, drum, coil).
 6. **Not lacking:** every SMR, shift and hydrotreating species; the FCC light products; formation enthalpies of all 52 datasets; oil viscosity, passage geometry and film temperature for the surface laws; the unit-on-accounts pattern for reactors.
-7. **Open:** the acid chloride anchors (API RP 581's table was not reached); the Ebert–Panchal constants; the heat of coking. Section 5 lists them.
+7. **Open:** the acid chloride anchors (API RP 581's table was not reached); the heat of coking. Section 5 lists them.
+8. **Survey** (section 7, added on the owner's request): about 130 candidate models weighed by five criteria. The commercial and molecular models fail on closed constants and on inputs the mod lacks, so the selection is the best of the open, small tier. Six selections changed (FCC, residue hydrocracking, the coke factor, hydrolysis, wall fouling, bulk coking) and two were corrected (desalting's drag, the corrosion slope). Fifteen papers hold tables still unread (7.5).
 
 ## 1. What the models may read
 
@@ -32,6 +33,8 @@ Batch `2026-11-16-solute-reaction-system`, 2026-11-16. Research only: no code, n
 
 ## 2. Non-catalytic transformations
 
+The first selection. Section 7 revises four of its rows (desalting's drag, the hydrolysable share, the fouling law's form and energy, bulk coking's induction) and the corrosion slope; the plan (revision 4) holds the current laws.
+
 | Transformation | Model | Anchors | Status |
 |---|---|---|---|
 | Desalting | Stokes settling of water drops in the oil, `N = v_s A / Q`, removal `E · N/(1+N)`; drop size 1.3 mm with the field, 0.1 mm without; contact `E = 1 − exp(−W/0.02)` | One stage removes about 90 % of the salt and two stages up to 99 % (**read**). A single stage removed 90 % of NaCl, 50 % of CaCl2, 40 % of MgCl2 (**read**, OGJ). Operating range 93 to 149 °C (**read**). A model that finds the drop that just settles from Stokes' law and the residence time (**read**, İYTE). Wash water 3 to 8 %, a field-grown drop near 1 mm (**recalled**) | Drop sizes fitted to the first anchor; the oil viscosities of the plan's table are typical values, to be replaced by the mod's own |
@@ -41,6 +44,8 @@ Batch `2026-11-16-solute-reaction-system`, 2026-11-16. Research only: no code, n
 | Bulk coking | First order in asphaltenes, 210 kJ/mol | Coke forms after an induction period, when the asphaltenes pass their solubility limit (Wiehe 1993, **read**). Residue cracking 200 to 230 kJ/mol (**recalled**; the search returned 235 kJ/mol for n-hexadecane and scattered residue values) | No induction period: the 340 °C window stands in for it |
 
 ## 3. Catalytic and thermal units: model and requirements
+
+The first selection. Section 7 surveys the alternatives and revises it: FCC gains a light cycle oil lump and other constants, residue hydrocracking is solved back-mixed, the coker's coke factor follows pressure and recycle; the rest stands with refinements.
 
 `✓` an input the mod has (or the plan's tags give); `✗` lacking.
 
@@ -287,3 +292,112 @@ Read in this task:
 - [Sánchez, Rodríguez and Ancheyta, Kinetic model for moderate hydrocracking of heavy oils (record)](https://investigacion.unirioja.es/documentos/5e81db4129995270f8358a69)
 
 Recalled, to be read when their unit is designed: Ebert and Panchal 1995; Panchal and others 1999; Polley and others, Appl. Therm. Eng. 22 (2002) 777; Gray, Eaton and Le, Pet. Sci. Technol. 26 (2008); Wiehe, Ind. Eng. Chem. Res. 32 (1993) 2447; Korsten and Hoffmann, AIChE J. 42 (1996) 1350; Girgis and Gates, Ind. Eng. Chem. Res. 30 (1991) 2021; Stangeland, Ind. Eng. Chem. Process Des. Dev. 13 (1974) 71; Weekman, Ind. Eng. Chem. Process Des. Dev. 7 (1968) 90; Lee and others, Can. J. Chem. Eng. 67 (1989) 615; Jacob and others, AIChE J. 22 (1976) 701; Ancheyta-Juárez and others, Appl. Catal. A 177 (1999) 227; Gary, Handwerk and Kaiser, Petroleum Refining: Technology and Economics; Sundaram and Froment, Chem. Eng. Sci. 32 (1977) 601 and 609; Kumar and Kunzru, Ind. Eng. Chem. Process Des. Dev. 24 (1985) 774; Xu and Froment, AIChE J. 35 (1989) 88; Smith, Chem. Eng. Prog. 55 (6) (1959) 76; Riazi and Daubert, Ind. Eng. Chem. Process Des. Dev. 19 (1980) 289; API RP 571, RP 581, RP 932-B.
+
+## 7. Model survey, and why each selection
+
+Owner, 2026-11-16: "there are numerous models on the market, explore more and justify your selection". It revises sections 2 and 3 where it differs from them.
+
+### 7.1 Method
+
+Four research subagents (Opus, medium, approved by the owner), one per group of units, about 105 searches and page reads in all. Each listed the published families and what commercial simulators use, ranked them by the criteria below, recommended one model on its own, and only then judged the earlier selection. Their notes are scratch (`tmp/reaction-models/`); what they found is in this section. Marks as before: **read** (seen on a page, source in 7.6) and **recalled**. Publishers refused most automated reads, so most original constant tables are still unread: 7.5 lists them.
+
+Criteria:
+
+1. Its inputs exist: cuts by boiling point with their tags, and real light compounds. No molecular feed analysis.
+2. Its constants are in the open literature, complete, for commercial conditions.
+3. It gives what the game needs: yields by cut and compound, hydrogen, heat where large, coke, a simple activity, and the right response to temperature, pressure, time and feed quality.
+4. Small: about ten lumps and thirty parameters, one solve per operating point.
+5. Its light ends are existing compounds.
+
+### 7.2 The families, and where each falls
+
+| Family | Examples | Needs | Verdict |
+|---|---|---|---|
+| Commercial simulator kinetics | Aspen HYSYS FCC (21 lumps, **read**), hydrocracker (97 lumps, **read**), CatRef; KBC Petro-SIM; SPYRO | Ring and type analysis by boiling range; a calibration per plant | Fails 2: constants are closed. Fails 1 |
+| Molecular and elementary-step | Structure-oriented lumping (Quann and Jaffe), single events (Froment), COILSIM1D | A molecular feed, thousands of species | Fails 1 and 4 |
+| Lumps by chemistry | Mobil ten-lump FCC (Jacob 1976), KINPTR (13), Krane (20), Ancheyta 2000 (24) | Paraffin, naphthene and aromatic shares by carbon number, ring carbon | Fails 1 today; open again if type tags by carbon number ever exist |
+| Rate laws per compound | Vanrysselberghe and Froment (sulfur), Xu and Froment (reforming of methane) | Speciation, or a profile along a tube | More than a yield table needs: a fallback |
+| Small lumps by boiling range, 3 to 6 | Weekman, Lee, Ancheyta, John (FCC); Sánchez (residue) | Cut groups | **Chosen** for FCC and residue |
+| Lumping on the boiling point | Stangeland 1974; continuous lumping (Laxminarasimhan 1996) | Boiling points | **Chosen** for distillate hydrocracking |
+| Two reactivity classes with inhibition | After Korsten and Hoffmann, Girgis and Gates | Sulfur per cut, boiling point | **Chosen** for hydrotreating |
+| Small molecular schemes | Sundaram and Froment; Kumar and Kunzru | Real compounds, one naphtha lump | **Chosen** for steam cracking |
+| Equilibrium with an approach | Reforming of methane, shift, isomerization | Gibbs data | **Chosen** for reforming of methane and shift; fallback for isomerization |
+| Yield correlations | Gary and Handwerk, Maples, Volk | One or two bulk properties | **Chosen** where no kinetic set is open (coking); a cross-check elsewhere |
+| Threshold surface laws | Ebert and Panchal and its descendants | Speed, viscosity, film temperature | **Chosen** for fouling |
+
+The models "on the market" in the commercial sense are the first two rows. They are better models and none can be used: their constants are not published and their inputs are analyses the mod does not have. The selection is therefore the best of the open, small tier, and its honest weakness is that every such model is fitted to one feed or one plant.
+
+### 7.3 Per unit: candidates, selection, change
+
+| Unit | Candidates weighed | Selected | Change from sections 2 and 3, and why |
+|---|---|---|---|
+| Hydrotreating | 9: Korsten–Hoffmann, Girgis–Gates, Ma–Sakanishi–Mochida (4 groups), Vanrysselberghe–Froment, Bej, Mederos–Ancheyta, Stanislaus–Cooper, Maples, commercial | Two first-order sulfur classes per cut with H2S inhibition | Kept. Four refinements: the refractory share rises smoothly with boiling point (dibenzothiophene boils near 332 °C, its 4,6-dimethyl form near 365 °C, **recalled**) instead of a step at 310 °C; ammonia also inhibits; aromatics are reversible with an equilibrium that falls with temperature; metals fill a catalyst capacity. Korsten–Hoffmann itself is one lump of order 1.6, so the class constants are refitted, not copied. Heats per mole of hydrogen: sulfur 53, nitrogen 59 to 66, olefins 124 kJ (**read**) |
+| Hydrocracking, distillates | 9: Qader–Hill, Stangeland, Mohanty, continuous lumping, Elizalde, 4 to 6 lump schemes (Song 2017), structure-oriented, single-event, Aspen | Stangeland on the 12 cuts | Kept: it is the only form written on boiling points, with 4 parameters. Added: organic nitrogen lowers the activity, light ends split onto C1 to C4. Fallback and calibration source: continuous lumping, the one complete open set (**read**, Naderi 2018: `α` 1.4, `kmax` 0.24 at 410 °C; 1.2, 0.79 at 430 °C) |
+| Hydrocracking, residue | 8: Sánchez 2005, Martínez–Ancheyta 2012, a slurry scheme, Callejas–Martínez, an industrial ebullated bed, continuous lumping, sediment limits, licensors | Sánchez's five lumps and ten paths, solved as a stirred reactor | Changed: an ebullated bed is back-mixed (Martínez–Ancheyta fitted the same network in a stirred reactor); its fit ends at 420 °C, commercial beds run to 440 °C (a notice). What limits a real unit is sediment, not kinetics; no open law was found (option O8) |
+| FCC | 16: Weekman (3), Lee (4), Ancheyta (5), Bollas with Dave–Saraf constants (5, 9 paths), Takatsuka (6), John 2019 (6), Hagelberg (8), Jacob (10), Arbel, Han–Chung, Aspen (21), structure-oriented, single-event, Voorhies, yield correlations, Roman | Six lumps: gas oil, light cycle oil, gasoline, LPG, dry gas, coke | Changed. The five lumps had no light cycle oil and no slurry, which are 25 to 30 % of the product and two of the game's cuts. Constants: the open Dave–Saraf set (**read**, Dasila 2012: nine paths with heats, checked on a plant with its regenerator) instead of Ancheyta 1999 (unread, fitted to a laboratory test); the cycle oil paths from John 2019 once read, until then fitted to an industrial slate (**read**: fuel gas 5.4, LPG 17.0, gasoline 45.9, cycle oil 17.8, slurry 8.8, coke 5.1 %). Slurry is the unconverted feed above 343 °C. Feed quality (nitrogen, Conradson carbon, metals) acts through multipliers no paper read gives: a fit |
+| Reforming | 11: Smith, Krane, Kmak, KINPTR, Van Trimpont, Padmavathi, Ancheyta 2000, Hu, Arani, Stijepovic, commercial | Smith 1959, per naphtha cut | Kept: the only open complete model on paraffin, naphthene and aromatic shares alone. Added: an activity factor for today's catalysts and a two-parameter coke law (Smith has no coke, and coke is what separates a continuous unit from a semi-regenerative one). The one readable copy of its constants is in a retracted paper and does not match the recalled ones: the original must be read |
+| Isomerization | 6: Chekantsev 2014, a 15-lump scheme, single-event, Ahari, equilibrium with an approach, licensors | Chekantsev, reduced to about eight reversible pairs and benzene saturation | Kept; now **read** in full: 36 constants at 130 °C, ratios for the two other catalyst families, no activation energies. Equilibria come from the mod's own Gibbs data (the paper's are wrong for two reaction rows). The temperature response needs one assumed activation energy per family: a fit |
+| Delayed coking | 11: Gary–Handwerk, Maples, Volk (Tulsa), a 4-lump Tulsa model, Del Bianco, Köseoglu, Zhou, Bozzano–Dente, Wiehe, a review, commercial; visbreaking: Singh, Kataria | Conradson carbon correlation, Gary–Handwerk splits | Kept; coefficients now **read** and checked on a worked example, with the sulfur split, metals to coke and the gas composition (all existing compounds). Changed: the coke factor 1.6 is above three commercial cases (1.3 to 1.5, **read**) and has no response to pressure or recycle: it becomes 1.2 to 1.7 by drum pressure and recycle ratio. That form is ours (option O8). The heat stays a stated value: the network's datum holds no heat of formation (4.1) |
+| Steam cracking | 9: Sundaram–Froment, Kumar–Kunzru, severity correlations, Belohlav, Towfighi, Joo–Park, SPYRO, COILSIM1D, a radical network | Sundaram–Froment (ethane, propane, butane); Kumar–Kunzru (naphtha) | Kept; constants now **read** from two reproductions, which disagree on two frequency factors. Gas oil: no open model; not offered. Coil coking: no constants found; a rate on the olefins' pressure fitted to a run length. It needs acetylene, toluene, ethylbenzene and styrene as compounds |
+| Reforming of methane, shift | 11: equilibrium with approach, Xu–Froment, Hou–Hughes, Numaguchi–Kikuchi, Akers–Camp, Moe, Keiski, Choi–Stenger, Christensen, the carbon limit, sulfur coverage | Equilibrium with an approach temperature | Kept. Constants **read**: `K = exp(−26 830/T + 30.114)` bar² and `exp(4 400/T − 4.036)`. Added: a carbon check on the equilibrated gas, and sulfur widening the approach. Xu–Froment only for tube profiles |
+| Chloride hydrolysis | 6: Gray–Eaton–Le, Eaton's patent, Londono's thesis, practice tables, older laboratory work, equilibrium | First order, magnesium chloride | Changed. Calcium chloride gives up 3 % of its chlorine in laboratory steam and under 15 % in practice, sodium 0.6 % (**read**): it is not one lump with magnesium. The tag `hydrolysable_chloride` becomes magnesium chloride's chlorine plus 12 % of calcium chloride's; the default share of an assay's salt falls from one fifth to about one sixth. Naphthenic acid raises it (**read**, a patent): not built |
+| Desalting | 7: Stokes with an overflow rate, a mixing balance, Al-Otaibi, Vafajoo, population balances (Aryafard), electrocoalescence, a flow simulation | Settling with an overflow rate | Kept, corrected: Stokes' own speed for a 1.3 mm drop gives a Reynolds number of 36, far outside its range; with the drag correction of Schiller and Naumann, now added, the drop settles at half that speed (2.1 times slower at 120 °C, 2.8 at 150 °C). `E` is read as the share of the brine that met the wash water; the rest, in fine drops, does not settle |
+| Wall fouling | 12: Kern–Seaton, Ebert–Panchal, Panchal 1999, Polley (three forms), Yeap, Nasr–Givi, Saleh, refinery refits, the compatibility model, fixed resistances | Panchal's form on Reynolds and Prandtl numbers and wall shear | Changed. The earlier law used speed alone and 48 kJ/mol, which I credited to Polley; it is Panchal's, fitted to coker feed at 360 to 420 °C. At 230 °C and 2 m/s it gave no fouling, where measured rates are 0.3e-10 to 3e-10 m²K/J (**read**). Now 40 kJ/mol (refinery refits give 21 to 47, **read**), calibrated to that benchmark times the game's pace. One term, no second regime above 350 °C: a switch would be a step |
+| Bulk coking | 4: Wiehe's phase separation, Rahmani–Gray, first order, lumped residue schemes | First order in the asphaltenes above a solubility limit set by the resins | Changed: coke forms after an induction period (Wiehe, **read** as a form). The resins crack and the asphaltenes they no longer hold in solution coke. Two more numbers, fitted until Wiehe's are read |
+| Acid chloride corrosion | API RP 581's table only | A rate by pH | Corrected: the earlier slope (0.5 per pH) missed its own second anchor by a factor of 2; it is 0.35. Both anchors are still **recalled** |
+| Speciation constants | | Plan 7.4 | Hydrogen chloride **read**: 2.03e6 mol² kg⁻² atm⁻¹, 9 000 K (Sander's compilation, after Clegg and Brimblecombe). Ammonia **read**: 59.8 mol kg⁻¹ atm⁻¹ with 4 200 K, ammonium pKa 9.245; combined slope 10 490 K, not 10 350. Bromley's `B` for hydrogen chloride still unread |
+
+### 7.4 Where I did not follow a subagent
+
+- Delayed coking's heat as "the enthalpy difference of products and feed": the network's datum holds no heat of formation, so that difference is not a reaction heat (4.1).
+- Fouling with 68 kJ/mol above 350 °C: one term instead (above).
+- Desalting as two settling classes: it gives the same numbers as the mixed share `E`, because 10 µm drops do not settle; only the wording changes.
+- A magnesium ceiling at half its chlorine (the first product is Mg(OH)Cl): it contradicts the 90 % of practice; not imposed.
+
+### 7.5 Papers whose tables are still unread
+
+The owner offered to fetch them. In order of need: the first five serve this batch, the rest the later reactor design.
+
+| # | Paper | Needed for |
+|---|---|---|
+| 1 | Gray, Eaton and Le 2008, Pet. Sci. Technol. 26, 1924: [doi 10.1080/10916460701402412](https://doi.org/10.1080/10916460701402412) | Hydrolysis rate and extent per salt |
+| 2 | API RP 581, Part 2, Annex B, the hydrochloric acid corrosion tables | M12's anchors |
+| 3 | Wiehe 1993, Ind. Eng. Chem. Res. 32, 2447: [doi 10.1021/ie00023a001](https://doi.org/10.1021/ie00023a001) | Bulk coking: rate constants and the solubility limit |
+| 4 | Bromley 1973, AIChE J. 19, 313: [doi 10.1002/aic.690190216](https://doi.org/10.1002/aic.690190216) | `B` for hydrogen chloride |
+| 5 | Polley, Wilson, Yeap and Pugh 2002, Appl. Therm. Eng. 22, 777 | Fouling constants on the wall temperature |
+| 6 | Korsten and Hoffmann 1996, AIChE J. 42, 1350: [doi 10.1002/aic.690420515](https://doi.org/10.1002/aic.690420515) | Hydrotreating: inhibition constant, activation energy |
+| 7 | Stangeland 1974, Ind. Eng. Chem. Process Des. Dev. 13 (1), 71; Mohanty, Saraf and Kunzru 1991, Fuel Process. Technol. 29, 1 | Hydrocracking: `A`, `B`, `C` |
+| 8 | Sánchez, Rodríguez and Ancheyta 2005, Ind. Eng. Chem. Res. 44, 9409 ([record](https://investigacion.unirioja.es/documentos/5e81db4129995270f8358a69)); Martínez and Ancheyta 2012, Fuel 100, 193: [doi 10.1016/j.fuel.2012.05.032](https://doi.org/10.1016/j.fuel.2012.05.032) | Residue: ten rate constants and energies |
+| 9 | John, Mustafa, Patel and Mujtaba 2019, Fuel 235, 1436: [doi 10.1016/j.fuel.2018.08.033](https://doi.org/10.1016/j.fuel.2018.08.033) (an open copy is on [CORE](https://core.ac.uk/download/161874963.pdf); the automated read was refused) | FCC: the six-lump table |
+| 10 | Ancheyta-Juárez and others 1999, Appl. Catal. A 177, 227: [doi 10.1016/S0926-860X(98)00262-2](https://doi.org/10.1016/S0926-860X(98)00262-2) | FCC: a second constant set |
+| 11 | Smith 1959, Chem. Eng. Prog. 55 (6), 76 (print only) | Reforming: the four rate and two equilibrium expressions |
+| 12 | Sundaram and Froment 1977, Chem. Eng. Sci. 32, 601: [doi 10.1016/0009-2509(77)80225-X](https://doi.org/10.1016/0009-2509(77)80225-X); Kumar and Kunzru 1985, Ind. Eng. Chem. Process Des. Dev. 24, 774 (doi 10.1021/i200030a043, from one reference list) | Steam cracking: the two disputed factors, units |
+| 13 | Sundaram, Van Damme and Froment 1981, AIChE J. 27, 946: [doi 10.1002/aic.690270610](https://doi.org/10.1002/aic.690270610) | Coil coking rate |
+| 14 | Kent and Eisenberg 1976, Hydrocarbon Process. 55 (2), 87 (print); API publication 955 (SWEQ) | Amine and sour water constants |
+| 15 | Kataria and others 2004, Ind. Eng. Chem. Res. 43, 1373: [doi 10.1021/ie0305723](https://doi.org/10.1021/ie0305723) | Visbreaking, if wanted |
+
+Open and readable, not yet mined: [Volk, Wisecarver and Sheppard, Fundamentals of Delayed Coking (OSTI)](https://www.osti.gov/servlets/purl/807578), for the pressure and recycle coefficients.
+
+### 7.6 Sources read in the survey
+
+- [Jechura, Hydroprocessing, Colorado School of Mines](https://people.mines.edu/jjechura/wp-content/uploads/sites/120/2019/02/CBEN409_08_Hydroprocessing.pdf) and [Coking](https://people.mines.edu/jjechura/wp-content/uploads/sites/120/2019/02/CBEN409_06_Coking.pdf)
+- [Naderi, Shokri and Ahmadpanah 2018, continuous lumping of a hydrocracker](https://scielo.br/j/bjce/a/RHTFMYmywGbMyfrPxrwhWFd/?lang=en)
+- [Song and others 2017, a six-lump industrial hydrocracker](https://www.aidic.it/cet/17/61/110.pdf)
+- [The Aspen HYSYS hydrocracker's 97 lumps, Processes 8, 32](https://www.mdpi.com/2227-9717/8/1/32)
+- [Dasila and others 2012, FCC riser and regenerator with the five-lump constants](https://file.scirp.org/pdf/ACES20120100020_53867384.pdf)
+- [Dagde and others 2025, an industrial FCC slate and Aspen's 21 lumps](https://jchpe.ut.ac.ir/article_101533_36b6fb7f2bab94a1479cef7af591faf7.pdf)
+- [Arani and others 2009, a 17-lump reforming model](https://scielo.br/j/bjce/a/JgbcwVg9mTYv9kH9wfX5kdg/?lang=en)
+- [Chekantsev, Gyngazova and Ivanchina 2014](https://portal.tpu.ru/SHARED/c/CHEKANCEV/Ucheba1/Tab1/CEJ11193.pdf)
+- [Kumar's 22 reactions as reproduced in Processes 8, 91](https://doi.org/10.3390/pr8010091) and [an ethane scheme, arXiv 2510.25880](https://arxiv.org/pdf/2510.25880)
+- [Wilson, Ishiyama and Polley 2017, Twenty years of Ebert and Panchal](https://www.repository.cam.ac.uk/handle/1810/267015)
+- [Estimating delayed coker yields, Digital Refining](https://digitalrefining.com/article/1002409/estimating-delayed-coker-yields)
+- [Bromley's equation](https://Www.Wikipedia.org/wiki/Bromley_equation) and [the paper's record](https://scilit.com/publications/33a28ecb5d2668def9efec8791982d37)
+- Looked up for 7.5: [John 2019 at Bradford](https://bradscholars.brad.ac.uk/entities/publication/e8f5e68a-7fcf-4a62-a058-86711c5a143a), [Martínez and Ancheyta 2012 (record)](https://manuscript.isc.ac/Inventory/10/1467160.htm), [Sundaram, Van Damme and Froment 1981 (OSTI)](https://www.osti.gov/biblio/5323351), [Stangeland 1974 (an unofficial copy)](https://www.scribd.com/document/48695179/Hydrocracking-Model)
+
+- [Abbas, Dupont and Mahmud 2017, the equilibrium constants and Xu and Froment's parameters](https://eprints.whiterose.ac.uk/108413/17/1-s2.0-S0360319916333821-main.pdf)
+- [Londono 2007, The role of clay in salt hydrolysis, MSc thesis, University of Alberta](https://ualberta.scholaris.ca/handle/123456789/84512)
+- [US patent 6,902,662, reducing hydrolysis in hydrocarbon streams](https://patents.google.com/patent/US6902662B2/en)
+- [Sander's Henry's law compilation: hydrogen chloride](https://henrys-law.org/henry/casrn/7647-01-0) and [ammonia](https://henrys-law.org/henry/casrn/7664-41-7)
+- [Bell and others 2007, the ammonium ion's dissociation](https://publish.csiro.au/en/Fulltext/EN07032)
+- [Suleman, Maulud and Man 2017, constants of amine equilibria](https://jcsp.org.pk/PublishedVersion/26e82d95-4ece-4562-8a0d-61770393c139Manuscript%20no%207,%20Final%20Gally%20Proof%20of%2011122%20(Abdulhalim%20Shah%20Maulud).pdf)
+- [A review of crude desalting, Processes 9, 1226](https://openaccess.iyte.edu.tr/bitstream/11147/11443/1/processes-09-01226-v2.pdf)

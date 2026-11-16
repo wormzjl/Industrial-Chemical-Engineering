@@ -1,4 +1,6 @@
-# Solute and reaction system: design (revision 3)
+# Solute and reaction system: design (revision 4)
+
+Revision 4 (owner, 2026-11-16: "explore more and justify your selection"): after the model survey (review section 7) four laws of this batch change. Desalting gains a drag correction (8.1); the hydrolysable chloride is magnesium's and 12 % of calcium's (5.2, 8.2); wall fouling is written on Reynolds and Prandtl numbers and wall shear at 40 kJ/mol (8.4); bulk coking waits for the resins to fall below a solubility limit (8.5). M12's slope is corrected (9) and the law's constants are read (7.4).
 
 Revision 3 (owner, 2026-11-16: "Level 1: speciation"): acids and bases in water follow one speciation law, solved at holdups and in units on accounts, outside the kernel. It replaces revision 2's absorption, limit, neutralisation rule and pH formula (sections 4, 5, 7.4, 8.2, 8.3, 9, 11, 12, 13, 15, 16, 17).
 
@@ -104,7 +106,7 @@ An assay gains an optional `content` block: whole-crude targets (sulfur wt%, nit
 | `asphaltenes` | cuts | dissolved (stay) | kg | Coking (8.4, 8.5), coker and FCC coke yield |
 | `resins` | cuts | dissolved (stay) | kg | Coke yield; asphaltene stability later |
 | `salt` | cuts, water | dissolved (heaviest cut) | kg Cl in stable chloride | Desalting; fouling later |
-| `hydrolysable_chloride` | cuts, water | dissolved (heaviest cut) | kg Cl in Mg and Ca chloride | Hydrolysis (8.2) |
+| `hydrolysable_chloride` | cuts, water | dissolved (heaviest cut) | kg Cl that can hydrolyse: magnesium chloride's, and 12 % of calcium chloride's (review 7.3) | Hydrolysis (8.2) |
 | `acid_chloride` | water, cuts | acid gas; anion | kg Cl as HCl | The ions of hydrogen chloride in water (7.4, M12); the hydrolysis product on its way to the next holdup |
 | `ammonium` | water | dissolved (heaviest cut); cation | kg N as NH4 | The ions of ammonia in water (7.4) |
 | `caustic` | water, cuts | dissolved (heaviest cut); cation | kg NaOH | Converts hydrolysable chloride and acid chloride to salt; in excess, a base in the charge balance |
@@ -156,7 +158,7 @@ A new material kind, `reactions`: `id`, `revision`, `source`; `uses` and `makes`
 
 | Law | Form | Used by |
 |---|---|---|
-| `first_order` | `k = A exp(−E/RT)` on a tag | Hydrolysis, bulk coking |
+| `first_order` | `k = A exp(−E/RT)` on a tag, optionally only on its excess over a `limit` (a factor on another tag) | Hydrolysis, bulk coking (8.5 uses the limit) |
 | `transfer` | A tag moves between carriers at a rate the site's law gives | Desalting, caustic |
 | `threshold_deposit` | Formation minus removal on a heat side's wall | Surface coking |
 
@@ -204,8 +206,8 @@ The records of this batch:
 
 | Volatile | Ion | `K` at 25 °C | Slope `b` | Check |
 |---|---|---|---|---|
-| `HydrogenChloride` | `acid_chloride` | 2.0e6 mol² kg⁻² atm⁻¹; strong; `B` = 0.1433 | 9 000 K | Returns 4.0e-12, 3.2e-9, 3.3e-7 and 1.85e-4 atm over 0.003, 0.1, 1 and 6 mol/kg acid (real 4.0e-12, 3.2e-9, 3.3e-7, 1.9e-4). Constants recalled (Clegg and Brimblecombe; Bromley 1973) |
-| `Ammonia` | `ammonium` | 1.05e11 atm⁻¹ (solubility 59 mol kg⁻¹ atm⁻¹ over the ammonium ion's 5.6e-10) | 10 350 K | Recalled; to be read |
+| `HydrogenChloride` | `acid_chloride` | 2.03e6 mol² kg⁻² atm⁻¹; strong; `B` = 0.1433 | 9 000 K | Returns 4.0e-12, 3.2e-9, 3.3e-7 and 1.85e-4 atm over 0.003, 0.1, 1 and 6 mol/kg acid (real 4.0e-12, 3.2e-9, 3.3e-7, 1.9e-4). `K` and its slope read (Sander's compilation, after Clegg and Brimblecombe); `B` recalled (Bromley 1973, to be read) |
+| `Ammonia` | `ammonium` | 1.05e11 atm⁻¹ (solubility 59.8 mol kg⁻¹ atm⁻¹ over the ammonium ion's 5.69e-10, pKa 9.245) | 10 490 K (4 200 + 6 290) | Read (Sander's compilation; Bates and Pinching's slope recalled) |
 
 Water's own product: 1e-14 at 25 °C, slope −6 710 K.
 
@@ -251,26 +253,26 @@ This is the one place where the interval changes: one solve at its start for the
 
 Salt on the oil moves to the water at the rate `k = E · v_s / H`:
 
-- `v_s = g d² (ρ_w − ρ_o) / (18 μ_o)`: Stokes, with the oil's viscosity and both densities from the vessel's state.
+- `v_s = g d² (ρ_w − ρ_o) / (18 μ_o (1 + 0.15 Re^0.687))`, `Re = ρ_o v_s d / μ_o`: Stokes with Schiller and Naumann's drag correction, by five fixed-point passes, with the oil's viscosity and both densities from the vessel's state. A 1.3 mm drop in hot crude settles at `Re` near 17, where plain Stokes gives twice the speed (review 7.3).
 - `d`: 1.3 mm in a desalter with its field on, 0.1 mm in any other vessel and in a desalter without power.
 - `H`: the oil layer's height.
-- `E = 1 − exp(−W / 0.02)`: the contact with wash water, `W` the water to oil mass ratio of what entered over the last slice (of the holdup when nothing entered).
+- `E = 1 − exp(−W / 0.02)`: the share of the brine that met the wash water and coalesced, `W` the water to oil mass ratio of what entered over the last slice (of the holdup when nothing entered). The rest stays in drops of about 10 µm, which do not settle.
 - `hydrolysable_chloride` moves at half the rate (a single stage removes about 90 % of sodium chloride and 40 to 50 % of the others: OGJ, review section 2).
 
 In a through-flow vessel this gives a removal of `E · N/(1 + N)`, `N = v_s A / Q` (`A` the plan area, `Q` the oil's volume flow). A desalter of 54 m² at 0.184 m³/s:
 
 | Crude, temperature | Oil viscosity (typical) | `N` | Water settled | Salt removed at 5 % wash |
 |---|---|---|---|---|
-| Medium, 60 °C | 8 mPa s | 4.7 | 82 % | 76 % |
-| Medium, 90 °C | 4 mPa s | 9.5 | 90 % | 83 % |
-| Medium, 120 °C | 2 mPa s | 18.9 | 95 % | 87 % |
-| Medium, 150 °C | 1.2 mPa s | 30.8 | 97 % | 89 % |
+| Medium, 60 °C | 8 mPa s | 3.9 | 79 % | 73 % |
+| Medium, 90 °C | 4 mPa s | 6.3 | 86 % | 79 % |
+| Medium, 120 °C | 2 mPa s | 9.1 | 90 % | 83 % |
+| Medium, 150 °C | 1.2 mPa s | 11.5 | 92 % | 84 % |
 | Medium, 120 °C, no field | 2 mPa s | 0.11 | 10 % | 9 % |
-| Heavy, 120 °C | 12 mPa s | 1.4 | 59 % | 54 % |
-| Heavy, 150 °C | 6 mPa s | 2.6 | 72 % | 66 % |
-| Heavy, 150 °C, half the flow | 6 mPa s | 5.1 | 84 % | 77 % |
+| Heavy, 120 °C | 12 mPa s | 1.3 | 56 % | 52 % |
+| Heavy, 150 °C | 6 mPa s | 2.2 | 69 % | 63 % |
+| Heavy, 150 °C, half the flow | 6 mPa s | 4.4 | 81 % | 75 % |
 
-Wash water: 1 % gives `E` = 0.39, 3 % 0.78, 5 % 0.92, 8 % 0.98. Two stages in series reach 98 %.
+Wash water: 1 % gives `E` = 0.39, 3 % 0.78, 5 % 0.92, 8 % 0.98. Two stages in series reach 97 %.
 
 Temperature acts through the viscosity, as the owner asked. Its upper limit needs no rule: where the water boils the vessel holds no free water and nothing transfers. A storage tank settles its brine too, in days (`k` = 5e-6 1/s at 25 °C, a time constant of 54 process hours).
 
@@ -278,7 +280,7 @@ Not modelled: the mix valve's pressure drop, demulsifier, water carried over in 
 
 ### 8.2 Chloride hydrolysis (`first_order`, heat sides, vessels, a column's bottom)
 
-`hydrolysable_chloride` → `acid_chloride`, mole for mole of chlorine. `k = 180 s⁻¹ · exp(−5190 K / T)`, window 393 K and above, oil present. A fit to two anchors: 90 % in 60 s at 340 °C, 5 % in 60 s at 150 °C.
+`hydrolysable_chloride` → `acid_chloride`, mole for mole of chlorine. `k = 180 s⁻¹ · exp(−5190 K / T)`, window 393 K and above, oil present. A fit to two anchors for magnesium chloride: 90 % in 60 s at 340 °C, 5 % in 60 s at 150 °C. Calcium chloride gives up 3 % of its chlorine in laboratory steam and under 15 % in a plant, sodium chloride below 1 %: only 12 % of the calcium chloride's chlorine is in the tag, the rest is `salt`. With a salt of 75 % sodium, 15 % magnesium and 10 % calcium chloride, an assay's default hydrolysable share is one sixth. Naphthenic acid raises the share of calcium and sodium (a patent, review 7.3): not built.
 
 | Temperature | `k` (1/s) | In 8 s | In 60 s | In 300 s |
 |---|---|---|---|---|
@@ -327,32 +329,44 @@ Heat and vacuum do not strip dilute acid water, in the model as in a plant; acid
 
 It replaces the Kern–Seaton placeholder of the fouling-corrosion batch for oil sides (owner decision O1 there: "until the reaction module"). Water sides keep Kern–Seaton.
 
-`dRf/dt = p · [3.17e-4 · exp(−5773 K / T_f) · v^(−0.66) − 5.1e-9 · v^1.6]`, in m²K/W per process second, not below 0.
+`dRf/dt = p · [0.0575 · Re^(−0.66) · Pr^(−0.33) · exp(−4811 K / T_f) − 1.59e-10 · τ_w]`, in m²K/W per process second (`τ_w` in Pa), not below 0.
 
-- The form is Ebert and Panchal's threshold model in Panchal's 1999 reading with Polley's activation energy (48 kJ/mol); the two constants are fitted to the game's fouling time, 0.0009 m²K/W in 10 process hours at 350 °C and 1 m/s.
-- `T_f`: the film temperature, `T_bulk + 0.55 (T_wall − T_bulk)`, `T_wall` from the side's duty, area and film.
-- `v`: the passage speed. `p = clamp(asphaltene share of the oil / 0.03, 0.2, 3)`.
+- The form is Panchal's 1999 reading of Ebert and Panchal's threshold model: deposition falls with the Reynolds number, removal rises with the wall shear. The side's law already has `Re`, `Pr` and the friction factor (`τ_w = f ρ v² / 2`), so cold, viscous crude fouls more, as it does.
+- 40 kJ/mol: refinery preheat trains refit to 21 to 47 kJ/mol. The 48 and 68 kJ/mol of the original papers are fits to coker feed at 360 to 420 °C (review 7.3; revision 3 used 48 with speed alone, and gave no fouling at 230 °C and 2 m/s, where exchangers do foul).
+- The two constants are fitted to a threshold of 3 m/s at 230 °C on the literature's benchmark oil (`Re` 17 100, `Pr` 10, 7.2 Pa at 2 m/s) and to the game's fouling time, 0.0009 m²K/W in 10 process hours at 350 °C and 1 m/s. At the benchmark the law gives 1.9e-9 m²K/J against a measured 0.3e-10 to 3e-10: the game fouls about 13 times faster than a plant, by choice.
+- `T_f`: the film temperature, `T_bulk + 0.55 (T_wall − T_bulk)`, `T_wall` from the side's duty, area and film. `p = clamp(asphaltene share of the oil / 0.03, 0.2, 3)`.
 - Window: `T_f` ≥ 473 K.
 
-| Speed | Deposit starts at `T_f` | Hours to 0.0009 at 350 °C | At 400 °C |
-|---|---|---|---|
-| 0.5 m/s | 185 °C | 5.5 | 2.7 |
-| 1 m/s | 250 °C | 10 | 4.6 |
-| 2 m/s | 337 °C | 70 | 11 |
-| 3 m/s | 402 °C | none | none |
+On the benchmark oil:
+
+| Speed | Deposit starts at `T_f` | Hours to 0.0009 at 250 °C | At 350 °C | At 400 °C |
+|---|---|---|---|---|
+| 0.5 m/s | below the window | 23 | 5.2 | 2.9 |
+| 1 m/s | below the window | 38 | 8.3 | 4.7 |
+| 2 m/s | below the window | 77 | 14 | 7.6 |
+| 3 m/s | 230 °C | 243 | 20 | 10.5 |
+| 4 m/s | 269 °C | none | 30 | 14 |
+| 5 m/s | 304 °C | none | 52 | 19 |
 
 Mass: the formation term × deposit conductivity (1 W/mK) × density (1 200 kg/m³) × area is the coke formed. The net part leaves the oil's `asphaltenes` and becomes the side's deposit (the `Rf` fact that exists). The part the flow removes becomes `coke_fines` on the same carriers.
 
 ### 8.5 Bulk coking (`first_order`, vessels and a column's bottom)
 
-`asphaltenes` → 60 % `coke_fines`, 40 % deposit. `k = 3e-5 s⁻¹ · exp(−25 258 K · (1/T − 1/673.15 K))` (210 kJ/mol, the usual value for residue cracking), window 613 K and above.
+Two records, both with `k = 3e-5 s⁻¹ · exp(−25 258 K · (1/T − 1/673.15 K))` (210 kJ/mol, the usual value for residue cracking), window 613 K and above:
 
-| Temperature | Asphaltenes coked per hour |
-|---|---|
-| 340 °C | 0.3 % |
-| 370 °C | 1.9 % |
-| 400 °C | 10 % |
-| 430 °C | 42 % |
+- `resins` crack at `2k` (to the oil: the tag only falls).
+- `asphaltenes` above the solubility limit `0.4 × resins` → 60 % `coke_fines`, 40 % deposit, at `k`. Below the limit nothing cokes. The `first_order` law gains an optional `limit` (a factor on another tag) for this.
+
+This is Wiehe's phase-separation picture on the two tags the cuts carry: the resins keep the asphaltenes in solution, heat destroys the resins, and coke appears after an induction period (review 7.3). The limit 0.4 and the factor 2 are fits to an induction of tens of minutes at 400 °C (recalled), until Wiehe's constants are read.
+
+| Temperature | Induction, asphaltenes to resins 1 to 3 | 1 to 2.6 | Asphaltenes coked per hour after it |
+|---|---|---|---|
+| 340 °C | 33 h | 7 h | 0.3 % |
+| 370 °C | 4.9 h | 1.0 h | 1.9 % |
+| 400 °C | 50 min | 11 min | 10 % |
+| 430 °C | 10 min | 2 min | 42 % |
+
+A residue with more asphaltenes than 0.4 of its resins cokes at once above 340 °C; a usual one passes a column's bottom, where it stays minutes, without coke. The 60 to 40 split is a game rule.
 
 In a column the deposit raises the tray fouling that the fouling-corrosion batch's WP8 already keeps (`trayFouling`), by the deposit's share of 2 % of the bottoms. In a vessel the deposit is booked and has no effect yet. `coke_fines` count as solid share in `ErosionLaw` and in the column's tray fouling. They are not a `SolidInventory` population in this batch (option O3).
 
@@ -372,15 +386,15 @@ Changes to `science/integrity`:
 - `CorrosionStandard.digest` takes `S` and `A` from the tags `sulfur` and `acid` of the oil it reads, no longer from the static sub-record. With default contents the numbers are those of today.
 - **M12, acid chloride** (`Mechanism.ACID_CHLORIDE`, appended): acts where free water holds chloride acid. Its pH is the speciation law's (7.4). In a holdup the ions are already split, so the charge balance alone gives it: `h − Kw/h = (acid_chloride − ammonium − caustic) / kg of free water`, in mol, `pH = −log10 h`. At a heat side's wet end and in a column's top zone no solve has run; there the law's acid side is used: all the hydrogen chloride counts as ions, and the ammonia as ions up to the acid. That is exact below pH 7, and M12 does not act above pH 5.5.
 - The acid dew point: refiners find the first acid drop above pure water's dew point (17 K in the OGJ example). Hydrogen chloride and water alone give about 0.5 K (review 4.3); salts and cold surfaces make the rest, and the cubic knows neither. A column's top zone and its condenser therefore count as wet for M12 up to 15 K above the table's `waterBelow`. A heat side of the network has only its state's wet flag: a known miss.
-- A heat side reads both its ends: the hotter end for the dry mechanisms, as today, and the colder end for the wet ones. A condenser's acid attack is at its cold end, which the hotter-end digest of the fouling-corrosion batch does not see. Carbon steel: `min(25, 2.5 · 10^(−0.5 (pH − 2.25))) · 2^((min(T, 366 K) − 311 K)/55 K)` mm/y, none above pH 5.5.
+- A heat side reads both its ends: the hotter end for the dry mechanisms, as today, and the colder end for the wet ones. A condenser's acid attack is at its cold end, which the hotter-end digest of the fouling-corrosion batch does not see. Carbon steel: `min(25, 2.5 · 10^(−0.35 (pH − 2.25))) · 2^((min(T, 366 K) − 311 K)/55 K)` mm/y, none above pH 5.5. The slope 0.35 is what the two anchors ask for (100 mils a year at pH 2.25, 20 at pH 4.25); revision 3's 0.5 missed the second by half (review 7.3).
 
 | pH | 38 °C | 93 °C |
 |---|---|---|
-| 1 | 10.5 | 21 |
+| 1 | 6.9 | 13.7 |
 | 2.25 | 2.5 | 5 |
-| 3.6 | 0.5 | 1.1 |
-| 4.5 | 0.19 | 0.37 |
-| 5.5 | 0.06 | 0.12 |
+| 3.6 | 0.84 | 1.7 |
+| 4.5 | 0.41 | 0.82 |
+| 5.5 | 0.18 | 0.36 |
 
 Material factors: chrome steel 1, stainless steel 0.3 (it pits and cracks in chloride), nickel alloy 0.02. Nickel alloy keeps its place as the answer for an acid overhead. The anchors are recalled from the hydrochloric acid table of API RP 581 Part 2 Annex B and must be read against it before the constants are fixed (the search of this task did not reach the table).
 
@@ -479,6 +493,10 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - **O5, the numbers** of sections 8 and 9 are game-level fits to the stated anchors, as the corrosion matrix is.
 - **O6, hydrogen chloride's pair with water: settled by O7.** With the law in place the pair serves the molecular part only and is sized, not fitted to the acid (8.3). The options A to C of revision 2 (pair 0, a pair of −1.0 with a tag limited to 1 mol/kg, the pair alone) are withdrawn. The size (0.1 atm at 25 °C, 10 atm at 100 °C) is the owner's to change: a larger constant gives a truer azeotrope at 50 mmHg (25.2 % at 1 and 30 atm) and holds less arriving gas (81 %).
 - **O7, acids and bases in water: decided** (owner, 2026-11-16: "Level 1: speciation"). One speciation law at the exchange sites: sections 7.4, 8.3 and 9. Not chosen: rules per substance (revision 2), and electrolyte thermodynamics in the kernel, which stays the answer if acid gas must one day flash correctly out of rich amine in any network equipment (review 4.5).
+- **O8, three numbers the survey could not source** (review 7.3), each a game value until the owner says otherwise:
+  - The coker's coke factor: 1.2 to 1.7 of the Conradson carbon by drum pressure and recycle ratio (ours), or the textbook's fixed 1.6.
+  - A sediment limit on residue hydrocracking conversion (60 to 80 % in real ebullated beds, recalled): a limit with game constants, or none.
+  - One activation energy per isomerization catalyst family: the paper gives none.
 
 ## 17. Risks
 
