@@ -96,8 +96,7 @@ The column block, the one unit with more than one calculation:
   at the tile's duty (`CentrifugalPump.rated`, Corripio); a compressor's is the world's closure's, the polytropic work;
   all of it heats the discharge. Readings `power`, `hydraulic` (a pump), `efficiency`, `head`, and the proposed driver,
   a `POLES`-pole IE3 motor rated by `Motor.ratingFor` (readings `motor`, `motor_efficiency`, `electric`). A pump warns
-  `pump.bubble_point` where its liquid boils 0.1 % under its pressure, or where one dense fluid stands at its edge
-  (`FlowThermo.denseAtEdge`).
+  `pump.bubble_point` where its liquid boils 0.1 % under its pressure; one dense fluid has no bubble point, so never.
 - **Turbine** (`TurbineUnit`): η is `SteamTurbine.typicalEfficiency` of a turbine rated at its own power; an exhaust at or
   above the inlet is refused.
 - **Ejector** (`EjectorUnit`): the world's `SteamEjector` uses the sheet's correlation, so a sheet-sized set runs its

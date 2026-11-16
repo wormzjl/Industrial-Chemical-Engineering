@@ -86,10 +86,13 @@ The laws are called, never call:
   status word, sound or cavitation count). A centrifugal compressor's efficiency reads `wetEfficiency` of its liquid
   share; a set-flow pump delivers `(1 − α)` of its displacement as liquid, a frame the displacement less the liquid's
   volume. Only a dry suction and, at a compressor, solids above the trace refuse.
-- One dense fluid (`State.dense()`) has no second phase: its `α` is `1 − w` and its liquid share `w`, its liquid-like
-  weight (`FluidThermodynamics.liquidLikeWeight`, a smoothstep between reduced densities `GAS_LIKE_UNTIL` 0.5 and
-  `LIQUID_LIKE_FROM` 1.5), whichever slot holds it (`InletPhase.measure`); the vapour slot's 1 and 0 below the window
-  and the liquid slot's 0 and 1 above it, to the bit. Its NPSH density is its own in either slot. The compressor's
+- One dense fluid (`State.dense()`) has no second phase. Whichever slot holds it (`InletPhase.measure`), a pump's `α`
+  is `1 − w_pump` on its own weight (`FluidThermodynamics.pumpLiquidLikeWeight`, a smoothstep between reduced densities
+  `GAS_LIKE_UNTIL` 0.5 and `PUMP_LIQUID_LIKE_FROM` 1.0: a pump keeps its full head from the critical density,
+  DENSE_PUMP_RESEARCH_REVIEW.md of batch 2026-11-15-supercritical-fluids), and a compressor's liquid share is `w` on the
+  film's (`liquidLikeWeight`, 0.5 to `LIQUID_LIKE_FROM` 1.5); each is the slot's own value to the bit outside its window. Its NPSH density is its own in either slot. What needs a second
+  phase does not occur in it: no vapour pressure, no droplet wear (`Supply.dropletMassShare` 0 feeds `Wear.wetGas`
+  and the `WET GAS` word), and a pump's suction edge only where its isenthalp really flashes. The compressor's
   head-to-ratio law reads the ideal-gas `k` on the suction's real `P/ρ`, which loses accuracy on a dense suction
   (`S4_MACHINES_REVIEW.md` of batch 2026-11-15-supercritical-fluids).
 

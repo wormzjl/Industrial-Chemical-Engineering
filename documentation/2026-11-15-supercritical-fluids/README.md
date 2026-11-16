@@ -1,6 +1,6 @@
 # Supercritical fluids
 
-Status: **In progress** since 2026-11-15 (S0, S1, S2, S3 and S4 done; S5 next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
+Status: **In progress** since 2026-11-15 (S0, S1, S2, S3, S4 and S4b done; S5 next). Branch `claude/supercritical-fluid-support-d0ffa4`, base `e9edc974b` (main 0.31.0).
 
 Purpose: dense and supercritical fluids as ordinary states of the fluid network, the machines, the heat units and the
 simulator: continuous properties, no label-driven jumps, no critical-band hold.
@@ -86,6 +86,16 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
 - 2026-11-16: the main thread checked the merge of main (`8bac3e6e7`, then `10c9578b2`) and S4 (the diff, the stored
   results, the review). The standing merge instruction, main's moves and S4's open form are in the plan's section 2b,
   points 8 to 10.
+- 2026-11-16: S4b (sub-thread; owner: "ok but use a new thread", then "Use 0.5 to 1.0"). One dense fluid has no second
+  phase at a machine. Its pump's E stands only at a real flash, from the bubble side below Pc: CO2 at 320 K and 15 MPa
+  keeps 6.5198 MPa, and the lock band (δ 0.5 to 1.1) is gone. It has no p_v and no droplet wear. On the sheet it has no
+  edge, no bubble warning and a cold suction, and the compressor's discharge exponent is blended to the solved streams'.
+  One seam is left, on the critical isenthalp (δ 1.067, 1.181, 1.311 at 310, 320, 330 K). A pump's own weight runs from
+  δ 0.5 to 1.0 (option 1 B of [DENSE_PUMP_RESEARCH_REVIEW.md](DENSE_PUMP_RESEARCH_REVIEW.md)), so it keeps its full head
+  from the critical density. Commits `588f7da31`, `6e6f928aa`, `c69ff5303`, then the documents. Results: 0 non-dense
+  values moved; the affected classes passed twice (190 classes and 1,347 tests, then 235 and 1,533; holdGates 136
+  each); chain-100 deviation 0; dense GameTests `s4b-dense1` 3 of 3. [S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md)
+  (corrected sections 1, 3, 4, 6, 8, 10).
 
 ## Documents
 
@@ -101,6 +111,8 @@ simulator: continuous properties, no label-driven jumps, no critical-band hold.
   owner options (onset, film bounds, film seam).
 - [S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md): S4, a dense fluid at a pump and a compressor: the shares and E
   before and after, the seams, the compressor law against the reference, the simulator's readers, the owner options.
+- [DENSE_PUMP_RESEARCH_REVIEW.md](DENSE_PUMP_RESEARCH_REVIEW.md): how a real centrifugal pump behaves on a supercritical
+  fluid (sources, the rise on the suction's density, options); option 1 B carried out in S4b.
 - [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md): S2c, the slot rule by density and its moved states, what still reads the slot, the dense pump's suction edge, the "no saturation" callers, the GameTests, the campaign draws.
 - [SUPERCRITICAL_QUALIFICATION_REVIEW.md](SUPERCRITICAL_QUALIFICATION_REVIEW.md): S0's measurements M1..M7 and the follow-up M8, the
   recommended pressure ranges and the sizes of the open decisions.
@@ -121,10 +133,12 @@ dataset records under `data/icheme/materials/properties/`, the device screens' p
   supercritical isotherms only). Implemented: the first of each.
 - For the owner (S2c, [S2C_NETWORK_REVIEW.md](S2C_NETWORK_REVIEW.md) section 8): the engine's PIP labels of one-root mixtures (option B, not done); the LIQUID port's head seam; the gas blanket in the liquid slot; the pump and compressor conventions and E for S4; the blanketed drum's failure in run `s2c-gt2` (section 6). The S2 review's cold-campaign line is corrected there (section 7).
 - For the owner (S4, [S4_MACHINES_REVIEW.md](S4_MACHINES_REVIEW.md) section 8):
-  - the machines' bounds, with the pump vapour-locked through a line from δ 0.5 to about 1.1;
-  - the seam at Tc on the isenthalp, where E drops by 0.35 to 0.65 MPa;
-  - the compressor law (−14 % head on a liquid-like suction; the sizing's discharge 17 to 32 K high);
-  - wet gas wear on a dense fluid.
+  - the compressor's head law (−14 % head on a liquid-like suction);
+  - the seam at the critical isenthalp (E none → about Pc), left as it is;
+  - the pump's readers of `1 − w_pump` (churn, `GAS`, gas ratio, a dry screw's LIQUID), for S5;
+  - the sizing's discharge between w 0 and 1 (15.5 K high at the slot line);
+  - the sheet's p_v of a dense mixture.
+  S4b settled the bounds (the pump on 0.5 to 1.0) and the wet gas wear (none).
   For S5, section 9 lists the texts that name a phase.
 - For the owner (S3 fix, [S3_DATA_REVIEW.md](S3_DATA_REVIEW.md) section 4): the thermodynamic revision repeats the fluid
   identity about three times (once would lift the NBT wall to about 290 compounds); the simulator menu's opening data is
