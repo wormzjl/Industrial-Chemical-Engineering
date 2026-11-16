@@ -301,6 +301,20 @@ class FluidCheckpointCodecTest {
         assertEquals(pump,after.graph().pipes().get(0).control());assertEquals(compressor,after.graph().pipes().get(1).control());
         assertSameImage(image,FluidCheckpointCodec.encode(FluidCheckpointCodec.decode(image,key->model),key->model),"a reloaded checkpoint re-encodes to the same bytes");
     }
+    /** Format 51 (batch 2026-11-15-supercritical-fluids, S8): a plunger pump casing, control tag 9, comes back a plunger pump
+     * (its displacement, relief rise and rated speed, speed, switch and set points), not the centrifugal pump the generic
+     * tag 5 would make of a liquid law. */
+    @Test void aPlungerPumpRoundTripsAsItsOwnLaw() {
+        var block=new PipeResistance.Geometry(1,.05,.000045,0);
+        var nodes=new ArrayList<PassiveNetwork.Reservoir>();for(long id=1;id<=2;id++)nodes.add(new PassiveNetwork.Reservoir(id,0,model.initialNitrogenCharge(1,298.15,150000,()->{})));
+        var plunger=new FlowControl.Machine(com.wormzjl.icheme.science.machine.PlungerPump.of(com.wormzjl.icheme.science.machine.PlungerPump.model(2)),.7,true,.002,0);
+        var pipes=List.of(new PassiveNetwork.Pipe(10,0,1,List.of(block),plunger,0,null,PassiveNetwork.PhasePort.BULK,PassiveNetwork.PhasePort.BULK));
+        var state=new IslandCoordinator.Snapshot(1,4,new PassiveNetwork(nodes,pipes),new IslandClock.Snapshot(350,200,400,100),Optional.empty(),"FULL");
+        var image=FluidCheckpointCodec.encode(new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state))),key->model);
+        var after=FluidCheckpointCodec.decode(image,key->model).islands().getFirst().snapshot();
+        assertEquals(plunger,after.graph().pipes().getFirst().control());
+        assertSameImage(image,FluidCheckpointCodec.encode(FluidCheckpointCodec.decode(image,key->model),key->model),"a reloaded checkpoint re-encodes to the same bytes");
+    }
     /** The world ledger's compressor registration comes back exactly; an unknown control kind is refused. */
     @Test void aCompressorRegistrationRoundTripsInTheTopologyUnit() {
         var empty=WorldTopologyLedger.Snapshot.empty(MaterialCatalog.bundled());int count=empty.basis().components().size();
