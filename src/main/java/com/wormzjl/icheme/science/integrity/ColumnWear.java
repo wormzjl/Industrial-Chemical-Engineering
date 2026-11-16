@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.science.integrity;
 
+import com.wormzjl.icheme.science.math.DeterministicMath;
+
 /**
  * A running column's trays and wall (batch 2026-11-16-fouling-corrosion, plan section 13.1, decision D10: the agent's
  * numbers, to be tuned later). Particles that ride the liquid down the trays settle on them and in the downcomers, so the
@@ -48,7 +50,7 @@ public final class ColumnWear {
     public static double foul(double fouling, double share, double seconds, double tauSeconds) {
         double f = clamp(fouling), target = asymptote(share);
         if (!(target > f) || !(seconds > 0) || !(tauSeconds > 0)) return f;
-        return clamp(f + (target - f) * -Math.expm1(-seconds / tauSeconds));
+        return clamp(f + (target - f) * -DeterministicMath.expm1(-seconds / tauSeconds));
     }
 
     /** The trays' capacity at fouling {@code fouling}: {@code 1 − 0.4 f}; exactly 1 for a clean column. */

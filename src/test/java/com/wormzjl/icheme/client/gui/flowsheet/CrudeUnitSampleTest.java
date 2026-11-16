@@ -524,23 +524,26 @@ class CrudeUnitSampleTest {
          * Since the column took the network's water (E30 (a)) the residue brings E-101 a little less heat, and the need is 572 m² (the probe's 578.5).
          * Since the pumps' losses heat the crude (D42 of batch 2026-11-03-rotating-machinery) the crude reaches E-101 0.08 K warmer:
          * both ends close by 0.05 K and the need is 569 m² (the probe's 575.0).
+         * Since the exchanger sizes on its services' design deposit (WP5 of batch 2026-11-16-fouling-corrosion) the dirty crude and
+         * residue need 1344 m², not 569, 1613 with the spare: a 1.50 m shell with 10 m tubes, 1688 m², not 1.25 × 6 m, 703 m². The
+         * probe's clean one LMTD stands at 575.0.
          */
         @Test
         void e101() {
             var unit = alone.units().get("E-101");
-            assertEquals(new ExchangerSizing.Size(false, 1, 1.25, 6), unit.size());
+            assertEquals(new ExchangerSizing.Size(false, 1, 1.5, 10), unit.size(), "1.25 × 6 m before the design deposit (WP5)");
             closest(unit.rating(), Limit.EXCHANGER_SURFACE);
             var surface = unit.rating().reading(Limit.EXCHANGER_SURFACE);
-            assertEquals(703, surface.value(), ONE);
-            assertEquals(569, surface.low(), ONE, "the curves' surface");
+            assertEquals(1688, surface.value(), ONE, "703 before the design deposit (WP5)");
+            assertEquals(1344, surface.low(), ONE, "the curves' surface on the design deposit; 569 clean, before WP5");
             assertEquals(575.0, probesSurface(), ONE, "the probe's one LMTD at U 1000, from the same streams");
             assertEquals(67.91, read(unit.rating(), Limit.EXCHANGER_HOT_END), TENTH);
             assertEquals(32.64, read(unit.rating(), Limit.EXCHANGER_COLD_END), TENTH);
             assertEquals(32.63, read(unit.rating(), Limit.EXCHANGER_APPROACH), TENTH);
-            assertEquals(23.6, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE);
+            assertEquals(25.5, read(unit.rating(), Limit.EXCHANGER_OVER_NEED), ONE, "23.6 before the design deposit (WP5)");
             var drops = unit.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
-            assertEquals(.20, drops.get(0).value(), HUNDREDTH, "the tube side, 0.44 on 1.00 × 6 m; 0.17 before O4's crude viscosity");
-            assertEquals(.07, drops.get(1).value(), HUNDREDTH, "the shell side, 0.15 on 1.00 × 6 m");
+            assertEquals(.21, drops.get(0).value(), HUNDREDTH, "the tube side, 0.44 on 1.00 × 6 m; 0.17 before O4's crude viscosity; 0.20 on 1.25 × 6 m clean, before the design deposit (WP5)");
+            assertEquals(.11, drops.get(1).value(), HUNDREDTH, "the shell side, 0.15 on 1.00 × 6 m; 0.07 on 1.25 × 6 m clean, before the design deposit (WP5): longer tubes and the narrowed passages");
         }
 
         private static double probesSurface() {
@@ -559,9 +562,9 @@ class CrudeUnitSampleTest {
             assertSame(Limit.EXCHANGER_SURFACE, kept.rating().closest().limit());
             assertEquals(253, read(kept.rating(), Limit.EXCHANGER_SURFACE), ONE);
             var drops = kept.rating().readings().stream().filter(reading -> reading.limit() == Limit.EXCHANGER_DROP_LIQUID).toList();
-            assertEquals(1.31, drops.get(0).value(), HUNDREDTH, "1.29 before O4's crude viscosity");
+            assertEquals(1.76, drops.get(0).value(), HUNDREDTH, "1.29 before O4's crude viscosity; 1.31 before the design deposit (WP5 of batch 2026-11-16-fouling-corrosion) narrowed the tubes");
             assertEquals(Lamp.YELLOW, drops.get(0).lamp());
-            assertEquals(.432, drops.get(1).value(), HUNDREDTH, "0.41 before O4's crude viscosity, 0.44 before condenser carry-over (E31)");
+            assertEquals(.715, drops.get(1).value(), HUNDREDTH, "0.41 before O4's crude viscosity, 0.44 before condenser carry-over (E31); 0.432 before the design deposit (WP5) narrowed the residue's side");
         }
 
         /**
@@ -602,15 +605,18 @@ class CrudeUnitSampleTest {
             var unit = alone.units().get("E-102");
             // The larger bays (batch 2026-11-15-equipment-visual-design, AIR_COOLER_BAY_PLAN.md 4.5): three 6 × 12 m bays in series,
             // 176.6 m² of face, take the 6 × 3 bays of 2.5 × 6 m's place (180.6 m²); one train of 36 m of tube loses 0.22 bar, not 0.045.
-            assertEquals(new AirCoolerSizing.Size(6, 12, new ProcessUnit.Bank(1, 3), 1), unit.size(), "S4c: the least face that holds 1.2 × the curve's need, 869 m²; 6 × 4 bays of 2.0 × 5 m held the bare need");
+            // Since the bank sizes on the residue's design deposit (WP5 of batch 2026-11-16-fouling-corrosion) it needs 954 m², not
+            // 732.5, 1145 with the spare: two trains of three 5.5 × 9 m bays, 1146 m², not one train of three 6 × 12 m bays, 883 m².
+            // Each train carries half the residue on 27 m of tube and loses 0.11 bar, not 0.22.
+            assertEquals(new AirCoolerSizing.Size(5.5, 9, new ProcessUnit.Bank(2, 3), 1), unit.size(), "S4c: the least face that holds 1.2 × the curve's need on the design deposit, 1145 m²; 6 × 12 m, bank 1 × 3, on the clean 869 m² before WP5; 6 × 4 bays of 2.0 × 5 m held the bare need");
             closest(unit.rating(), Limit.AIR_COOLER_SURFACE);
             var surface = unit.rating().reading(Limit.AIR_COOLER_SURFACE);
-            assertEquals(883, surface.value(), ONE);
-            assertEquals(732.5, surface.low(), ONE, "the curve's surface");
+            assertEquals(1146, surface.value(), ONE, "883 before the design deposit (WP5)");
+            assertEquals(953.9, surface.low(), ONE, "the curve's surface on the design deposit; 732.5 clean, before WP5");
             assertEquals(750.2, probesBareSurface(), ONE, "the probe's one capacity, from the same streams");
             itsCapacityRises("S-10", run.streams().get("S-10").temperature(), run.streams().get("RESIDUE").temperature());
             assertEquals(45, read(unit.rating(), Limit.AIR_COOLER_OUTLET), TENTH);
-            assertEquals(.218, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH);
+            assertEquals(.112, read(unit.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH, "0.218 on one train before the design deposit (WP5)");
         }
 
         private static double probesBareSurface() {
@@ -620,13 +626,21 @@ class CrudeUnitSampleTest {
             return capacity * Math.log((in.temperature() - air) / (out.temperature() - air)) / HeatSides.airFilms(1).liquid();
         }
 
+        /**
+         * The probe's bank, kept by the player: 5 trains of three 2.5 × 6 m bays, 752 m² of face. It held the clean need, 732.5 m²,
+         * and rated GREEN (this test was {@code theProbesBankStillHoldsItsDutyWhenThePlayerKeepsIt}). Since the bank rates on the residue's
+         * design deposit (WP5 of batch 2026-11-16-fouling-corrosion) the need is 954 m²: the kept face is short of it and rates RED
+         * on its surface. The deposit narrows the tubes: 0.069 bar, not 0.05.
+         */
         @Test
-        void theProbesBankStillHoldsItsDutyWhenThePlayerKeepsIt() {
+        void theProbesBankIsShortOfSurfaceOnTheDirtyService() {
             var kept = MaterialRuntime.with(SheetFixture.CATALOG, SheetFixture.NETWORK, () -> SheetSizing.pass(sheet, run, thermo,
                     new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of("E-102", new SheetSizing.UnitEntry(new AirCoolerSizing.Size(2.5, 6, new ProcessUnit.Bank(5, 3), 1), null, null, false))))).units().get("E-102");
-            assertEquals(Lamp.GREEN, kept.rating().lamp());
+            assertEquals(Lamp.RED, kept.rating().lamp());
+            assertSame(Limit.AIR_COOLER_SURFACE, kept.rating().closest().limit());
             assertEquals(752, read(kept.rating(), Limit.AIR_COOLER_SURFACE), ONE);
-            assertEquals(.05, read(kept.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH, "0.05 before O4's crude viscosity: the residue cooled to 45 C");
+            assertEquals(953.9, kept.rating().reading(Limit.AIR_COOLER_SURFACE).low(), ONE, "the need on the design deposit");
+            assertEquals(.069, read(kept.rating(), Limit.AIR_COOLER_DROP), HUNDREDTH, "0.05 before O4's crude viscosity: the residue cooled to 45 C; 0.05 before the design deposit (WP5)");
         }
 
         /** The plan's what-if: the sample has no storage tile, so each product stands for the liquid one would hold. */
@@ -749,6 +763,9 @@ class CrudeUnitSampleTest {
          * batch 2026-11-04-open-thermo-data) with condenser carry-over (E31 of that batch) the condenser takes less: one crossflow
          * shell of 2.00 × 6 m on the curves' 509 m² (2.25 × 7 m on 781 m² on Tia Juana), and the widest single standard shell,
          * 2.50 × 8 m, now meets the gas drop too; Auto's crossflow shell is the least surface that meets every limit.
+         * Since the condenser sizes on its services' design deposit (WP5 of batch 2026-11-16-fouling-corrosion) the curves need
+         * 766 m², not 509: Auto's shell stands, and the probe's three shells, 1406 m², now hold 83 % over the need, under the 100 %
+         * advisory, so they rate GREEN, not YELLOW.
          */
         @Test
         void theCondenserIsSetByItsShellDrop() {
@@ -759,7 +776,7 @@ class CrudeUnitSampleTest {
             assertTrue(condenser.rating().reading(Limit.EXCHANGER_DROP_LIQUID).met());
             assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).met());
             assertFalse(condenser.rating().reading(Limit.EXCHANGER_OVER_NEED).met());
-            assertEquals(509, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8);
+            assertEquals(766, condenser.rating().reading(Limit.EXCHANGER_SURFACE).low(), 8, "509 before the design deposit (WP5)");
             assertTrue(condenser.rating().reading(Limit.EXCHANGER_SURFACE).value() >= 1.2*condenser.rating().reading(Limit.EXCHANGER_SURFACE).low());
             var single = new SheetSizing.Entries(DesignBasis.DEFAULT, Map.of(), Map.of(SheetSizing.member(T, "condenser"), new SheetSizing.UnitEntry(new ExchangerSizing.Size(false, 1, 2.5, 8), null, null, false)));
             var singleRating = size(sheet, run, thermo, single).units().get(SheetSizing.member(T, "condenser")).rating();
@@ -768,7 +785,7 @@ class CrudeUnitSampleTest {
             var three = size(door(sheet, json -> json.addProperty("condenser_units", 3)), run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
             assertEquals(new ExchangerSizing.Size(false, 3, 1.25, 4), three.size());
             var kept = three.rating();
-            assertEquals(Lamp.YELLOW, kept.lamp(), () -> text(kept));
+            assertEquals(Lamp.GREEN, kept.lamp(), () -> text(kept));
             assertEquals(.13, read(kept, Limit.EXCHANGER_DROP_GAS), HUNDREDTH, "over 0.20 on Tia Juana (O3)");
             var one = size(sheet, run, thermo, probe).units().get(SheetSizing.member(T, "condenser"));
             assertEquals(new ExchangerSizing.Size(false, 1, 1.25, 4), one.size(), "the door's one shell");
@@ -816,16 +833,19 @@ class CrudeUnitSampleTest {
          * 300 m², where the least that held the bare need was 3 m, 225 m². PA 3's 225 m² already holds 1.2 × its 117. On the medium
          * crude grade (O3 of batch 2026-11-04-open-thermo-data) the needs are 202, 240 and 153 m², 242, 288 and 184 with the spare: the
          * same coolers and pumps. With condenser carry-over (E31 of that batch) PA 1 needs 198 m², 238 with the spare.
+         * Since the coolers size on their services' design deposit (WP5 of batch 2026-11-16-fouling-corrosion) the dirty needs are
+         * 290, 348 and 270 m², not 198, 240 and 153, 348, 417 and 324 with the spare: PA 1 and PA 3 take 1.00 × 5 m, 375 m², not 4 m
+         * and 3 m tubes, and PA 2 a 1.25 m shell with 4 m tubes, 469 m², not 1.00 × 4 m. The pumps stand.
          */
         @Test
         void eachPumparoundTakesItsCoolerAndPump() {
-            double[] needs = {198, 240, 153}, rated = {109, 107, 92}, pumps = {.25, .3, .25}, surfaces = {300, 300, 225};
-            int[] tubes = {4, 4, 3};
+            double[] needs = {290, 348, 270}, rated = {109, 107, 92}, pumps = {.25, .3, .25}, surfaces = {375, 468.8, 375}, shells = {1, 1.25, 1};
+            int[] tubes = {5, 4, 5};
             for (int i = 0; i < 3; i++) {
                 var cooler = unit("pa " + (i + 1) + " cooler");
-                assertEquals(new ExchangerSizing.Size(false, 1, 1, tubes[i]), cooler.size(), "PA " + (i + 1));
+                assertEquals(new ExchangerSizing.Size(false, 1, shells[i], tubes[i]), cooler.size(), "PA " + (i + 1));
                 assertEquals(surfaces[i], read(cooler.rating(), Limit.EXCHANGER_SURFACE), ONE);
-                assertEquals(needs[i], cooler.rating().reading(Limit.EXCHANGER_SURFACE).low(), needs[i] * .02, "PA " + (i + 1) + ": the curves' need, within 2 % of the probe's one LMTD");
+                assertEquals(needs[i], cooler.rating().reading(Limit.EXCHANGER_SURFACE).low(), needs[i] * .02, "PA " + (i + 1) + ": the curves' need on the design deposit");
                 var pump = unit("pa " + (i + 1) + " pump");
                 assertEquals(new PumpSizing.Size(pumps[i]), pump.size(), "PA " + (i + 1));
                 closest(pump.rating(), Limit.PUMP_RATED);
@@ -1082,15 +1102,20 @@ class CrudeUnitSampleTest {
          * <p>O3 of the same batch runs the sample on the medium crude grade: PA 1 cooler 0.36 to 0.39, E-101 0.18 to 0.20, H-101 1.48 to
          * 1.39, S-6 0.03 to 0.02; the path 3.10 to 3.06 bar. With condenser carry-over (E31 of that batch) H-101 loses
          * 1.385; the path stands.
+         *
+         * <p>Since the coolers and E-101 size on their services' design deposit (WP5 of batch 2026-11-16-fouling-corrosion) four
+         * steps move with their units' sizes: PA 1's cooler takes 5 m tubes, 0.45 bar, not 0.39; PA 2's a 1.25 m shell, more tubes
+         * at the same length, 0.19, not 0.41; PA 3's 5 m tubes, 0.41, not 0.30; E-101's 1.50 m shell, more tubes, 0.15, not 0.20.
+         * The path loses 2.97 bar, not 3.06.
          */
         @Test
         void p101sPathIsTheProbesStair() {
             var path = path(proposal, "P-101");
             String[] items = {"S-1", "T-101/pa 1 cooler", "S-2", "T-101/pa 2 cooler", "S-3", "T-101/pa 3 cooler", "S-4", "E-101", "S-5", "H-101", "S-6"};
-            double[] lost = {.12, .39, .10, .41, .04, .30, .04, .20, .04, 1.385, .02};
+            double[] lost = {.12, .452, .10, .186, .04, .413, .04, .154, .04, 1.385, .02};
             assertEquals(List.of(items), path.steps().stream().map(PressurePath.Step::item).toList());
             for (int i = 0; i < lost.length; i++) assertEquals(lost[i], path.steps().get(i).lost(), HUNDREDTH, items[i]);
-            assertEquals(3.06, path.lost(), HUNDREDTH);
+            assertEquals(2.97, path.lost(), HUNDREDTH, "3.06 before the design deposit (WP5)");
             assertEquals(14.00, path.from(), HUNDREDTH);
             assertTrue(path.set());
             assertEquals("V-101", path.taker());
@@ -1106,18 +1131,22 @@ class CrudeUnitSampleTest {
          * batch 2026-11-04-open-thermo-data (crude cuts on Twu 1985 viscosity, the one-term mixture term), 0.375 against 0.37. On the
          * medium crude grade (O3 of that batch) E-101's residue side loses 0.07 and the product line 0.16; the head 0.48, the path 0.38; 0.374 with
          * condenser carry-over (E31 of that batch).
+         * Since E-101 and E-102 size on the residue's design deposit (WP5 of batch 2026-11-16-fouling-corrosion) the residue side
+         * loses less on the larger units: E-101's 1.50 m shell 0.064, not 0.07, and E-102's two trains of three 5.5 × 9 m bays 0.084,
+         * not 0.218 on one train of three 6 × 12 m bays. The path loses 0.41, not 0.55.
          */
         @Test
         void theResiduesPathIsTheProbes() {
             var residue = proposal.paths().stream().filter(p -> p.start().equals("T-101") && p.end().equals("RESIDUE")).findFirst().orElseThrow();
             assertEquals(List.of("S-9", "E-101", "S-10", "E-102", "RESIDUE"), residue.steps().stream().map(PressurePath.Step::item).toList());
-            // E-102: 0.22 bar on three 6 × 12 m bays in series since the larger bays (batch 2026-11-15-equipment-visual-design), not 0.045.
-            double[] lost = {.005, .07, .09, .218, .16};
+            // E-102: 0.22 bar on three 6 × 12 m bays in series since the larger bays (batch 2026-11-15-equipment-visual-design), not 0.045;
+            // 0.084 on two trains of three 5.5 × 9 m bays since the design deposit (WP5 of batch 2026-11-16-fouling-corrosion).
+            double[] lost = {.005, .064, .09, .084, .16};
             for (int i = 0; i < lost.length; i++) assertEquals(lost[i], residue.steps().get(i).lost(), HUNDREDTH, residue.steps().get(i).item());
             assertEquals(.48, residue.head(), HUNDREDTH);
             assertEquals(2.21, residue.to(), HUNDREDTH);
             assertEquals(.98, residue.available(), HUNDREDTH);
-            assertEquals(.550, residue.lost(), HUNDREDTH);
+            assertEquals(.41, residue.lost(), HUNDREDTH, "0.550 before the design deposit (WP5)");
             assertFalse(residue.set());
             assertSame(com.wormzjl.icheme.science.flowsheet.sizing.Rating.NONE, residue.rating());
         }
