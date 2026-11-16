@@ -13,6 +13,8 @@ public final class ModBlockEntities {
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, IChemE.MOD_ID);
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity>> CREATIVE_POWER=BLOCK_ENTITY_TYPES.register("creative_power",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity::new,ModBlocks.CREATIVE_POWER.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.PollutionMonitorBlockEntity>> POLLUTION_MONITOR=BLOCK_ENTITY_TYPES.register("pollution_monitor",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.PollutionMonitorBlockEntity::new,ModBlocks.POLLUTION_MONITOR.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.LinePieceBlockEntity>> LINE_PIECE=BLOCK_ENTITY_TYPES.register("line_piece",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.LinePieceBlockEntity::new,ModBlocks.LINE_PIECE.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity>> DATA_CABLE=BLOCK_ENTITY_TYPES.register("data_cable",

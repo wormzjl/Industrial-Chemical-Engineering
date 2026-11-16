@@ -40,9 +40,9 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [pump-sprites/](pump-sprites/README.md) | Machinery/control sprites and normal/low-detail render probes | `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing` | In use since 2026-11-04 |
 | [still-sprites/](still-sprites/README.md) | Batch still sprites and textured still renders | `2026-11-09-batch-distiller` | In use since 2026-11-09 |
 | [batch-still-column/](batch-still-column/README.md) | B3 measurement: the bubble-point column candidate against V3 | `2026-11-09-batch-distiller` | Kept for reference since 2026-11-10 |
-| [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
+| [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit, the pollution meter) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
 | [machine-sounds/](machine-sounds/README.md) | Original pump, compressor, motor and steam-turbine loops (authoring only) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
-| [process-sounds/](process-sounds/README.md) | Original flare, burner, firebox, boiling-pot, valve, steam ejector, valve turn and prime mover sounds (authoring only) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
+| [process-sounds/](process-sounds/README.md) | Original flare, burner, firebox, boiling-pot, valve, steam ejector, valve turn, prime mover and pollution meter click sounds (authoring only) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [pbr-textures/](pbr-textures/README.md) | Instrument wiring textures and equipment relief sprites (baked and flat variants) with LabPBR 1.3 maps (stdlib Python) | `2026-11-10-custom-shader-system`, `2026-11-15-equipment-visual-design` | In use since 2026-11-10 |
 | [fx-textures/](fx-textures/README.md) | Effects textures: flame flipbook with LabPBR `_s`, smoke, plume (stdlib Python) | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |
 | [fx-bench/](fx-bench/README.md) | Effects CPU, GPU and RAM bench: scene, synthetic feed, five lanes, budget summary, recorder, flame preview | `2026-11-10-custom-shader-system` | In use since 2026-11-10 |

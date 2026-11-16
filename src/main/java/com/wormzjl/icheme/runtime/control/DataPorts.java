@@ -178,6 +178,29 @@ public final class DataPorts {
         return create(identity, DataPort.Kind.ALARM, 0, level, owner, centre, outward);
     }
 
+    /**
+     * A fixed pollution monitor's socket (WP10): on the analyser box's back, opposite its front, as the controller's
+     * ({@link #panel}); a sensor socket of host {@code host}.
+     */
+    public static DataPort monitor(
+            com.wormzjl.icheme.world.level.block.entity.PollutionMonitorBlockEntity monitor, long host, UUID identity) {
+        var outward =
+                monitor.getBlockState()
+                        .getValue(com.wormzjl.icheme.world.level.block.PollutionMonitorBlock.FACING)
+                        .getOpposite();
+        var normal = Vec3.atLowerCornerOf(outward.getNormal());
+        return create(
+                identity,
+                DataPort.Kind.SENSOR,
+                host,
+                monitor.getLevel(),
+                monitor.getBlockPos(),
+                monitor.getBlockPos()
+                        .getCenter()
+                        .add(normal.scale(com.wormzjl.icheme.world.level.block.PollutionMonitorBlock.SOCKET_DEPTH + .005)),
+                outward);
+    }
+
     public static DataPort power(
             UUID id,
             DataPort.Kind kind,

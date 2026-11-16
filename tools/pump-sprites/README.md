@@ -48,6 +48,8 @@ javac -encoding UTF-8 -d tmp/<task>/classes tools/pump-sprites/ConstructorAssets
 java -Djava.awt.headless=true -Djava.io.tmpdir=tmp/<task> -cp tmp/<task>/classes ControlAssets src/main/resources/assets/icheme
 ```
 
+The same command with a second argument `monitor` writes only the fixed pollution monitor's assets (batch 2026-11-15-pollution-system, WP10): `pollution_monitor_front` and the four `pollution_monitor_lamp_<dark|green|amber|red>` sprites, the base model `pollution_monitor` (lamp dark), one child model per lit lamp, the blockstate (facing by lamp) and the item model; `monitorBoxes` is the envelope of `PollutionMonitorBlock`'s collision boxes. Add `src/main/java/com/wormzjl/icheme/science/equipment/DcsGeometry.java` to the `javac` line when no build output is on the class path.
+
 `probes/SensorSheet.java <render-folder> <output.png>` combines the five sensor item renders at enlarged/inventory scales. The exporter/rasterizer recipe is in `tools/simulator-sizing/README.md`. Installed sensor colours are owned by `InstrumentGeometry`/`InstrumentRenderer`, rather than their item textures.
 
 ## Entry points

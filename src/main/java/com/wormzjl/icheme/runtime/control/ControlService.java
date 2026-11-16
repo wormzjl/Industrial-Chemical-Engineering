@@ -218,6 +218,16 @@ public final class ControlService {
             box.bind(panel.id(), port);
     }
 
+    /** A fixed pollution monitor's load or placement (WP10): its socket and host, kept or made, and its channels listed. */
+    public void loaded(PollutionMonitorBlockEntity monitor) {
+        hosts.bindMonitor(monitor);
+    }
+
+    /** A removed pollution monitor: its socket leaves the facts (a cable to it stays, unwired) and its channels the bus. */
+    public void removeMonitor(long host) {
+        if (hosts.monitor(host) || hosts.port(host) != null) hosts.removeHost(host);
+    }
+
     public void removePanel(UUID id) {
         facts.removePanel(id);
         law.forget(id);
@@ -461,7 +471,10 @@ public final class ControlService {
             if (input.physical() == null && needed.contains(input.host()))
                 readings.put(
                         input.instance(),
-                        BuiltInInputs.read(input, world, hosts.binding(input), views));
+                        // A pollution monitor's channel reads the installed pollution field (WP10).
+                        BuiltInInputs.ofMonitor(input)
+                                ? hosts.readMonitor(input, world.onlineTick())
+                                : BuiltInInputs.read(input, world, hosts.binding(input), views));
         return readings;
     }
 

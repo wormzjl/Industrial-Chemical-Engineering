@@ -33,6 +33,12 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 - A generator's own loss coefficient now reaches its line (`PhysicalFluidTopology.boundaryHalf`); every existing line is bit-identical, since no generator had one.
 - The level loop GameTests pace the server on the drum island's slice in flight (`LevelLoopGameTests.pace`): while a slice has been in flight more than 10 online ticks, each tick waits, as a 20 TPS server with a quick worker would; the run's result line counts the decisions that held.
 
+## [0.32.0] - 2026-11-16
+
+### Added
+
+- Air pollution (`2026-11-15-pollution-system`). The air of every dimension is divided into 16 m cubes that hold four kinds of pollution: toxic, combustible, corrosive and particulate, each measured against its compound's reference (NIOSH IDLH, the lower flammability limit, 1.75 g/m3 of dust). Open vessels, spills, chimneys, flares, flushes and fuel sulfur release into the cubes (`266d8d2d2`); the blanketing vent does not. Every 5 s a worker job spreads, settles and decays the field (`5830c527d`, `08d43d9f5`, `9d58d7ed4`). Players and mobs in a polluted cube take effects and damage by level (`6ae503c32`). A combustible cube at its limit explodes at a flame, and its neighbours follow. A blast that destroys a pipe, valve or one-block tank releases what it held, with a burst sound. A blast breaches constructed equipment, which then stands open until a repair kit mends it (`08512cd5e`, `41a6914e6`; fluid facts schema 26). New: the handheld pollution meter, the pollution monitor on data cables with a lamp, a horn and five DCS channels (`08512cd5e`), the command `/icheme pollution`, and with FTB Chunks installed a pollution overlay on its large map (`05c02394f`; wire protocol `icheme-2`). The pollution store never refuses a world: a damaged store is copied aside or erased (`ace24a1dd`). Config section `pollution`. Code guide chapter `pollution.md` (`b2321f37c`).
+
 ## [0.31.1] - 2026-11-15
 
 ### Changed

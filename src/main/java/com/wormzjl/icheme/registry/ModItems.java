@@ -54,6 +54,7 @@ public final class ModItems {
     public static final DeferredItem<BlockItem> POWER_CABLE=ITEMS.registerSimpleBlockItem(ModBlocks.POWER_CABLE);
     public static final DeferredItem<net.minecraft.world.item.BlockItem> LOCAL_CONTROLLER=ITEMS.registerSimpleBlockItem(ModBlocks.LOCAL_CONTROLLER);
     public static final DeferredItem<net.minecraft.world.item.BlockItem> DCS=ITEMS.registerSimpleBlockItem(ModBlocks.DCS);
+    public static final DeferredItem<net.minecraft.world.item.BlockItem> POLLUTION_MONITOR=ITEMS.registerSimpleBlockItem(ModBlocks.POLLUTION_MONITOR);
     public static final DeferredItem<BlockItem> FLUID_RESERVOIR=ITEMS.registerSimpleBlockItem("fluid_reservoir",ModBlocks.FLUID_RESERVOIR);
     public static final DeferredItem<BlockItem> FLUID_PIPE=ITEMS.registerSimpleBlockItem("fluid_pipe",ModBlocks.FLUID_PIPE);
     public static final DeferredItem<PipelineFittingItem> FLUID_PUMP=fitting("fluid_pump",Instrument.Type.PUMP);
@@ -97,6 +98,8 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.AccessoryWrenchItem> ACCESSORY_WRENCH = ITEMS.registerItem("accessory_wrench", com.wormzjl.icheme.world.item.AccessoryWrenchItem::new);
     /** A pump repair kit (W10b): used on a pump casing or an in-line pump, it restores the pump's health. */
     public static final DeferredItem<com.wormzjl.icheme.world.item.RepairKitItem> REPAIR_KIT = ITEMS.registerItem("repair_kit", com.wormzjl.icheme.world.item.RepairKitItem::new);
+    /** The handheld pollution meter (batch 2026-11-15-pollution-system, WP8): held, it reads the cube's air; used, the full reading in chat. */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.PollutionMeterItem> POLLUTION_METER = ITEMS.registerItem("pollution_meter", com.wormzjl.icheme.world.item.PollutionMeterItem::new);
 
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> PRESSURE_PROBE=sensor("pressure_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE);
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> TEMPERATURE_PROBE=sensor("temperature_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE);

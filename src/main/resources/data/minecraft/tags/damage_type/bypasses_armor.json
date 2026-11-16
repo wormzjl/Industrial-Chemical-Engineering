@@ -1,0 +1,8 @@
+{
+  "replace": false,
+  "values": [
+    "icheme:toxic_gas",
+    "icheme:corrosive_gas",
+    "icheme:particulate"
+  ]
+}

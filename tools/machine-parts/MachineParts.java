@@ -4,15 +4,18 @@ import javax.imageio.ImageIO;
 
 /**
  * Draws the machine part item icons (batch 2026-11-03-rotating-machinery W10b): 16 x 16 flat silhouettes in the mod
- * logo's direction (flat navy and gold fields, a dark outline, no lighting or gradients). Today one icon: the pump
- * repair kit, a toolbox with its handle, lid seam and a gold clasp and a double-ended gold wrench on its front.
+ * logo's direction (flat navy and gold fields, a dark outline, no lighting or gradients). Two icons: the pump repair kit,
+ * a toolbox with its handle, lid seam and a gold clasp and a double-ended gold wrench on its front; and the handheld
+ * pollution meter (batch 2026-11-15-pollution-system, WP8).
  *
  * <p>Run: {@code java -Djava.awt.headless=true tools/machine-parts/MachineParts.java <item texture folder> [preview folder]}.
- * Writes {@code repair_kit.png} into the texture folder, and with a preview folder {@code repair_kit-preview.png} there,
- * enlarged 16 times on a checker background.
+ * Writes {@code repair_kit.png} and {@code pollution_meter.png} into the texture folder, and with a preview folder
+ * {@code <name>-preview.png} there, enlarged 16 times on a checker background.
  */
 public final class MachineParts {
     static final int OUTLINE = 0xFF0E1B2E, NAVY = 0xFF1F3A5F, LID = 0xFF2B4C78, GOLD = 0xFFD4A73A, GOLD_DARK = 0xFF9C7420, CLEAR = 0x00000000;
+    /** The pollution meter's lit display and its alarm lamp (flat fields, as the rest). */
+    static final int SCREEN = 0xFF8FD8A0, LAMP = 0xFFD2402F;
 
     /** The repair kit, row by row: '.' clear, 'o' outline, 'n' body, 'l' lid, 'g' gold, 'd' dark gold. */
     static final String[] REPAIR_KIT = {
@@ -34,14 +37,44 @@ public final class MachineParts {
             "................",
     };
 
+    /**
+     * The handheld pollution meter (batch 2026-11-15-pollution-system, WP8): a portable gas detector, a navy case with a
+     * gold sampling probe on its top left, a lit display in a dark bezel, a red alarm lamp and two gold keys, and a gold
+     * belt-clip band at its foot. '.' clear, 'o' outline, 'n' body, 'l' lighter case edge, 'g' gold, 'd' dark gold,
+     * 's' display, 'r' alarm lamp.
+     */
+    static final String[] POLLUTION_METER = {
+            "................",
+            "....oo..........",
+            "....od..........",
+            "....od..........",
+            "...oooooooooo...",
+            "...ollllllllo...",
+            "...onoooooono...",
+            "...onossssono...",
+            "...onossssono...",
+            "...onoooooono...",
+            "...onnnnnnnno...",
+            "...onrngngnno...",
+            "...onnnnnnnno...",
+            "...oddddddddo...",
+            "...oooooooooo...",
+            "................",
+    };
+
     public static void main(String[] args) throws Exception {
         if (args.length < 1) throw new IllegalArgumentException("usage: MachineParts <item texture folder> [preview folder]");
-        var icon = draw(REPAIR_KIT);
-        var out = new File(args[0], "repair_kit.png");
+        write(args, "repair_kit", REPAIR_KIT);
+        write(args, "pollution_meter", POLLUTION_METER);
+    }
+
+    private static void write(String[] args, String name, String[] rows) throws Exception {
+        var icon = draw(rows);
+        var out = new File(args[0], name + ".png");
         ImageIO.write(icon, "png", out);
         System.out.println("wrote " + out);
         if (args.length > 1) {
-            var preview = new File(args[1], "repair_kit-preview.png");
+            var preview = new File(args[1], name + "-preview.png");
             ImageIO.write(enlarge(icon, 16), "png", preview);
             System.out.println("wrote " + preview);
         }
@@ -58,6 +91,8 @@ public final class MachineParts {
                 case 'l' -> LID;
                 case 'g' -> GOLD;
                 case 'd' -> GOLD_DARK;
+                case 's' -> SCREEN;
+                case 'r' -> LAMP;
                 case '.' -> CLEAR;
                 default -> throw new IllegalStateException("unknown cell '" + rows[y].charAt(x) + "'");
             });

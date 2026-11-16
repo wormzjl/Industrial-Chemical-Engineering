@@ -27,6 +27,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.SPEED_SENSOR.get());
                 output.accept(ModItems.PRESSURE_GAUGE.get());
                 output.accept(ModItems.TEMPERATURE_GAUGE.get());
+                output.accept(ModItems.POLLUTION_METER.get());
                 output.accept(ModItems.LIQUID_LEVEL_GAUGE.get());
                 output.accept(ModItems.GAS_BLANKETING_VALVE.get());
                 output.accept(ModItems.PRESSURE_SAFETY_VALVE.get());
@@ -38,6 +39,7 @@ public final class ModCreativeTabs {
                     output.accept(ModItems.POWER_CABLE.get());
                 output.accept(ModItems.LOCAL_CONTROLLER.get());
                 output.accept(ModItems.DCS.get());
+                output.accept(ModItems.POLLUTION_MONITOR.get());
                 output.accept(ModItems.PIPE_RACK.get());
                 output.accept(ModItems.PIPELINE_SIGHT_GLASS.get());
                 output.accept(ModItems.PIPELINE_SHUTOFF_VALVE.get());

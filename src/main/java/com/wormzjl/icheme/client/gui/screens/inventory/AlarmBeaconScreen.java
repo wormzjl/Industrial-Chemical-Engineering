@@ -103,7 +103,8 @@ public final class AlarmBeaconScreen extends AbstractContainerScreen<AlarmBeacon
             case METRE -> "m";
             case HEIGHT_PERCENT -> "%";
             case REVOLUTIONS_PER_MINUTE -> "rpm";
-            case STATE -> "";
+            // A pollution monitor's hazard index is dimensionless (batch 2026-11-15-pollution-system, WP10).
+            case STATE, INDEX -> "";
         };
     }
 

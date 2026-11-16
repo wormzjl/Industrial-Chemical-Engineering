@@ -60,7 +60,8 @@ class EquipmentNetworkCodecTest {
 
     @Test void deconstructionRequestsRoundTrip() {
         // One protocol for every registrar since icheme-1 (codebase review P3-22); the equipment payloads were equipment-23.
-        // icheme-3 (icheme-2 is reserved by the pollution system batch): the steam classes gained LP, first, so their ordinals moved; the conversion rules sync and the alarm beacon's payloads (batch 2026-11-15-fluid-interfaces).
+        // icheme-2: the pollution map's payloads joined (WP9).
+        // icheme-3: the steam classes gained LP, first, so their ordinals moved; the conversion rules sync and the alarm beacon's payloads (batch 2026-11-15-fluid-interfaces).
         assertEquals("icheme-3", NetworkProtocol.VERSION);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));

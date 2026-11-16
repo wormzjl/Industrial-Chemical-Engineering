@@ -114,7 +114,7 @@ final class Placement {
         var device=PhysicalFluidTopology.Device.builder(id,position,TopologyCompiler.Kind.GENERATOR,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,INTAKE_LOSS),new FlowControl.Passive()).generatorEnabled(true).build();
         double height=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT;
         var spec=new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,
-                com.wormzjl.icheme.science.fluid.network.Air.wet(model),SlurryFeed.NONE,height,false,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(1,height),null,0,0,null,true);
+                com.wormzjl.icheme.science.fluid.network.Air.wet(model),SlurryFeed.NONE,height,false,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(1,height),null,0,0,null,false,true);
         return new WorldTopologyLedger.Registration(device,spec,0);
     }
     /** A gas intake's entry loss, velocity heads at the pipe's bore (D8: a louvred box and a rain hood, K = 3). */

@@ -53,7 +53,15 @@ record ControlInput(
 
     String label(ControlFacts facts) {
         return physical == null
-                ? String.format(Locale.ROOT, "EQ-%04d / %s", host, channel.replace('_', ' '))
+                ? String.format(Locale.ROOT, "%s / %s", hostLabel(), channel.replace('_', ' '))
                 : facts.sensorId(instance).label() + " / " + kind.name();
+    }
+
+    /**
+     * An equipment channel's host as the operator reads it: {@code EQ-0012}, or a pollution monitor's analyser tag
+     * {@code AT-0012} (WP10; the number is its host, as a column's {@code COL-} and a converter's {@code FC-}).
+     */
+    String hostLabel() {
+        return String.format(Locale.ROOT, BuiltInInputs.ofMonitor(this) ? "AT-%04d" : "EQ-%04d", host);
     }
 }

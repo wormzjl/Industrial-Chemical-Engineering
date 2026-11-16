@@ -63,6 +63,12 @@ Registry first ([runtime-registry.md](runtime-registry.md)). A rack lane's frame
 - `BuiltInInputs`: a chimney's `flow_rate` (`CHIMNEY:FLOW`, kg/s), `solids_rate` (`CHIMNEY:SOLIDS`) and `venting` (`CHIMNEY:VENTING`, 1 from `Chimney.NO_FLOW` up), read from `Chimneys.view` at the online tick; its alarms `alarm_over_capacity` and `alarm_no_draft` (`EquipmentAlarm.CHIMNEY`).
 - `EquipmentServices`: its junction box set into the foot's side (a steel stack's plinth, a brick chimney's shell), cover flush, gland on the bottom block's centre.
 
+## The pollution monitor's data channels
+
+- `PollutionMonitorBlock` is a one-block data host with a sensor socket on its back. `ControlHosts.bindMonitor` keeps the socket fact its block owns (a monitor placed again where a lost one stood takes it back), else reserves a control identity. Label `AT-nnnn` from the host number, as `COL-` and `EQ-`.
+- `BuiltInInputs.monitor(host)`: `toxic`, `combustible`, `corrosive`, `particulate` (`Sensor.Kind.ANALYSER`, `Sensor.Unit.INDEX`) and `alarm_gas` (0 clear, 1 `GAS` at index 0.1, 2 `GAS HIGH` at 1). Read in `ControlHosts.readMonitor` from the installed pollution field; unavailable while pollution is off.
+- `ControlLaw` refuses an analyser channel as a loop input (`SELECT A MEASUREMENT`), as an alarm. The monitor is not part of `RegistryRealignment`. No control fact was added. See [pollution.md](pollution.md).
+
 ## Fan power, the still's terminal and alarm channels
 
 - A fired heater's terminal cell feeds its burners' electric store (`ElectricStores` kind `BURNERS`, `PowerPorts`, `TerminalEnergy`): without power the burners trip (NO POWER) and light again once the store refills.
@@ -89,4 +95,4 @@ The form calls the direction selector Valve location, shows it only for level/pr
 
 The DCS is a two-block console (`DcsBlock`, `DcsGeometry`), one lower-half panel identity/menu/socket. Placement and removal treat both halves together; a legacy one-block console waits for room without moving saved identity or endpoints. The controller's, the shared line commands' and the tool settings' packets are on `NetworkProtocol.VERSION` ([FORMATS.md](../FORMATS.md#wire-protocols)). Screens preserve the player's GUI scale and scroll/page within their viewport. Hover shows sensor block coordinates and attached EQ identity, with no dimension identifier.
 
-**Snapshot:** `44cad3da1`, 2026-11-12 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).
+**Snapshot:** `05c02394f`, 2026-11-16 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

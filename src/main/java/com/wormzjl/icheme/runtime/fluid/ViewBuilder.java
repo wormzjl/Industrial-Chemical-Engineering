@@ -205,6 +205,8 @@ final class ViewBuilder {
         if(filter!=null&&filter.clogged())status="filter clogged / "+status;
         var closures=snapshot.lastResult().map(PassiveIntervalSolver.Result::rejectionReasons).orElse(Map.of());
         for(var mapping:mappings){Integer p=ix.pipes.get(mapping.pipeId());if(p==null)continue;var pipe=snapshot.graph().pipes().get(p);if(pipe.blockedDirections()!=0&&pipe.filter()==null)status=FluidWorldAuthority.solidClosure(mapping.pipeId(),closures)+" / "+status;}
+        // A vessel a blast breached (batch 2026-11-15-pollution-system, WP6b) stands open until a repair kit closes it.
+        if(registration.spec().breached())status="BREACHED: open to the air, use a repair kit / "+status;
         if(authority.registry.diagnostic(id)!=null)status=authority.registry.diagnostic(id)+" / "+status;
         var active=authority.topology.active().get(id);if(active==null||active.revision()!=registration.revision())status="WAITING: configuration event / "+status;
         if(authority.unboundBindings.contains(id))status="UNBOUND: saved inventory retained / "+status;

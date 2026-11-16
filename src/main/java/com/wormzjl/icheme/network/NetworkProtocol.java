@@ -14,8 +14,8 @@ package com.wormzjl.icheme.network;
  * <p>History: before {@code icheme-1} each registrar carried its own string ({@code fluid-24}, {@code equipment-23},
  * {@code assembly-6}, {@code machine-4}, {@code control-5}, {@code lines-1}, {@code rotation-1}, {@code tutorial-1},
  * {@code sight-glass-3}, {@code mover-4}, {@code flare-2}, {@code still-1}, {@code instruments-1},
- * {@code pipeline-tool-5} and the process simulator's {@code 3}); the first value differs from all of them.
- * {@code icheme-2}: reserved on main by batch 2026-11-15-pollution-system, not merged at this value.
+ * {@code pipeline-tool-5} and the process simulator's {@code 3}); the first value differs from all of them. {@code icheme-2}:
+ * the pollution map's payloads joined ({@link PollutionMapNetwork}, batch 2026-11-15-pollution-system, WP9).
  * {@code icheme-3}: a steam turbine's inlet class gained LP, declared first, so every class's ordinal on the wire moved
  * (batch 2026-11-15-equipment-visual-design); the conversion rules sync, {@code FluidNetwork.ConversionRulesSync} (batch 2026-11-15-fluid-interfaces, W5), and the alarm beacon's
  * edit and view (same batch, W9).</p>
