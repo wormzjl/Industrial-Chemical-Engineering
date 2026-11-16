@@ -123,12 +123,58 @@ Read from the local DWSIM 10.2.5 extract (`chemsep1.xml` record 1904, `kij_pr.da
 
 | # | Gap | Effect | Proposal |
 |---|---|---|---|
-| 1 | The acid dew point. The cubic condenses water at pure water's dew point. With hydrogen chloride the first acid drop forms higher: 220 °F against 190 °F in the OGJ example (**read**), 17 K | The model sees no acid attack in that band | The column's top zone and its condenser count as wet for M12 up to 15 K above the table's `waterBelow` (the margin refiners keep: **read**). A heat side of the network keeps its state's wet flag: a known miss |
+| 1 | The acid dew point. The cubic condenses water at pure water's dew point. With hydrogen chloride the first acid drop forms higher: 220 °F against 190 °F in the OGJ example (**read**), 17 K. Hydrogen chloride and water alone give about 0.5 K (section 4.3): salts and cold surfaces make the rest | The model sees no acid attack in that band | The column's top zone and its condenser count as wet for M12 up to 15 K above the table's `waterBelow` (the margin refiners keep: **read**). A heat side of the network keeps its state's wet flag: a known miss |
 | 2 | Neutralisation by ammonia. The cubic dissolves ammonia by a Henry pair; in acid it reacts and is taken up whole | Reading only the dissolved ammonia would understate neutralisation; reading all of it without removing it would let the same ammonia act in every vessel | In a wet holdup, ammonia up to the acid chloride present becomes, with it, a tag `ammonium_chloride` on the water (plan 7.4): the same exchange as the absorption |
 | 3 | The hydrolysis rate: two anchors and an assumed 60 s; magnesium and calcium chloride as one lump | A factor of about 2 in the hydrogen chloride made | Accept as a game-level fit; refit if Gray, Eaton and Le 2008 is read |
 | 4 | Salt per assay and its hydrolysable share: the mod holds none; sources give 10 % (OGJ) to 25 % for the share | Scales the whole chain | Authored values per assay, marked estimated |
 | 5 | The corrosion rate by pH: recalled anchors, and field scatter of about a factor of 3 | The life of an overhead wall | Read API RP 581's table before WP5 |
 | 6 | Ammonium chloride that deposits as a salt in dry overhead exchangers | Not modelled | Later, with the tag of row 2 |
+
+### 4.3 Hydrogen chloride with water, without an electrolyte model
+
+Owner's question, 2026-11-16: does the mixture with water behave as intended? Computed with `tmp/hcl-check/pr78-water.mjs` (PR78, classical mixing, standard alpha: a stand-in for the kernel, good for orders of magnitude).
+
+**Expected.** In liquid water hydrogen chloride ionises completely. Its pressure over the acid is `(m γ)² / K`: an apparent Henry constant (pressure over mole fraction) that is not constant, but is tiny everywhere.
+
+| Acid, 25 °C | Pressure of HCl, atm | Apparent Henry constant, atm |
+|---|---|---|
+| 0.003 mol/kg (pH 2.5, 100 ppm) | 4.0e-12 | 7.4e-8 |
+| 0.1 mol/kg | 3.2e-9 | 1.8e-6 |
+| 1 mol/kg (3.5 % by mass) | 3.3e-7 | 1.9e-5 |
+| 6 mol/kg (18 %) | 1.9e-4 (Perry: 1.9e-4, **recalled**) | 1.9e-3 |
+
+Any drum with free water takes all of it. Dissolving releases 75 kJ/mol. The water's own vapour pressure falls a little.
+
+**What the cubic does at `k_ij` = 0** (revision 2 of the plan). It treats hydrogen chloride as a gas that barely dissolves: Henry constant 3 900 atm at 25 °C, 3 100 atm at 100 °C, against 33 to 78 atm in n-heptane. That is wrong by 6 to 10 orders of magnitude. A reflux drum at 40 °C and 1.5 bar (per 100 mol: water 45, naphtha 50, gas 5) gets 0.27 % of the hydrogen chloride in its water, 26 % in the naphtha and 73 % in the gas.
+
+The plan's absorption (7.4) takes what a wet vessel holds at each interval's start. An interval is 5 s online, 20 s of process time at the default factor. Within it the flash rules: what arrives goes mostly to the gas, and the gas leaves the drum in less than an interval. So a flowing drum would pass most of its hydrogen chloride to the off-gas. As written, the plan does not behave as intended.
+
+**A fitted classical pair.** A negative `k_ij` gives the cubic the attraction it lacks, with no electrolyte term.
+
+| Fit target (Henry constant in water at 25 and 100 °C) | `k_ij` at 25 °C, 100 °C | Share in the drum's water |
+|---|---|---|
+| None | 0, 0 | 0.27 % |
+| Flat 1e-2 atm | −0.83, −1.20 | 99.9 % |
+| The acid at 1 mol/kg: 1.85e-5 and 7.4e-3 atm | −1.230, −1.228 | 99.999 % |
+| The acid at 0.003 mol/kg | −1.58, −1.75 | 100 % |
+
+One constant, `k_ij` = −1.23, reproduces the acid at 1 mol/kg at both temperatures, and with it the heat of solution (the slope between them). Away from that point, at 25 °C:
+
+| Mole fraction of HCl | Cubic with −1.23, atm | Real, atm |
+|---|---|---|
+| 1e-4 (0.006 mol/kg) | 1.9e-9 | 1.3e-11 |
+| 0.0177 (1 mol/kg) | 6.5e-7 | 3.3e-7 |
+| 0.26 (42 % by mass) | 1.6e-2 | 1 |
+
+- Too volatile when dilute (the cubic is linear where the acid is quadratic), by a factor of 250 at 0.003 mol/kg, with no effect: below 0.1 mol/kg the pressure stays under 1e-7 atm.
+- Too absorbing when concentrated, by a factor of 60 at 42 %. Only a player who feeds hydrogen chloride on purpose reaches that.
+- The liquid root exists over the whole range, and the water's fugacity falls smoothly (2.65e-2 to 6.2e-3 atm at 42 %), as the real acid's does.
+
+**The acid dew point, corrected.** With the acid's own law, 50 ppm of hydrogen chloride on the water raises the dew point by about 0.5 K (first drop 0.5 mol/kg, water activity 0.98); the fitted pair gives the same order. The 17 K of the OGJ example (row 1 of 4.2) is therefore not hydrogen chloride and water alone: salts and cold surfaces make it. The 15 K margin stays as the operating rule it is, and the plan's "colder end of a heat side" covers cold surfaces.
+
+**Not checked.** A pair of −1.23 is far from any pair the solver has met. Its effect on flash robustness (the wet-oil false root, wet junctions) is a measurement of the build: the 200-seed quick check on worlds that hold the compound.
+
+**Proposal** (plan option O6): the pair fitted to the acid at 1 mol/kg, with the absorption to the tag kept as the owner described it, and capped at 1 mol/kg of water.
 
 ## 5. Not found, and open
 

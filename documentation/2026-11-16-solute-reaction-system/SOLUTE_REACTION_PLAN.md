@@ -63,7 +63,7 @@ None of these changes a stream's density, enthalpy or phase split by a part in 1
 | D4 | Tags move in a pass of their own after each solved interval, from the pipes' recorded transfers. The step's Newton, its booking and the certificates are not changed. Nothing happens in a pipe. |
 | D5 | A transformation is a data record: participants, a rate law, a condition window, the equipment classes it acts in. It is evaluated at the walls' 5 s cadence on the last committed state and applied by the tag pass. One cadence of lag. |
 | D6 | A transformation of this batch moves tags, and parts per million of one compound (7.4), so it books no heat of reaction (each is below 1e-4 of its stream's enthalpy change, section 8.6). Heat belongs to the reactor units (section 14). |
-| D7 | Hydrogen chloride is a compound, `HydrogenChloride`, in `icheme:refinery` (owner, revision 2). In a holdup with free water it becomes the tag `acid_chloride` on that water; in a holdup without, the tag becomes the compound. The cubic is not asked to model hydrochloric acid: no Henry record, no electrolyte term. |
+| D7 | Hydrogen chloride is a compound, `HydrogenChloride`, in `icheme:refinery` (owner, revision 2). In a holdup with free water it becomes the tag `acid_chloride` on that water; in a holdup without, the tag becomes the compound. No electrolyte term. Whether the cubic gets a fitted pair with water, so that the compound goes to the water between two exchanges, is option O6. |
 | D8 | A stock without tag data has its datasets' default contents. Only a stock that differs stores amounts, so a world without salted crude pays nothing and an old save needs no conversion. |
 | D9 | The electric desalter is a horizontal vessel of the fluid network with an electric store. Its law is the settling law every vessel has; the field only makes the drops larger. |
 | D10 | Corrosion is evaluated per part: each product zone of a column's shell and the process side of each of its exchangers has its own wall record. |
@@ -193,7 +193,8 @@ How it is booked:
 2. `PassiveIntervalSolver.solve` applies it once, at the interval's start, where the crystals' conversions run: the vessel's amounts change and the vessel is restated at its temperature and pressure (one TP flash, as `flushTraces` restates a node). The moles and the energy difference are a `BoundaryTransfer` of a new kind, `SOLUTE`.
 3. The tag pass reads the interval's `SOLUTE` transfers and books the same chlorine on the tag side. Chlorine closes exactly across compound and tags (`TagLedgerTest`).
 
-- Absorption takes what the vessel holds at the interval's start; what arrives within the interval is taken at the next one.
+- Absorption takes what the vessel holds at the interval's start; what arrives within the interval is taken at the next one. Until then the flash decides where it sits: this is why the pair with water matters (option O6).
+- Absorption stops at 1 mol of `acid_chloride` per kg of free water (pH 0, where M12 is already at its cap). Above it the compound stays a compound in the water, at the concentration the pair is fitted to. A tag has no mass, so without the cap a vessel fed hydrogen chloride on purpose would swallow it without limit.
 - A unit on accounts does both on its accounts, with no solver part. A column gives all the `acid_chloride` and `HydrogenChloride` of its feed to its top product, as the compound (section 8.3).
 - An island that receives the compound and does not list it grows its list, as it does for a column outlet (`IslandSets`).
 - A junction, a pipe and a heat side exchange nothing. Between a heater and the next holdup the hydrolysis product travels as the tag.
@@ -259,13 +260,13 @@ What the compound needs of the data and the thermo model:
 | Formula | Chlorine joins `MaterialCatalog.FORMULA_ELEMENTS` and `Thermochemistry.ELEMENTS`. The heating value is 0 (it burns as an inert) |
 | Hazard | A `hazard` sub-record, so a vent, a flare or a leak of it reaches the air through the pollution system as it stands |
 | Pairs with hydrocarbons | The rule of the refinery compounds (DWSIM `kij_pr.dat`, else the DECHEMA value, else 0) gives 0 for every pair: none of the three files holds one. A fair value: its solubility in paraffins is near ideal (review 4.2) |
-| Pair with water | A library pair, `k_ij` = 0, with its reason. No `henry_in_water`: with one, `DerivedPairs` would fit a pair to the solubility and the cubic would hold hydrochloric acid beside the tag |
+| Pair with water | Open, option O6. Revision 2 stated `k_ij` = 0; at 0 the cubic keeps 99.7 % of the compound out of the water and a flowing drum loses it to its gas between two absorptions (review 4.3). Proposed: a library pair fitted on the kernel to the acid at 1 mol/kg (1.85e-5 atm at 25 °C, 7.4e-3 atm at 100 °C; `k_ij` about −1.23, one constant) |
 | Flash | As any compound. At parts per million it needs no special case: the trace cutoff folds trace phases, not trace compounds, and the flush acts below 1e-24 |
 | Column | Not on V3's axis and in no neural seed: the running column and the simulator's column carry it on their accounts and give it whole to the top product, as inert particles go whole to the bottoms |
 | Identity | A compound added to a package moves no identity of a view without it: no world is restated |
 | Kernel, engine | No change: no electrolyte model, no new phase |
 
-At `k_ij` = 0 the cubic still puts some of the compound into the water of a wet stream, about as it does for hydrogen sulfide. That is harmless: the absorption takes the compound from every phase of a wet holdup.
+With the fitted pair the flash itself puts the compound into the water wherever water is: in a wet stream, a junction, and a vessel between two absorptions. It leaves a wet vessel only with the water, and the next holdup's absorption turns it into the tag. The cubic's acid is then never older than one interval, so its errors away from 1 mol/kg (review 4.3) do not accumulate.
 
 ### 8.4 Surface coking (`threshold_deposit`, a heat side that carries oil)
 
@@ -315,7 +316,7 @@ Changes to `science/integrity`:
 
 - `CorrosionStandard.digest` takes `S` and `A` from the tags `sulfur` and `acid` of the oil it reads, no longer from the static sub-record. With default contents the numbers are those of today.
 - **M12, acid chloride** (`Mechanism.ACID_CHLORIDE`, appended): acts where free water meets chloride acid, as the tag `acid_chloride` on the water or as the compound not yet absorbed (the wet end of a condenser). `m = (acid chloride + hydrogen chloride − ammonia − caustic) / kg of free water`, in mol/kg, not below 1e-7; `pH = −log10 m`. The ammonia is all the node holds, as the neutralisation of 7.4 takes it.
-- The acid dew point: with hydrogen chloride the first acid drop forms above pure water's dew point (17 K in the OGJ example), and the cubic does not know it. A column's top zone and its condenser therefore count as wet for M12 up to 15 K above the table's `waterBelow`. A heat side of the network has only its state's wet flag: a known miss.
+- The acid dew point: refiners find the first acid drop above pure water's dew point (17 K in the OGJ example). Hydrogen chloride and water alone give about 0.5 K (review 4.3); salts and cold surfaces make the rest, and the cubic knows neither. A column's top zone and its condenser therefore count as wet for M12 up to 15 K above the table's `waterBelow`. A heat side of the network has only its state's wet flag: a known miss.
 - A heat side reads both its ends: the hotter end for the dry mechanisms, as today, and the colder end for the wet ones. A condenser's acid attack is at its cold end, which the hotter-end digest of the fouling-corrosion batch does not see. Carbon steel: `min(25, 2.5 · 10^(−0.5 (pH − 2.25))) · 2^((min(T, 366 K) − 311 K)/55 K)` mm/y, none above pH 5.5.
 
 | pH | 38 °C | 93 °C |
@@ -420,6 +421,10 @@ Results that move: none in stage A (default contents give today's digest). Stage
 - **O3, coke fines.** Designed as a particulate tag. Option: turn them into a `SolidInventory` population at the next vessel, so that filters cake and beds settle. It needs a mass exchange with the heaviest cut in the vessel's refresh.
 - **O4, metals.** One tag (Ni + V). FCC models treat them apart; two tags cost one more row.
 - **O5, the numbers** of sections 8 and 9 are game-level fits to the stated anchors, as the corrosion matrix is.
+- **O6, hydrogen chloride's pair with water** (review 4.3). No electrolyte model in any option.
+  - **A, `k_ij` = 0** (revision 2). The flash puts 0.27 % of it in a drum's water; the absorption catches only what the vessel holds every 20 s of process time; most leaves with the off-gas. Not as intended.
+  - **B, a fitted pair and the absorption** (proposed). `k_ij` about −1.23: the flash puts 99.999 % in the water everywhere, the heat of solution appears, and the absorption still turns it into the tag on water, capped at 1 mol/kg. Risk: a pair this negative is new to the solver; the build measures it on the 200-seed quick check.
+  - **C, the fitted pair alone.** No absorption: the acid stays a compound in the water and M12 reads it there. Deletes the absorption and half of `SOLUTE`; keeps the release and the neutralisation. It departs from "aqueous phase solute", and the cubic's acid then lives for hours, with its errors when concentrated.
 
 ## 17. Risks
 
