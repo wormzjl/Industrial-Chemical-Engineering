@@ -207,4 +207,4 @@ read by `IChemE.joulesPerFE`, `machinesNeedPower`, `stressPerFE`, `wearSettings`
 - A part whose cell another block holds leaves its train and splits it: a train can lose its driver to a held part and
   stand with `NO DRIVER` until the cell is cleared.
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `410c37fcb`, 2026-11-16.

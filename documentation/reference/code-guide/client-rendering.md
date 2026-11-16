@@ -108,4 +108,4 @@ Drawing itself (ghosts, animation, renderers, tints on racks) has no automated t
 - `EquipmentBodyRenderer` rebuilds its region map only when the hash of its structures (origin, shape, paint, light) or their count changes, or after `release`; it merges at most one changed square a frame, its last mesh standing meanwhile.
 - `DataControlRenderer` shows a port placed or removed up to `HOST_TICKS` late.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `410c37fcb`, 2026-11-16.

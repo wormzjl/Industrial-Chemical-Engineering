@@ -196,4 +196,4 @@ All under `test`: `--tests 'com.wormzjl.icheme.science.machine.*'`.
 - `science/machine` may not import the equipment or the network: a law that needs a shape's number takes it as an
   argument (`science/plant/machine/MachineRatings` maps a shape to the law's inputs).
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `410c37fcb`, 2026-11-16.

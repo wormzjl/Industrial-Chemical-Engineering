@@ -199,4 +199,4 @@ Fixtures: `V3TestInputs`, `V3JacobianOracle` (the FD Jacobian and block extracti
 - A Java method with a Rust twin changes in both in the same batch, or the native ceiling drops below it (AGENTS.md
   "Native code"). `cargo` runs from `src/main/rust` with at most 4 jobs and counts as one of the two Gradle lanes.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `410c37fcb`, 2026-11-16.

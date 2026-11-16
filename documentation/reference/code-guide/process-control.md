@@ -76,4 +76,4 @@ The fluid facts (`FluidFacts.SCHEMA`, [runtime-saves.md](runtime-saves.md); numb
 
 Tests of the geometry, the outlets and the taps: `VesselGeometryTest.bootHeadStandsOverTheBodyBottom`, `ProcessOutletTest` (`aSlurryHeadWeighsItsSolids`, `aTraceFilmDoesNotTurnTheBottomStreamHalfOil`), runtime `TracePhaseFoldTest` (`aCrudeTraceInAWaterFullVesselHasNoPhaseOfItsOwn`, `waterThroughATankHoldingACrudeTraceKeepsUp`, seed 236 minimized), runtime `PipelineFittingTest` (`aFlowmeterTapsItsPipeOnTheEngineScheduleAndAgainAfterAReload`, `aRestingIslandKeepsItsTapThroughItsRestoredCertificate`), `FlowControlTest.aFlowValveRestsWhenNothingDrivesThroughIt`.
 
-**Snapshot:** `4563176e1`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).
+**Snapshot:** `410c37fcb`, 2026-11-16 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

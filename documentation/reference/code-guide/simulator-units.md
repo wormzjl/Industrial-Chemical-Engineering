@@ -159,4 +159,4 @@ A unit's settings are the file's `Params` ([process-simulator.md](process-simula
 - `TopologyCompiler.Kind.TURBINE` maps to the turbine tile; `MOTOR`, `GENERATOR` and `GEARBOX` stand on it as
   DRAWING_ONLY and size nothing (`FlowsheetCatalog.DRIVER`). The diverter valve is the splitter.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `410c37fcb`, 2026-11-16.
