@@ -68,6 +68,7 @@ The owner accepted the plan's decisions D1 to D12 on 2026-11-15: "Liquid hopper 
   - `369728ef7`: the translation commit, 90 keys and 3 rewritten hints in each of zh_cn, fr_fr, es_es, ja_jp. LanguageFilesTest 2/2, UnitTextTest 1/1.
   - `3e9a8484f`: the alarm beacon's model rework (owner: "need to improve this model before merge, this doesn't make sense"; chose "Stacked unit"). AlarmGeometryTest 3/3.
   - The lane: chain-100 exact; campaign 992 / 993 after one replay / 1000; junction lines 33 of 33. Test step: 3,649 tests, 5 failures, both stale pins, fixed in `ecc4d49e9` (PreparedRefillTest, test only) and `5e306724b` (three tutorial lines). GameTests: 101 of 102. `LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence` overflowed; it is read as timing-sensitive. **The merge is on hold for the owner's choice (A, B or C in the review).**
+  - The owner chose "A: pace the test". `LevelLoopGameTests.pace` now waits while the drum island's slice has been in flight more than 10 online ticks, and the result line counts held decisions. Test only; nothing in `src/main` changed. One focused run of the three level loop tests: all pass. Highs: 61.08 % vented, 65.68 % blanketed, 79.78 % blanketed from empty. heldDecisions 0 in each. Recorded in FINAL_LANE_REVIEW.md.
 
 ## Documents
 

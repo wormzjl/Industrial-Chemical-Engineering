@@ -31,6 +31,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 - Formats (`documentation/reference/FORMATS.md`): fluid facts schema 27 (26 is reserved by the pollution system batch), accessory facts schema 7, control store format 5, protocol `icheme-3` (`icheme-2` is reserved). `FormatsTableTest` skips a reservation row.
 - A generator's own loss coefficient now reaches its line (`PhysicalFluidTopology.boundaryHalf`); every existing line is bit-identical, since no generator had one.
+- The level loop GameTests pace the server on the drum island's slice in flight (`LevelLoopGameTests.pace`): while a slice has been in flight more than 10 online ticks, each tick waits, as a 20 TPS server with a quick worker would; the run's result line counts the decisions that held.
 
 ## [0.31.1] - 2026-11-15
 

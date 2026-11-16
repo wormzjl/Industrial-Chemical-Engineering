@@ -15,6 +15,7 @@ Commits on the lane branch:
 - `3e9a8484f`: the alarm beacon's model rework, which the owner asked for before the merge.
 - `ecc4d49e9`: the PreparedRefillTest pin fix.
 - `5e306724b`: the three tutorial lines.
+- The level loop's pacing (owner: "A: pace the test"), with this review's update: the commit that holds this line.
 
 Output is in the worktree's `tmp/merge-lane/head/`. The baseline is the 0.31.1 lane (`tmp/merge-lane/head` of the
 worktree `batch-still-models-b3de99`; its review is `documentation/2026-11-15-fluid-step-cost/MERGE_REVIEW.md`).
@@ -43,9 +44,10 @@ second lane.
   - `equipmentGates`: 28 classes, 258 tests.
   - The 5 failures are below. Both causes are fixed, and the failing classes ran again alone.
 - **regression:** chain-100 exact, every deviation 0. No re-record.
-- **gametest:** 101 of 102. One failure, `LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence`:
-  timing-sensitive, read below. The four new GameTest batches (`alarm-beacon`, `crude-oil`, `gas-intake`, `liquid-hopper`)
-  pass.
+- **gametest:** 101 of 102. One failure, `LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence`: the
+  test did not pace the unthrottled server (section below). The four new GameTest batches (`alarm-beacon`, `crude-oil`,
+  `gas-intake`, `liquid-hopper`) pass. After the owner's choice, the test paces the server; the three level loop tests
+  then ran once and all pass. The other 99 GameTests were not run again: their pass in the lane stands.
 - **Junction lines:** 33 of 33 identical, floats included.
 - **`MIXED_GAS_COST`:** 313 Newton solves before and after. Allocated memory 125.1 to 137.1 MB: the mole arrays carry
   52 entries instead of 47.
@@ -83,8 +85,8 @@ second lane.
   - LanguageFilesTest 2/2, UnitTextTest 1/1, TutorialTextTest 6/6.
 - **Logs:** `tools/merge-lane/logs/fluid-interfaces-final-lane-logs-2026-11-16.tar.gz` in the main checkout
   (git-ignored).
-- **Status:** one GameTest failure stands, read as timing-sensitive. It waits for the decision below. Everything else
-  is clean.
+- **Status:** clean. The level loop failure is answered by the owner's choice A (the test paces the server); the
+  three level loop tests pass on their one run.
 
 ## The five test failures, and their fixes
 
@@ -93,41 +95,60 @@ second lane.
 | `PreparedRefillTest` (3 tests) | `RootAbsent`: "a liquid of a node with a vapour has only a vapour-like root" at 330 and 345 K, 2 bar | A positional pin of the world list. The test's liquid took the compounds at `n-2-c`, the last ones before water. W1 appended the five rare gases there, so its "liquid" became xenon, krypton and helium, which are supercritical. | `ecc4d49e9`, test only. The liquid skips the five rare gases (`RARE_GASES = 5`) and runs the same compounds as before: ethanol, carbon dioxide, ethyl mercaptan. Alone: 3/3. Accepted by the orchestrator. |
 | `TutorialTextTest` (2 tests) | Item lines over 14 words or not one sentence: `alarm_beacon.serves`, `crude_oil_bucket.serves`. A tour stop of two sentences: `tour.alarm_beacon.settings.7`. | English lines written in W3 and W9 that break the test's text rules. W9 did not run this class (the builder's miss). | `5e306724b`, lang text only, with the orchestrator's OK. The beacon's wording is the orchestrator's. Four translations follow. Alone: TutorialTextTest 6/6, LanguageFilesTest 2/2, UnitTextTest 1/1 (the load map names UnitTextTest for the lang files). |
 
-## The GameTest failure
+## The GameTest failure, and the owner's choice
 
-`LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence`: "The drum emptied or overflowed (1 % to
-99 %): 23.35 % to 100.0 %".
+`LevelLoopGameTests.aBlanketedDrumOfTwoCyclesHoldsItsLevelOnTheCadence` failed in the lane: "The drum emptied or
+overflowed (1 % to 99 %): 23.35 % to 100.0 %". The mechanism below is the orchestrator's, read from the lane log and the
+code. It corrects this review's first reading, which counted two held cycles and blamed the start phase alone.
 
-**Expected behaviour.** The blanketed drum holds two control cycles of its feed. After the +50 % feed step at cycle 15,
-the level loop opens its valve within a cycle, and the level peaks well below the 99 % limit. The 0.31.1 lane's run
-peaked at 81.79 %.
+**Expected behaviour.** The drum holds two control cycles of its feed. After the +50 % feed step, the level loop
+decides on a fresh reading at each cadence (100 online ticks) and opens its valve within about a cadence. On a 20 TPS
+server a slice's solve takes well under one tick, so every decision reads a level at most a slice old.
 
-**What the run did.**
-- Fill phase: the run is identical to the 0.31.1 run through the first five samples, 10.91 to 30.25 %.
-- First split: the two runs part at the controller's first action. Here the output is 0.4538 at a level of 33.08 %;
-  in 0.31.1 it was 0.5100 at 37.63 %. The action falls at another point of the 100-tick control cadence.
-- Why the timing moved: this lane runs 102 GameTests against 98, so the test starts at another online tick. Its ramp
-  committed at tick 27203 against 27397.
-- After the step: the feed edit landed one cycle later than in 0.31.1. Then, for two cycles, the level reading was
-  flagged `held=true`: the island was SOLVING, so the reading had not advanced. The output stayed at 0.75.
-- The arithmetic: a 50 % step held for two cycles adds one cycle of feed, which is half of a two-cycle drum, so 50 %
-  becomes 100 %. The drum went liquid-full (3.85 bar, venting) and the loop recovered to 50.00 % by cycle 26.
-- The two other level-loop tests (vented, and blanketed from empty on the design feed) pass.
+**What happened.**
+- `Sensor.read` gives a reading the tick of the view's `committedTick`. `ControlLaw.level` holds its output when the
+  reading's tick equals the last sample's tick.
+- The GameTest server ran about 3,000 ticks a second: cycles 2 to 30 share one log second. A solve of about 15 ms then
+  spans about 45 online ticks (lag 45 at cycle 17, 72 at cycle 19).
+- After the step, no slice committed between the control ticks at online 30500 and 30600. The new state came about 2
+  ticks after 30600. That one decision held: cycles 17 and 18 print the same decision. The fresh level waited 98 ticks.
+- The next output acted about 2.6 cadences after the surplus began, but the drum has room for 2.0. The drum filled
+  (3.85 bar, venting); the loop then recovered to 50.00 %.
+- `pace()` throttled only above `CADENCE + LAG` = 110 ticks behind, so lags of 45 to 84 passed unthrottled. The 0.31.1
+  run had the same lags and passed by its phase.
 
-**What the batch changed near it.**
-- `LevelLoopGameTests` and the gas blanketing valve are unchanged since `main`.
-- `ControlLaw` gains W7's on/off branch, taken only by a valve whose `onOffValve()` is true (an automated shutoff
-  valve). The test's level valve is an ordinary control valve.
-- `ControlService` gains W9's beacons. Its early return also requires `alarms.idle()`, which holds when no beacon
-  exists; the test places none.
-- This reading comes from the lane's log, the code and the 0.31.1 log. By the replay rule, the test was not run again.
+**The fix.** The owner chose "A: pace the test": a test-only change, with no control-law change.
+- `LevelLoopGameTests.pace` now waits while the drum island's slice has been in flight more than `LAG` = 10 online ticks,
+  as a 20 TPS server with a quick worker would.
+- In flight means the drum view's status is `SOLVING`. `IslandCoordinator` sets it at admission and replaces it only
+  when the server drains the completion (`closeRound`), so the view shows it for the whole flight.
+- A new slice (another committed tick) starts its own count, so a backlog drains one slice per `LAG` ticks at most.
+- The result line counts the decisions that held (`heldDecisions`), so each run proves from its own record whether one
+  held.
+- Nothing in `src/main` changed. `tools/minecraft-time-delta/level-loop/` calls the test's own `run` and `pace`, so it
+  needed no change.
 
-**Proposal (decision pending):**
-- (A) Accept it as a timing-sensitive test and merge. *Recommended.*
-- (B) A test-only follow-up: start the run at a fixed phase of the control cadence, so its result does not depend on
-  how many GameTests ran before it.
-- (C) A control-law question for the owner: the stale-reading hold (`4563176e1`) can freeze the output for two cycles
-  after a feed step, which is exactly enough to fill this drum.
+**The bound.** Once a solve is at most W ticks, the surplus runs at most S + W + 99 ticks before the first correction
+(S the slice):
+- S = 43 and W = 12 give 154 ticks, about 83 % level;
+- S = 70 gives 181 ticks, about 90 %.
+
+**The run.** One focused run of the three level loop tests (`runFluidGameTestServer` with
+`tools/simulator-sizing/focused-gametests.init.gradle`, run id `level-loop-paced-1`): all 3 pass.
+
+| Test | Lane (old pacing) | Paced |
+|---|---|---|
+| vented drum (`aDrumOfTwoCycles…`) | low 24.50 %, high 89.25 %, at step 50.00 %, at end 50.00 %, deadMax 72, largest lag after the step 16 | low 25.09 %, high 61.08 %, at step 50.00 %, at end 50.00 %, deadMax 45, heldDecisions 0, largest lag after the step 12 |
+| blanketed drum (`aBlanketedDrumOfTwoCycles…`) | low 23.35 %, **high 100.0 %**, at step 50.00 %, at end 50.00 %, deadMax 64, largest lag after the step 72; failed | low 25.00 %, high 65.68 %, at step 50.00 %, at end 50.00 %, deadMax 57, heldDecisions 0, largest lag after the step 13 |
+| blanketed drum from empty (`aBlanketedDrumStartedEmpty…`) | low 45.02 %, high 64.08 %, at step 50.00 %, at end 50.00 %, deadMax 90, largest lag after the step 43 | low 46.10 %, high 79.78 %, at step 50.00 %, at end 50.00 %, deadMax 90, heldDecisions 0, largest lag after the step 12 |
+
+- Every largest lag after the step is within S + `LAG`.
+- Every high is within the bound.
+- Conservation is exact in all three: moles residual at most 5.8e-10 mol of 1.6e7, energy at most 2.2e-5 J of 7.0e11.
+- The lane runs printed no `heldDecisions`: the field is new.
+
+**Not taken.** Option B was offered and not taken: a coupled level loop that decides on each published state (worst
+peak about 61 to 66 %).
 
 ## Printed lines that differ, and why
 
@@ -146,6 +167,6 @@ peaked at 81.79 %.
 | # | Finding | Proposal |
 |---|---|---|
 | 1 | `lane.sh`'s shell died with exit 255 during a long Gradle step; Gradle went on, the step's tail did not run. The cause is not known from the lane's output. | Run the tail by hand, as here. A tools change could make the tail a script of its own that a lane can resume. |
-| 2 | The blanketed level-loop GameTest depends on its start phase in the control cadence (section above). | Owner or orchestrator choice: A, B or C. |
+| 2 | The level loop GameTests did not pace the unthrottled server: one decision could fall while a slice was in flight and hold the output (section above). | Done: the owner chose "A: pace the test"; the three level loop tests pass. |
 | 3 | The campaign's wall-deadline seeds (bundled 12 and 59) move between lanes with the machine's load. Both lanes shared the machine with another Gradle run. | None: the replay rule handles them. |
 | 4 | `tools/heat-gui-renders/GuiPrototypes.java` does not compile on this branch (an old import of `science.column.operation`; ALARM_BEACON_BUILD.md). | A tools fix after the merge. |
