@@ -34,25 +34,44 @@ public final class ReleasePressure {
      * failure (AGENTS.md, thermo validity).
      */
     public static double lowest(DoubleUnaryOperator trial,DoubleUnaryOperator share,double lo,double hi,double width) {
-        if(!(hi>lo))return Double.POSITIVE_INFINITY;
+        return search(trial,share,lo,hi,width).pressure();
+    }
+    /**
+     * {@link #lowest} where the stream holds a vapour at the pressure it returns: its trial there above 0 (a vapour beside a
+     * liquid; the smallest positive double counts); positive infinity where it reads exactly 0 there. What the clean zone's
+     * edge of one dense fluid reads (S4b of batch 2026-11-15-supercritical-fluids): such a fluid has no second phase, so an
+     * edge stands only where its isenthalp really flashes. From the bubble side the share rises continuously from 0 at the
+     * bubble pressure to the clean share at E, and the search's last passing pressure lies between them, above 0; where the
+     * isenthalp crosses the critical temperature on the gas side, the last passing trial is still one fluid, exactly 0: a
+     * change of label, not a flash. The same bisection and the same pressure as {@link #lowest}.
+     */
+    public static double lowestHeld(DoubleUnaryOperator trial,DoubleUnaryOperator share,double lo,double hi,double width) {
+        var found=search(trial,share,lo,hi,width);
+        return found.share()>0?found.pressure():Double.POSITIVE_INFINITY;
+    }
+    /** {@link #lowest}'s pressure and its trial's value there (NaN with no pressure). */
+    private record Found(double pressure,double share) {
+        static final Found NONE=new Found(Double.POSITIVE_INFINITY,Double.NaN);
+    }
+    private static Found search(DoubleUnaryOperator trial,DoubleUnaryOperator share,double lo,double hi,double width) {
+        if(!(hi>lo))return Found.NONE;
         double top=trial.applyAsDouble(hi);
-        if(Double.isNaN(top))return Double.POSITIVE_INFINITY;
-        if(!(top<=share.applyAsDouble(hi)))return hi;
+        if(Double.isNaN(top))return Found.NONE;
+        if(!(top<=share.applyAsDouble(hi)))return new Found(hi,top);
         double bottom=trial.applyAsDouble(lo);
-        if(bottom<=share.applyAsDouble(lo))return Double.POSITIVE_INFINITY;
-        boolean vapour=bottom>0;
-        for(int k=0;k<200&&hi>lo*(1+width);k++){double mid=Math.sqrt(lo*hi),at=trial.applyAsDouble(mid);if(at<=share.applyAsDouble(mid))hi=mid;else{lo=mid;vapour|=at>0;}}
-        return vapour?hi:Double.POSITIVE_INFINITY;
+        if(bottom<=share.applyAsDouble(lo))return Found.NONE;
+        boolean vapour=bottom>0;double held=top;
+        for(int k=0;k<200&&hi>lo*(1+width);k++){double mid=Math.sqrt(lo*hi),at=trial.applyAsDouble(mid);if(at<=share.applyAsDouble(mid)){hi=mid;held=at;}else{lo=mid;vapour|=at>0;}}
+        return vapour?new Found(hi,held):Found.NONE;
     }
     /**
      * The vapour volume share of trial state {@code at}: 0 for liquid alone, the smallest positive double for a vapour
-     * too small to have a volume, NaN for no state and for one that holds no liquid. One dense fluid, in either slot,
-     * reads {@code 1 - w} on its liquid-like weight ({@link FluidThermodynamics#liquidLikeWeight}; S4 of batch
-     * 2026-11-15-supercritical-fluids): 0 from reduced density 1.5, as the liquid slot gave; 1 at or below 0.5, where the
-     * vapour slot gave NaN. So above the critical pressure E is where the fluid thins to the clean share, a density.
+     * too small to have a volume, NaN for no state and for one that holds no liquid. One dense fluid
+     * ({@link FluidThermodynamics.State#dense()}), in either slot, reads 0: it has no second phase, so it releases no vapour
+     * (S4b of batch 2026-11-15-supercritical-fluids; before S4 the liquid slot read 0 and the vapour slot NaN).
      */
     public static double vapourVolumeShare(FluidThermodynamics.State at) {
-        if(at!=null&&at.dense()){double w=FluidThermodynamics.liquidLikeWeight(at);return w>=1?0:Math.max(1-w,Double.MIN_VALUE);}
+        if(at!=null&&at.dense())return 0;
         if(at==null||!(FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(at,FluidThermodynamics.AQUEOUS)))return Double.NaN;
         if(!FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS))return 0;
         double v=at.vaporVolume(),total=v+at.condensedVolume();

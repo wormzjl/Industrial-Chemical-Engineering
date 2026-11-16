@@ -39,7 +39,8 @@ final class StepObservations {
         double enthalpy=carried.mass()*(carried.specificEnthalpy()+work);
         try {
             var state=model.fluidPH(exhaust.temperature(),exhaust.pressure(),enthalpy,carried.moles(),checkpoint);
-            return state==null?Double.NaN:InletPhase.bulk(model,state).condensedMassShare();
+            // Droplets only: one dense fluid has none (S4b of batch 2026-11-15-supercritical-fluids).
+            return state==null?Double.NaN:InletPhase.bulk(model,state).dropletMassShare();
         }catch(IllegalArgumentException unavailable){return Double.NaN;}
     }
     List<PipeObservation> observe(StepEquations e,List<FluidThermodynamics.State> states,double[] flows,double[] lawFlows,double[] heads,List<FlowControl.Mode> modes,Runnable checkpoint) {

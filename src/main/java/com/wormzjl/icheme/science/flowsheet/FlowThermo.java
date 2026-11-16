@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.flowsheet;
 
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
-import com.wormzjl.icheme.science.fluid.network.InletPhase;
 import com.wormzjl.icheme.science.fluid.network.ReleasePressure;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
@@ -201,7 +200,9 @@ public final class FlowThermo implements StreamThermo {
     /**
      * p_v of a liquid stream (Pa), as the world's pump suction limit reads it ({@link ReleasePressure}): the bubble pressure of
      * {@code amounts} without the compounds above their critical temperature, searched up to the stream's {@code pressure}.
-     * Positive infinity where there is none: nothing condensable, or no boiling down to the search's floor.
+     * Positive infinity where there is none: nothing condensable, or no boiling down to the search's floor. The world gives one
+     * dense fluid none; this reads no state, so a dense mixture whose heavier compounds stay below their critical temperature
+     * keeps their bubble pressure here (S4b: knowing the stream dense would cost a flash this does not make).
      */
     public double vapourPressure(double temperature, double pressure, double[] amounts) {
         double[] condensable = amounts.clone();
@@ -243,7 +244,10 @@ public final class FlowThermo implements StreamThermo {
      * A sheet stream stands at its temperature, so the trial keeps it, where the world's keeps the enthalpy of what its line
      * throttles: on drum liquids the two readings agree to 0.3 %. A state that is all vapour has boiled away, share 1: at one
      * temperature a pure liquid has no pressure at which it holds both phases, and with no such trial it would read no pressure.
-     * A trial with no state says nothing.
+     * A trial with no state says nothing. One dense fluid reads 0 in either slot ({@link ReleasePressure#vapourVolumeShare}):
+     * at its own temperature it never flashes, so a dense stream has no edge and no bubble point on the sheet (S4b of batch
+     * 2026-11-15-supercritical-fluids), where the world's isenthalpic trial can flash (carbon dioxide at 320 K and 15 MPa:
+     * 6.52 MPa in the world, none here).
      */
     private double releaseShare(double temperature, double pressure, double[] amounts) {
         try {
@@ -255,17 +259,6 @@ public final class FlowThermo implements StreamThermo {
         } catch (RuntimeException noState) {
             return Double.NaN;
         }
-    }
-
-    /**
-     * Whether one dense fluid ({@link FluidThermodynamics.State#dense()}) stands at its pump's clean zone's edge: its
-     * vapour share as the world's pump reads it ({@link InletPhase#bulk}, {@code 1 - w} on its liquid-like weight) at or past
-     * the clean share at its pressure ({@link GasEntrainment#cleanShare}), where the world's E is its own pressure. A dense
-     * fluid has no bubble point: this stands in for "at its bubble point" at a pump (S4 of batch
-     * 2026-11-15-supercritical-fluids). False for any other state.
-     */
-    public boolean denseAtEdge(FluidThermodynamics.State state) {
-        return state.dense() && InletPhase.bulk(model, state).vapourVolumeShare() >= GasEntrainment.cleanShare(state.pressure());
     }
 
     /** Whether {@code amounts} at {@code temperature} and {@code pressure} hold vapour. A trial with no state does not boil. */

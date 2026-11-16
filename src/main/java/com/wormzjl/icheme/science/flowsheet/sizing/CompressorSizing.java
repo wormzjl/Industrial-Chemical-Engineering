@@ -80,7 +80,7 @@ public final class CompressorSizing {
      * @param ratio    outlet pressure over inlet
      * @param liquid   the suction's condensed share by mass, %
      * @param suction  K
-     * @param exponent (n − 1) / n of the world's polytropic compression, (k − 1) / (k η_p)
+     * @param exponent (n − 1) / n of the world's polytropic compression, (k − 1) / (k η_p); for one dense fluid blended to the solved streams' by its liquid-like weight ({@link #blended})
      * @param hydrogen its hydrogen's mole share, %
      */
     public record Load(double flow, double ratio, double liquid, double suction, double exponent, double hydrogen) {
@@ -95,8 +95,22 @@ public final class CompressorSizing {
             // One dense fluid: the world's condensed share, its liquid-like weight, not its slot (S4); exact outside 0.5 to 1.5.
             double w = FluidThermodynamics.liquidLikeWeight(in.state());
             double liquid = in.state().dense() && w > 0 && w < 1 ? 100 * w : 100 - Service.vapourShare(in.state(), thermo.model());
-            return new Load(LineSizing.Carried.of(in, basis.designFlow(), thermo, scratch).volume() * 3600, out.pressure() / in.pressure(), liquid, in.temperature(),
-                    k > 1 ? 1 / CentrifugalCompressor.sigma(k, CentrifugalCompressor.DEFAULT_EFFICIENCY) : 0, share);
+            double ratio = out.pressure() / in.pressure(), ideal = k > 1 ? 1 / CentrifugalCompressor.sigma(k, CentrifugalCompressor.DEFAULT_EFFICIENCY) : 0;
+            return new Load(LineSizing.Carried.of(in, basis.designFlow(), thermo, scratch).volume() * 3600, ratio, liquid, in.temperature(),
+                    in.state().dense() && w > 0 ? blended(ideal, w, ratio, in.temperature(), out.temperature()) : ideal, share);
+        }
+
+        /**
+         * The discharge exponent of one dense fluid of liquid-like weight {@code w} (above 0): the ideal-gas exponent
+         * {@code ideal} blended by {@code w} to the one the solved streams give, {@code ln(T_out/T_in)/ln(ratio)} (S4b of batch
+         * 2026-11-15-supercritical-fluids). The ideal-gas estimate does not see the density: it stood 17 to 32 K above the
+         * engine's discharge on a dense suction, which reads the real enthalpy at the outlet pressure. At {@code w = 0} it is
+         * the ideal exponent to the bit, so an ordinary gas does not move; the ideal one where the solved streams say nothing.
+         */
+        static double blended(double ideal, double w, double ratio, double suction, double discharge) {
+            if (!(ratio > 1) || !(suction > 0) || !(discharge > 0) || !Double.isFinite(ratio) || !Double.isFinite(suction) || !Double.isFinite(discharge)) return ideal;
+            double solved = DeterministicMath.log(discharge / suction) / DeterministicMath.log(ratio);
+            return Double.isFinite(solved) ? ideal + w * (solved - ideal) : ideal;
         }
 
         boolean flows() {

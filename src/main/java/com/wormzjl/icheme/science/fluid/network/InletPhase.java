@@ -34,7 +34,8 @@ import static com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics.AQUEOU
  * ({@link FluidThermodynamics#liquidLikeWeight}), whichever slot holds it (S4 of batch 2026-11-15-supercritical-fluids):
  * exactly the vapour slot's 1 and 0 at or below reduced density 0.5, the liquid slot's 0 and 1 from 1.5. A port's
  * stream drawn from such a state is that fluid. Neither share enters the refusal ({@link #decide}): a dry suction and
- * a compressor's solids only.</p>
+ * a compressor's solids only. Its shares are a density's, not a second phase's ({@link Supply#dense}): it holds no
+ * droplets ({@link Supply#dropletMassShare}), and its pump's clean zone's edge stands only at a real flash (S4b).</p>
  *
  * <p>A dry suction (owner decision D58, A1): a pump or compressor with nothing at its suction runs dry. What can feed
  * the suction is what stands upstream of it ({@link #held}): the device's first node if it is not a junction, else
@@ -57,10 +58,19 @@ public final class InletPhase {
      * What a device's suction line delivers: the node the walk ended at ({@code node} its index, {@code nodeId} its id),
      * the end's port there (BULK for a junction mixture and for a generator), the three measures, and {@code heldShare},
      * the largest share of its capacity held by what can feed the suction ({@link #held}; infinite for a generator).
+     * {@code dense}: the stream is one dense fluid ({@link FluidThermodynamics.State#dense()}), so its two shares are its
+     * density's, {@code 1 - w} and {@code w}, not a second phase's (S4b of batch 2026-11-15-supercritical-fluids).
      */
-    public record Supply(int node,long nodeId,PassiveNetwork.PhasePort port,double vapourVolumeShare,double condensedMassShare,double largestSolidVolumeFraction,double heldShare) {
+    public record Supply(int node,long nodeId,PassiveNetwork.PhasePort port,double vapourVolumeShare,double condensedMassShare,double largestSolidVolumeFraction,double heldShare,boolean dense) {
+        /** A supply of no dense fluid. */
+        public Supply(int node,long nodeId,PassiveNetwork.PhasePort port,double vapourVolumeShare,double condensedMassShare,double largestSolidVolumeFraction,double heldShare) {
+            this(node,nodeId,port,vapourVolumeShare,condensedMassShare,largestSolidVolumeFraction,heldShare,false);
+        }
         /** Whether the suction is dry for the next slice, given whether the device stood refused at the committed slice end. */
         public boolean dry(boolean refused){return heldShare<DRY_REFUSE||refused&&!(heldShare>=DRY_RESUME);}
+        /** The mass share of droplets in the stream, what erodes a compressor's impeller ({@code Wear.wetGas}) and wets a
+         * turbine's exhaust: its condensed mass share; 0 for one dense fluid, which has none (S4b). */
+        public double dropletMassShare(){return dense?0:condensedMassShare;}
     }
 
     /**
@@ -284,8 +294,9 @@ public final class InletPhase {
         if(total>0)for(var population:state.solids().populations())largestSolid=Math.max(largestSolid,population.volume()*solidScale/total);
         double vapourShare=fluid>0?gas/fluid:0,condensedShare=gasMass+condensedMass>0?condensedMass/(gasMass+condensedMass):0;
         // One dense fluid: the shares follow its density, not its slot (S4); the weight is exactly 0 or 1 outside 0.5 to 1.5.
-        if(fluid>0&&state.dense()){double w=FluidThermodynamics.liquidLikeWeight(state);vapourShare=1-w;condensedShare=w;}
-        return new Supply(node,id,port,vapourShare,condensedShare,largestSolid,held);
+        boolean dense=fluid>0&&state.dense();
+        if(dense){double w=FluidThermodynamics.liquidLikeWeight(state);vapourShare=1-w;condensedShare=w;}
+        return new Supply(node,id,port,vapourShare,condensedShare,largestSolid,held,dense);
     }
 
     /**
