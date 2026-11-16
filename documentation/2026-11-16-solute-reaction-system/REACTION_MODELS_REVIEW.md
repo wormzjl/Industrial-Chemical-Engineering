@@ -311,7 +311,7 @@ The water's end is right; the reason for the water is missing. For the same reas
 | Solid on a cold wall | Revision 5: none. O10: `saltFouling` on a heat side's wall, without mass | `Kp` at the wall's colder end |
 | Crystals carried by the oil, solids in a vessel | None | |
 
-The dry holdup is wrong for this pair. Hydrogen chloride alone, or ammonia alone, does leave boiled-dry water as a gas. The two together leave crystals: at 60 °C `Kp` is 1.9e-13 bar², so a plant keeps 0.4 ppm of each in a gas at 1 bar and the rest is solid; at 200 °C it keeps 5 200 ppm. The model gives all of it back as gas at any temperature. With O10 the gases then deposit at the next cold, dry heat side, which is where the fouling matters, but a cold dry vessel shows none.
+The dry holdup is wrong for this pair. Hydrogen chloride alone, or ammonia alone, does leave boiled-dry water as a gas. The two together leave crystals: at 60 °C `Kp` is 1.8e-13 bar², so a plant keeps 0.4 ppm of each in a gas at 1 bar and the rest is solid; at 200 °C it keeps 5 200 ppm. The model gives all of it back as gas at any temperature. With O10 the gases then deposit at the next cold, dry heat side, which is where the fouling matters, but a cold dry vessel shows none.
 
 **Proposal** (plan option O10). The dry salt as a third form of the same pairs: one record kind and one law at heat sides.
 
