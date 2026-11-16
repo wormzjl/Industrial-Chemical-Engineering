@@ -1,30 +1,35 @@
-// Records what each test class loads (affected.mjs, README.md of this folder): one JVM per test class, its class loads in
-// <laneRecord>/<task>-<pid>-<time>.log. -PlaneRecord takes a folder relative to the worktree root (-Xlog splits a path at ':').
+// The lane's test runs (lane.sh, affected.mjs, README.md of this folder).
+//   -PlaneTests=<file>   the filters of each test task, one per line: "<task> [!]<filter>". A task runs only its
+//                        filters (as --tests would, with no limit on their number); "!" leaves a test method out.
+//   -PlaneRecord=<folder> records what each test JVM loads and initializes, in <folder>/<task>-<pid>-<time>.log
+//                        (-Xlog splits a path at ':', so the folder is relative to the worktree root). -PlaneGroup
+//                        test classes (8) share a JVM, and each takes the JVM's loads as its load set.
 // The logs are no declared output, so a recorded run never comes up to date or from the cache.
-// -PlaneSelection takes the lane's selection file (affected.mjs select), relative to the worktree root: each Test task
-// named on a line "TASK <task> <n>/<total> <filter>..." runs only those filters, as --tests would (a command line of
-// --tests filters is cut off at about 8,000 characters on Windows). A task on an ALL line, or on none, runs whole.
-def selection = startParameter.projectProperties['laneSelection']
-if (selection) allprojects { project ->
-    def filters = [:]
-    project.providers.fileContents(project.rootProject.layout.projectDirectory.file(selection)).asText.get().readLines().each { line ->
-        def parts = line.trim().split(/\s+/)
-        if (parts.length > 3 && parts[0] == 'TASK' && parts[2] ==~ /\d+\/\d+/) filters[parts[1]] = parts[3..-1].collect { it.toString() }
+// The filter file is read through providers.fileContents: its text is an input of the configuration cache.
+def lane = { String name -> gradle.startParameter.projectProperties[name] }
+if (lane('laneRecord') || lane('laneTests')) allprojects { p ->
+    def record = p.providers.gradleProperty('laneRecord').getOrNull()
+    def picksFile = p.providers.gradleProperty('laneTests').getOrNull()
+    def group = (p.providers.gradleProperty('laneGroup').getOrElse('8')) as int
+    def picks = [:]
+    if (picksFile) p.providers.fileContents(p.layout.projectDirectory.file(picksFile)).asText.get().readLines().each { line ->
+        def parts = line.trim().split(/\s+/, 2)
+        if (parts.size() == 2) picks.computeIfAbsent(parts[0]) { [] } << parts[1]
     }
-    tasks.withType(Test).configureEach { task ->
-        def chosen = filters[task.name]
-        if (chosen) task.setTestNameIncludePatterns(chosen)
-    }
-}
-def record = startParameter.projectProperties['laneRecord']
-if (record) allprojects {
-    tasks.withType(Test).configureEach { task ->
-        forkEvery = 1
-        // %t as well as %p: Windows reuses process ids, and filecount=0 stops -Xlog rotating an older file away.
-        jvmArgs "-Xlog:class+load=info:file=${record}/${task.name}-%p-%t.log:uptime,level,tags:filecount=0"
-        outputs.cacheIf { false }
-        outputs.upToDateWhen { false }
-        def folder = project.file(record)
-        doFirst { folder.mkdirs() }
+    p.tasks.withType(Test).configureEach { task ->
+        def mine = picks[task.name]
+        if (mine) {
+            task.setTestNameIncludePatterns(mine.findAll { !it.startsWith('!') })
+            mine.findAll { it.startsWith('!') }.each { task.filter.excludeTestsMatching(it.substring(1)) }
+        }
+        if (record) {
+            task.forkEvery = group
+            // %t as well as %p: Windows reuses process ids, and filecount=0 stops -Xlog rotating an older file away.
+            task.jvmArgs "-Xlog:class+load=info,class+init=info:file=${record}/${task.name}-%p-%t.log:uptime,level,tags:filecount=0"
+            task.outputs.cacheIf { false }
+            task.outputs.upToDateWhen { false }
+            def folder = p.file(record)
+            task.doFirst { folder.mkdirs() }
+        }
     }
 }

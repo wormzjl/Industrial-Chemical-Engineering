@@ -9,3 +9,4 @@
 ^src/test/resources/materials/
 ^tools/unified-thermo-port-forms/
 ^tools/phase-ports-probes/hold-fuzz/
+^tools/merge-lane/campaign-seeds\.txt

@@ -2,11 +2,17 @@
 // (README.md of this folder). Usage, from the worktree root, after testClasses and compileFluidGameTestJava:
 //   node tools/merge-lane/affected.mjs select [--explain <test class>] [--since <commit>|<A>..<B>]
 //   node tools/merge-lane/affected.mjs save <load-log folder> <results folder>...
-// select prints: FULL <reason> | TASK <task> NONE|ALL|<n>/<total> <filter>... | STEP <regression|gametest> due|skip <why>
-// | NOTE <text>. save adds the load sets of the passed test classes, recorded at HEAD, to the load map.
+//   node tools/merge-lane/affected.mjs stamp <gametest|campaign> [<output folder>]
+// select prints: FULL <reason> | TASK <task> NONE|<n>/<total> | PICK <task> [!]<test filter>
+// | STEP <regression|gametest|campaign> due|skip <why> | NOTE <text> | WHY <class> <reason>.
+//   PICK lines are the filters of each test task: one per class to run, and !<class>.<method> for each of its tests
+//   that the lane leaves out (left-out.txt). lane.sh hands them to Gradle in a file (record.init.gradle, -PlaneTests).
+// save adds the load sets of the passed test classes, recorded at HEAD, to the load map.
+// stamp records that a step ran at HEAD: the next select asks what changed since then, not since main.
 // --since replays a past batch on today's load sets: every load set counts as recorded at <commit>, the batch's
 // base; <A>..<B> takes the changes between two commits instead of those up to the working tree.
-// The load map is $LANE_MAP, or tools/merge-lane/logs/load-map.json.gz in the main checkout (git-ignored, shared).
+// The load map is $LANE_MAP, or tools/merge-lane/logs/load-map.json.gz in the main checkout (git-ignored, shared);
+// steps.json beside it holds the stamps.
 import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
@@ -18,14 +24,16 @@ const gitOk = (...a) => { try { execFileSync('git', a, { stdio: 'ignore' }); ret
 const root = git('rev-parse', '--show-toplevel').trim();
 const mainCheckout = git('worktree', 'list', '--porcelain').split('\n')[0].replace(/^worktree /, '').trim();
 const mapFile = process.env.LANE_MAP || path.join(mainCheckout, 'tools/merge-lane/logs/load-map.json.gz');
+const stepsFile = path.join(path.dirname(mapFile), 'steps.json');
 const SETS = ['main', 'test', 'fluidGameTest'];
 const PREFIX = 'com/wormzjl/icheme/';
 const KEEP = 3; // load sets kept per test class, newest first: one per recent commit line
+const STEPS_KEPT = 8; // stamps kept per step
 const out = [];
 let range = null; // --since A..B
 const emit = line => out.push(line);
 
-// ---- class files: source file of each class, string constants, test classes ------------------------------------------
+// ---- class files: source file of each class, string constants, static fields, test classes --------------------------
 function parseClass(buf) {
   let p = 8;
   const u1 = () => buf[p++], u2 = () => { const v = buf.readUInt16BE(p); p += 2; return v; };
@@ -45,15 +53,22 @@ function parseClass(buf) {
   const access = u2(), self = utf[classRefs[u2()]], superIndex = u2();
   const superName = superIndex ? utf[classRefs[superIndex]] : null;
   const interfaces = u2(); p += 2 * interfaces;
-  const skipMembers = () => { for (let m = u2(); m > 0; m--) { p += 6; for (let a = u2(); a > 0; a--) { p += 2; const len = u4(); p += len; } } };
-  skipMembers(); skipMembers();
+  // The static fields by name, and whether javac gave each a ConstantValue: a compile-time constant, copied into its users.
+  const fields = [];
+  for (let m = u2(); m > 0; m--) {
+    const flags = u2(), name = utf[u2()]; p += 2;
+    let constant = false;
+    for (let a = u2(); a > 0; a--) { if (utf[u2()] === 'ConstantValue') constant = true; const len = u4(); p += len; }
+    if (flags & 0x0008) fields.push({ name, constant });
+  }
+  for (let m = u2(); m > 0; m--) { p += 6; for (let a = u2(); a > 0; a--) { p += 2; const len = u4(); p += len; } }
   let sourceFile = null;
   for (let a = u2(); a > 0; a--) {
     const name = utf[u2()], len = u4();
     if (name === 'SourceFile') sourceFile = utf[buf.readUInt16BE(p)];
     p += len;
   }
-  return { self, superName, access, sourceFile, utf: utf.filter(Boolean), strings: strings.map(i => utf[i]).filter(s => s != null) };
+  return { self, superName, access, sourceFile, fields, utf: utf.filter(Boolean), strings: strings.map(i => utf[i]).filter(s => s != null) };
 }
 
 const classes = new Map(); // internal name -> class
@@ -111,36 +126,48 @@ for (const c of classes.values()) {
   if (t.task) tests.set(fqn, t);
 }
 
-// ---- the load map --------------------------------------------------------------------------------------------------
+// ---- the load map and the steps' stamps ------------------------------------------------------------------------------
 const readMap = () => fs.existsSync(mapFile) ? JSON.parse(zlib.gunzipSync(fs.readFileSync(mapFile)).toString('utf8')) : { version: 1, files: [], tests: {} };
 const map = readMap();
+const readSteps = () => fs.existsSync(stepsFile) ? JSON.parse(fs.readFileSync(stepsFile, 'utf8')) : {};
+const dirty = (...more) => git('status', '--porcelain', '--untracked-files=no', '--', 'src', 'build.gradle', 'settings.gradle', 'gradle.properties', ...more).trim();
 
 if (mode === 'save') {
   const [logs, ...resultDirs] = rest;
   const head = git('rev-parse', 'HEAD').trim();
-  if (git('status', '--porcelain', '--untracked-files=no', '--', 'src', 'build.gradle', 'settings.gradle', 'gradle.properties').trim()) {
-    console.log('NOTE load sets not saved: src or the build files have uncommitted changes, so HEAD is not what ran'); process.exit(0);
-  }
-  const passed = new Set();
+  if (dirty()) { console.log('NOTE load sets not saved: src or the build files have uncommitted changes, so HEAD is not what ran'); process.exit(0); }
+  // A class passed when every result file of it passed (its nested classes have their own).
+  const seen = new Set(), failed = new Set();
   for (const d of resultDirs) for (const f of fs.existsSync(d) ? fs.readdirSync(d) : []) {
     const m = f.match(/^TEST-(.+)\.xml$/); if (!m) continue;
     const suite = (fs.readFileSync(path.join(d, f), 'utf8').match(/<testsuite [^>]*>/) || [''])[0];
-    if (/ failures="0"/.test(suite) && / errors="0"/.test(suite)) passed.add(m[1].split('$')[0]);
+    const fqn = m[1].split('$')[0];
+    seen.add(fqn);
+    if (!/ failures="0"/.test(suite) || !/ errors="0"/.test(suite)) failed.add(fqn);
   }
-  const sets = new Map();
+  // Each JVM's loads go to every test class of this run that it loaded: the test classes share JVMs
+  // (record.init.gradle, -PlaneGroup), and a larger load set is a safe one.
+  const sets = new Map(), inits = new Map(), initLogged = new Set();
   for (const f of fs.readdirSync(logs).filter(f => /\.log(\.\d+)?$/.test(f))) {
-    const loaded = [...fs.readFileSync(path.join(logs, f), 'utf8').matchAll(/\] (com\.wormzjl\.icheme\.\S+) source:/g)].map(m => m[1]);
-    const first = loaded.map(n => n.split('$')[0]).find(n => tests.has(n)); // the class this JVM was given; supertypes load first
-    if (!first) continue;
-    if (!sets.has(first)) sets.set(first, new Set());
-    for (const n of loaded) { const node = nodeOf(n); if (node) sets.get(first).add(node); }
+    const text = fs.readFileSync(path.join(logs, f), 'utf8');
+    const loaded = [...text.matchAll(/\] (com\.wormzjl\.icheme\.\S+) source:/g)].map(m => m[1]);
+    const started = [...text.matchAll(/Initializing '?(com\/wormzjl\/icheme\/[^'\s(]+)/g)].map(m => m[1]);
+    const ran = new Set(loaded.map(n => n.split('$')[0]).filter(n => tests.has(n) && seen.has(n)));
+    for (const fqn of ran) {
+      if (!sets.has(fqn)) { sets.set(fqn, new Set()); inits.set(fqn, new Set()); }
+      for (const n of loaded) { const node = nodeOf(n); if (node) sets.get(fqn).add(node); }
+      for (const n of started) { const node = nodeOf(n); if (node) inits.get(fqn).add(node); }
+      if (started.length) initLogged.add(fqn);
+    }
   }
   const index = new Map(map.files.map((f, i) => [f, i]));
   const id = f => { if (!index.has(f)) { index.set(f, map.files.length); map.files.push(f); } return index.get(f); };
   let saved = 0;
   for (const [fqn, files] of sets) {
-    if (!passed.has(fqn)) continue;
+    if (failed.has(fqn)) continue;
     const entry = { commit: head, task: tests.get(fqn).task, files: [...files].map(id).sort((a, b) => a - b) };
+    // The files with a class this JVM initialized (-Xlog:class+init): a file only loaded ran no code of its own.
+    if (initLogged.has(fqn)) entry.init = [...inits.get(fqn)].map(id).sort((a, b) => a - b);
     map.tests[fqn] = [entry, ...(map.tests[fqn] ?? []).filter(e => e.commit !== head)].slice(0, KEEP);
     saved++;
   }
@@ -150,11 +177,25 @@ if (mode === 'save') {
   console.log(`NOTE saved ${saved} load sets at ${head.slice(0, 10)} (${sets.size - saved} not passed) to ${mapFile}`);
   process.exit(0);
 }
-if (mode !== 'select') { console.error('usage: affected.mjs select | save <logs> <results>...'); process.exit(2); }
+if (mode === 'stamp') {
+  const [step, folder] = rest;
+  if (!['gametest', 'campaign'].includes(step)) { console.error('usage: affected.mjs stamp <gametest|campaign> [<output folder>]'); process.exit(2); }
+  if (dirty('tools/merge-lane/campaign-seeds.txt')) { console.log(`NOTE ${step} not stamped: uncommitted changes, so HEAD is not what ran`); process.exit(0); }
+  const head = git('rev-parse', 'HEAD').trim(), steps = readSteps();
+  steps[step] = [{ commit: head, at: new Date().toISOString().slice(0, 10), out: folder ? path.resolve(folder) : null },
+    ...(steps[step] ?? []).filter(e => e.commit !== head)].slice(0, STEPS_KEPT);
+  fs.mkdirSync(path.dirname(stepsFile), { recursive: true });
+  fs.writeFileSync(stepsFile + '.tmp', JSON.stringify(steps, null, 1));
+  fs.renameSync(stepsFile + '.tmp', stepsFile);
+  console.log(`NOTE ${step} stamped at ${head.slice(0, 10)} in ${stepsFile}`);
+  process.exit(0);
+}
+if (mode !== 'select') { console.error('usage: affected.mjs select | save <logs> <results>... | stamp <step> [<folder>]'); process.exit(2); }
 
-// ---- what changed since a commit: seeds (changed or touched source files), FULL reasons, GameTest reasons -------------
-const readers = fs.readFileSync(new URL('./readers.txt', import.meta.url), 'utf8').replace(/\r/g, '')
-  .split('\n').filter(l => l && !l.startsWith('#')).map(l => l.split(/\s+/)).map(([re, node]) => [new RegExp(re), node]);
+// ---- what changed since a commit: seeds (changed or touched source files), FULL reasons, step reasons -----------------
+const lines = name => fs.readFileSync(new URL(name, import.meta.url), 'utf8').replace(/\r/g, '').split('\n').filter(l => l && !l.startsWith('#'));
+const readers = lines('./readers.txt').map(l => l.split(/\s+/)).map(([re, node]) => [new RegExp(re), node]);
+const campaignInputs = lines('./campaign-inputs.txt').map(l => new RegExp(l));
 const texts = new Map();
 const sourceText = node => { if (!texts.has(node)) { const f = path.join(root, node); texts.set(node, fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : ''); } return texts.get(node); };
 const IGNORED = /^(documentation|research|tools|\.claude|\.github)\/|^[^/]+\.md$|^\.git(ignore|attributes)$|^LICENSE/;
@@ -163,22 +204,44 @@ const IGNORED = /^(documentation|research|tools|\.claude|\.github)\/|^[^/]+\.md$
 // versions live in gradle.properties. gradle.properties is not a full-run file either (owner, 2026-11-16:
 // "gradle.properties change should not trigger full test"); a game or loader version change is run with --all.
 const FULL = /^(settings\.gradle|gradlew(\.bat)?|gradle\/.*|(?!build\.gradle$)[^/]+\.gradle(\.kts)?)$|^tools\/development\.gradle$/;
-// Compile-time constant candidates of a source file, name -> initializer: static final primitives and Strings, and any
-// primitive or String field with an initializer in a file that declares an interface (its fields are static final).
+// Compile-time constants. javac marks each with a ConstantValue in its class file, so the constants of a source file as
+// compiled now are exact: constantTypes gives, per file, each constant's name and the simple names of the types that
+// declare it. A file's earlier text has no class file: there a constant is a static final primitive or String with an
+// initializer, or, in a file that declares an interface, a field that is still a static field now. (Until 2026-11-16
+// the second rule took any initialized local of such a file for a constant: 125 test classes of one lane ran for it.)
 const PRIMITIVE = '(?:int|long|double|float|short|byte|char|boolean|String)';
-function constantsOf(text) {
-  const t = text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
-  const found = new Map();
-  for (const m of t.matchAll(new RegExp(`\\b(?:static\\s+final|final\\s+static)\\s+${PRIMITIVE}\\s+(\\w+)\\s*=\\s*([^;]+);`, 'g'))) found.set(m[1], m[2].replace(/\s+/g, ' ').trim());
-  if (/\binterface\s+\w+/.test(t)) for (const m of t.matchAll(new RegExp(`^\\s*(?:public\\s+)?${PRIMITIVE}\\s+(\\w+)\\s*=\\s*([^;]+);`, 'gm'))) found.set(m[1], m[2].replace(/\s+/g, ' ').trim());
+const constantTypes = new Map(), staticFields = new Map(); // source file -> Map(constant -> Set(type)) | Set(field)
+for (const c of classes.values()) for (const f of c.fields) {
+  if (!staticFields.has(c.node)) { staticFields.set(c.node, new Set()); constantTypes.set(c.node, new Map()); }
+  staticFields.get(c.node).add(f.name);
+  if (!f.constant) continue;
+  const types = constantTypes.get(c.node);
+  if (!types.has(f.name)) types.set(f.name, new Set());
+  types.get(f.name).add(c.self.slice(Math.max(c.self.lastIndexOf('/'), c.self.lastIndexOf('$')) + 1));
+}
+const code = text => text.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+// Every initializer or assignment of a name in a text, through its semicolon: what the constant's value is written as.
+const written = (text, name) => [...code(text).matchAll(new RegExp(`\\b${name}\\s*=(?!=)([^;]*);`, 'g'))].map(m => m[1].replace(/\s+/g, ' ').trim()).join(' | ');
+function earlierConstants(text, node) {
+  const t = code(text), found = new Set();
+  for (const m of t.matchAll(new RegExp(`\\b(?:static\\s+final|final\\s+static)\\s+${PRIMITIVE}\\s+(\\w+)\\s*=`, 'g'))) found.add(m[1]);
+  if (/\binterface\s+\w+/.test(t)) for (const m of t.matchAll(new RegExp(`^\\s*(?:public\\s+)?${PRIMITIVE}\\s+(\\w+)\\s*=`, 'gm'))) if (staticFields.get(node)?.has(m[1])) found.add(m[1]);
   return found;
 }
-const changedConstants = (before, after) => {
-  const a = constantsOf(before), b = constantsOf(after);
-  return [...new Set([...a.keys(), ...b.keys()])].filter(n => a.get(n) !== b.get(n));
-};
+// The constants of a file whose value is written differently than before, each with the types a user names it by: its
+// declaring types as compiled now, or every type of the file for a constant that is no constant any more.
+function changedConstants(node, before, after) {
+  const now = constantTypes.get(node) ?? new Map(), found = [];
+  for (const name of new Set([...now.keys(), ...earlierConstants(before, node)])) {
+    if (written(before, name) === written(after, name)) continue;
+    const types = now.get(name) ?? new Set([...code(after + '\n' + before).matchAll(/\b(?:class|interface|enum|record)\s+(\w+)/g)].map(m => m[1]));
+    found.push([name, [...types]]);
+  }
+  return found;
+}
 const show = (commit, file) => { try { return execFileSync('git', ['show', `${commit}:${file}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 26 }); } catch { return ''; } };
 const constants = [...classes.values()].map(c => [c.node, c.strings]);
+const nodes = [...new Set([...classes.values()].map(c => c.node))];
 
 // A string constant names a path when it is a segment-aligned prefix of the path, or of a tail of it; a constant that
 // names a file names its folder too (siblings are often read through it).
@@ -205,21 +268,22 @@ function readersOf(file) {
 const sinceCache = new Map();
 function since(commit) {
   if (sinceCache.has(commit)) return sinceCache.get(commit);
-  const r = { seeds: new Map(), full: [], notes: [], gametest: null, files: 0 };
+  const r = { seeds: new Map(), full: [], notes: [], gametest: null, campaign: null, files: 0 };
   const seed = (node, why) => { if (!r.seeds.has(node)) r.seeds.set(node, why); };
-  const pending = []; // [constant name, holder file] whose value changed
+  const pending = []; // [constant name, holder file, the types that declare it] whose value changed
   // Against the working tree, as compiled: uncommitted edits and new files count too.
   const changed = range ? git('diff', '--name-only', '--no-renames', ...range).split('\n').filter(Boolean)
     : [...new Set([...git('diff', '--name-only', '--no-renames', commit).split('\n'),
       ...git('ls-files', '--others', '--exclude-standard', 'src').split('\n')].filter(Boolean))];
   r.files = changed.length;
   for (const f of changed) {
+    if (campaignInputs.some(re => re.test(f))) r.campaign ??= `${f} changed`;
     if (IGNORED.test(f)) continue;
     if (FULL.test(f)) { r.full.push(`${f} changed`); continue; }
     if (f === 'build.gradle') { r.notes.push('build.gradle changed: no test selected for it (owner, 2026-11-10)'); continue; }
     if (f === 'gradle.properties') {
-      const lines = git('diff', '-U0', ...(range ?? [commit]), '--', f).split('\n').filter(l => /^[+-][^+-]/.test(l));
-      if (lines.some(l => !/^[+-]\s*mod_version\s*=/.test(l))) r.notes.push('gradle.properties changed beyond mod_version: no test selected for it (owner, 2026-11-16)');
+      const diff = git('diff', '-U0', ...(range ?? [commit]), '--', f).split('\n').filter(l => /^[+-][^+-]/.test(l));
+      if (diff.some(l => !/^[+-]\s*mod_version\s*=/.test(l))) r.notes.push('gradle.properties changed beyond mod_version: no test selected for it (owner, 2026-11-16)');
       continue;
     }
     if (/^src\/(main\/resources\/(data|META-INF)|main\/templates|fluidGameTest)\//.test(f)) r.gametest ??= `${f} changed`;
@@ -229,7 +293,7 @@ function since(commit) {
       seed(f, 'changed');
       if (java[1] === 'fluidGameTest' || (java[1] === 'main' && !f.includes('/client/'))) r.gametest ??= `${f} changed`;
       const before = show(commit, f), after = range ? show(range[1], f) : sourceText(f);
-      for (const name of changedConstants(before, after)) pending.push([name, f]);
+      for (const [name, types] of changedConstants(f, before, after)) pending.push([name, f, types]);
       continue;
     }
     const hits = readersOf(f);
@@ -243,19 +307,18 @@ function since(commit) {
   // names a constant whose value changed changed too, and so do its own constants that are built from it.
   const done = new Set();
   while (pending.length) {
-    const [name, holder] = pending.pop();
-    if (done.has(name)) continue;
-    done.add(name);
-    // A user names the holder (or a type declared in its file): Holder.NAME, a static import, or extends/implements it.
-    const types = [...new Set([...sourceText(holder).matchAll(/\b(?:class|interface|enum|record)\s+(\w+)/g)].map(m => m[1]))];
+    const [name, holder, types] = pending.pop();
+    if (done.has(holder + '#' + name)) continue;
+    done.add(holder + '#' + name);
+    // A user names the constant's declaring type: Type.NAME, a static import, or extends/implements it.
     if (!types.length) types.push(holder.slice(holder.lastIndexOf('/') + 1, -5));
     const t = `(?:${types.join('|')})`;
     const word = new RegExp(`\\b${name}\\b`);
     const use = new RegExp(`\\b${t}\\s*\\.\\s*(?:${name}\\b|\\*)|\\b(?:extends|implements)\\s+[\\w.,\\s<>]*\\b${t}\\b`);
-    for (const c of new Set([...classes.values()].map(c => c.node))) {
-      if (c === holder || !use.test(sourceText(c)) || !word.test(sourceText(c))) continue;
+    for (const c of nodes) {
+      if (c === holder || !word.test(sourceText(c)) || !use.test(sourceText(c))) continue;
       seed(c, `uses ${holder.slice(holder.lastIndexOf('/') + 1, -5)}.${name}, a changed constant`);
-      for (const [n, init] of constantsOf(sourceText(c))) if (word.test(init)) pending.push([n, c]);
+      for (const [n, own] of constantTypes.get(c) ?? []) if (word.test(written(sourceText(c), n))) pending.push([n, c, [...own]]);
     }
   }
   sinceCache.set(commit, r);
@@ -274,11 +337,9 @@ const ancestor = new Map();
 const isAncestor = c => { if (!ancestor.has(c)) ancestor.set(c, gitOk('merge-base', '--is-ancestor', c, 'HEAD')); return ancestor.get(c); };
 const explainName = opt('--explain');
 const chosen = new Map([...new Set([...tests.values()].map(t => t.task))].map(k => [k, []]));
-const total = new Map([...chosen.keys()].map(k => [k, 0]));
 const why = new Map();
-let unrecorded = 0;
+let unrecorded = 0, onlyLoaded = 0;
 for (const [fqn, t] of tests) {
-  total.set(t.task, total.get(t.task) + 1);
   const found = (map.tests[fqn] ?? []).find(e => isAncestor(e.commit));
   const entry = found && replay ? { ...found, commit: base } : found;
   let reason = null;
@@ -287,7 +348,14 @@ for (const [fqn, t] of tests) {
     const s = since(entry.commit);
     if (s.full.length) reason = `since ${entry.commit.slice(0, 10)}: ${s.full[0]}`;
     else if (s.seeds.has(t.node)) reason = `its source: ${s.seeds.get(t.node)}`;
-    else for (const i of entry.files) { const f = map.files[i]; if (s.seeds.has(f)) { reason = `loads ${f}: ${s.seeds.get(f)}`; break; } }
+    else {
+      const hits = entry.files.map(i => map.files[i]).filter(f => s.seeds.has(f));
+      if (hits.length) {
+        reason = `loads ${hits[0]}: ${s.seeds.get(hits[0])}`;
+        // Counted, not used: the class runs. A file that was loaded and never initialized ran no code in this test.
+        if (entry.init) { const ran = new Set(entry.init.map(i => map.files[i])); if (!hits.some(f => ran.has(f))) { onlyLoaded++; reason += ' (loaded, never initialized)'; } }
+      }
+    }
   }
   if (reason) { chosen.get(t.task).push(fqn); why.set(fqn, reason); }
 }
@@ -296,29 +364,48 @@ if (explainName) {
   console.error(fqn ? `${fqn}: ${why.get(fqn) ?? 'not affected'}` : `${explainName}: no such test class`);
 }
 
+// The tests the lane leaves out (left-out.txt, owner 2026-11-16): by test class, as Gradle filters.
+const leftOut = new Map();
+for (const filter of lines('./left-out.txt').map(l => l.split(/\s+/)[0])) {
+  const fqn = filter.slice(0, filter.lastIndexOf('.')).split('$')[0];
+  if (!leftOut.has(fqn)) leftOut.set(fqn, []);
+  leftOut.get(fqn).push(filter);
+}
+let left = 0;
 for (const task of ['test', 'holdGates', 'columnGates', 'equipmentGates', 'nativeSmoke', 'fluidSolverRegression']) {
-  const picked = chosen.get(task) ?? [], all = [...tests].filter(([, t]) => t.task === task).map(([k]) => k);
-  if (!picked.length) { emit(`TASK ${task} NONE 0/${all.length}`); continue; }
-  if (picked.length === all.length) { emit(`TASK ${task} ALL ${all.length}/${all.length}`); continue; }
-  // A package whose tests in the task are all picked collapses to pkg.*; a test class with nested classes adds Name$*.
-  const set = new Set(picked), filters = new Set();
-  for (const fqn of [...set].sort()) {
-    const seg = fqn.split('.');
-    let best = null;
-    for (let i = seg.length - 1; i >= 4; i--) {
-      const pkg = seg.slice(0, i).join('.') + '.';
-      if (all.filter(k => k.startsWith(pkg)).every(k => set.has(k))) best = pkg + '*'; else break;
-    }
-    if (best) filters.add(best); else { filters.add(fqn); if (tests.get(fqn).nested) filters.add(fqn + '$*'); }
+  const picked = (chosen.get(task) ?? []).sort(), all = [...tests].filter(([, t]) => t.task === task).length;
+  if (!picked.length) { emit(`TASK ${task} NONE 0/${all}`); continue; }
+  emit(`TASK ${task} ${picked.length}/${all}`);
+  if (task === 'fluidSolverRegression') continue;
+  // One filter per class, Name$* for a class with nested test classes, and !<filter> for each of its tests left out.
+  for (const fqn of picked) {
+    emit(`PICK ${task} ${fqn}`);
+    if (tests.get(fqn).nested) emit(`PICK ${task} ${fqn}$*`);
+    for (const filter of leftOut.get(fqn) ?? []) { emit(`PICK ${task} !${filter}`); left++; }
   }
-  const reduced = [...filters].filter(f => ![...filters].some(g => g !== f && g.endsWith('.*') && f.startsWith(g.slice(0, -1))));
-  emit(`TASK ${task} ${picked.length}/${all.length} ${reduced.join(' ')}`);
 }
 const regression = (chosen.get('fluidSolverRegression') ?? []).length;
 emit(`STEP regression ${regression ? 'due' : 'skip'} ${regression ? why.get('com.wormzjl.icheme.fluid.benchmark.FluidSolverRegressionTest') : 'FluidSolverRegressionTest loads nothing that changed'}`);
-const gametest = fromBase.full[0] ?? fromBase.gametest;
-const baseName = replay ?? 'main';
-emit(`STEP gametest ${gametest ? 'due' : 'skip'} ${gametest ?? `only client code, tests or game assets changed since ${baseName}`}`);
-emit(`NOTE since ${baseName} (${base.slice(0, 10)}): ${fromBase.files} files changed; ${unrecorded} test classes have no load set; map ${path.relative(root, mapFile).startsWith('..') ? mapFile : path.relative(root, mapFile)}`);
+// The GameTests and the campaign run when something they load changed since their last run on this line of commits
+// (stamp), or since main when they have none: a second lane of a batch does not repeat a step its changes cannot reach.
+const steps = replay ? {} : readSteps();
+function stepDue(step, reach) {
+  const marks = [...(steps[step] ?? []).filter(e => isAncestor(e.commit)).map(e => ({ commit: e.commit, label: `its last run (${e.commit.slice(0, 10)}, ${e.at})`, out: e.out })),
+    { commit: base, label: `main (${base.slice(0, 10)})` }];
+  let first = null;
+  for (const m of marks) {
+    const reason = reach(since(m.commit));
+    if (!reason) return { due: false, text: `nothing it loads changed since ${m.label}`, out: m.out };
+    first ??= `${reason} since ${m.label}`;
+  }
+  return { due: true, text: first, out: marks[0].out };
+}
+const gametest = stepDue('gametest', s => s.full[0] ?? s.gametest);
+emit(`STEP gametest ${gametest.due ? 'due' : 'skip'} ${gametest.text}`);
+const campaign = stepDue('campaign', s => s.campaign);
+emit(`STEP campaign ${campaign.due ? 'due' : 'skip'} ${campaign.text}`);
+if (campaign.out) emit(`NOTE the campaign's last reports on this line of commits: ${campaign.out}`);
+if (onlyLoaded) emit(`NOTE ${onlyLoaded} selected test classes only loaded what changed and initialized none of it (they run; README, "Loaded and never initialized")`);
+emit(`NOTE since main (${base.slice(0, 10)}): ${fromBase.files} files changed; ${unrecorded} test classes have no load set; ${left} tests left out (left-out.txt); map ${path.relative(root, mapFile).startsWith('..') ? mapFile : path.relative(root, mapFile)}`);
 for (const [fqn, r] of why) if (r.startsWith('no load set') === false) emit(`WHY ${fqn.slice(19)} ${r}`);
 console.log(out.join('\n'));

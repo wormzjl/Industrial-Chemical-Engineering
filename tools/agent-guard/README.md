@@ -12,6 +12,9 @@ Batch: `documentation/2026-11-10-agent-instructions-review/` (finding 3).
 | `git add -f` / `--force` | Git and worktrees: never stage ignored files |
 | Gradle with `--rerun-tasks`, `--no-build-cache`, `cleanTest` | No repeated tests: do not force a result again |
 | `rm -r build` / `Remove-Item -Recurse build` | No repeated tests: no deleted `build/` |
+| Gradle `test`, `holdGates`, `columnGates`, `equipmentGates` or `nativeSmoke` with no `--tests` after it; `check`, `build`, `slowGates` | No repeated tests: a whole task runs only through the final lane (`lane.sh` passes its filters in a file, `-PlaneTests`, which also passes) |
+| `--tests` with `*`, `*.*`, `*Test`, `com.wormzjl.icheme.*` or `com.wormzjl.icheme.<package>.*` | No repeated tests: a filter names test classes, not a package tree |
+| `-PholdFuzzSeeds` or `LANE_SEEDS` of more than 200 seeds; `lane.sh base`; `lane.sh head --all`, unless the command carries `LANE_FULL=owner` | Measurement: the campaign runs its watch seeds; the full lane and the full campaign only when the owner asks |
 | `cargo build`, `test`, `clippy`, `run`, `bench` outside `src/main/rust`, or with `-j`, `--jobs` or `CARGO_BUILD_JOBS` above 4 | Native code: a cargo build uses at most 4 jobs (`src/main/rust/.cargo/config.toml` sets 4, so cargo runs from that folder: the session's folder, or a `cd` earlier in the command) |
 
 Text inside quotes, heredocs and PowerShell here-strings is ignored, so commit messages and file bodies that name these commands pass. `--rerun` on one filtered test task (the replay AGENTS.md allows) passes.
@@ -37,3 +40,4 @@ Text inside quotes, heredocs and PowerShell here-strings is ignored, so commit m
 
 - 2026-11-10: created; checked through bash (Claude Code), `cmd.exe /d /s /c` and `powershell -Command` (Codex on Windows) spawns.
 - 2026-11-13: the cargo rule (batch 2026-11-13-codebase-review, Rust part 2b; plan pitfall 18).
+- 2026-11-16: the test rules (batch 2026-11-16-final-lane-cost; owner: "harder enforcement of test only relevant part policy"): whole test tasks, filters over a package tree, campaigns over 200 seeds, the full lane without the owner's word. A quoted `--tests` filter is read, not ignored.
