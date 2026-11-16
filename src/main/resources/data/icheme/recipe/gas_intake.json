@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    "SSS",
+    "BFB",
+    " P "
+  ],
+  "key": {
+    "S": {
+      "item": "minecraft:iron_ingot"
+    },
+    "B": {
+      "item": "minecraft:iron_bars"
+    },
+    "F": {
+      "item": "minecraft:white_wool"
+    },
+    "P": {
+      "item": "icheme:fluid_pipe"
+    }
+  },
+  "result": {
+    "id": "icheme:gas_intake",
+    "count": 1
+  }
+}

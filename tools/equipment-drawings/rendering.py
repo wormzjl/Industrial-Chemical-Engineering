@@ -20,6 +20,7 @@ def palette(material,n):
  elif material=='DATA':c=np.array([37,177,196])
  elif material=='FE':c=np.array([231,135,57])
  elif material in ['DISPLAY','OPENING']:c=np.array([50,68,77])
+ elif material=='MOTOR_LOUVRE':c=np.array([98,112,120])
  elif material=='BRACKET':c=np.array([68,134,162])
  elif material=='COVER':c=np.array([96,179,212])
  elif material=='CABLE_DATA':c=np.array([57,175,190])

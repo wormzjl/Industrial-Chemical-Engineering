@@ -1,0 +1,118 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "icheme:block/pump_casting",
+    "case": "icheme:block/pump_casting",
+    "metal": "icheme:block/equipment_steelwork",
+    "side": "icheme:block/control_panel_side",
+    "rear": "icheme:block/control_panel_rear",
+    "front": "icheme:block/pollution_monitor_front",
+    "lamp": "icheme:block/pollution_monitor_lamp_dark"
+  },
+  "elements": [
+    {
+      "name": "foot plate",
+      "from": [4.0, 0.0, 4.0],
+      "to": [12.0, 1.0, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "post",
+      "from": [7.0, 1.0, 7.0],
+      "to": [9.0, 4.0, 9.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "analyser box",
+      "from": [3.0, 4.0, 5.0],
+      "to": [13.0, 13.0, 12.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#front" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#rear" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#side" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#case" }
+      }
+    },
+    {
+      "name": "sample inlet",
+      "from": [4.5, 2.5, 5.5],
+      "to": [5.5, 4.0, 6.5],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "inlet filter cup",
+      "from": [4.0, 1.75, 5.0],
+      "to": [6.0, 2.5, 7.0],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "lamp base",
+      "from": [6.0, 13.0, 6.75],
+      "to": [10.0, 13.5, 10.75],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    },
+    {
+      "name": "lamp lens",
+      "from": [6.5, 13.5, 7.25],
+      "to": [9.5, 15.5, 10.25],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#lamp" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#lamp" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#lamp" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#lamp" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#lamp" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#lamp" }
+      }
+    },
+    {
+      "name": "lamp guard cap",
+      "from": [6.0, 15.5, 6.75],
+      "to": [10.0, 16.0, 10.75],
+      "faces": {
+        "north": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "east": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "south": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "west": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "up": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" },
+        "down": { "uv": [0.0, 0.0, 16.0, 16.0], "texture": "#metal" }
+      }
+    }
+  ]
+}

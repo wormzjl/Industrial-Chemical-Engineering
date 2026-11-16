@@ -46,7 +46,7 @@ class ConstructorDefaultsTest {
                                 design.check(
                                         sizes.diameter(),
                                         sizes.length(),
-                                        design.duty(sizes.diameter(), sizes.length())),
+                                        design.draft(sizes.diameter(), sizes.length())),
                         form.name());
         }
     }
@@ -60,5 +60,24 @@ class ConstructorDefaultsTest {
         var exchanger = ConstructorDefaults.sizes(VesselPlacement.Form.EXCHANGER);
         assertEquals(1.5, exchanger.diameter());
         assertEquals(9, exchanger.length());
+        // The air cooler's starting bay stays 2.5 m by 5 m though its range grew to 6 m by 12 m (owner, 2026-11-15).
+        var bay = ConstructorDefaults.sizes(VesselPlacement.Form.AIR_COOLER);
+        assertEquals(2.5, bay.diameter());
+        assertEquals(5, bay.length());
+    }
+
+    /**
+     * A fresh steam turbine draft starts as a condensing HP turbine (owner point T2, option A): HP steam to 10 kPa, through
+     * its HP, MP and LP sections; a turbine saved before design points keeps reading HP into the LP header.
+     */
+    @Test
+    void aFreshTurbineDraftCondensesFromHpSteam() {
+        var design = UnitDesign.of(EquipmentShape.Kind.STEAM_TURBINE);
+        var sizes = ConstructorDefaults.sizes(VesselPlacement.Form.STEAM_TURBINE);
+        var draft = design.draft(sizes.diameter(), sizes.length());
+        assertEquals(MachineDuty.Steam.HP, draft.steam());
+        assertEquals(10, draft.exhaust(), 0);
+        assertEquals(sizes.diameter(), design.size(draft), 1e-9);
+        assertEquals(450, design.duty(sizes.diameter(), sizes.length()).exhaust(), 0, "the saved point of old turbines stands");
     }
 }

@@ -370,9 +370,10 @@ public final class LevelLoopGameTests {
                     if (state.operator != null) state.operator.player.closeContainer();
                     if (state.watcher != null) state.watcher.player.closeContainer();
                     if (state.ficWatcher != null) state.ficWatcher.player.closeContainer();
-                    log("result factor={} cycles={} blanket={} direct={} pressure={} to {} Pa low={} % high={} % levelAtStep={} % levelAtEnd={} % held={} failure={} molesResidual={} mol of {} mol energyResidual={} J of {} J intervals={} ticks={} unread={} setupResidual={} mol {} J deadMax={} ticks",
+                    log("result factor={} cycles={} blanket={} direct={} pressure={} to {} Pa low={} % high={} % levelAtStep={} % levelAtEnd={} % held={} failure={} molesResidual={} mol of {} mol energyResidual={} J of {} J intervals={} ticks={} unread={} setupResidual={} mol {} J deadMax={} ticks heldDecisions={}",
                             time.factor(), state.cycles, state.blanket, state.direct, fmt(state.lowPressure), fmt(state.highPressure), fmt(state.low), fmt(state.high), fmt(state.firstHalf), fmt(state.secondHalf), state.held, state.failure,
-                            fmt(state.massResidual), fmt(state.massThrough), fmt(state.energyResidual), fmt(state.energyThrough), state.intervals, world.onlineTick() - state.applied, state.unread, fmt(state.setupMoles), fmt(state.setupEnergy), state.deadMax);
+                            fmt(state.massResidual), fmt(state.massThrough), fmt(state.energyResidual), fmt(state.energyThrough), state.intervals, world.onlineTick() - state.applied, state.unread, fmt(state.setupMoles), fmt(state.setupEnergy), state.deadMax,
+                            state.decisions.stream().filter(com.wormzjl.icheme.runtime.control.ControlService.LevelDecision::held).count());
                     plant.remove();
                 })
                 .thenWaitUntil(() -> helper.assertTrue(plant.removed(), "Waiting for the plant to leave"))
@@ -396,12 +397,23 @@ public final class LevelLoopGameTests {
     }
 
     /**
-     * The GameTest server ticks without waiting, far ahead of the island's workers; the loop then reads samples many
-     * cadences old. While the drum's island runs more than one slice and {@link #LAG} ticks behind, each tick waits 20 ms, as a
-     * server at 20 TPS with quick workers would (an island publishes at the end of its slice).
+     * The GameTest server ticks without waiting, so a slice that takes a worker a few milliseconds spans dozens of online
+     * ticks, and a control decision can fall while no new state has arrived. A server at 20 TPS with a quick worker sees
+     * the slice back within a tick or two. So while the drum island's slice is in flight (its status {@code SOLVING}, from
+     * admission until the server drains its completion) for more than {@link #LAG} online ticks, each tick waits 20 ms. A new
+     * slice (another committed tick) starts its own count, so a backlog drains one slice per {@link #LAG} ticks at most.
      */
     static void pace(FluidWorldAuthority world, State state) {
-        if (world.onlineTick() - committed(world, state) <= ControlService.CADENCE + LAG) return;
+        if (!world.view(state.drum).status().startsWith("SOLVING")) {
+            state.flightSince = -1;
+            return;
+        }
+        long committed = committed(world, state);
+        if (state.flightSince < 0 || committed != state.flightCommitted) {
+            state.flightSince = world.onlineTick();
+            state.flightCommitted = committed;
+        }
+        if (world.onlineTick() - state.flightSince <= LAG) return;
         // One short wait per tick: the server drains the workers' completions on its next tick.
         try {
             Thread.sleep(20);
@@ -413,6 +425,8 @@ public final class LevelLoopGameTests {
     /** The run's state, and its book of the drum island's published intervals. */
     static final class State {
         long drum, start, applied, logged = -1, settled = -1;
+        /** The online tick the drum island's slice in flight was first seen, and the committed tick it started from; -1 with none. */
+        long flightSince = -1, flightCommitted = -1;
         String failure;
         /** Ticks the drum's view had no state (between publications): not samples. */
         int unread;

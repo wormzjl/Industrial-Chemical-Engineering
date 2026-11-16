@@ -81,6 +81,7 @@ The cadence displays (flares, stills, towers, heaters, chimneys) publish at thei
 | `icheme:fluid_open_partner` | C→S | menu id, BlockPos, identity | `FluidNetwork.openPartner`: the partner side's own cell opens its menu (a replay) |
 | `icheme:fluid_check_lines` | C→S | menu id, BlockPos, identity | `FluidNetwork.checkLines`: an exchanger's lines checked at the next server tick |
 | `icheme:fluid_static`, `icheme:fluid_live` | S→C | menu id, identity, `StaticData` or `LiveData` JSON (≤ 262144) | `menu.acceptStatic`, `acceptLive` |
+| `icheme:conversion_rules` | S→C | rule ids and their files with names resolved (≤ 4096 rules, each ≤ 32767) | `FluidNetwork.syncConversionRules` on `OnDatapackSyncEvent` (login, reload; datapack data, not process data); the client parses with `ConversionRule.RESOLVED` into `ConversionRuntime.client` |
 | `icheme:tank_watch`, `icheme:tank_display` | C→S, S→C | two BlockPos lists; a node and its `TankDisplay.Glide` | `watchTanks`; `TankRenderer.accept` |
 | `icheme:sight_glass_watch`, `icheme:sight_glass_display` (`sight-glass`) | C→S, S→C | `Target` lists; a `Target` and its `SightGlass` | `watchSightGlasses`; `SightGlassRenderer.accept` |
 | `icheme:mover_watch`, `icheme:mover_state` (`mover`) | C→S, S→C | `Target` lists; `MoverState` | `watchMovers`; `MoverSounds.accept` |

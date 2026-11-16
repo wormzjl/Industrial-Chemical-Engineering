@@ -22,6 +22,10 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> INLINE_FILTER=fluid("inline_filter",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.FILTER);
     /** A three-way diverter valve (batch 2026-11-09-batch-distiller). */
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> DIVERTER_VALVE=fluid("diverter_valve",com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.DIVERTER_VALVE);
+    /** A gas intake (batch 2026-11-15-fluid-interfaces, W2): the atmosphere as a generator. */
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> GAS_INTAKE=fluid("gas_intake",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::intake);
+    /** A liquid hopper (batch 2026-11-15-fluid-interfaces, W4): Forge fluid in, the network's out. */
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> LIQUID_HOPPER=fluid("liquid_hopper",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::hopper);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.LinePieceBlock> LINE_PIECE=BLOCKS.registerBlock("line_piece",
             com.wormzjl.icheme.world.level.block.LinePieceBlock::new,BlockBehaviour.Properties.of().strength(.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().dynamicShape().noLootTable());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ConduitBlock> DATA_CABLE=BLOCKS.registerBlock("data_cable",
@@ -34,17 +38,28 @@ public final class ModBlocks {
                     .pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.CreativePowerBlock> CREATIVE_POWER=BLOCKS.registerBlock("creative_power",
             com.wormzjl.icheme.world.level.block.CreativePowerBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_BLUE).strength(-1,3600000).sound(SoundType.METAL));
+    // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9, decisions A1 and A5): its lamp lights the area at block light 12 while lit.
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.AlarmBeaconBlock> ALARM_BEACON=BLOCKS.registerBlock("alarm_beacon",
+            com.wormzjl.icheme.world.level.block.AlarmBeaconBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_RED).strength(1.5F).sound(SoundType.METAL).noOcclusion()
+                    .lightLevel(s->s.getValue(com.wormzjl.icheme.world.level.block.AlarmBeaconBlock.STATE).lit()?12:0));
+    // A fixed pollution monitor (batch 2026-11-15-pollution-system, WP10): a post-mounted analyser box with a lamp and a data socket.
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.PollutionMonitorBlock> POLLUTION_MONITOR=BLOCKS.registerBlock("pollution_monitor",
+            com.wormzjl.icheme.world.level.block.PollutionMonitorBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(2).sound(SoundType.METAL).noOcclusion()
+                    .lightLevel(com.wormzjl.icheme.world.level.block.PollutionMonitorBlock::light));
     private static DeferredBlock<com.wormzjl.icheme.world.level.block.ControlPanelBlock> controlPanel(String name){return BLOCKS.registerBlock(name,
             com.wormzjl.icheme.world.level.block.ControlPanelBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3).sound(SoundType.METAL).noOcclusion());}
     // A pipe rack (batch 2026-10-26-pipe-laying-system): a thin frame, so light and the faces behind it show through; its shape follows its lanes.
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.PipeRackBlock> PIPE_RACK=BLOCKS.registerBlock("pipe_rack",com.wormzjl.icheme.world.level.block.PipeRackBlock::new,
             BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().dynamicShape());
     private static DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> fluid(String name,com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind kind) {
+        return fluid(name,p->com.wormzjl.icheme.world.level.block.FluidDeviceBlock.create(kind,p));
+    }
+    private static DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> fluid(String name,java.util.function.Function<BlockBehaviour.Properties,com.wormzjl.icheme.world.level.block.FluidDeviceBlock> block) {
         var properties=BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(3.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK);
         // Every device model (the inline filter too, a Y-strainer since 2026-10-16) leaves part of its block space open:
         // none occludes the neighbouring block's faces in the chunk renderer, and light reaches inside each.
         properties.noOcclusion();
-        return BLOCKS.registerBlock(name,p->com.wormzjl.icheme.world.level.block.FluidDeviceBlock.create(kind,p),properties);
+        return BLOCKS.registerBlock(name,block,properties);
     }
 
     public static final DeferredBlock<ProcessSimulatorBlock> PROCESS_SIMULATOR = BLOCKS.registerBlock(
@@ -136,6 +151,18 @@ public final class ModBlocks {
     public static final DeferredHolder<SoundEvent,SoundEvent> EJECTOR_JET=loop("ejector_jet");
     /** A hand valve's quarter turn at the click, a one-shot (owner 2026-11-10: tools/process-sounds/valve_turn_candidates.py). */
     public static final DeferredHolder<SoundEvent,SoundEvent> VALVE_TURN=loop("valve_turn");
+    /** The alarm beacon's horn (W9, decision A8): a loop, heard to about 48 blocks. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> ALARM_HORN=SOUNDS.register("alarm_horn",()->SoundEvent.createFixedRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"alarm_horn"),48));
+    /** A pipe a blast destroyed (batch 2026-11-15-pollution-system, WP6a; tools/process-sounds/pipe_burst_synth.py): the rupture, then a gas hiss, a liquid gush or nothing. One-shots. */
+    public static final DeferredHolder<SoundEvent,SoundEvent> PIPE_BURST_GAS=loop("pipe_burst_gas"),PIPE_BURST_LIQUID=loop("pipe_burst_liquid"),PIPE_BURST_EMPTY=loop("pipe_burst_empty");
+    /**
+     * The handheld pollution meter's warning clicks (batch 2026-11-15-pollution-system, WP8): one-second one-shots of 1, 3
+     * and 8 clicks, played to the holder once a second by the worst level (tools/process-sounds/meter_tick_synth.py).
+     */
+    public static final DeferredHolder<SoundEvent,SoundEvent> METER_TICK_SLOW=loop("meter_tick_slow"),METER_TICK_MEDIUM=loop("meter_tick_medium"),
+            METER_TICK_FAST=loop("meter_tick_fast");
+    /** The fixed pollution monitor's horn (WP10): a 2 s one-shot, played at the block every 2 s while its lamp is red (tools/process-sounds/gas_alarm_synth.py). */
+    public static final DeferredHolder<SoundEvent,SoundEvent> GAS_ALARM=loop("gas_alarm");
     private static DeferredHolder<SoundEvent,SoundEvent> loop(String name){return SOUNDS.register(name,()->SoundEvent.createVariableRangeEvent(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,name)));}
 
     private ModBlocks() {

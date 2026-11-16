@@ -13,14 +13,19 @@ public final class ModBlockEntities {
             DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, IChemE.MOD_ID);
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity>> CREATIVE_POWER=BLOCK_ENTITY_TYPES.register("creative_power",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.CreativePowerBlockEntity::new,ModBlocks.CREATIVE_POWER.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.PollutionMonitorBlockEntity>> POLLUTION_MONITOR=BLOCK_ENTITY_TYPES.register("pollution_monitor",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.PollutionMonitorBlockEntity::new,ModBlocks.POLLUTION_MONITOR.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.LinePieceBlockEntity>> LINE_PIECE=BLOCK_ENTITY_TYPES.register("line_piece",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.LinePieceBlockEntity::new,ModBlocks.LINE_PIECE.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity>> DATA_CABLE=BLOCK_ENTITY_TYPES.register("data_cable",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.ConduitBlockEntity::new,ModBlocks.DATA_CABLE.get(),ModBlocks.POWER_CABLE.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity>> CONTROL_PANEL=BLOCK_ENTITY_TYPES.register("control_panel",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.ControlPanelBlockEntity::new,ModBlocks.LOCAL_CONTROLLER.get(),ModBlocks.DCS.get()).build(null));
+    // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9).
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.AlarmBeaconBlockEntity>> ALARM_BEACON=BLOCK_ENTITY_TYPES.register("alarm_beacon",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.AlarmBeaconBlockEntity::new,ModBlocks.ALARM_BEACON.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity>> FLUID_DEVICE=BLOCK_ENTITY_TYPES.register("fluid_device",()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity::new,
-            ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get(),ModBlocks.DIVERTER_VALVE.get()).build(null));
+            ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get(),ModBlocks.DIVERTER_VALVE.get(),ModBlocks.GAS_INTAKE.get(),ModBlocks.LIQUID_HOPPER.get()).build(null));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ProcessSimulatorBlockEntity>>
             PROCESS_SIMULATOR = BLOCK_ENTITY_TYPES.register(

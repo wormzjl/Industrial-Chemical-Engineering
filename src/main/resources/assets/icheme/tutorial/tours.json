@@ -372,5 +372,16 @@
       { "anchor": "group:equipment_constructor.group.imports" },
       { "anchor": "title_key" }
     ]
+  },
+  "alarm_beacon.settings": {
+    "stops": [
+      { "anchor": "group:alarm_beacon.settings" },
+      { "anchor": "name" },
+      { "anchor": "on" },
+      { "anchor": "source:any" },
+      { "anchor": "threshold" },
+      { "anchor": "input" },
+      { "anchor": "apply" }
+    ]
   }
 }

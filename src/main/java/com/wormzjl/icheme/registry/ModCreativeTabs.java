@@ -27,6 +27,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.SPEED_SENSOR.get());
                 output.accept(ModItems.PRESSURE_GAUGE.get());
                 output.accept(ModItems.TEMPERATURE_GAUGE.get());
+                output.accept(ModItems.POLLUTION_METER.get());
                 output.accept(ModItems.LIQUID_LEVEL_GAUGE.get());
                 output.accept(ModItems.GAS_BLANKETING_VALVE.get());
                 output.accept(ModItems.PRESSURE_SAFETY_VALVE.get());
@@ -38,16 +39,24 @@ public final class ModCreativeTabs {
                     output.accept(ModItems.POWER_CABLE.get());
                 output.accept(ModItems.LOCAL_CONTROLLER.get());
                 output.accept(ModItems.DCS.get());
+                output.accept(ModItems.POLLUTION_MONITOR.get());
                 output.accept(ModItems.PIPE_RACK.get());
                 output.accept(ModItems.PIPELINE_SIGHT_GLASS.get());
                 output.accept(ModItems.PIPELINE_SHUTOFF_VALVE.get());
                 output.accept(ModItems.PIPELINE_CHECK_VALVE.get());
+                // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7).
+                output.accept(ModItems.ORIFICE_PLATE.get());
+                output.accept(ModItems.AUTOMATED_SHUTOFF_VALVE.get());
+                // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9).
+                output.accept(ModItems.ALARM_BEACON.get());
                 output.accept(ModItems.FLUID_RESERVOIR.get());
                 output.accept(ModItems.FLUID_PIPE.get());
                 output.accept(ModItems.FLUID_PUMP.get());
                 output.accept(ModItems.FLUID_COMPRESSOR.get());
                 output.accept(ModItems.PRESSURE_CONTROL_VALVE.get());
                 output.accept(ModItems.FLUID_GENERATOR.get());
+                output.accept(ModItems.GAS_INTAKE.get());
+                output.accept(ModItems.LIQUID_HOPPER.get());
                 output.accept(ModItems.DIVERTER_VALVE.get());
                 output.accept(ModItems.FLUID_VOID.get());
                 output.accept(ModItems.INLINE_FILTER.get());
@@ -57,6 +66,8 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.SHAFT.get());
                 output.accept(ModItems.CREATIVE_MOTOR.get());
                 output.accept(ModItems.CREATIVE_POWER.get());
+                // The placeholder crude oil (batch 2026-11-15-fluid-interfaces, W3, D9): only while no other mod's fluid is in c:crude_oil.
+                if (!ModFluids.othersInTag()) output.accept(ModFluids.CRUDE_OIL_BUCKET.get());
             })
             .build());
     /** The equipment reference items (batch 2026-11-12-tutorial-system, P3), in {@code Kind} order, after the main tab. */

@@ -28,7 +28,7 @@ import java.util.*;
  */
 @EventBusSubscriber(modid = IChemE.MOD_ID, value = Dist.CLIENT)
 public final class DataControlRenderer {
-    private static final Set<ControlPanelBlockEntity> PANELS =
+    private static final Set<net.minecraft.world.level.block.entity.BlockEntity> PANELS =
             Collections.newSetFromMap(new WeakHashMap<>());
     private static final ResourceLocation WHITE =
             ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "textures/misc/instrument.png");
@@ -86,12 +86,24 @@ public final class DataControlRenderer {
 
     private DataControlRenderer() {}
 
-    public static void loaded(ControlPanelBlockEntity box) {
+    public static <T extends net.minecraft.world.level.block.entity.BlockEntity & DataPort.Owner> void loaded(T box) {
         PANELS.add(box);
     }
 
-    public static void unloaded(ControlPanelBlockEntity box) {
+    public static void unloaded(net.minecraft.world.level.block.entity.BlockEntity box) {
         PANELS.remove(box);
+    }
+
+    /** The loaded pollution monitors (WP10): their sockets are drawn and aimed at as the controllers' are. */
+    private static final Set<PollutionMonitorBlockEntity> MONITORS =
+            Collections.newSetFromMap(new WeakHashMap<>());
+
+    public static void loaded(PollutionMonitorBlockEntity monitor) {
+        MONITORS.add(monitor);
+    }
+
+    public static void unloaded(PollutionMonitorBlockEntity monitor) {
+        MONITORS.remove(monitor);
     }
 
     public static Map<UUID, DataPort> ports(Level level, Vec3 centre, double radius) {
@@ -101,9 +113,16 @@ public final class DataControlRenderer {
         for (var panel : List.copyOf(PANELS))
             if (panel.getLevel() == level
                     && !panel.isRemoved()
-                    && panel.dataPort() != null
-                    && panel.dataPort().centre().distanceToSqr(centre) < radius * radius)
-                ports.put(panel.dataPort().id(), panel.dataPort());
+                    && panel instanceof DataPort.Owner owner
+                    && owner.dataPort() != null
+                    && owner.dataPort().centre().distanceToSqr(centre) < radius * radius)
+                ports.put(owner.dataPort().id(), owner.dataPort());
+        for (var monitor : List.copyOf(MONITORS))
+            if (monitor.getLevel() == level
+                    && !monitor.isRemoved()
+                    && monitor.dataPort() != null
+                    && monitor.dataPort().centre().distanceToSqr(centre) < radius * radius)
+                ports.put(monitor.dataPort().id(), monitor.dataPort());
         return Map.copyOf(ports);
     }
 
@@ -163,7 +182,9 @@ public final class DataControlRenderer {
                                 .values());
         if (port == null) return;
         String id =
-                port.host() > 0
+                mc.level.getBlockEntity(port.owner()) instanceof PollutionMonitorBlockEntity monitor
+                        ? monitor.tag()
+                        : port.host() > 0
                         ? String.format(Locale.ROOT, "#%04d", port.host())
                         : "LC-" + port.id().toString().substring(0, 8).toUpperCase(Locale.ROOT);
         String text =

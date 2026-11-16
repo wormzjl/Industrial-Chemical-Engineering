@@ -32,7 +32,9 @@ public final class DataPorts {
                 var state = pipe.getBlockState();
                 var key = fittingKey(pipe);
                 var socket =
-                        FluidDeviceBlock.hasPressureValve(state)
+                        FluidDeviceBlock.hasActuatedValve(state)
+                                ? ValveGeometry.actuatedSocket(key)
+                                : FluidDeviceBlock.hasPressureValve(state)
                                 ? ValveGeometry.socket(key)
                                 : FluidDeviceBlock.hasPump(state)
                                                 || FluidDeviceBlock.hasCompressor(state)
@@ -160,6 +162,42 @@ public final class DataPorts {
                 panel.getBlockPos()
                         .getCenter()
                         .add(normal.scale((panel.dcs() ? .375 : .3125) + .005)),
+                outward);
+    }
+
+    /**
+     * An alarm beacon's data socket (batch 2026-11-15-fluid-interfaces, W9): on its base's gland, facing out of the beacon
+     * as its mounting turns it ({@link AlarmGeometry#socketOutward}).
+     */
+    public static DataPort alarm(Level level, BlockPos owner, Direction facing, UUID identity) {
+        var s = AlarmGeometry.socket(facing.ordinal());
+        var outward = Direction.values()[AlarmGeometry.socketOutward(facing.ordinal())];
+        var centre =
+                new Vec3(owner.getX() + s[0] / 16, owner.getY() + s[1] / 16, owner.getZ() + s[2] / 16)
+                        .add(Vec3.atLowerCornerOf(outward.getNormal()).scale(.005));
+        return create(identity, DataPort.Kind.ALARM, 0, level, owner, centre, outward);
+    }
+
+    /**
+     * A fixed pollution monitor's socket (WP10): on the analyser box's back, opposite its front, as the controller's
+     * ({@link #panel}); a sensor socket of host {@code host}.
+     */
+    public static DataPort monitor(
+            com.wormzjl.icheme.world.level.block.entity.PollutionMonitorBlockEntity monitor, long host, UUID identity) {
+        var outward =
+                monitor.getBlockState()
+                        .getValue(com.wormzjl.icheme.world.level.block.PollutionMonitorBlock.FACING)
+                        .getOpposite();
+        var normal = Vec3.atLowerCornerOf(outward.getNormal());
+        return create(
+                identity,
+                DataPort.Kind.SENSOR,
+                host,
+                monitor.getLevel(),
+                monitor.getBlockPos(),
+                monitor.getBlockPos()
+                        .getCenter()
+                        .add(normal.scale(com.wormzjl.icheme.world.level.block.PollutionMonitorBlock.SOCKET_DEPTH + .005)),
                 outward);
     }
 

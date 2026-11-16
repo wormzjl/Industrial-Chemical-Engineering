@@ -18,7 +18,7 @@ import java.util.UUID;
  * Physical local controller or DCS console. Settings live in the registered control facts, not in a
  * ticking tile.
  */
-public final class ControlPanelBlockEntity extends BlockEntity {
+public final class ControlPanelBlockEntity extends BlockEntity implements DataPort.Owner {
     private UUID identity = UUID.randomUUID();
     private DataPort port;
 

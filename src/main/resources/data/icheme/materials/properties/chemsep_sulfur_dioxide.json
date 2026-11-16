@@ -48,6 +48,13 @@
     "source": "Ideal-gas heat of formation at 298.15 K and formula SO2 (molar mass 64.058 g/mol) of ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Sulfur dioxide\" (ChemSep index 910, CAS 7446-09-5). Heats of reaction follow by Hess's law. Data only.",
     "revision": "chemsep-8.3-hf-r1"
   },
+  "hazard": {
+    "channel": "corrosive",
+    "reference_ppm": 100,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, Sulfur dioxide (npgd0575, https://www.cdc.gov/niosh/npg/npgd0575.html, read 2026-11-15): IDLH 100 ppm. CDC material, in the public domain. The corrosive channel's reference: GHS H314 (owner decision, batch 2026-11-15-pollution-system).",
+    "revision": "npg-idlh-r1"
+  },
   "combustion": {
     "lower_heating_value_j_per_mol": 0,
     "estimated": false,

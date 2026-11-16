@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "id": "icheme:crude_pr78",
-  "revision": "crude-pr78-r3",
+  "revision": "crude-pr78-r4",
   "model": "pr78",
   "ideal_gas": "fit",
   "interactions": [
     "icheme:tjl20",
     "icheme:dwsim_refinery_pr78",
-    "icheme:dwsim_refinery_pr78_co2"
+    "icheme:dwsim_refinery_pr78_co2",
+    "icheme:dwsim_refinery_pr78_rare_gases"
   ],
   "missing_interactions": "zero",
   "water_model": "icheme:water",

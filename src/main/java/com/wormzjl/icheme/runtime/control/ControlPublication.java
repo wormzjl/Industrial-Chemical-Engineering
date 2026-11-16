@@ -192,8 +192,9 @@ final class ControlPublication {
                     var r = readings.get(s.instance());
                     if (r == null || r.value() < .5) return;
                     var tag = new CompoundTag();
-                    tag.putString("label", String.format(Locale.ROOT, "EQ-%04d", s.key().host()));
-                    tag.putString("alarm", s.role().substring(6));
+                    tag.putString("label", s.hostLabel());
+                    // A pollution monitor's one gas alarm reads 2 at GAS HIGH (WP10).
+                    tag.putString("alarm", s.role().equals(BuiltInInputs.GAS_ALARM) && r.value() >= 1.5 ? "GAS_HIGH" : s.role().substring(6));
                     sensorLocation(tag, s);
                     out.add(tag);
                 });

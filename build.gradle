@@ -55,6 +55,19 @@ repositories {
             includeGroup 'com.github.rtyley'
         }
     }
+    // FTB Chunks and FTB Library, and the Architectury API they are built on (the pollution map overlay, compile only).
+    maven {
+        url = 'https://maven.ftb.dev/releases'
+        content {
+            includeGroup 'dev.ftb.mods'
+        }
+    }
+    maven {
+        url = 'https://maven.architectury.dev/'
+        content {
+            includeGroup 'dev.architectury'
+        }
+    }
     // Modrinth's maven serves only its own group, and nothing else is looked up there: Iris, Sodium and the
     // Distant Horizons API (batch 2026-11-10-custom-shader-system).
     exclusiveContent {
@@ -279,6 +292,19 @@ dependencies {
         }
     }
 
+    // FTB Chunks is an optional client integration of pollution (batch 2026-11-15-pollution-system, WP9: the map overlay):
+    // compiled against, with the FTB Library and Architectury types its map API names, and never on a runtime, so the dev
+    // runs, tests and GameTests load none of the three. Only client/pollution/ftbchunks/ names their types.
+    compileOnly("dev.ftb.mods:ftb-chunks-neoforge:${ftb_chunks_version}") {
+        transitive = false
+    }
+    compileOnly("dev.ftb.mods:ftb-library-neoforge:${ftb_library_version}") {
+        transitive = false
+    }
+    compileOnly("dev.architectury:architectury-neoforge:${architectury_version}") {
+        transitive = false
+    }
+
     // JEI is an optional client integration: APIs at compile time, full mod only in dev runs.
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
@@ -302,6 +328,7 @@ def metadataProperties = [
     mod_description        : mod_description,
     create_version_range   : create_version_range,
     jei_version_range      : jei_version_range,
+    ftb_chunks_version_range: ftb_chunks_version_range,
     kubejs_version_range   : kubejs_version_range
 ]
 
@@ -620,6 +647,7 @@ def equipmentGates = gateGroup('equipment', 'science/equipment',
         ['column/**', 'compat/**', 'materials/**'], ['assets/icheme/parts/**', 'assets/icheme/lang/**',
          'assets/icheme/models/block/dcs*.json', 'assets/icheme/models/item/dcs.json', 'assets/icheme/blockstates/dcs.json',
          'assets/icheme/models/block/local_controller.json',
+         'assets/icheme/models/block/alarm_beacon*.json', 'assets/icheme/models/item/alarm_beacon.json', 'assets/icheme/blockstates/alarm_beacon.json',
          'assets/icheme/textures/block/dcs_*.png', 'assets/icheme/textures/block/control_panel_*.png',
          'assets/icheme/textures/block/controller_front.png',
          'assets/icheme/textures/block/pump_casting.png', 'assets/icheme/textures/block/equipment_steelwork.png'])

@@ -793,7 +793,7 @@ public final class EquipmentConstructorScreen extends Screen {
             if (changedKind) support = ProcessUnit.defaultSupport(kind, diameter, tangentLength);
             // A machine keeps its design point; a new kind takes the one its starting sizes give, which its sizes follow.
             var design = UnitDesign.of(kind);
-            duty = !design.hasDuty() ? MachineDuty.NONE : before.kind() != kind || duty.equals(MachineDuty.NONE) ? design.duty(diameter, tangentLength) : duty;
+            duty = !design.hasDuty() ? MachineDuty.NONE : before.kind() != kind || duty.equals(MachineDuty.NONE) ? design.draft(diameter, tangentLength) : duty;
             if (design.hasDuty()) {
                 diameter = design.size(duty);
                 tangentLength = design.length(duty);

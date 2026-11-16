@@ -108,6 +108,50 @@ public final class Wear {
     }
 
     /**
+     * The wet-exhaust onset at 20 kPa and at 10 kPa (batch 2026-11-15-equipment-visual-design, W5; owner: "you need to
+     * change the wear rules instead"): a condensing last stage is built for its design moisture, and the fast damage is
+     * from inlet steam that lost its superheat. Each is the largest condensed share of the four inlet classes' design steam
+     * expanded to that exhaust on the solve's work law (W1, 10 MW at η 0.76: at 20 kPa MP 4.66 %, LP 4.50 %, HP 3.91 %,
+     * VHP 3.36 %; at 10 kPa LP 5.45 %, MP 5.39 %, HP 4.61 %, VHP 4.06 %), up to the next 0.1 %, plus 0.1 %.
+     */
+    public static final double WET_ONSET_20_KPA = .048, WET_ONSET_10_KPA = .056;
+    /** The onset's exhaust pressures, Pa: {@link #WET_EXHAUST_ONSET} at and above the first, the two above at the others. */
+    static final double ONSET_FROM = 150e3, ONSET_20 = 20e3, ONSET_10 = 10e3;
+
+    /**
+     * A steam turbine's wet-exhaust onset at {@code exhaustPressure}, Pa (W5): {@link #WET_EXHAUST_ONSET} from 150 kPa up
+     * (and for NaN), {@link #WET_ONSET_20_KPA} at 20 kPa, {@link #WET_ONSET_10_KPA} at 10 kPa and below, linear in ln P
+     * between: continuous, with no step at the vacuum limit.
+     */
+    public static double wetOnset(double exhaustPressure) {
+        if (!(exhaustPressure < ONSET_FROM)) return WET_EXHAUST_ONSET;
+        if (exhaustPressure <= ONSET_10) return WET_ONSET_10_KPA;
+        double x = DeterministicMath.log(exhaustPressure);
+        if (exhaustPressure >= ONSET_20) {
+            double a = DeterministicMath.log(ONSET_20), b = DeterministicMath.log(ONSET_FROM);
+            return WET_ONSET_20_KPA + (WET_EXHAUST_ONSET - WET_ONSET_20_KPA) * (x - a) / (b - a);
+        }
+        double a = DeterministicMath.log(ONSET_10), b = DeterministicMath.log(ONSET_20);
+        return WET_ONSET_10_KPA + (WET_ONSET_20_KPA - WET_ONSET_10_KPA) * (x - a) / (b - a);
+    }
+
+    /**
+     * A turbine's wet-exhaust driving quantity (W5): its exhaust's condensed {@code share} less the rise of the onset at
+     * {@code exhaustPressure} (Pa) over {@link #WET_EXHAUST_ONSET}, so {@link #wetExhaust(double)} and
+     * {@link Fault#intensity} read it as they read a share. The share itself from 150 kPa up; NaN stays NaN.
+     */
+    public static double wetExcess(double share, double exhaustPressure) {
+        return share - (wetOnset(exhaustPressure) - WET_EXHAUST_ONSET);
+    }
+
+    /** A steam turbine's wet-exhaust erosion intensity at {@code share} exhausting at {@code exhaustPressure}, Pa (W5): {@code (share − onset) / 0.05}, 0 to 1. */
+    public static double wetExhaust(double share, double exhaustPressure) {
+        double onset = wetOnset(exhaustPressure);
+        if (!(share > onset)) return 0;
+        return Math.min(1, (share - onset) / WET_EXHAUST_SPAN);
+    }
+
+    /**
      * A centrifugal compressor's wet gas erosion intensity at {@code share}, the condensed mass share of its suction stream
      * (N2): droplets erode its impeller. {@code (share − 0.005) / 0.05}, between 0 and 1: 0 at and below 0.5 % and for NaN,
      * one from 5.5 % up. In the erosion class: at the default lives 8 h of process time from 5.5 %, 16 h at 3 %.

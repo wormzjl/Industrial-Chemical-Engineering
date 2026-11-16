@@ -55,6 +55,13 @@
     "source": "NIOSH Pocket Guide to Chemical Hazards, Cyclohexane (npgd0163, https://www.cdc.gov/niosh/npg/npgd0163.html, read 2026-11-05): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23).",
     "revision": "npg-b627-r1"
   },
+  "hazard": {
+    "channel": "toxic",
+    "reference_ppm": 1300,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, Cyclohexane (npgd0163, https://www.cdc.gov/niosh/npg/npgd0163.html, read 2026-11-15): IDLH 1300 ppm [10%LEL]. CDC material, in the public domain. The toxic channel's reference (batch 2026-11-15-pollution-system).",
+    "revision": "npg-idlh-r1"
+  },
   "combustion": {
     "lower_heating_value_j_per_mol": 3688644,
     "estimated": false,

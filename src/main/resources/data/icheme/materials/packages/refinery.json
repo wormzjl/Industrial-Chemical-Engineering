@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "id": "icheme:refinery",
-  "revision": "refinery-tier1-r4",
+  "revision": "refinery-tier1-r5",
   "method": "icheme:crude_pr78",
   "extends": "icheme:tjl20_methane_nitrogen",
   "components": [
@@ -33,7 +33,12 @@
       "id": "CarbonDioxide",
       "properties": "icheme:chemsep_carbon_dioxide"
     },
-    "Ethanol"
+    "Ethanol",
+    "Argon",
+    "Neon",
+    "Helium",
+    "Krypton",
+    "Xenon"
   ],
   "crystals": [
     "icheme:crystal_carbon_dioxide_i"

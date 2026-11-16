@@ -164,7 +164,7 @@ public final class RegistryFirstGameTests {
             var at = helper.absolutePos(new BlockPos(1 + 2 * (i % 4), 1 + 2 * (i / 4), 1));
             cells.add(at);
             level.setBlock(at, placed.get(i), 3);
-            var stood = FluidDeviceBlock.stateFor(world.at(position(level, at)).orElseThrow().device());
+            var stood = FluidDeviceBlock.stateFor(world.at(position(level, at)).orElseThrow());
             if (failure[0] == null && !placed.get(i).equals(stood)) failure[0] = "placed " + placed.get(i) + ", stands as " + stood;
         }
         for (var at : cells) level.setBlock(at, Blocks.AIR.defaultBlockState(), 3);

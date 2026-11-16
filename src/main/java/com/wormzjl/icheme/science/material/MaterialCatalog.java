@@ -187,6 +187,22 @@ public final class MaterialCatalog {
         }
     }
     /**
+     * A dataset's health hazard in air, its optional {@code hazard} sub-record (batch 2026-11-15-pollution-system, plan
+     * section 2): the channel ({@code toxic}, or {@code corrosive} for a GHS H314 compound) and the reference concentration,
+     * ppm by volume (the NIOSH IDLH; an estimate where NIOSH gives none), whether it is estimated, its source and the
+     * sub-record's own revision. A compound with no health hazard (a simple asphyxiant, an inert) has none; its
+     * flammability is {@link Flammability}'s. Read by the pollution field ({@link MaterialCatalog#toxicReferences}); in no
+     * saved state, so like {@link Flammability} it is in no identity.
+     */
+    public record Hazard(Hazard.Channel channel, double referencePpm, boolean estimated, String source, String revision) {
+        /** The hazard channels, read by lower-case name. */
+        public enum Channel { TOXIC, CORROSIVE }
+        public Hazard {
+            Objects.requireNonNull(channel); Objects.requireNonNull(source); Objects.requireNonNull(revision);
+            if (!(referencePpm > 0 && referencePpm <= 1e6)) throw new IllegalArgumentException("reference_ppm: must lie in (0, 1e6]");
+        }
+    }
+    /**
      * A dataset's or water model's lower heating value, its optional {@code combustion} sub-record (batch
      * 2026-11-09-furnace-fuel-power, owner decision F2): J/mol of the ideal gas at 298.15 K burnt to CO2, H2O (gas), SO2
      * and N2, prebuilt from the record's {@link Thermochemistry} by {@code tools/heating-values}; 0 for a record that gives
@@ -253,8 +269,8 @@ public final class MaterialCatalog {
      * viscosities, each by its own revision, the water's ice and the fluid reference data in
      * {@link MaterialCatalog#fluidRevision}, and the spine and crystal records (the column refuses such packages) record by
      * record in {@link MaterialCatalog#spineRevision}. Assays are compositions, not physics: no identity carries them, and
-     * neither do a dataset's freezing, thermochemistry and flammability sub-records ({@link Freezing}, {@link Thermochemistry},
-     * {@link Flammability}), which no model reads yet, nor its {@code group_counts} ({@link GroupCounts}) and
+     * neither do a dataset's freezing, thermochemistry, flammability and hazard sub-records ({@link Freezing}, {@link Thermochemistry},
+     * {@link Flammability}, {@link Hazard}), which no phase model reads, nor its {@code group_counts} ({@link GroupCounts}) and
      * {@code henry_in_water} ({@link HenryConstant}), data for the derived pairs, nor the group tables until a package's rule
      * resolves a pair from one.</p>
      */
@@ -317,6 +333,9 @@ public final class MaterialCatalog {
     private final Map<String, Combustion> combustion;
     /** Each dataset's and water model's formula, from its {@code thermochemistry} sub-record (C, H, N, O, S atoms per molecule), by its record key. */
     private final Map<String, Map<String, Double>> formulas;
+    /** Each dataset's {@link Flammability} and {@link Hazard} by record key ({@code properties/<id>}): what a release puts in the air. */
+    private final Map<String, Flammability> flammability;
+    private final Map<String, Hazard> hazards;
     /**
      * The group data of batch 2026-11-11-aqueous-solvents (data for the derived pairs, in no identity): each record's
      * {@code group_counts} by scheme and each gas's {@code henry_in_water}, by record key ({@code properties/<id>},
@@ -337,8 +356,10 @@ public final class MaterialCatalog {
             Map<String, Map<ViscosityCorrelation.Phase, ViscosityCorrelation>> viscosities, Map<String, String> waterModels,
             Map<String, FluidAppearance> assayAppearances, Map<String, FluidAppearance> componentAppearances, Map<String, LiquidMixtureCorrection> liquidMixtures, MaterialPresets presets, FluidData fluidData,
             Map<String, Validity> propertyValidity, Map<String, Validity> packageValidity,
-            Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, Map<String, Map<String, Double>> formulas, SolidMaterialCatalog solids,
+            Map<String, ReferenceSpine> spines, Map<String, CrystalReference> crystals, Map<String, Combustion> combustion, Map<String, Map<String, Double>> formulas,
+            Map<String, Flammability> flammability, Map<String, Hazard> hazards, SolidMaterialCatalog solids,
             SolidFuelCatalog fuels, Records records, Map<String, Definition> definitions, GroupData groupData, DerivedPairs.Cache derivedPairs) {
+        this.flammability = Map.copyOf(flammability); this.hazards = Map.copyOf(hazards);
         this.groupData = Objects.requireNonNull(groupData);
         this.derivedPairs = Objects.requireNonNull(derivedPairs);
         this.propertyValidity = Map.copyOf(propertyValidity); this.packageValidity = Map.copyOf(packageValidity);
@@ -360,7 +381,7 @@ public final class MaterialCatalog {
     /** This catalog with its packages, liquid-mixture corrections and definitions replaced; a view, never published. */
     private MaterialCatalog derived(Map<String, Package> packages, Map<String, LiquidMixtureCorrection> liquidMixtures, Map<String, Definition> definitions) {
         return new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,presets,
-                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,solids,fuels,records,definitions,groupData,derivedPairs);
+                fluidData,propertyValidity,packageValidity,spines,crystals,combustion,formulas,flammability,hazards,solids,fuels,records,definitions,groupData,derivedPairs);
     }
     public Package requirePackage(String id) {
         Package p = packages.get(id);
@@ -648,6 +669,8 @@ public final class MaterialCatalog {
         var crystals = new HashMap<String, CrystalReference>();
         var combustion = new HashMap<String, Combustion>();
         var formulas = new HashMap<String, Map<String, Double>>();
+        var flammability = new HashMap<String, Flammability>();
+        var hazards = new HashMap<String, Hazard>();
         var propertyRevisions = new HashMap<String, String>();
         for (var o : group(groups,"components").values()) checked(origins,o,() -> {
             JsonObject cut = o.has("cut") ? object(o,"cut") : null;
@@ -735,10 +758,12 @@ public final class MaterialCatalog {
                             +" is anchored at "+crystal.anchor().temperature()+" K; they must agree within "+Freezing.CRYSTAL_ANCHOR_TOLERANCE+" K");
             }
             // Data for later models: each sub-record is validated as it is read; the catalog keeps the formula (a flare's flame
-            // temperature, batch 2026-11-09-flare-stack) and the heating value (the burners), nothing else.
+            // temperature, batch 2026-11-09-flare-stack), the heating value (the burners) and the flammability and hazard (the
+            // pollution field, batch 2026-11-15-pollution-system), nothing else.
             if (o.has("thermochemistry")) formulas.put("properties/"+id,Map.copyOf(readThermochemistry(object(o,"thermochemistry")).elements()));
             if (o.has("combustion")) combustion.put("properties/"+id,readCombustion(object(o,"combustion")));
-            if (o.has("flammability")) readFlammability(object(o,"flammability"));
+            if (o.has("flammability")) flammability.put("properties/"+id,readFlammability(object(o,"flammability")));
+            if (o.has("hazard")) hazards.put("properties/"+id,readHazard(object(o,"hazard")));
             // Data for the derived pairs (batch 2026-11-11-aqueous-solvents), kept apart from the Property: in no identity.
             if (o.has("group_counts")) groupCounts.put("properties/"+id,readGroupCounts(object(o,"group_counts"),activityTables));
             if (o.has("henry_in_water")) henry.put("properties/"+id,HenryConstant.read(object(o,"henry_in_water")));
@@ -815,7 +840,7 @@ public final class MaterialCatalog {
             throw new IllegalArgumentException(record.origin()+": no package holds every compound of assay "+record.id());
         if(packages.isEmpty()) throw new IllegalArgumentException("Material catalog has no packages");
         var result=new MaterialCatalog(names,packages,resources,viscosities,waterModels,assayAppearances,componentAppearances,liquidMixtures,MaterialPresets.read(group(groups,"presets"),group(groups,"networks"),origins,packages,names.keySet()),fluidData,
-                propertyValidity,packageValidity,spines,crystals,combustion,formulas,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions,
+                propertyValidity,packageValidity,spines,crystals,combustion,formulas,flammability,hazards,SolidMaterialCatalog.parse(resources),SolidFuelCatalog.parse(resources),records,definitions,
                 new GroupData(groupCounts,henry,activityTables,homomorphs),new DerivedPairs.Cache());
         // The column's check of each column preset runs above this layer, before a catalog is published
         // (V3ColumnPresets.validate, called by the reload listener; codebase review C2, F5).
@@ -962,6 +987,80 @@ public final class MaterialCatalog {
             return new Flammability(number(o,"lfl_volume_fraction"),o.has("ufl_volume_fraction")?number(o,"ufl_volume_fraction"):null,
                     bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
         } catch (RuntimeException invalid) { throw new IllegalArgumentException("flammability."+invalid.getMessage(),invalid); }
+    }
+    /** A dataset's {@code hazard} sub-record ({@link Hazard}); a refusal names the field. */
+    static Hazard readHazard(JsonObject o) {
+        try {
+            String name=text(o,"channel");
+            var channel=switch(name) {
+                case "toxic" -> Hazard.Channel.TOXIC;
+                case "corrosive" -> Hazard.Channel.CORROSIVE;
+                default -> throw new IllegalArgumentException("channel: expected toxic or corrosive, got "+name);
+            };
+            return new Hazard(channel,number(o,"reference_ppm"),bool(o,"estimated"),text(o,"source"),revision(o,"revision"));
+        } catch (RuntimeException invalid) { throw new IllegalArgumentException("hazard."+invalid.getMessage(),invalid); }
+    }
+    /** A compound's {@link Hazard} in a package: the {@code hazard} of the dataset the package takes for it; none for the water. */
+    public Optional<Hazard> hazard(String packageId,String componentId) {
+        return Optional.ofNullable(hazards.get(recordKey(packageId,componentId)));
+    }
+    /** A compound's {@link Flammability} in a package: the {@code flammability} of the dataset the package takes for it; none for the water. */
+    public Optional<Flammability> flammability(String packageId,String componentId) {
+        return Optional.ofNullable(flammability.get(recordKey(packageId,componentId)));
+    }
+    /**
+     * Package {@code packageId}'s toxic reference concentrations as mole fractions (the {@link Hazard} reference, ppm times
+     * 1e-6) in the fluid network's conserved order (its components, then the water): 0 where the record has no
+     * {@link Hazard.Channel#TOXIC} hazard. The pollution field's toxic index divides by them (plan section 2).
+     */
+    public double[] toxicReferences(String packageId) { return references(packageId,Hazard.Channel.TOXIC); }
+    /** As {@link #toxicReferences}, for the {@link Hazard.Channel#CORROSIVE} channel. */
+    public double[] corrosiveReferences(String packageId) { return references(packageId,Hazard.Channel.CORROSIVE); }
+    private double[] references(String packageId,Hazard.Channel channel) {
+        var out=new double[conservedComponents(packageId).size()];var keys=datasetKeys(packageId);
+        for(int k=0;k<keys.size();k++){var h=hazards.get(keys.get(k));out[k]=h!=null&&h.channel()==channel?h.referencePpm()*1e-6:0;}
+        return out;
+    }
+    /**
+     * Package {@code packageId}'s lower flammability limits, volume fractions, in the fluid network's conserved order (its
+     * components, then the water): 0 where the record has no {@link Flammability}. The combustible index divides by them
+     * (Le Chatelier, plan section 2).
+     */
+    public double[] lowerFlammabilityLimits(String packageId) {
+        var out=new double[conservedComponents(packageId).size()];var keys=datasetKeys(packageId);
+        for(int k=0;k<keys.size();k++){var f=flammability.get(keys.get(k));out[k]=f==null?0:f.lowerLimit();}
+        return out;
+    }
+    /**
+     * Package {@code packageId}'s critical temperatures, K, in the fluid network's conserved order (its components, then the
+     * water): each dataset's PR78 constant, NaN for a record without one; the water's from its water model. A spill's
+     * volatile share reads them ({@code HazardStandard}).
+     */
+    public double[] criticalTemperatures(String packageId) { return critical(packageId,0); }
+    /** As {@link #criticalTemperatures}: the critical pressures, Pa. */
+    public double[] criticalPressures(String packageId) { return critical(packageId,1); }
+    /**
+     * As {@link #criticalTemperatures}: the acentric factors. The water model gives none, so the water's is its definition
+     * on the model's own saturation line, {@code -log10(p_s(0.7 T_c)/p_c) - 1} (0.344).
+     */
+    public double[] acentricFactors(String packageId) { return critical(packageId,2); }
+    private double[] critical(String packageId,int constant) {
+        var p=requirePackage(packageId);var names=conservedComponents(packageId);var out=new double[names.size()];
+        for(int k=0;k<names.size()-1;k++) {
+            var pr=p.properties().get(p.components().indexOf(names.get(k))).pr();
+            out[k]=pr==null?Double.NaN:constant==0?pr.criticalTemperature():constant==1?pr.criticalPressure():pr.acentricFactor();
+        }
+        var w=p.water();
+        out[out.length-1]=constant==0?w.criticalTemperature():constant==1?w.criticalPressure()
+                :-com.wormzjl.icheme.science.math.DeterministicMath.log10(com.wormzjl.icheme.science.thermo.water.WagnerPruss.pressure(
+                        WaterRecords.constants(w),0.7*w.criticalTemperature())/w.criticalPressure())-1;
+        return out;
+    }
+    /** The record keys of a package's components other than the water, in the conserved order. */
+    private List<String> datasetKeys(String packageId) {
+        var p=requirePackage(packageId);var names=conservedComponents(packageId);var out=new ArrayList<String>(names.size()-1);
+        for(int k=0;k<names.size()-1;k++)out.add("properties/"+p.properties().get(p.components().indexOf(names.get(k))).id());
+        return out;
     }
     /** A dataset's {@code models.pr78.alpha} ({@link MathiasCopeman}); a refusal names the field. */
     static MathiasCopeman readAlpha(JsonObject o) {

@@ -167,8 +167,12 @@ class ProcessUnitTest {
                 () -> EquipmentShape.unit(Kind.EXCHANGER, 1, 4, Heading.NORTH, 1),
                 () -> EquipmentShape.unit(Kind.KETTLE, 2.25, 10, Heading.NORTH, 2),
                 () -> EquipmentShape.unit(Kind.KETTLE, 1, 11, Heading.NORTH, 2),
-                () -> EquipmentShape.unit(Kind.AIR_COOLER, 4, 6, Heading.NORTH, 6),
-                () -> EquipmentShape.unit(Kind.AIR_COOLER, 3, 7, Heading.NORTH, 6),
+                // Past the larger bays (batch 2026-11-15-equipment-visual-design): wider than 6 m, longer than 12 m, a
+                // 1.5 m bay past 6 m (its fans no longer cover 0.4 of its face), a 6 by 12 m bay under its fans' 6 m.
+                () -> EquipmentShape.unit(Kind.AIR_COOLER, 6.5, 6, Heading.NORTH, 6),
+                () -> EquipmentShape.unit(Kind.AIR_COOLER, 3, 13, Heading.NORTH, 6),
+                () -> EquipmentShape.unit(Kind.AIR_COOLER, 1.5, 7, Heading.NORTH, 6),
+                () -> EquipmentShape.unit(Kind.AIR_COOLER, 6, 12, Heading.NORTH, 5),
                 () -> EquipmentShape.unit(Kind.AIR_COOLER, 3, 6, Heading.NORTH, 2),
                 () -> EquipmentShape.unit(Kind.AIR_COOLER, 1, 4, Heading.NORTH, 5),
                 () -> EquipmentShape.unit(Kind.AIR_COOLER, 3, 3, Heading.NORTH, 5),
@@ -224,10 +228,10 @@ class ProcessUnitTest {
         // face (API 661); 1.5 and 2 m wide from 3 m long, 2.5 and 3 m wide from 4 m (a 3 m bay of 3 m has 28 %). The 3 × 6 m bay keeps two
         // fans of 1.9 m, their rings 2.13 m across (owner report 2026-10-16: the rings of 2.05 m fans overlapped).
         var bays = ProcessUnit.bays();
-        assertEquals(14, bays.size());
+        assertEquals(14, bays.stream().filter(bay -> bay[0] <= 3 && bay[1] <= 6).count(), "the bays before 2026-11-15");
         for (var bay : bays) {
             assertTrue(UnitRatings.coverage(bay[0], bay[1]) >= ProcessUnit.FAN_COVERAGE, bay[0] + " x " + bay[1]);
-            EquipmentShape.unit(Kind.AIR_COOLER, bay[0], bay[1], Heading.NORTH, 5);
+            EquipmentShape.unit(Kind.AIR_COOLER, bay[0], bay[1], Heading.NORTH, Math.max(5, ProcessUnit.minSupport(Kind.AIR_COOLER, bay[0], bay[1])));
         }
         assertEquals(3, UnitDesign.of(Kind.AIR_COOLER).minLength(1.5));
         assertEquals(4, UnitDesign.of(Kind.AIR_COOLER).minLength(2.5));
@@ -664,7 +668,7 @@ class ProcessUnitTest {
         // keep 0.02 m apart at their widest (flange and bellmouth, RING_OD rotor diameters), and each ring stays 0.05 m
         // inside the plenum's frame across the bay.
         for (var bay : ProcessUnit.bays()) {
-            var shape = EquipmentShape.unit(Kind.AIR_COOLER, bay[0], bay[1], Heading.NORTH, 4, new ProcessUnit.Bank(2, 2));
+            var shape = EquipmentShape.unit(Kind.AIR_COOLER, bay[0], bay[1], Heading.NORTH, ProcessUnit.defaultSupport(Kind.AIR_COOLER, bay[0], bay[1]), new ProcessUnit.Bank(2, 2));
             var hubs = ShapeRasterizer.moving(shape).stream().map(part -> part.motion().pivot()).toList();
             double ring = ProcessUnit.RING_OD * UnitRatings.fans(bay[0], bay[1]).diameter();
             assertTrue(ring <= bay[0] - .32 + 1e-9, bay[0] + " x " + bay[1]);

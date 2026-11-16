@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "Krypton",
+  "kind": "chemical",
+  "translation_key": "material.icheme.krypton",
+  "fallback": "Krypton",
+  "properties": "icheme:chemsep_krypton",
+  "appearance": {
+    "color": "#DCE8FA",
+    "transparency": 0.95,
+    "estimated": true
+  },
+  "identifiers": {
+    "cas": "7439-90-9",
+    "chemsep_id": "920",
+    "smiles": "[Kr]",
+    "formula": "Kr"
+  }
+}

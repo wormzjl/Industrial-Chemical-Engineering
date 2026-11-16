@@ -18,6 +18,8 @@ class MaterialThermochemistryTest {
     private static final String METHANE="properties/tjl20_methane.json";
     private static final String WATER="water/water.json";
     private static final Set<String> NOT_COMBUSTIBLE=Set.of("Oxygen","SulfurDioxide","Nitrogen","CarbonDioxide");
+    /** Batch 2026-11-15-fluid-interfaces, W1: the rare gases of the world list, without thermochemistry. */
+    private static final Set<String> RARE_GASES=Set.of("Argon","Neon","Helium","Krypton","Xenon");
     /**
      * Every compound of the world list and the water: its ChemSep v8.3 ideal-gas heat of formation at 298.15 K (J/mol;
      * O2 and N2 are 0 by definition) and its atoms of C, H, N, O and S.
@@ -136,12 +138,14 @@ class MaterialThermochemistryTest {
      */
     @Test void theWorldListCarriesThermochemistryAndTheLimitsOfWhatBurns() {
         var catalog=MaterialCatalog.bundled();var world=catalog.requirePackage(WORLD);
-        assertEquals(46,world.components().size(),"7 light ends, 12 cuts, N2, the 24 Tier 1 compounds, CO2 and ethanol (W6: ethanol joins icheme:refinery)");
+        assertEquals(51,world.components().size(),"7 light ends, 12 cuts, N2, the 24 Tier 1 compounds, CO2, ethanol (W6: ethanol joins icheme:refinery) and the five rare gases (batch 2026-11-15-fluid-interfaces, W1)");
         var water=SubRecords.thermochemistry(catalog,WORLD,"Water").orElseThrow();
         assertEquals(formula(FORMULA.get("Water")),water.elements());assertEquals(-241814,water.formationEnthalpy());
         assertEquals(.01801528,SubRecords.molarMass(water),.01801528*MOLAR_MASS_TOLERANCE,"the water's formula");
         int compounds=0,cuts=0,limits=0;
         for(String component:world.components()) {
+            // The rare gases carry no thermochemistry: their elements are outside C, H, N, O and S; they burn as inerts.
+            if(RARE_GASES.contains(component)) { assertTrue(SubRecords.thermochemistry(catalog,WORLD,component).isEmpty(),component); continue; }
             var t=SubRecords.thermochemistry(catalog,WORLD,component).orElseThrow(()->new AssertionError(component+" has no thermochemistry"));
             var f=SubRecords.flammability(catalog,WORLD,component);
             assertFalse(t.source().contains("CAMEO")||f.isPresent()&&f.get().source().contains("CAMEO"),component);
@@ -226,6 +230,7 @@ class MaterialThermochemistryTest {
         assertEquals(world.components().size()+1,values.length,"the components, then the water");
         for(int i=0;i<world.components().size();i++) {
             String component=world.components().get(i);
+            if(RARE_GASES.contains(component)) { assertEquals(0,values[i],component+" burns as an inert"); continue; }
             double hess=Math.max(0,hess(catalog,SubRecords.thermochemistry(catalog,WORLD,component).orElseThrow()));
             assertEquals(hess,values[i],1e-6*Math.max(1,hess),component);
             if(NOT_COMBUSTIBLE.contains(component))assertEquals(0,values[i],component+" gives no heat");

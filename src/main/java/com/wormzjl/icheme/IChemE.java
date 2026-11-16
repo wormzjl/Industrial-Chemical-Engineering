@@ -57,6 +57,12 @@ public final class IChemE {
     private static final ModConfigSpec.DoubleValue CREATE_STRESS_PER_FE;
     private static final ModConfigSpec.BooleanValue WEAR_ENABLED;
     private static final ModConfigSpec.DoubleValue WEAR_CAVITATION_HOURS, WEAR_DRY_MINUTES;
+    private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED, POLLUTION_EFFECTS, POLLUTION_PARTICLES;
+    private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF;
+    private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
+    private static final ModConfigSpec.BooleanValue POLLUTION_EXPLOSIONS, POLLUTION_BLOCK_DAMAGE, POLLUTION_EQUIPMENT_BREACH;
+    private static final ModConfigSpec.DoubleValue POLLUTION_EXPLOSION_POWER_CAP;
+    private static final ModConfigSpec.ConfigValue<String> POLLUTION_MAP_OVERLAY;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -193,12 +199,45 @@ public final class IChemE {
                 .defineInRange("dryProcessMinutes", com.wormzjl.icheme.science.machine.Wear.DRY_PROCESS_MINUTES, 0.01, 1e6);
         builder.pop();
         builder.pop();
+        // Pollution (batch 2026-11-15-pollution-system, WP3): the field of released gases and particulate, per dimension.
+        builder.push("pollution");
+        POLLUTION_ENABLED = builder.comment("Whether released gases and particulate spread, decay and act on the world. False: the saved field is kept as it is, nothing moves, and every reading is 0. Captured on server start.")
+                .define("enabled", true);
+        POLLUTION_HALF_LIFE_OPEN_MINUTES = builder.comment("Half-life of pollution in a cube at or above the surface, in process minutes (5 min is 75 s of play at the default fluid.timeScale 4). Rain shortens it 4 times for corrosive gas and particulate. Captured on server start.")
+                .defineInRange("halfLifeOpenMinutes", 5.0, 0.1, 1000.0);
+        POLLUTION_HALF_LIFE_ENCLOSED_MINUTES = builder.comment("Half-life of pollution in an enclosed cube (indoors, underground), in process minutes. Captured on server start.")
+                .defineInRange("halfLifeEnclosedMinutes", 60.0, 0.1, 10000.0);
+        POLLUTION_CUTOFF = builder.comment("The smallest index a cube keeps (1 is the reference: the IDLH of a toxic or corrosive gas, the LFL of a combustible one). Below it a channel is dropped, so a release reaches at most its total index over this many cubes. Captured on server start.")
+                .defineInRange("cutoff", 1e-3, 1e-6, 0.05);
+        POLLUTION_MAX_ACTIVE_CUBES = builder.comment("The most 16 m cubes a dimension's field holds; above it the faintest are dropped first. Captured on server start.")
+                .defineInRange("maxActiveCubes", 8192, 64, 262_144);
+        // WP5: what the field does to living things, and the clouds players see.
+        POLLUTION_EFFECTS = builder.comment("Whether pollution gives status effects and damage to players and mobs. Captured on server start.")
+                .define("effects", true);
+        POLLUTION_PARTICLES = builder.comment("Whether polluted cubes show coloured particles to players within 48 blocks: green toxic, yellow corrosive, grey particulate, pale orange combustible. Captured on server start.")
+                .define("particles", true);
+        // WP6a: a flammable cube (combustible index at least 1, the LFL) explodes at a flame, with a chain into flammable neighbours.
+        POLLUTION_EXPLOSIONS = builder.comment("Whether a cube whose combustible gas reaches its lower flammability limit explodes at an ignition source (fire, a torch, a lit furnace, a burning mob, an explosion, a flare, a firing burner or engine), and its flammable neighbours after it. False: flammable cubes never ignite. Captured on server start.")
+                .define("explosions", true);
+        POLLUTION_BLOCK_DAMAGE = builder.comment("Whether those explosions break blocks (pipes and one-block devices among them, which then release what they held). Constructed equipment is never broken (see equipmentBreach). Captured on server start.")
+                .define("blockDamage", true);
+        // WP6b: a blast breaches constructed equipment instead of destroying it.
+        POLLUTION_EQUIPMENT_BREACH = builder.comment("Whether an explosion (any: TNT, a creeper, a burning cloud) of strength 2 or more at constructed equipment breaches it: a closed vessel then stands open to the air, venting its gas and spilling what overflows, and a pump, compressor or turbine fails, until a player repairs it with a repair kit. Its blocks stay. False: constructed equipment ignores blasts. Read at each explosion.")
+                .define("equipmentBreach", true);
+        POLLUTION_EXPLOSION_POWER_CAP = builder.comment("The highest explosion power of a burning cube (TNT is 4; an open cube at its flammability limit is about 4, a 200 m3 room about 1.4). Captured on server start.")
+                .defineInRange("explosionPowerCap", 8.0, 1.0, 32.0);
+        // WP9: the pollution overlay on the FTB Chunks map (a client with FTB Chunks asks while its map is open).
+        POLLUTION_MAP_OVERLAY = builder.comment("Who sees pollution on the FTB Chunks map (one square per polluted chunk): METER, only a player who carries a pollution meter anywhere in the inventory; ALL, every player; OFF, no one. Read at each answer.")
+                .defineInList("mapOverlay", "METER", java.util.Arrays.asList("METER", "ALL", "OFF"));
+        builder.pop();
         CONFIG_SPEC = builder.build();
     }
 
     public IChemE(IEventBus modEventBus, ModContainer modContainer) {
         ModBlocks.register(modEventBus);
         ModItems.register(modEventBus);
+        // The placeholder crude oil (batch 2026-11-15-fluid-interfaces, W3): its own fluid, block and bucket registers.
+        com.wormzjl.icheme.registry.ModFluids.register(modEventBus);
         com.wormzjl.icheme.registry.ModCreativeTabs.register(modEventBus);
         // The Create coupling (W6b, D40): its only entry point, guarded; no class outside compat/create names a Create type.
         if (net.neoforged.fml.ModList.get().isLoaded("create")) com.wormzjl.icheme.compat.create.CreateCompat.register(modEventBus);
@@ -213,6 +252,7 @@ public final class IChemE {
         modEventBus.addListener(com.wormzjl.icheme.network.MachineNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.ControlNetwork::register);
         modEventBus.addListener(com.wormzjl.icheme.network.LineNetwork::register);
+        modEventBus.addListener(com.wormzjl.icheme.network.PollutionMapNetwork::register);
         modEventBus.addListener(IChemE::registerCapabilities);
         modContainer.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC, "icheme-common.toml");
         // The client's own settings (the process screens' panel theme); a dedicated server never loads them.
@@ -225,6 +265,8 @@ public final class IChemE {
         gameEventBus.addListener(com.wormzjl.icheme.material.MaterialReloadListener::register);
         // After the materials: the conversion rules resolve their compounds on the catalog that reload publishes.
         gameEventBus.addListener(com.wormzjl.icheme.material.ConversionReloadListener::register);
+        // The rules reach the client's JEI page at login and after each reload (batch 2026-11-15-fluid-interfaces, W5).
+        gameEventBus.addListener(com.wormzjl.icheme.network.FluidNetwork::syncConversionRules);
         gameEventBus.addListener(IChemE::onServerStarting);
         com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.listen(com.wormzjl.icheme.runtime.assembly.AssemblyService::edited);
         gameEventBus.addListener(IChemE::onServerTickPost);
@@ -235,6 +277,10 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
         gameEventBus.addListener(com.wormzjl.icheme.network.TutorialNetwork::earned);
         gameEventBus.addListener(IChemE::onLevelTickPost);
+        // An explosion inside a flammable cube ignites it at the next ignition pass (pollution WP6a); the handler only queues.
+        gameEventBus.addListener(com.wormzjl.icheme.runtime.pollution.Ignition::detonated);
+        // And breaches the constructed equipment it reaches (WP6b); the handler only collects, the pollution tick applies.
+        gameEventBus.addListener(com.wormzjl.icheme.runtime.pollution.Breaches::detonated);
     }
     /**
      * An operator who joins while parts are held (fluid devices, shaft parts, cables, controllers) is told how many, once
@@ -259,6 +305,8 @@ public final class IChemE {
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.fuel());
         // A fluid converter's Forge tank on its port cell's port face (batch 2026-11-12-fluid-conversion, W3): passive, whole mB.
         event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, ModBlockEntities.EQUIPMENT_SHELL.get(), (shell, side) -> shell.forgeTank(side));
+        // A liquid hopper's Forge tank (batch 2026-11-15-fluid-interfaces, W4).
+        event.registerBlockEntity(net.neoforged.neoforge.capabilities.Capabilities.FluidHandler.BLOCK, ModBlockEntities.FLUID_DEVICE.get(), (device, side) -> device.hopperTank(side));
     }
     /**
      * The floating roofs that rise this tick lift what stands on them (a read of each tank's glide; nothing solves), and the
@@ -269,10 +317,12 @@ public final class IChemE {
         com.wormzjl.icheme.world.level.block.FloatingRoofs.carry(event.getLevel());
         if(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level)com.wormzjl.icheme.world.level.block.RegistryRealignment.serve(level);
     }
-    /** A player who leaves watches no tank any more. */
+    /** A player who leaves watches no tank any more, and no pollution map. */
     private static void onPlayerLoggedOut(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
-        if(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player&&player.server.isSameThread())
+        if(event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player&&player.server.isSameThread()) {
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(player.server).ifPresent(world->world.forgetWatcher(player.getUUID()));
+            com.wormzjl.icheme.runtime.pollution.PollutionMaps.forget(player);
+        }
     }
     private static void onFluidChunkLoaded(net.neoforged.neoforge.event.level.ChunkEvent.Load event) {
         if(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
@@ -299,6 +349,54 @@ public final class IChemE {
     public static com.wormzjl.icheme.science.machine.Wear.Settings wearSettings() {
         if (!CONFIG_SPEC.isLoaded()) return com.wormzjl.icheme.science.machine.Wear.Settings.DEFAULT;
         return new com.wormzjl.icheme.science.machine.Wear.Settings(WEAR_ENABLED.get(), WEAR_CAVITATION_HOURS.get(), WEAR_DRY_MINUTES.get());
+    }
+
+    /** Whether pollution runs (batch 2026-11-15-pollution-system, WP3; true before the config loads). */
+    public static boolean pollutionEnabled() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_ENABLED.get();
+    }
+
+    /** Whether pollution gives status effects and damage (WP5; true before the config loads). */
+    public static boolean pollutionEffects() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_EFFECTS.get();
+    }
+
+    /** Whether flammable cubes ignite and explode (WP6a; true before the config loads). */
+    public static boolean pollutionExplosions() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_EXPLOSIONS.get();
+    }
+
+    /** Whether those explosions break blocks (WP6a; true before the config loads). */
+    public static boolean pollutionBlockDamage() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_BLOCK_DAMAGE.get();
+    }
+
+    /** Whether a blast breaches constructed equipment (WP6b; true before the config loads). */
+    public static boolean pollutionEquipmentBreach() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_EQUIPMENT_BREACH.get();
+    }
+
+    /** The highest power of a burning cube's explosion (WP6a; 8 before the config loads). */
+    public static double pollutionExplosionPowerCap() {
+        return CONFIG_SPEC.isLoaded() ? POLLUTION_EXPLOSION_POWER_CAP.get() : 8.0;
+    }
+
+    /** Who sees pollution on the FTB Chunks map: METER, ALL or OFF (WP9; METER before the config loads). */
+    public static String pollutionMapOverlay() {
+        return CONFIG_SPEC.isLoaded() ? POLLUTION_MAP_OVERLAY.get() : "METER";
+    }
+
+    /** Whether polluted cubes show particles to players nearby (WP5; true before the config loads). */
+    public static boolean pollutionParticles() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_PARTICLES.get();
+    }
+
+    /** The pollution field's settings: the defaults with the config's half-lives (process minutes), cutoff and cube cap; the defaults before the config loads. */
+    public static com.wormzjl.icheme.science.pollution.PollutionSettings pollutionSettings() {
+        var d = com.wormzjl.icheme.science.pollution.PollutionSettings.DEFAULT;
+        if (!CONFIG_SPEC.isLoaded()) return d;
+        return new com.wormzjl.icheme.science.pollution.PollutionSettings(d.faceShare(), d.nominalSeconds(), 60.0 * POLLUTION_HALF_LIFE_OPEN_MINUTES.get(),
+                60.0 * POLLUTION_HALF_LIFE_ENCLOSED_MINUTES.get(), d.washout(), d.settlingShare(), POLLUTION_CUTOFF.get(), POLLUTION_MAX_ACTIVE_CUBES.get(), d.closedAirShare());
     }
 
     /** Create stress units per FE per tick (W6b; default 34.13 before the config loads). */
@@ -362,6 +460,12 @@ public final class IChemE {
             LOGGER.error("process_solver lifecycle=START_FAILED", exception);
             throw exception;
         }
+        // Pollution never refuses a world (owner, 2026-11-15): its own guard, after the fluid authority, never rethrown.
+        try {
+            com.wormzjl.icheme.runtime.pollution.PollutionService.start(server);
+        } catch (RuntimeException exception) {
+            LOGGER.error("pollution status=START_FAILED detail={}", String.valueOf(exception));
+        }
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {
@@ -378,9 +482,21 @@ public final class IChemE {
         } finally {
             com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.Meter.exit(event.getServer());
         }
+        // The pollution pass deadline: its own guard, outside the one above, so nothing of it reaches the rethrow.
+        try {
+            com.wormzjl.icheme.runtime.pollution.PollutionService.tick(event.getServer());
+        } catch (RuntimeException exception) {
+            LOGGER.error("pollution status=TICK_FAILED detail={}", String.valueOf(exception));
+        }
     }
 
     private static void onServerStopping(ServerStoppingEvent event) {
+        // Before the pool stops: a pollution pass it abandons then gives its releases back without counting a failure.
+        try {
+            com.wormzjl.icheme.runtime.pollution.PollutionService.stop(event.getServer());
+        } catch (RuntimeException exception) {
+            LOGGER.error("pollution status=STOP_FAILED detail={}", String.valueOf(exception));
+        }
         try {
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.stop(event.getServer());
             ProcessSolveCoordinator.stopCalculations(event.getServer());
@@ -392,6 +508,11 @@ public final class IChemE {
 
 
     private static void onServerStopped(ServerStoppedEvent event) {
+        try {
+            com.wormzjl.icheme.runtime.pollution.PollutionService.forget(event.getServer());
+        } catch (RuntimeException exception) {
+            LOGGER.error("pollution status=FORGET_FAILED detail={}", String.valueOf(exception));
+        }
         try {
             // ServerStopped can still fire after an abnormal lifecycle path that skipped ServerStopping.
             com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.forget(event.getServer());

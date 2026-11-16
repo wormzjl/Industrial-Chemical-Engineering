@@ -288,7 +288,7 @@ final class ConverterDesign extends UnitDesign {
             double stub = crown + ProcessUnit.clamp(.3 * r, .15, .3);
             u.mesh.prism(up, fitting, crown - .05, stub, 12, Material.PIPE);
             u.mesh.cylinder(up, 1.6 * fitting, stub, stub + .05, 12, Material.FLANGE);
-            u.mesh.bolts(up, 2 * fitting, fitting, 1.6 * fitting, stub + .05, 1, Material.BOLT);
+            u.mesh.flangeBolts(up, 2 * fitting, fitting, 1.6 * fitting, stub + .05, 1, Material.BOLT);
             u.solids.add(ProcessUnit.Solid.rod(axis, 1, crown - .05, stub + .05, 1.6 * fitting, 0));
         } else {
             // A cone roof over a rim angle, the open vent under its weather cap at the apex.

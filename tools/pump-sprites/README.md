@@ -14,7 +14,6 @@ Every sprite but the casting (tiled by 2 m), the motor's plain and panel sprites
 | `pump_joint` | `PUMP_JOINT` | bolted joint's rim: two flanges and the gasket |
 | `pump_disc` | `PUMP_DISC` | low-detail cover face: twelve textured nuts, spigot |
 | `pump_cover` | `PUMP_COVER` | plain recessed cover under normal raised casing nuts |
-| `equipment_bolt_face` | `BOLT_FACE` | flush textured hex nut for low-detail flanges |
 | `pump_base`, `pump_channel` | `PUMP_BASE`, `PUMP_CHANNEL` | drain-rim deck with anchors, drain and grout holes; channel sides with gussets |
 | `coupling_guard` | `COUPLING_GUARD` | framed expanded-metal panel, safety yellow; its plain band makes the end plates |
 | `shaft_steel` | `SHAFT` | machined steel of every turning shaft and hub, and of the shaft block models |
@@ -30,7 +29,7 @@ From the worktree root:
 java -Djava.awt.headless=true tools/pump-sprites/PumpSprites.java src/main/resources/assets/icheme/textures/block
 ```
 
-It writes seventeen PNGs including the plain cover and low-detail hex nut. `probes/PumpRender` takes `-Dpaint=RRGGBB` to render another body paint. The output is the same on every run (no random numbers; the grain is a fixed hash).
+It writes sixteen PNGs including the plain cover. The flush hex nut `equipment_bolt_face` moved to `tools/pbr-textures/equipment_textures.py` on 2026-11-15 (batch `2026-11-15-equipment-visual-design`). `probes/PumpRender` takes `-Dpaint=RRGGBB` to render another body paint. The output is the same on every run (no random numbers; the grain is a fixed hash).
 
 `probes/` holds the checks used for the rework. They are in package `com.wormzjl.icheme.science.equipment`: compile them with `javac -proc:none -d <worktree>/tmp/<folder>` against `build/classes/java/main` and the runtime class path, and run them with that folder, the main classes and `build/resources/main` on the class path, from the worktree root.
 
@@ -48,6 +47,8 @@ It writes seventeen PNGs including the plain cover and low-detail hex nut. `prob
 javac -encoding UTF-8 -d tmp/<task>/classes tools/pump-sprites/ConstructorAssets.java tools/pump-sprites/SimulatorAssets.java tools/pump-sprites/ControlAssets.java
 java -Djava.awt.headless=true -Djava.io.tmpdir=tmp/<task> -cp tmp/<task>/classes ControlAssets src/main/resources/assets/icheme
 ```
+
+The same command with a second argument `monitor` writes only the fixed pollution monitor's assets (batch 2026-11-15-pollution-system, WP10): `pollution_monitor_front` and the four `pollution_monitor_lamp_<dark|green|amber|red>` sprites, the base model `pollution_monitor` (lamp dark), one child model per lit lamp, the blockstate (facing by lamp) and the item model; `monitorBoxes` is the envelope of `PollutionMonitorBlock`'s collision boxes. Add `src/main/java/com/wormzjl/icheme/science/equipment/DcsGeometry.java` to the `javac` line when no build output is on the class path.
 
 `probes/SensorSheet.java <render-folder> <output.png>` combines the five sensor item renders at enlarged/inventory scales. The exporter/rasterizer recipe is in `tools/simulator-sizing/README.md`. Installed sensor colours are owned by `InstrumentGeometry`/`InstrumentRenderer`, rather than their item textures.
 

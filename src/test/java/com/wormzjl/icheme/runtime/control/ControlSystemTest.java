@@ -539,6 +539,67 @@ class ControlSystemTest {
     }
 
     /**
+     * A fixed pollution monitor on the data bus (batch 2026-11-15-pollution-system, WP10): its sensor socket lists it on a
+     * controller only while a cable links them; its five channels (four indices, the gas alarm) derive from its host alone,
+     * so they are the same after the facts' save and load; a monitor placed again at its block takes its socket back. No
+     * new fact field: a sensor socket of a host no fluid device holds, as a column's.
+     */
+    @Test
+    void aPollutionMonitorIsListedOnlyOverItsDataLinkAndKeepsItsChannels() throws Exception {
+        var facts = corpus();
+        var controller = facts.panels().iterator().next();
+        var linked = facts.ports().values().stream().filter(p -> p.host() > 0).findFirst().orElseThrow();
+        long host = 4321;
+        // The monitor's socket in the corpus sensor's place: the same identity and cable entry, the monitor's host.
+        facts.port(new DataPort(linked.id(), DataPort.Kind.SENSOR, host, linked.dimension(), linked.owner(), linked.centre(),
+                linked.cell(), linked.face(), linked.u(), linked.v()));
+        assertEquals(Set.of(host), new DataBus(facts.cables(), facts.ports()).hosts(controller.id(), facts::port));
+
+        var channels = BuiltInInputs.monitor(host);
+        assertEquals(List.of("toxic", "combustible", "corrosive", "particulate", "alarm_gas"), channels.stream().map(ControlInput::channel).toList());
+        assertEquals(List.of(com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ANALYSER, com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ANALYSER,
+                com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ANALYSER, com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ANALYSER,
+                com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ALARM), channels.stream().map(ControlInput::kind).toList());
+        assertEquals("AT-4321 / toxic", channels.get(0).label(facts));
+        assertEquals("AT-4321 / alarm gas", channels.get(4).label(facts));
+        assertTrue(channels.stream().allMatch(BuiltInInputs::ofMonitor));
+        assertTrue(channels.stream().noneMatch(BuiltInInputs::volumeAvailable), "an index has no volume flow");
+        assertEquals(UUID.nameUUIDFromBytes("icheme:equipment-input:4321:toxic".getBytes(java.nio.charset.StandardCharsets.UTF_8)), channels.get(0).instance());
+
+        var read = ControlFacts.load(facts.save(new CompoundTag(), null));
+        assertEquals(host, read.port(linked.id()).host());
+        assertEquals(channels, BuiltInInputs.monitor(read.port(linked.id()).host()), "the channels' identities survive the save");
+        assertEquals(read.port(linked.id()), ControlHosts.monitorPort(read.ports().values(), linked.dimension(), linked.owner(), h -> false),
+                "a monitor placed again at its block takes its socket back");
+        assertNull(ControlHosts.monitorPort(read.ports().values(), linked.dimension(), linked.owner(), h -> h == host), "never a socket a fluid device holds");
+        assertNull(ControlHosts.monitorPort(read.ports().values(), linked.dimension(), linked.owner().above(), h -> false), "nor another block's");
+
+        facts.removeCable(facts.cables().iterator().next().site());
+        assertTrue(new DataBus(facts.cables(), facts.ports()).hosts(controller.id(), facts::port).isEmpty(), "no cable, not listed");
+        assertNotNull(facts.port(linked.id()), "the socket stays a fact");
+    }
+
+    /** A monitor channel's reading (WP10): the index of its kind, or the alarm's level; 0 and unavailable while pollution is off. */
+    @Test
+    void aPollutionMonitorReadsItsCubesIndices() {
+        var channels = BuiltInInputs.monitor(12);
+        var indices = new double[] {1.2, .03, 0, .42};
+        var toxic = BuiltInInputs.monitorReading(channels.get(0), indices, true, 400);
+        assertEquals(1.2, toxic.value(), 0);
+        assertEquals(com.wormzjl.icheme.runtime.instrument.Sensor.Unit.INDEX, toxic.unit());
+        assertTrue(toxic.secondaryUnit().isEmpty());
+        assertEquals(com.wormzjl.icheme.runtime.instrument.Instrument.Availability.AVAILABLE, toxic.availability());
+        assertEquals(.42, BuiltInInputs.monitorReading(channels.get(3), indices, true, 400).value(), 0, "particulate on its own");
+        assertEquals(2, BuiltInInputs.monitorReading(channels.get(4), indices, true, 400).value(), 0, "GAS HIGH at 1.2");
+        assertEquals(1, BuiltInInputs.monitorReading(channels.get(4), new double[] {0, .1, 0, 0}, true, 400).value(), 0, "GAS at 0.1");
+        assertEquals(0, BuiltInInputs.monitorReading(channels.get(4), new double[] {0, .05, 0, 0}, true, 400).value(), 0);
+        var off = BuiltInInputs.monitorReading(channels.get(0), new double[4], false, 400);
+        assertEquals(0, off.value(), 0);
+        assertEquals(com.wormzjl.icheme.runtime.instrument.Instrument.Availability.UNAVAILABLE, off.availability());
+        assertEquals("AT-0003", new SensorId(new UUID(0, 9), 3, com.wormzjl.icheme.runtime.instrument.Sensor.Kind.ANALYSER).label());
+    }
+
+    /**
      * A converter's level thresholds (W4): either tank at or over its high threshold raises LEVEL HIGH, at or under its low one
      * LEVEL LOW; each clears when the fill crosses back; a threshold of none and an unpublished vessel raise nothing.
      */

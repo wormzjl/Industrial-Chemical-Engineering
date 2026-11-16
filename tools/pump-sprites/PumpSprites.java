@@ -387,18 +387,6 @@ public class PumpSprites {
         return out;
     }
 
-    /** One flush hex nut: the polygon supplies its outline, so no alpha/cutout pass is needed. */
-    static double[][] boltFace() {
-        int n = 32;
-        var out = new double[n][n];
-        for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) {
-            double px = (x + .5 - n / 2.0) / (n / 2.0), py = (y + .5 - n / 2.0) / (n / 2.0);
-            double radial = Math.hypot(px, py);
-            out[y][x] = radial < .18 ? .64 : radial < .27 ? .30 : py < -.2 ? .60 : py > .2 ? .37 : .48;
-        }
-        return out;
-    }
-
     public static void main(String[] args) throws Exception {
         writeRgb(new File(args[0]), "motor_frame", motorFrame());
         writeRgb(new File(args[0]), "motor_shield", motorShield());
@@ -415,7 +403,7 @@ public class PumpSprites {
         write(folder, "pump_joint", joint());
         write(folder, "pump_disc", disc());
         write(folder, "pump_cover", disc(false));
-        write(folder, "equipment_bolt_face", boltFace());
+        // equipment_bolt_face: tools/pbr-textures/equipment_textures.py since 2026-11-15 (a relief nut with its flat variant).
         write(folder, "pump_base", base());
         write(folder, "pump_channel", channel());
     }

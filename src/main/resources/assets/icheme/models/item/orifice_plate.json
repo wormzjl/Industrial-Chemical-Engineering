@@ -1,0 +1,25 @@
+{
+  "parent": "icheme:block/fluid_device",
+  "loader": "icheme:fluid_device",
+  "kind": "pipe",
+  "orifice_accessory": true,
+  "display": {
+    "gui": {
+      "rotation": [
+        30,
+        45,
+        0
+      ],
+      "translation": [
+        -1.3,
+        -0.9,
+        0
+      ],
+      "scale": [
+        1.85,
+        1.85,
+        1.85
+      ]
+    }
+  }
+}

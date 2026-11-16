@@ -1,0 +1,6 @@
+{
+  "parent": "icheme:block/fluid_device",
+  "loader": "icheme:fluid_device",
+  "kind": "generator",
+  "body": "hopper"
+}

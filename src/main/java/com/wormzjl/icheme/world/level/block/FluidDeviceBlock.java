@@ -43,9 +43,17 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     public static final EnumProperty<InlineMover> INLINE_MOVER=EnumProperty.create("inline_mover",InlineMover.class);
     public static final BooleanProperty INLINE_FILTER=BooleanProperty.create("inline_filter");
     public static final BooleanProperty PRESSURE_CONTROL=BooleanProperty.create("pressure_control");
-    /** Committed lever position; a newly installed accessory initially draws open. */
+    /**
+     * The pipe's in-line body: a hand valve's committed lever position (a newly installed accessory initially draws open),
+     * a check valve, or (batch 2026-11-15-fluid-interfaces) an orifice plate, which cuts nothing off. The fittings share this
+     * one slot, as only one fits a pipe: a property of their own would multiply the pipe's block states again.
+     */
     public enum Shutoff implements net.minecraft.util.StringRepresentable {
-        NONE(PhysicalFluidTopology.Cutoff.NONE),OPEN(PhysicalFluidTopology.Cutoff.OPEN),CLOSED(PhysicalFluidTopology.Cutoff.CLOSED),CHECK(PhysicalFluidTopology.Cutoff.CHECK);
+        NONE(PhysicalFluidTopology.Cutoff.NONE),OPEN(PhysicalFluidTopology.Cutoff.OPEN),CLOSED(PhysicalFluidTopology.Cutoff.CLOSED),CHECK(PhysicalFluidTopology.Cutoff.CHECK),
+        /** A restriction orifice plate (W6): drawn from its fitting record, the store's fact; the pipe stays passive. */
+        ORIFICE(PhysicalFluidTopology.Cutoff.NONE),
+        /** An automated shutoff valve (W7): drawn from its control, the source {@code ON_OFF}; open or closed is its control's, not drawn. */
+        ACTUATED(PhysicalFluidTopology.Cutoff.NONE);
         private final PhysicalFluidTopology.Cutoff cutoff;
         Shutoff(PhysicalFluidTopology.Cutoff cutoff){this.cutoff=cutoff;}
         public PhysicalFluidTopology.Cutoff cutoff(){return cutoff;}
@@ -68,6 +76,29 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         private Pipe(BlockBehaviour.Properties properties){super(TopologyCompiler.Kind.PIPE,properties);}
         @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> builder){super.createBlockStateDefinition(builder);builder.add(SHUTOFF,PRESSURE_CONTROL,INLINE_FILTER,INLINE_MOVER);}
     }
+    /** A gas intake (batch 2026-11-15-fluid-interfaces, W2): a generator block that registers the atmosphere ({@code FluidDeviceSpec.ambient}). */
+    public static FluidDeviceBlock intake(BlockBehaviour.Properties properties){return new Intake(properties);}
+    private static final MapCodec<FluidDeviceBlock> INTAKE_CODEC=RecordCodecBuilder.mapCodec(instance->instance.group(propertiesCodec()).apply(instance,FluidDeviceBlock::intake));
+    private static final class Intake extends FluidDeviceBlock {
+        private Intake(BlockBehaviour.Properties properties){super(TopologyCompiler.Kind.GENERATOR,properties);}
+        @Override public MapCodec<FluidDeviceBlock> codec(){return INTAKE_CODEC;}
+        @Override public boolean ambient(){return true;}
+    }
+    /** Whether this block stands for the atmosphere, a gas intake's generator. */
+    public boolean ambient(){return false;}
+    /**
+     * A liquid hopper (batch 2026-11-15-fluid-interfaces, W4): a generator block that is a fluid converter's fill port on its
+     * own ({@code ConverterUnit.hopper}). As every generator, it feeds each pipe it meets; its funnel takes Forge fluid on the other faces.
+     */
+    public static FluidDeviceBlock hopper(BlockBehaviour.Properties properties){return new Hopper(properties);}
+    private static final MapCodec<FluidDeviceBlock> HOPPER_CODEC=RecordCodecBuilder.mapCodec(instance->instance.group(propertiesCodec()).apply(instance,FluidDeviceBlock::hopper));
+    private static final class Hopper extends FluidDeviceBlock {
+        private Hopper(BlockBehaviour.Properties properties){super(TopologyCompiler.Kind.GENERATOR,properties);}
+        @Override public MapCodec<FluidDeviceBlock> codec(){return HOPPER_CODEC;}
+        @Override public boolean hopper(){return true;}
+    }
+    /** Whether this block is a liquid hopper. */
+    public boolean hopper(){return false;}
     public TopologyCompiler.Kind kind(){return kind;}
     @Override public MapCodec<FluidDeviceBlock> codec(){return CODEC;}
     @Override protected void createBlockStateDefinition(StateDefinition.Builder<Block,BlockState> builder){builder.add(FACING,SIGHT_GLASS,SIGHT_GLASS_AXIS);for(var property:CONNECTIONS.values())builder.add(property);}
@@ -83,9 +114,25 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     public static boolean hasMover(BlockState s){return s.hasProperty(INLINE_MOVER)&&s.getValue(INLINE_MOVER)!=InlineMover.NONE;}
     public static boolean hasPump(BlockState s){return hasMover(s)&&s.getValue(INLINE_MOVER)==InlineMover.PUMP;}
     public static boolean hasCompressor(BlockState s){return hasMover(s)&&s.getValue(INLINE_MOVER)==InlineMover.COMPRESSOR;}
-    public static boolean hasAxialAccessory(BlockState s){return hasPipeValve(s)||hasFilter(s)||hasMover(s);}
+    public static boolean hasAxialAccessory(BlockState s){return hasPipeValve(s)||hasFilter(s)||hasMover(s)||hasOrifice(s)||hasActuatedValve(s);}
     public static boolean hasShutoff(BlockState state){return hasPipeValve(state)&&(state.getValue(SHUTOFF)==Shutoff.OPEN||state.getValue(SHUTOFF)==Shutoff.CLOSED);}
-    public static boolean hasPipeValve(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&(state.getValue(SHUTOFF)!=Shutoff.NONE||state.getValue(PRESSURE_CONTROL));}
+    public static boolean hasPipeValve(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&(state.getValue(SHUTOFF)!=Shutoff.NONE&&state.getValue(SHUTOFF)!=Shutoff.ORIFICE&&state.getValue(SHUTOFF)!=Shutoff.ACTUATED||state.getValue(PRESSURE_CONTROL));}
+    /** A pipe carrying a restriction orifice plate (batch 2026-11-15-fluid-interfaces, W6). */
+    public static boolean hasOrifice(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&state.getValue(SHUTOFF)==Shutoff.ORIFICE;}
+    /** A pipe carrying an automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7). */
+    public static boolean hasActuatedValve(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE&&state.getValue(SHUTOFF)==Shutoff.ACTUATED;}
+    /** Whether registration {@code d} is an automated shutoff valve (W7): its control the source {@code ON_OFF}. */
+    public static boolean actuated(PhysicalFluidTopology.Device d){return d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve v&&v.onOffValve();}
+    /**
+     * The in-line body pipe {@code state} draws for registration {@code d}: its cutoff where it has one; else an orifice
+     * plate {@code state} already shows on a pipe that stays passive (the plate comes from its fitting record, never from
+     * the registration); else none.
+     */
+    public static Shutoff body(BlockState state,PhysicalFluidTopology.Device d){
+        if(d.cutoff()!=PhysicalFluidTopology.Cutoff.NONE)return Shutoff.of(d.cutoff());
+        if(actuated(d))return Shutoff.ACTUATED;
+        return state.getValue(SHUTOFF)==Shutoff.ORIFICE&&!d.inlineFilter()&&d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Passive?Shutoff.ORIFICE:Shutoff.NONE;
+    }
     public static PhysicalFluidTopology.Cutoff cutoff(BlockState state){return state.getBlock() instanceof FluidDeviceBlock block&&block.kind==TopologyCompiler.Kind.PIPE?state.getValue(SHUTOFF).cutoff():PhysicalFluidTopology.Cutoff.NONE;}
     public static boolean hasFitting(BlockState state){return hasSightGlass(state)||hasAxialAccessory(state);}
     /** Small movers carry compact internal joints; larger movers flange at the block faces. */
@@ -181,13 +228,14 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      * REGISTRY_FIRST_PLAN.md 4.3): its kind's block with its facing and fittings, the inverse of what {@link #onPlace} and
      * a chunk load register from a block. No connection and no sight glass: the placer connects it, and accessories
      * belong to the registration. Null for a device no block of this class stands for: a structure's, a rack lane, a
-     * column's port, a heat side.
+     * column's port, a heat side. A generator whose spec is the atmosphere stands as a gas intake.
      */
-    public static @Nullable BlockState stateFor(PhysicalFluidTopology.Device d) {
-        if(!d.ports().isEmpty()||d.position().lane()!=0)return null;
+    public static @Nullable BlockState stateFor(com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.Registration r) {
+        var d=r.device();if(!d.ports().isEmpty()||d.position().lane()!=0)return null;
+        if(d.converterFill())return com.wormzjl.icheme.registry.ModBlocks.LIQUID_HOPPER.get().defaultBlockState().setValue(FACING,Direction.valueOf(d.facing().name()));
         var block=switch(d.kind()){
             case RESERVOIR->com.wormzjl.icheme.registry.ModBlocks.FLUID_RESERVOIR.get();case PIPE->com.wormzjl.icheme.registry.ModBlocks.FLUID_PIPE.get();
-            case GENERATOR->com.wormzjl.icheme.registry.ModBlocks.FLUID_GENERATOR.get();case VOID->com.wormzjl.icheme.registry.ModBlocks.FLUID_VOID.get();
+            case GENERATOR->r.spec().ambient()?com.wormzjl.icheme.registry.ModBlocks.GAS_INTAKE.get():com.wormzjl.icheme.registry.ModBlocks.FLUID_GENERATOR.get();case VOID->com.wormzjl.icheme.registry.ModBlocks.FLUID_VOID.get();
             case FILTER->com.wormzjl.icheme.registry.ModBlocks.INLINE_FILTER.get();default->null;};
         return block==null?null:fittings(block.defaultBlockState(),d);
     }
@@ -198,7 +246,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      */
     public static BlockState fittings(BlockState state,PhysicalFluidTopology.Device d) {
         state=state.setValue(FACING,Direction.valueOf(d.facing().name()));
-        return state.hasProperty(INLINE_MOVER)?fitted(state,d).setValue(SHUTOFF,Shutoff.of(d.cutoff())):state;
+        return state.hasProperty(INLINE_MOVER)?fitted(state,d).setValue(SHUTOFF,body(state,d)):state;
     }
     /**
      * A pipe {@code state} with the pressure valve, filter and mover that registration {@code d} compiles as
@@ -207,7 +255,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      */
     public static BlockState fitted(BlockState state,PhysicalFluidTopology.Device d) {
         var hydraulic=d.hydraulicKind();
-        return state.setValue(PRESSURE_CONTROL,hydraulic==TopologyCompiler.Kind.VALVE).setValue(INLINE_FILTER,hydraulic==TopologyCompiler.Kind.FILTER)
+        return state.setValue(PRESSURE_CONTROL,hydraulic==TopologyCompiler.Kind.VALVE&&!actuated(d)).setValue(INLINE_FILTER,hydraulic==TopologyCompiler.Kind.FILTER)
                 .setValue(INLINE_MOVER,InlineMover.of(hydraulic));
     }
     @Override protected void onPlace(BlockState state,Level level,BlockPos position,BlockState previous,boolean moved) {
@@ -215,7 +263,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=Positions.of(level,position);
             if(previous.getBlock()!=this) {
-                var record=world.place(p,kind,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name()),cutoff(state),hasPressureValve(state),hasFilter(state),hasMover(state)?state.getValue(INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE);
+                var record=ambient()?world.placeIntake(p,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())):hopper()?world.placeHopper(p,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())):world.place(p,kind,PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name()),cutoff(state),hasPressureValve(state),hasFilter(state),hasMover(state)?state.getValue(INLINE_MOVER).kind():TopologyCompiler.Kind.PIPE);
                 if(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.bindIdentity(record.device().id());
             } else if(!hasAxialAccessory(state)&&!hasAxialAccessory(previous)&&previous.getValue(FACING)!=state.getValue(FACING)) {
                 world.at(p).ifPresent(old->{var d=old.device();world.edit(d.id(),old.revision(),d.withFacing(PhysicalFluidTopology.Direction.valueOf(state.getValue(FACING).name())),old.spec());});
@@ -223,15 +271,34 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         });
     }
     @Override public BlockState playerWillDestroy(Level level,BlockPos pos,BlockState state,Player player){if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)h.instruments().recoverOnBreak(!player.isCreative());return super.playerWillDestroy(level,pos,state,player);}
+    /**
+     * A blast destroys a one-block device outright, as an ordinary block (owner 2026-11-15: no damage meter), and only this
+     * removal lets out what it held (batch 2026-11-15-pollution-system, WP6a, S5): the position is marked while the block
+     * leaves ({@link com.wormzjl.icheme.runtime.pollution.BurstPipes}). A player's break releases nothing.
+     */
+    @Override public void onBlockExploded(BlockState state,Level level,BlockPos position,Explosion explosion) {
+        if(level instanceof ServerLevel serverLevel)com.wormzjl.icheme.runtime.pollution.BurstPipes.exploded(serverLevel,position,()->super.onBlockExploded(state,level,position,explosion));
+        else super.onBlockExploded(state,level,position,explosion);
+    }
     @Override protected void onRemove(BlockState state,Level level,BlockPos position,BlockState replacement,boolean moved) {
         if(!registered&&state.getBlock()!=replacement.getBlock()&&level instanceof ServerLevel serverLevel)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
-            var p=Positions.of(level,position);world.at(p).ifPresent(r->{boolean drops=!(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)||h.instruments().recoverOnBreak();world.instruments().recover(r.device().id(),level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);world.remove(r.device().id());});
+            // A blast's removal (WP6a): what the device holds goes to the air before its registration leaves; the ledger books its removal as before.
+            var p=Positions.of(level,position);world.at(p).ifPresent(r->{if(com.wormzjl.icheme.runtime.pollution.BurstPipes.marked(serverLevel,position))com.wormzjl.icheme.runtime.pollution.BurstPipes.burst(serverLevel,position,world,r.device().id());boolean drops=!(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)||h.instruments().recoverOnBreak();world.instruments().recover(r.device().id(),level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);world.remove(r.device().id());});
         });
         super.onRemove(state,level,position,replacement,moved);
     }
     @Override protected InteractionResult useWithoutItem(BlockState state,Level level,BlockPos position,Player player,BlockHitResult hit) {
         if(hasPressureValve(state)||hasFilter(state)||hasMover(state)) {
             if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.open(serverPlayer,false);
+            return InteractionResult.sidedSuccess(level.isClientSide());
+        }
+        // An automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7): an empty hand opens or closes it, refused while an enabled loop holds it.
+        if(hasActuatedValve(state)) {
+            if(!player.getMainHandItem().isEmpty()||!player.getOffhandItem().isEmpty())return InteractionResult.PASS;
+            if(!player.mayBuild()||player.isSpectator()||!level.mayInteract(player,position)||!player.mayUseItemAt(position,hit.getDirection(),ItemStack.EMPTY))return InteractionResult.FAIL;
+            if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)
+                FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->{var refused=world.toggleActuatedValve(entity.fluidIdentity());
+                    serverPlayer.displayClientMessage(net.minecraft.network.chat.Component.translatable(refused!=null?refused:world.actuatedValveOpen(entity.fluidIdentity())?"message.icheme.automated_shutoff_valve.opening":"message.icheme.automated_shutoff_valve.closing"),true);});
             return InteractionResult.sidedSuccess(level.isClientSide());
         }
         if(hasPipeValve(state)&&player.getMainHandItem().isEmpty()&&player.getOffhandItem().isEmpty()) {
@@ -246,6 +313,13 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
                         turned(level,position,player,cutoff==PhysicalFluidTopology.Cutoff.CLOSED?1:0);
                 });
             else if(level.isClientSide()&&com.wormzjl.icheme.client.ValveTurnRenderer.clicked(level,position,state))turnSound(level,position,player);
+            return InteractionResult.sidedSuccess(level.isClientSide());
+        }
+        // An orifice plate (batch 2026-11-15-fluid-interfaces, W6): a use reads its stamped handle, its bore ratio and K, from its record.
+        if(hasOrifice(state)) {
+            if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)
+                FluidWorldAuthority.find(serverPlayer.server).ifPresent(world->{double beta=world.instruments().orificeRatio(entity.fluidIdentity());
+                    if(beta>0)serverPlayer.displayClientMessage(net.minecraft.network.chat.Component.translatable("message.icheme.orifice_plate.reads",String.format(java.util.Locale.ROOT,"%.2f",beta),String.format(java.util.Locale.ROOT,"%.3g",com.wormzjl.icheme.science.fluid.network.Orifice.loss(beta))),true);});
             return InteractionResult.sidedSuccess(level.isClientSide());
         }
         // A diverter valve (batch 2026-11-09-batch-distiller): an empty hand turns it to its next outlet; a sneak opens its menu.
@@ -288,6 +362,11 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         if(stack.is(com.wormzjl.icheme.registry.ModItems.FLUID_DEBUGGER.get())) {
             if(player instanceof ServerPlayer serverPlayer&&level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.open(serverPlayer,true);
             return ItemInteractionResult.sidedSuccess(level.isClientSide());
+        }
+        // A liquid hopper (W4): a filled bucket or tank item empties into its Forge tank; the handler refuses a fluid no rule converts.
+        if(hopper()&&net.neoforged.neoforge.fluids.FluidUtil.getFluidHandler(stack).isPresent()) {
+            if(level.isClientSide())return ItemInteractionResult.SUCCESS;
+            return net.neoforged.neoforge.fluids.FluidUtil.interactWithFluidHandler(player,hand,level,position,null)?ItemInteractionResult.SUCCESS:ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
         return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
     }

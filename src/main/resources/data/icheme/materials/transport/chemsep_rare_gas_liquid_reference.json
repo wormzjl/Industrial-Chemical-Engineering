@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "id": "icheme:chemsep_rare_gas_liquid_reference",
+  "type": "liquid_volume_reference_points",
+  "revision": "chemsep-8.3-tr07-r1",
+  "source": "ChemSep v8.3 (Kooijman and Taylor, Artistic License 2.0) as embedded in DWSIM 10.2.5: each point is the saturated liquid at Tr = 0.7 from the compound's liquid density (eq. 105) and vapour pressure (eq. 101); individual sources per point.",
+  "points": [
+    {
+      "component": "Argon",
+      "temperatureKelvin": 105.602,
+      "pressurePascal": 494564.8045556653,
+      "molarVolumeCubicMetres": 0.00003138198925158356,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Argon\" (ChemSep index 914, CAS 7440-37-1): saturated liquid at Tr = 0.7 (105.602 K), molar volume from liquid density eq. 105 (A=3.803, B=0.286, C=150.86, D=0.2984, E=0; data 83.78..150.86 K), pressure from vapour pressure eq. 101 (A=44.369, B=-1126.1, C=-4.5688, D=0.000062339, E=2; data 78.65..150.86 K)"
+    },
+    {
+      "component": "Neon",
+      "temperatureKelvin": 31.08,
+      "pressurePascal": 290405.33881124615,
+      "molarVolumeCubicMetres": 0.000017869966207672777,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Neon\" (ChemSep index 919, CAS 7440-01-9): saturated liquid at Tr = 0.7 (31.08 K), molar volume from liquid density eq. 105 (A=7.3718, B=0.3067, C=44.4, D=0.2786, E=0; data 24.56..44.4 K), pressure from vapour pressure eq. 101 (A=29.459, B=-269.41, C=-2.5349, D=0.00051726, E=2; data 23.45..44.4 K)"
+    },
+    {
+      "component": "Helium",
+      "temperatureKelvin": 3.633,
+      "pressurePascal": 55554.8933229406,
+      "molarVolumeCubicMetres": 0.0000300306225383598,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Helium-4\" (ChemSep index 913, CAS 7440-59-7): saturated liquid at Tr = 0.7 (3.633 K), molar volume from liquid density eq. 105 (A=0.31844, B=0.089499, C=5.21, D=0.063807, E=0; data 1.2..5.2 K), pressure from vapour pressure eq. 101 (A=8.8804, B=-4.8932, C=2.5648, D=0.0062779, E=2; data 1.4..11.26 K)"
+    },
+    {
+      "component": "Krypton",
+      "temperatureKelvin": 146.57999999999998,
+      "pressurePascal": 557382.6566881207,
+      "molarVolumeCubicMetres": 0.000038269279278036714,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Krypton\" (ChemSep index 920, CAS 7439-90-9): saturated liquid at Tr = 0.7 (146.57999999999998 K), molar volume from liquid density eq. 105 (A=2.5742, B=0.26395, C=209.4, D=0.25018, E=0; data 115.76..209.39 K), pressure from vapour pressure eq. 101 (A=48.208, B=-1609, C=-4.9593, D=0.0000342, E=2; data 109.95..209.4 K)"
+    },
+    {
+      "component": "Xenon",
+      "temperatureKelvin": 202.81799999999998,
+      "pressurePascal": 569972.5565883921,
+      "molarVolumeCubicMetres": 0.00004900070744461331,
+      "source": "ChemSep v8.3 pure component data (Copyright (c) Harry Kooijman and Ross Taylor; Artistic License 2.0), as embedded in DWSIM 10.2.5 (DWSIM.Thermodynamics.dll resource chemsep1.xml), compound \"Xenon\" (ChemSep index 959, CAS 7440-63-3): saturated liquid at Tr = 0.7 (202.81799999999998 K), molar volume from liquid density eq. 105 (A=2.4063, B=0.28552, C=289.74, D=0.28967, E=0; data 161.36..289.74 K), pressure from vapour pressure eq. 101 (A=31.497, B=-1758.9, C=-1.8727, D=0.0000091652, E=2; data 155.55..290 K)"
+    }
+  ]
+}

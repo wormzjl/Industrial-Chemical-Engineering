@@ -41,6 +41,14 @@ class EquipmentLayoutGoldenTest {
             shapes.add(EquipmentShape.column(diameter, ColumnTrays.simple(20, 10), Heading.NORTH, EquipmentShape.minimumSkirt(diameter)));
         for (var kind : Kind.values()) {
             if (!kind.designed()) continue;
+            if (kind == Kind.AIR_COOLER) {
+                // Air cooler bays (batch 2026-11-15-equipment-visual-design, AIR_COOLER_BAY_PLAN.md): the three the table
+                // held before their range grew to 6 by 12 m (their layouts stand), then the largest, the longest
+                // single-bundle and the widest short bay.
+                for (double[] bay : new double[][]{{1.5, 3}, {2.5, 4}, {3, 4}, {6, 12}, {3, 12}, {6, 6}})
+                    shapes.add(EquipmentShape.designed(kind, bay[0], bay[1], Heading.NORTH, ProcessUnit.defaultSupport(kind, bay[0], bay[1]), ProcessUnit.Bank.ONE, 0));
+                continue;
+            }
             double low = UnitDesign.of(kind).minSize(), high = UnitDesign.of(kind).maxSize();
             for (double diameter : new double[]{low, UnitDesign.of(kind).snap((low + high) / 2), high}) {
                 int length = UnitDesign.of(kind).defaultLength(diameter);
@@ -65,7 +73,9 @@ class EquipmentLayoutGoldenTest {
         // Steam turbines above one casing (owner P12): HP to vacuum at 300 MW (HP, MP, double-flow LP), HP to the MP header at
         // 150 MW (HP, MP), MP to vacuum at 80 MW (MP, LP), VHP into the LP header at 60 MW (HP, MP).
         for (var duty : List.of(MachineDuty.turbine(300000, MachineDuty.Steam.HP, 10), MachineDuty.turbine(150000, MachineDuty.Steam.HP, 1000),
-                MachineDuty.turbine(80000, MachineDuty.Steam.MP, 10), MachineDuty.turbine(63000, MachineDuty.Steam.VHP, 450)))
+                MachineDuty.turbine(80000, MachineDuty.Steam.MP, 10), MachineDuty.turbine(63000, MachineDuty.Steam.VHP, 450),
+                // The LP class above one casing (batch 2026-11-15-equipment-visual-design, W6): a single and a double flow.
+                MachineDuty.turbine(63000, MachineDuty.Steam.LP, 10), MachineDuty.turbine(150000, MachineDuty.Steam.LP, 10)))
             shapes.add(EquipmentShape.unit(Kind.STEAM_TURBINE, 3, 1, Heading.NORTH, 0).withDuty(duty));
         // The generators the table held before their range grew to 400 MW: their layouts stand.
         for (double kilowatts : new double[]{10000, 20000}) {

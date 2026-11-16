@@ -4,6 +4,7 @@ import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.MachineHealth;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
+import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
 import java.util.List;
@@ -22,7 +23,9 @@ import net.minecraft.world.item.context.UseOnContext;
  * steam turbine, or on an in-line device's pipe block, it queues a repair ({@link MachineHealth.Repair}) that applies on the
  * engine's tick drain. Whether the device wears is the health's decision there: every device with a health record (a pump,
  * a dry screw, M-02, a centrifugal compressor, N2, or a steam turbine, N4) is repaired. The kit is consumed only when the repair is accepted (none in creative mode); a pump at full health, or a
- * device with no health record ({@link MachineHealth.Outcome#NOT_A_PUMP}), refuses it with a chat line.
+ * device with no health record ({@link MachineHealth.Outcome#NOT_A_PUMP}), refuses it with a chat line. Used on any cell of a
+ * constructed vessel a blast breached (batch 2026-11-15-pollution-system, WP6b), it closes the breach first
+ * ({@link FluidWorldAuthority#queueBreachRepair}), one kit taken at acceptance in the same way.
  */
 public final class RepairKitItem extends Item {
     public RepairKitItem(Properties properties) {
@@ -34,14 +37,33 @@ public final class RepairKitItem extends Item {
         var player = context.getPlayer();
         if (player == null) return InteractionResult.PASS;
         long id = pumpAt(context.getLevel(), context.getClickedPos());
-        if (id <= 0) return InteractionResult.PASS;
+        long[] vessels = structureAt(context.getLevel(), context.getClickedPos());
+        if (id <= 0 && vessels.length == 0) return InteractionResult.PASS;
         if (!(player instanceof ServerPlayer server) || !(context.getLevel() instanceof ServerLevel level)) return InteractionResult.SUCCESS;
         var pos = context.getClickedPos();
         if (!server.mayBuild() || !level.mayInteract(server, pos) || !server.canInteractWithBlock(pos, 1.0)) return InteractionResult.FAIL;
         var world = FluidWorldAuthority.find(server.server).orElse(null);
         if (world == null) return InteractionResult.FAIL;
-        world.health().queue(new MachineHealth.Repair(id, () -> take(server), outcome -> reply(server, outcome)));
+        // A breached vessel of the structure takes the kit first (batch 2026-11-15-pollution-system, WP6b): one kit closes its wall.
+        for (long vessel : vessels)
+            if (world.isBreached(vessel)) {
+                world.queueBreachRepair(new MachineHealth.Repair(vessel, () -> take(server), outcome -> reply(server, outcome)));
+                return InteractionResult.CONSUME;
+            }
+        // Else the machines' repair; a structure with no machine answers NOT_A_PUMP there.
+        world.health().queue(new MachineHealth.Repair(id > 0 ? id : vessels[0], () -> take(server), outcome -> reply(server, outcome)));
         return InteractionResult.CONSUME;
+    }
+
+    /**
+     * The fluid devices bound at the nodes of the constructed structure whose shell or interior cell is at {@code pos} (WP6b:
+     * a breached vessel among them is what the kit repairs first); none for a block that is no structure with a fluid device,
+     * or whose nodes are not loaded or not bound.
+     */
+    private static long[] structureAt(net.minecraft.world.level.Level level, BlockPos pos) {
+        var vessel = EquipmentStructure.find(level, pos);
+        if (vessel == null || !vessel.shape().fluidDevice()) return new long[0];
+        return java.util.Arrays.stream(EquipmentStructure.sideIdentities(level, vessel)).filter(id -> id > 0).toArray();
     }
 
     /**
@@ -87,6 +109,7 @@ public final class RepairKitItem extends Item {
             case FULL -> "chat.icheme.repair_kit.full";
             case NOT_A_PUMP -> "chat.icheme.repair_kit.not_a_pump";
             case NO_KIT -> "chat.icheme.repair_kit.no_kit";
+            case BREACH_REPAIRED -> "chat.icheme.repair_kit.breach_repaired";
         };
         player.displayClientMessage(Component.translatable(key), false);
     }

@@ -86,6 +86,7 @@ public final class GuiPrototypes {
         out.addAll(assembly());
         out.addAll(constructor());
         out.addAll(List.of(pipelineTool(), gauge(), thermometer(), vessel(), unit()));
+        out.addAll(alarmBeacons());
         out.addAll(OperationPrototypes.operation());
         out.add(titleStrip());
         out.addAll(machines());
@@ -1155,6 +1156,28 @@ public final class GuiPrototypes {
             }
             dialogFooter(d, "Cancel", "Save");
         });
+    }
+
+    // ---- The alarm beacon (batch 2026-11-15-fluid-interfaces, W9): the shipped AlarmColumns on its door ----
+
+    static final java.util.function.BiFunction<String, Object[], String> ALARM_TEXT = (key, a) -> HeatDiagramRender.tr("gui.icheme." + key, a);
+
+    /** A beacon's settings, {@code view}, on its 246 px door, Apply alone at the right. */
+    static Prototype alarmBeacon(String name, com.wormzjl.icheme.client.gui.common.AlarmColumns.View view, Map<String, String> entries) {
+        var rows = com.wormzjl.icheme.client.gui.common.AlarmColumns.rows(view, ALARM_TEXT);
+        return new Prototype(name, 246, dialogHeight(rows, 246), (d, s) -> {
+            d.skin.title(d.c, 10, 10, "Alarm beacon AL-0A1B2C3D");
+            d.column(rows, 10, DialogColumns.TOP, d.w - 20, entries);
+            d.skin.button(d.c, DialogColumns.footer(d.w, d.h, 1).get(0), "Apply", Skin.Press.PRIMARY, false);
+        });
+    }
+
+    static List<Prototype> alarmBeacons() {
+        return List.of(
+                alarmBeacon("alarm-beacon", new com.wormzjl.icheme.client.gui.common.AlarmColumns.View(true, false, "LT-0012 / LEVEL", false, true, "%", "ACTIVE", "84.2", "%", true, ""),
+                        Map.of("name", "DRUM HIGH LEVEL", "threshold", "80")),
+                alarmBeacon("alarm-beacon-any", new com.wormzjl.icheme.client.gui.common.AlarmColumns.View(true, true, "", false, true, "m", "CLEAR", "", "", true, ""),
+                        Map.of("name", "HEATER TRIP")));
     }
 
     static Prototype gauge() {

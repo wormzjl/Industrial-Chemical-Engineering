@@ -242,6 +242,18 @@ public class ScreenToursTest {
         return out;
     }
 
+    /** The alarm beacon's variants (batch 2026-11-15-fluid-interfaces, W9): each mode of {@link AlarmColumnsTest#views}. */
+    public static List<Variant> alarmBeacon(int door, Measure m) {
+        var out = new ArrayList<Variant>();
+        AlarmColumnsTest.views().forEach((name, view) -> out.add(dialog(name, 246, door, AlarmColumns.rows(view, TEXT), "Alarm beacon AL-0A1B2C3D", List.of("apply"), m)));
+        return out;
+    }
+
+    @Test
+    void theAlarmBeaconsTourStands() {
+        stands(ScreenTours.ALARM_BEACON, doors(246).stream().map(door -> alarmBeacon(door, M)).toList());
+    }
+
     @Test
     void theGaugesTourStands() {
         stands(ScreenTours.GAUGE, doors(246).stream().map(door -> gauge(door, M)).toList());

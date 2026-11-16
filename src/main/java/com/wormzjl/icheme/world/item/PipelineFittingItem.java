@@ -4,6 +4,7 @@ import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import com.wormzjl.icheme.runtime.instrument.Instrument;
 import com.wormzjl.icheme.science.equipment.SightGlassGeometry;
+import com.wormzjl.icheme.science.fluid.network.Orifice;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler;
 import com.wormzjl.icheme.world.level.block.FluidDeviceBlock;
 import com.wormzjl.icheme.world.level.block.Positions;
@@ -31,8 +32,8 @@ public final class PipelineFittingItem extends Item {
     public PipelineFittingItem(Properties properties,Instrument.Type type){
         super(properties.stacksTo(64));
         this.type=java.util.Objects.requireNonNull(type);
-        installed=switch(type){case SHUTOFF->PhysicalFluidTopology.Cutoff.OPEN;case CHECK->PhysicalFluidTopology.Cutoff.CHECK;case FILTER,PRESSURE_VALVE,PUMP,COMPRESSOR,SIGHT_GLASS->PhysicalFluidTopology.Cutoff.NONE;case PRESSURE,TEMPERATURE,LEVEL_GAUGE,BLANKET_VALVE,SAFETY_VALVE->throw new IllegalArgumentException("A gauge is not a pipe fitting");};
-        translation=switch(type){case PUMP->"item.icheme.fluid_pump.";case COMPRESSOR->"item.icheme.fluid_compressor.";case FILTER->"item.icheme.inline_filter.";case PRESSURE_VALVE->"item.icheme.pressure_control_valve.";case SIGHT_GLASS->"item.icheme.pipeline_sight_glass.";case CHECK->"item.icheme.pipeline_check_valve.";default->"item.icheme.pipeline_shutoff_valve.";};
+        installed=switch(type){case SHUTOFF->PhysicalFluidTopology.Cutoff.OPEN;case CHECK->PhysicalFluidTopology.Cutoff.CHECK;case FILTER,PRESSURE_VALVE,PUMP,COMPRESSOR,SIGHT_GLASS,ORIFICE,ACTUATED_VALVE->PhysicalFluidTopology.Cutoff.NONE;case PRESSURE,TEMPERATURE,LEVEL_GAUGE,BLANKET_VALVE,SAFETY_VALVE->throw new IllegalArgumentException("A gauge is not a pipe fitting");};
+        translation=switch(type){case PUMP->"item.icheme.fluid_pump.";case COMPRESSOR->"item.icheme.fluid_compressor.";case FILTER->"item.icheme.inline_filter.";case PRESSURE_VALVE->"item.icheme.pressure_control_valve.";case SIGHT_GLASS->"item.icheme.pipeline_sight_glass.";case CHECK->"item.icheme.pipeline_check_valve.";case ORIFICE->"item.icheme.orifice_plate.";case ACTUATED_VALVE->"item.icheme.automated_shutoff_valve.";default->"item.icheme.pipeline_shutoff_valve.";};
     }
 
     private boolean mover(){return type==Instrument.Type.PUMP||type==Instrument.Type.COMPRESSOR;}
@@ -42,7 +43,7 @@ public final class PipelineFittingItem extends Item {
         if(!(state.getBlock() instanceof FluidDeviceBlock block)||block.kind()!=TopologyCompiler.Kind.PIPE)return InteractionResult.PASS;
         if(player==null||!player.mayBuild()||player.isSpectator()||!level.mayInteract(player,pos)||!player.mayUseItemAt(pos,context.getClickedFace(),stack))return InteractionResult.FAIL;
         if(type==Instrument.Type.SIGHT_GLASS)return sightGlass(stack,player,level,pos,state);
-        boolean duplicate=switch(type){case PUMP->FluidDeviceBlock.hasPump(state);case COMPRESSOR->FluidDeviceBlock.hasCompressor(state);case FILTER->FluidDeviceBlock.hasFilter(state);case PRESSURE_VALVE->FluidDeviceBlock.hasPressureValve(state);case SHUTOFF->FluidDeviceBlock.hasShutoff(state);default->FluidDeviceBlock.cutoff(state)==installed;};
+        boolean duplicate=switch(type){case PUMP->FluidDeviceBlock.hasPump(state);case COMPRESSOR->FluidDeviceBlock.hasCompressor(state);case FILTER->FluidDeviceBlock.hasFilter(state);case PRESSURE_VALVE->FluidDeviceBlock.hasPressureValve(state);case SHUTOFF->FluidDeviceBlock.hasShutoff(state);case ORIFICE->FluidDeviceBlock.hasOrifice(state);case ACTUATED_VALVE->FluidDeviceBlock.hasActuatedValve(state);default->FluidDeviceBlock.cutoff(state)==installed;};
         if(duplicate)return InteractionResult.sidedSuccess(level.isClientSide());
         if(state.getValue(FluidDeviceBlock.SIGHT_GLASS)||FluidDeviceBlock.hasAxialAccessory(state)) {
             if(!level.isClientSide())player.displayClientMessage(Component.translatable(translation+"one_accessory"),true);
@@ -68,14 +69,14 @@ public final class PipelineFittingItem extends Item {
                 if(along<0)facing=facing.getOpposite();
             }
             var changed=state.setValue(FluidDeviceBlock.FACING,facing);
-            changed=mover()?changed.setValue(FluidDeviceBlock.INLINE_MOVER,type==Instrument.Type.PUMP?FluidDeviceBlock.InlineMover.PUMP:FluidDeviceBlock.InlineMover.COMPRESSOR):type==Instrument.Type.FILTER?changed.setValue(FluidDeviceBlock.INLINE_FILTER,true):type==Instrument.Type.PRESSURE_VALVE?changed.setValue(FluidDeviceBlock.PRESSURE_CONTROL,true):changed.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.of(installed));
+            changed=mover()?changed.setValue(FluidDeviceBlock.INLINE_MOVER,type==Instrument.Type.PUMP?FluidDeviceBlock.InlineMover.PUMP:FluidDeviceBlock.InlineMover.COMPRESSOR):type==Instrument.Type.FILTER?changed.setValue(FluidDeviceBlock.INLINE_FILTER,true):type==Instrument.Type.PRESSURE_VALVE?changed.setValue(FluidDeviceBlock.PRESSURE_CONTROL,true):type==Instrument.Type.ORIFICE?changed.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.ORIFICE):type==Instrument.Type.ACTUATED_VALVE?changed.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.ACTUATED):changed.setValue(FluidDeviceBlock.SHUTOFF,FluidDeviceBlock.Shutoff.of(installed));
             changed=FluidDeviceBlock.connectedState(changed,level,pos);
             if(!level.setBlock(pos,changed,Block.UPDATE_ALL))return InteractionResult.FAIL;
             var axis=PhysicalFluidTopology.Direction.valueOf(facing.name());
-            if(!(mover()?world.installPipeMover(entity.fluidIdentity(),axis,type==Instrument.Type.PUMP?TopologyCompiler.Kind.PUMP:TopologyCompiler.Kind.COMPRESSOR):type==Instrument.Type.FILTER?world.installPipeFilter(entity.fluidIdentity(),axis):type==Instrument.Type.PRESSURE_VALVE?world.installPipePressureValve(entity.fluidIdentity(),axis):world.installPipeValve(entity.fluidIdentity(),axis,installed))) {
+            if(!(mover()?world.installPipeMover(entity.fluidIdentity(),axis,type==Instrument.Type.PUMP?TopologyCompiler.Kind.PUMP:TopologyCompiler.Kind.COMPRESSOR):type==Instrument.Type.FILTER?world.installPipeFilter(entity.fluidIdentity(),axis):type==Instrument.Type.PRESSURE_VALVE?world.installPipePressureValve(entity.fluidIdentity(),axis):type==Instrument.Type.ORIFICE?world.installPipeOrifice(entity.fluidIdentity(),axis,ratio(stack)):type==Instrument.Type.ACTUATED_VALVE?world.installPipeActuatedValve(entity.fluidIdentity(),axis):world.installPipeValve(entity.fluidIdentity(),axis,installed))) {
                 level.setBlock(pos,state,Block.UPDATE_ALL);return InteractionResult.FAIL;
             }
-            world.instruments().legacyInstalled(entity.fluidIdentity(),type);
+            world.instruments().legacyInstalled(entity.fluidIdentity(),type,type==Instrument.Type.ORIFICE?ratio(stack):0);
             entity.refreshGeometry(entity.bore(),true);
             if(!player.getAbilities().instabuild)stack.shrink(1);
         }
@@ -111,8 +112,24 @@ public final class PipelineFittingItem extends Item {
         return InteractionResult.sidedSuccess(level.isClientSide());
     }
 
+    /** An orifice plate's bore ratio on {@code stack} ({@code orifice_settings}; absent: {@link Orifice#DEFAULT}). */
+    public static double ratio(ItemStack stack){return stack.getOrDefault(com.wormzjl.icheme.registry.ModItems.ORIFICE_SETTINGS.get(),Orifice.DEFAULT);}
+
+    /** An orifice plate: a sneak-use away from a pipe steps its bore ratio up by 0.05, the smallest after the largest (D2). */
+    @Override public net.minecraft.world.InteractionResultHolder<ItemStack> use(net.minecraft.world.level.Level level,net.minecraft.world.entity.player.Player player,net.minecraft.world.InteractionHand hand) {
+        var stack=player.getItemInHand(hand);
+        if(type!=Instrument.Type.ORIFICE||!player.isShiftKeyDown())return super.use(level,player,hand);
+        if(!level.isClientSide()) {
+            double next=Orifice.next(ratio(stack));stack.set(com.wormzjl.icheme.registry.ModItems.ORIFICE_SETTINGS.get(),next);
+            player.displayClientMessage(ratioLine(next),true);
+        }
+        return net.minecraft.world.InteractionResultHolder.sidedSuccess(stack,level.isClientSide());
+    }
+    private static net.minecraft.network.chat.MutableComponent ratioLine(double beta){return Component.translatable("item.icheme.orifice_plate.ratio",String.format(java.util.Locale.ROOT,"%.2f",beta),String.format(java.util.Locale.ROOT,"%.3g",Orifice.loss(beta)));}
+
     @Override public void appendHoverText(ItemStack stack,TooltipContext context,List<Component> tooltip,TooltipFlag flag) {
-        for(String key:type==Instrument.Type.SIGHT_GLASS?List.of("install","straight_only","recover"):List.of("install","toggle","straight_only","one_accessory","recover"))
+        if(type==Instrument.Type.ORIFICE)tooltip.add(ratioLine(ratio(stack)).withStyle(ChatFormatting.GRAY));
+        for(String key:type==Instrument.Type.SIGHT_GLASS?List.of("install","straight_only","recover"):type==Instrument.Type.ORIFICE?List.of("install","step","straight_only","one_accessory","recover"):type==Instrument.Type.ACTUATED_VALVE?List.of("install","toggle","loop","straight_only","one_accessory","recover"):List.of("install","toggle","straight_only","one_accessory","recover"))
             tooltip.add(Component.translatable(translation+key).withStyle(ChatFormatting.GRAY));
     }
 }

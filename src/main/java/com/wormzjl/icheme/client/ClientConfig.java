@@ -76,7 +76,7 @@ public final class ClientConfig {
         builder.comment("Flames, smoke, plumes and the instrument wiring's relief (batch 2026-11-10-custom-shader-system). Drawing only: the server's process calculations never read these. Changes take effect on the next frame.").push("effects");
         EFFECTS_MODE = builder.comment("AUTO picks the path each frame: the mod's own shaders without a shader pack, vanilla render types under one. COMPATIBLE never uses the mod's own shaders (use it if another mod conflicts with them). OFF draws no flames, smoke or plumes; sounds stay.")
                 .defineEnum("mode", FxMode.AUTO);
-        PBR_TEXTURES = builder.comment("The instrument wiring lit through its normal map, by the mod's shader without a shader pack or by the pack. Off: the same texture, lit flat. Reloads the chunks when changed, as low_polygon_mode does.")
+        PBR_TEXTURES = builder.comment("The instrument wiring lit through its normal map, by the mod's shader without a shader pack or by the pack; under a pack, the equipment's relief sprites (nuts, louvres, straps) lit by the pack from their normal maps. Off: the same textures, lit flat, and the equipment keeps its baked relief. Reloads the chunks when changed, as low_polygon_mode does.")
                 .define("pbr_textures", true);
         HEAT_HAZE = builder.comment("A heat shimmer over flames and hot stacks: one screen copy and a distortion. Only without a shader pack.")
                 .define("heat_haze", false);
@@ -176,7 +176,7 @@ public final class ClientConfig {
         return get(EFFECTS_MODE, FxMode.AUTO);
     }
 
-    /** Whether the instrument wiring is lit through its normal map; on before the config has loaded. */
+    /** Whether the instrument wiring, and under a shader pack the equipment's relief sprites, are lit through their normal maps; on before the config has loaded. */
     public static boolean pbrTextures() {
         return get(PBR_TEXTURES, true);
     }

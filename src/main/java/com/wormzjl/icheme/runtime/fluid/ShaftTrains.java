@@ -326,6 +326,14 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         chimneys = Objects.requireNonNull(value);
     }
 
+    /** The pollution releases (batch 2026-11-15-pollution-system, WP4): what each span let into the open air. */
+    private Releases releases;
+
+    /** Installs the pollution releases. */
+    public void releases(Releases value) {
+        releases = Objects.requireNonNull(value);
+    }
+
     /** Installs the fired heaters' burners. */
     public void burners(FiredHeaters value) {
         burners = Objects.requireNonNull(value);
@@ -724,6 +732,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             chimneys.sync();
             chimneys.booked(start, end, result);
         }
+        // What the span let into the open air, after the flares' flame states (it never throws: a fault is logged there).
+        if (releases != null) releases.booked(island, start, end, result);
         // The pumps' wear over the span (W10b).
         if (health != null) health.booked(island, start, end, result);
         if (unitOfDevice.isEmpty()) return;

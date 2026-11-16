@@ -1292,7 +1292,7 @@ class ShapeRasterizerTest {
     private static double manwayArea(EquipmentShape shape) {
         var manway = shape.manway();
         if (manway == null) return 0;
-        var mesh = new Mesh();
+        var mesh = new Mesh().equipment(); // drawn on the vessel's mesh: its nuts are the relief faces (R-W4)
         manway.draw(mesh);
         return mesh.area();
     }

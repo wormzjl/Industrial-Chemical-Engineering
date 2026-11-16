@@ -282,6 +282,12 @@ public enum Limit {
     TURBINE_SPARE(SHOULD, least(Motor.SPARE), "", "This plan: `Motor.SPARE`"),
     /** The inlet's pressure under its steam class's header: a casing is rated for its class. The world reads the real inlet and refuses none. */
     TURBINE_INLET(SHOULD, given(Sense.MOST), "kPa", "This plan: `MachineDuty.Steam`", QUIET),
+    /**
+     * The LP header's pressure over the tile's exhaust, kPa, above 0 (batch 2026-11-15-equipment-visual-design): a turbine
+     * expands straight through its sections to an exhaust below the LP header, and the constructor builds none for back
+     * pressure, so an exhaust at or above the header reads red. The tile's own run does not change.
+     */
+    TURBINE_EXHAUST(MUST, above(0), "kPa", "World: `MachineDuty.TURBINE_EXHAUSTS`", QUIET),
 
     // ---- Prime movers (batch 2026-11-10-prime-movers) ----
     /** The fuel heat at design flow against the model's rated fuel: the governor holds the fuel there. */

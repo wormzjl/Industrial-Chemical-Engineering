@@ -216,9 +216,14 @@ public final class Converters implements IslandCoordinator.Ports {
         long room=u.capacity()-u.stored();long back=Math.min(whole,room);if(back<=0)return;
         topology.converter(u.withTank(u.accountFluid(),u.stored()+back,u.remainder()).withAccount(u.accountFluid(),u.account()-back));
     }
-    /** Whether a rule in force names Forge fluid {@code fluid} for a converter, closed or open: forward, or reverse to it. */
-    private boolean named(String fluid,boolean closed) {
+    /**
+     * Whether a rule in force names Forge fluid {@code fluid} for converter {@code u}, closed or open: forward, or reverse
+     * to it. A liquid hopper converts forward only, on a liquid rule.
+     */
+    private boolean named(String fluid,ConverterUnit u) {
+        boolean closed=u.closed();
         var set=rules.get();if(set.forward(fluid,tags.apply(fluid),closed)!=null)return true;
+        if(u.hopper())return false;
         for(var r:set.rules())if(r.toForge()!=null&&r.fluid().equals(fluid)&&(closed||r.phase()==ConversionRule.Phase.LIQUID))return true;
         return false;
     }
@@ -230,7 +235,7 @@ public final class Converters implements IslandCoordinator.Ports {
             public long stored(){var u=topology.converter(id);return u==null?0:u.stored();}
             public long fill(String fluid,long mB,boolean simulate) {
                 var u=topology.converter(id);if(u==null||mB<=0||fluid.isEmpty())return 0;
-                if(!u.fluid().isEmpty()&&!u.fluid().equals(fluid)||u.fluid().isEmpty()&&!named(fluid,u.closed()))return 0;
+                if(!u.fluid().isEmpty()&&!u.fluid().equals(fluid)||u.fluid().isEmpty()&&!named(fluid,u))return 0;
                 long free=(long)Math.floor(u.capacity()-u.stored()-reserved(id)-u.remainder());
                 long taken=Math.max(0,Math.min(mB,free));
                 if(taken>0&&!simulate){topology.converter(u.withTank(fluid,u.stored()+taken,u.remainder()));moved.accept(id);}
@@ -244,7 +249,7 @@ public final class Converters implements IslandCoordinator.Ports {
             }
             public boolean valid(String fluid) {
                 var u=topology.converter(id);if(u==null||fluid.isEmpty())return false;
-                return u.fluid().isEmpty()?named(fluid,u.closed()):u.fluid().equals(fluid);
+                return u.fluid().isEmpty()?named(fluid,u):u.fluid().equals(fluid);
             }
         };
     }
@@ -363,8 +368,9 @@ public final class Converters implements IslandCoordinator.Ports {
         // A rule naming a compound the island does not carry waits for its island to grow (W3), as a column outlet's does.
         // Only where the package can carry the rule's compounds: one without water never grows wet, and would be recompiled at every plan.
         if(per==null){if(ConversionLaws.fractions(rule.toIChemE(),model.whole())!=null)growth.add(u.fill());return new Outcome(null,Status.NO_RULE);}
+        // A liquid hopper has no vessel of its own: its generator gives into the line, which is never full (W4).
         var tank=graph.reservoirs().get(vessel);
-        double free=(tank.inventory().volume()-FluidThermodynamics.liquidStreamVolume(tank.state()))*ConversionLaws.LITRES_PER_M3;
+        double free=u.hopper()?Double.POSITIVE_INFINITY:(tank.inventory().volume()-FluidThermodynamics.liquidStreamVolume(tank.state()))*ConversionLaws.LITRES_PER_M3;
         double want=Math.min(u.maxRate()*dt,free);
         if(free<LEAST_LITRES)return new Outcome(null,Status.DESTINATION_FULL);
         // Whole mB out of the Forge tank into the account, enough for the slice.

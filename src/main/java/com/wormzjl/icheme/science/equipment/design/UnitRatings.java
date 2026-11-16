@@ -41,7 +41,24 @@ public final class UnitRatings {
 
     /** An air cooler bay's bundle face between its headers (centred 0.5 m in from each end), m². */
     public static double bundleFace(double width, double length) {
-        return (width - .22) * (length - 1 - ProcessUnit.header(length));
+        return finWidth(width) * (length - 1 - ProcessUnit.header(length));
+    }
+
+    /** The widest bay one bundle fills, m: a wider bay holds two bundles side by side (a bundle over about 3.5 m does not travel by road). */
+    public static final double ONE_BUNDLE = 3;
+
+    /** An air cooler bay's bundles: one, or two above {@link #ONE_BUNDLE}. */
+    public static int bundles(double width) {
+        return width > ONE_BUNDLE + 1e-9 ? 2 : 1;
+    }
+
+    /**
+     * The finned width of an air cooler bay, m (batch 2026-11-15-equipment-visual-design, AIR_COOLER_BAY_PLAN.md 4.2): the
+     * bay less its side frames' 0.22 m, and less 0.12 m more for the two frames at its centre line where it holds two
+     * bundles ({@link #bundles}).
+     */
+    public static double finWidth(double width) {
+        return width - .22 - (bundles(width) > 1 ? .12 : 0);
     }
 
     /**

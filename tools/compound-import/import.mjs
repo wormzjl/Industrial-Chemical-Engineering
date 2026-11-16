@@ -439,9 +439,12 @@ for (const s of selection.compounds) {
   if (muV) visc.vapor = muV.entry;
   if (Object.keys(visc).length) property.viscosity = visc;
   // A compound with a crystal record takes the crystal's anchor as its freezing data (as the existing CO2 dataset).
-  property.freezing = s.from_crystal ? crystalFreezing(s.id, s.from_crystal, s.freezing_note)
-    : freezingRecord(c, s.freezing_override, s.constants?.freezing_note);
-  crystalGap(s.id, s.from_crystal, property.freezing);
+  // "no_freezing": a compound without a triple point (helium: ChemSep's 1.763 K is its lambda point) gets no sub-record.
+  if (!s.no_freezing) {
+    property.freezing = s.from_crystal ? crystalFreezing(s.id, s.from_crystal, s.freezing_note)
+      : freezingRecord(c, s.freezing_override, s.constants?.freezing_note);
+    crystalGap(s.id, s.from_crystal, property.freezing);
+  }
   // An entry may carry "thermochemistry": {formula, reference_element, limits} (the thermochemistry_only form).
   if (s.thermochemistry) {
     const e = { component: s.id, ...s.thermochemistry };
@@ -449,7 +452,8 @@ for (const s of selection.compounds) {
     if (e.limits) property.flammability = flammabilityRecord(e);
   }
   // Group counts always (plan section 8); a gas's Henry constant in water when the entry gives its coefficients.
-  const groupRecord = groupCounts(c, s.id, s.authored_counts);
+  // "no_group_counts": a compound whose derived pairs are zero by rule (helium, as hydrogen) gets no counts.
+  const groupRecord = s.no_group_counts ? null : groupCounts(c, s.id, s.authored_counts);
   if (groupRecord) property.group_counts = groupRecord;
   if (s.henry_in_water) property.henry_in_water = henryRecord({ component: s.id, ...s.henry_in_water });
   if (s.homomorph) property.homomorph = homomorphRecord(s.id, s.homomorph);

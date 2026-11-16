@@ -234,7 +234,7 @@ final class StirredReactorDesign extends UnitDesign {
         u.mesh.cylinder(f, fv, b0, b0 + .04, n, Material.FLANGE);
         u.mesh.cylinder(f, rb, b0 + .04, b1, n, Material.MACHINE);
         u.mesh.cylinder(f, fv, b1, b1 + .06, n, Material.FLANGE);
-        u.mesh.bolts(f, v, v / 2 + .01, fv, b1 + .06, 1, Material.BOLT);
+        u.mesh.flangeBolts(f, v, v / 2 + .01, fv, b1 + .06, 1, Material.BOLT);
         u.mesh.prism(f, v / 2 + .01, b1 + .06, p.yj + .05, n, Material.PIPE);
         double mid = (b0 + b1) / 2, box = .1 + .2 * v;
         u.mesh.cylinder(Frame.of(new double[]{0, mid, a}, 0, 1), .025, a + rb - .01, a + rb + .12, 8, Material.PIPE);

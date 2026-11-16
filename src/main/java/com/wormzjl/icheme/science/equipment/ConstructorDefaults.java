@@ -19,16 +19,17 @@ public final class ConstructorDefaults {
             return new Sizes(diameter, Math.max(2, (int) Math.round(1.5 * diameter)));
         }
         var design = UnitDesign.of(form.kind());
-        var sizes = design.sizes();
-        double diameter = sizes.get(sizes.size() / 2);
+        double diameter = design.startSize();
         int low = design.minLength(diameter), high = design.maxLength(diameter);
         int length = design.defaultLength(diameter);
         // Keep intentional proportions and counts (beds, stages, throws); otherwise start a length
         // inside its range.
         if (design.lengthInMetres() && (length == low || length == high))
             length = low + ((high - low) / design.lengthStep() + 1) / 2 * design.lengthStep();
+        // A kind that states its own starting second size keeps it (an air cooler's bay).
+        if (design.startLength(diameter) > 0) length = design.startLength(diameter);
         if (design.hasDuty()) {
-            var duty = design.duty(diameter, length);
+            var duty = design.draft(diameter, length);
             return new Sizes(design.size(duty), design.length(duty));
         }
         return new Sizes(diameter, length);

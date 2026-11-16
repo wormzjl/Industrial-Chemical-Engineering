@@ -33,7 +33,9 @@ import java.util.stream.Stream;
  * </ul>
  * A class is found by its simple name under {@code src/main/java} or {@code src/test/java}. The equipment shape-field
  * count has no production constant; its row names the corpus test's {@code EquipmentShapeCompatTest#SHAPE_FIELDS}.
- * A row that names nothing checkable fails, unless it is in {@link #DESCRIBED}.
+ * A row that names nothing checkable fails, unless it is in {@link #DESCRIBED}. A reservation row (its value cell starts with
+ * {@code reserved by}: a number a batch not yet on main holds, {@code COLLABORATION.md} "Numbers") is not checked: no code
+ * declares it yet.
  */
 class FormatsTableTest {
     private static final Path TABLE = Path.of("documentation/reference/FORMATS.md");
@@ -61,6 +63,7 @@ class FormatsTableTest {
             if (cells.length < 3) continue;
             String format = cells[0].strip(), value = cells[1].strip(), declared = cells[2].strip();
             if (format.equals("Format") || format.equals("Registrar")) continue;
+            if (value.startsWith("reserved by")) continue;
             int before = problems.size();
             boolean any = false;
 

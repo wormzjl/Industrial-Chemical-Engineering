@@ -206,7 +206,7 @@ class DerivedPairsTest {
     /**
      * W6 plan sections 13 and 15: a list's activity pairs are fitted on a parallel first pass. On a fresh catalog the whole wet
      * network list equals, pair for pair and double for double, each pair derived alone as a two-compound list on another fresh
-     * catalog (one fit, so the pair loop fits it, sequentially), and the whole list runs every fit once (291).
+     * catalog (one fit, so the pair loop fits it, sequentially), and the whole list runs every fit once (291; 326 since the rare gases of batch 2026-11-15-fluid-interfaces, W1: five Henry pairs with water and argon's E-PPR78 pairs).
      */
     @Test void theParallelFitsEqualEachPairFittedAlone() {
         String network = "icheme:refinery";
@@ -214,7 +214,7 @@ class DerivedPairsTest {
         var whole = MaterialCatalog.parse(resources).withWater(network);
         var ids = whole.requirePackage(network).components();
         var all = DerivedPairs.derive(whole, network, ids);
-        assertEquals(291, all.fitsRun(), "every fit of the whole list, once");
+        assertEquals(326, all.fitsRun(), "every fit of the whole list, once");
         var alone = MaterialCatalog.parse(resources).withWater(network);
         var e = all.excess();
         int n = ids.size(), k = 0;
@@ -239,7 +239,7 @@ class DerivedPairsTest {
                 }
             }
         assertEquals(all.pairs().size(), k);
-        assertEquals(291, alone.derivedPairCache().fitsRun(), "the pairs alone run the same fits");
+        assertEquals(326, alone.derivedPairCache().fitsRun(), "the pairs alone run the same fits");
     }
 
     @Test void aHomomorphNamesAKnownCompoundWithADataset() {

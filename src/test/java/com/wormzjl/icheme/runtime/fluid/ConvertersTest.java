@@ -242,4 +242,92 @@ class ConvertersTest {
         assertArrayEquals(new double[]{.9,.1,.7,Double.NaN},rig.unit().thresholds(),0);
         assertEquals(Converters.Direction.NONE,c.direction(id),"off converts in no direction");
     }
+
+    /**
+     * A liquid hopper (batch 2026-11-15-fluid-interfaces, W4) feeding an open 10 m3 tank through two pipes, the second's
+     * cutoff {@code cutoff}: the hopper's own generator is its converter's fill port, at {@link Placement#HOPPER_PRESSURE}.
+     */
+    static Rig hopperRig(PhysicalFluidTopology.Cutoff cutoff) throws IOException {
+        var world=new EventPathWorld();
+        long id=world.ledger.nextIdentity();
+        var record=Placement.hopper(id,new PhysicalFluidTopology.Position(EventPathWorld.DIM,0,64,0),Direction.EAST,.05,FluidDeviceSpec.nitrogen(world.catalog).composition());
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(id,record)),id+1,null);
+        world.place(1,64,0,Kind.PIPE,Direction.EAST,.05);
+        long pipe=world.ledger.nextIdentity();
+        var second=PhysicalFluidTopology.Device.builder(pipe,new PhysicalFluidTopology.Position(EventPathWorld.DIM,2,64,0),Kind.PIPE,Direction.EAST,
+                new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).cutoff(cutoff).build();
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(pipe,new WorldTopologyLedger.Registration(second,FluidDeviceSpec.nitrogen(world.catalog),0))),pipe+1,null);
+        var node=new PhysicalFluidTopology.Position(EventPathWorld.DIM,3,64,0);
+        world.placeVessel(node,List.of(new PhysicalFluidTopology.Port(node,Direction.WEST,PassiveNetwork.PhasePort.LIQUID)),10,1,true);
+        var set=rules();
+        var converters=new Converters(world.ledger,world.coordinator::model,world.model.time(),world.ledger::onlineTick,
+                x->{var island=world.registry.owner(x);if(island!=null)world.coordinator.portsMoved(island);},()->set);
+        var counting=new Counting(converters,world,Set.of(id));counting.fill=id;
+        world.coordinator.ports(counting);
+        // The hopper stands with nitrogen: its island grows the rule's compounds at its first plan, as the world's tick queues it.
+        world.converters=converters;world.beforeSolves=world::grow;
+        converters.register(ConverterUnit.hopper(id,Placement.HOPPER_RATE,Placement.HOPPER_CAPACITY));
+        world.runTo(40);
+        return new Rig(world,converters,counting,id);
+    }
+    /** The water the hopper's tank holds, kg (the rig's vessel is the hopper). */
+    static double tankWater(Rig rig) {
+        var world=rig.world;
+        for(var s:world.coordinator.snapshots())for(var n:s.graph().reservoirs())if(n.kind()==PassiveNetwork.NodeKind.RESERVOIR&&n.inventory().volume()>5) {
+            var m=world.coordinator.model(s.id());int w=m.components().indexOf("Water");return n.inventory().moles()[w]*m.molecularWeight(w);
+        }
+        return 0;
+    }
+
+    /**
+     * A hopper (D5, D6): it takes a liquid a forward rule names and nothing else; 3 000 mB of water run into the tank at its
+     * 0.1 L per process second, the litres out of its Forge tank equal the mass booked at its port over the rule's density
+     * (1 mB = 1 L) and that mass is in the tank; drained at a higher rate it empties to the last mB, and nothing is lost.
+     */
+    @Test void aHopperConvertsItsForgeTankIntoTheLineAtItsRate() throws IOException {
+        var rig=hopperRig(PhysicalFluidTopology.Cutoff.NONE);var world=rig.world;var c=rig.converters;long id=rig.vessel;
+        assertTrue(rig.unit().hopper());
+        assertEquals(0,rig.tank().fill("test:nitrogen",100,true),"an open hopper takes no gas");
+        assertEquals(0,rig.tank().fill("test:hot_water",100,true),"a fluid only a reverse rule names is not a hopper's");
+        assertEquals(0,rig.tank().fill("minecraft:lava",100,true),"a fluid no rule names");
+        assertFalse(rig.tank().valid("test:hot_water"));assertTrue(rig.tank().valid(WATER));
+        assertEquals(3000,rig.tank().fill(WATER,3000,false));
+        assertEquals(1000,rig.tank().fill(WATER,2000,false),"its tank holds 4 000 mB");
+        rig.slices(40,false);
+        world.assertKeptUp("hopper");
+        assertEquals(Converters.Status.CONVERTING,c.status(id));
+        var rate=c.rate(id);
+        assertEquals(Placement.HOPPER_RATE,rate.litres(),1e-6*Placement.HOPPER_RATE,"0.1 L per process second: "+rate);
+        var per=ConversionLaws.perLitre(rules().rule("test:water").toIChemE(),world.coordinator.model(rig.island()));
+        var u=rig.unit();double litresIn=4000-u.stored()-u.account();
+        assertEquals(ConversionLaws.litres(rig.counting.fillMass,per.density()),litresIn,1e-6,"stored "+u.stored()+", account "+u.account());
+        assertEquals(rig.counting.fillMass,tankWater(rig),.01*rig.counting.fillMass+1e-6,"what came in is in the tank");
+        System.out.println("HOPPER slices="+rig.counting.fillSlices+" kg="+rig.counting.fillMass+" L="+litresIn+" rate="+rate.litres()+" stored="+u.stored()+" account="+u.account());
+        // Faster (a test's setting; a placed hopper has none): it empties to the last mB.
+        c.settings(id,new Converters.Settings(ConverterUnit.Mode.TO_ICHEME,4,ConverterUnit.DEFAULT_DEADBAND,u.thresholds()));
+        long limit=world.ledger.onlineTick()+200000;
+        while(rig.unit().stored()+rig.unit().account()>=1&&world.ledger.onlineTick()<limit)world.tick();
+        world.runTo(world.ledger.onlineTick()+400);
+        world.assertKeptUp("hopper emptied");
+        u=rig.unit();
+        assertEquals(0,u.stored(),"the Forge tank is empty");
+        assertEquals(4000,ConversionLaws.litres(rig.counting.fillMass,per.density())+u.account(),1e-6,"every mB went into the line");
+        assertEquals(Converters.Status.SOURCE_EMPTY,c.status(id));
+        assertEquals(rig.counting.fillMass,tankWater(rig),.01*rig.counting.fillMass,"and is in the tank");
+        System.out.println("HOPPER emptied slices="+rig.counting.fillSlices+" kg="+rig.counting.fillMass+" account="+u.account()+" tank_kg="+tankWater(rig));
+    }
+
+    /** A hopper behind a closed cutoff: what it gives stays in the dead-end pipe, its Forge tank and account keep every other mB. */
+    @Test void aHopperOnAClosedLineConvertsAlmostNothingAndLosesNothing() throws IOException {
+        var rig=hopperRig(PhysicalFluidTopology.Cutoff.CLOSED);var world=rig.world;var c=rig.converters;long id=rig.vessel;
+        assertEquals(3000,rig.tank().fill(WATER,3000,false));
+        world.runTo(world.ledger.onlineTick()+4000);
+        world.assertKeptUp("closed");
+        var per=ConversionLaws.perLitre(rules().rule("test:water").toIChemE(),world.model);
+        var u=rig.unit();double given=ConversionLaws.litres(rig.counting.fillMass,per.density());
+        assertEquals(3000,u.stored()+u.account()+given,1e-6,"nothing lost: stored "+u.stored()+", account "+u.account()+", given "+given);
+        assertTrue(given<2,"a dead-end pipe takes at most its own volume: "+given+" L");
+        assertEquals(0,tankWater(rig),1e-9,"nothing reached the tank");
+        System.out.println("HOPPER closed given="+given+" stored="+u.stored()+" account="+u.account()+" status="+c.status(id));
+    }
 }

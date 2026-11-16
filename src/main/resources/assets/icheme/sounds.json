@@ -118,5 +118,37 @@
   "valve_turn": {
     "subtitle": "subtitles.icheme.valve_turn",
     "sounds": [{ "name": "icheme:valve_turn", "stream": false }]
+  },
+  "alarm_horn": {
+    "subtitle": "subtitles.icheme.alarm_horn",
+    "sounds": [{ "name": "icheme:alarm_horn", "stream": false }]
+  },
+  "pipe_burst_gas": {
+    "subtitle": "subtitles.icheme.pipe_burst",
+    "sounds": [{ "name": "icheme:pipe_burst_gas", "stream": false }]
+  },
+  "pipe_burst_liquid": {
+    "subtitle": "subtitles.icheme.pipe_burst",
+    "sounds": [{ "name": "icheme:pipe_burst_liquid", "stream": false }]
+  },
+  "pipe_burst_empty": {
+    "subtitle": "subtitles.icheme.pipe_burst",
+    "sounds": [{ "name": "icheme:pipe_burst_empty", "stream": false }]
+  },
+  "meter_tick_slow": {
+    "subtitle": "subtitles.icheme.meter_tick",
+    "sounds": [{ "name": "icheme:meter_tick_slow", "stream": false }]
+  },
+  "meter_tick_medium": {
+    "subtitle": "subtitles.icheme.meter_tick",
+    "sounds": [{ "name": "icheme:meter_tick_medium", "stream": false }]
+  },
+  "meter_tick_fast": {
+    "subtitle": "subtitles.icheme.meter_tick",
+    "sounds": [{ "name": "icheme:meter_tick_fast", "stream": false }]
+  },
+  "gas_alarm": {
+    "subtitle": "subtitles.icheme.gas_alarm",
+    "sounds": [{ "name": "icheme:gas_alarm", "stream": false }]
   }
 }

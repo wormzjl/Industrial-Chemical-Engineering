@@ -56,6 +56,13 @@
     "source": "NIOSH Pocket Guide to Chemical Hazards, Methyl mercaptan (npgd0425, https://www.cdc.gov/niosh/npg/npgd0425.html, read 2026-11-05): LEL and UEL in air. CDC material, in the public domain. Constant with temperature (owner decision E23).",
     "revision": "npg-b627-r1"
   },
+  "hazard": {
+    "channel": "toxic",
+    "reference_ppm": 150,
+    "estimated": false,
+    "source": "NIOSH Pocket Guide to Chemical Hazards, Methyl mercaptan (npgd0425, https://www.cdc.gov/niosh/npg/npgd0425.html, read 2026-11-15): IDLH 150 ppm. CDC material, in the public domain. The toxic channel's reference (batch 2026-11-15-pollution-system).",
+    "revision": "npg-idlh-r1"
+  },
   "combustion": {
     "lower_heating_value_j_per_mol": 1151378,
     "estimated": false,

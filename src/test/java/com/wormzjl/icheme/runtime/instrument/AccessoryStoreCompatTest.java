@@ -48,6 +48,10 @@ class AccessoryStoreCompatTest {
         s.installLegacy(64,Instrument.Type.PRESSURE_VALVE);s.installSensor(new Instrument.Key(64,"valve_sensor"),new UUID(0x5e,5),Sensor.Kind.PRESSURE,s.revision(64));
         // Accessory facts schema 3 (batch 2026-11-03-rotating-machinery W3): a steam turbine's speed pickup.
         s.installSensor(new Instrument.Key(65,Sensor.SPEED_PICKUP),new UUID(0x5e,6),Sensor.Kind.SPEED,0);
+        // Accessory facts schema 7 (batch 2026-11-15-fluid-interfaces, W6): an orifice plate with its bore ratio.
+        s.installLegacy(66,Instrument.Type.ORIFICE,.35);
+        // Schema 7 (W7): an automated shutoff valve, the pipe's only fitting.
+        s.installLegacy(67,Instrument.Type.ACTUATED_VALVE);
         s.nextDue(123456);
         return s;
     }
@@ -61,7 +65,7 @@ class AccessoryStoreCompatTest {
         var out=new StringBuilder();
         for(var i:s.installed()){var g=i.settings();out.append("installed ").append(i.key().host()).append('/').append(i.key().mount()).append(' ').append(i.instance()).append(" r").append(i.revision())
                 .append(' ').append(g.kind()).append(' ').append(g.minimum()).append("..").append(g.maximum()).append(' ').append(g.unit()).append(g.relative()?" relative":"").append("; ");}
-        for(long h:hosts){var f=s.legacy(h);if(f!=null)out.append("fitting ").append(h).append(' ').append(f.instance()).append(" r").append(f.revision()).append(' ').append(f.type()).append("; ");}
+        for(long h:hosts){var f=s.legacy(h);if(f!=null)out.append("fitting ").append(h).append(' ').append(f.instance()).append(" r").append(f.revision()).append(' ').append(f.type()).append(f.ratio()!=0?" ratio "+f.ratio():"").append("; ");}
         for(long h:hosts)out.append("revision ").append(h).append('=').append(s.revision(h)).append("; ");
         for(var p:s.pending()){out.append("pending ").append(p.request()).append(' ').append(p.player()).append(' ').append(p.key().host()).append('/').append(p.key().mount()).append(' ').append(p.instance())
                 .append(" r").append(p.expectedRevision()).append(p.install()?" install ":" remove ").append(p.type()).append(' ').append(p.settings()==null?"-":p.settings().kind()+" "+p.settings().minimum()+".."+p.settings().maximum()+" "+p.settings().unit()+(p.settings().relative()?" relative":""))

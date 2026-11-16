@@ -15,6 +15,32 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-11-16
+
+### Added
+
+- Fluid interfaces (`2026-11-15-fluid-interfaces`; plan D1 to D12, A1 to A8; joined on `claude/fluid-interfaces-batch`, `8f12eee7c`, `690d683a8`, `12dfbcda2`, `df3c928b1`):
+  - A gas intake (`gas_intake`): one block that draws the atmosphere into a line (25 °C, 101 325 Pa, 50 % humidity: nitrogen, oxygen, argon 0.934 %, neon, helium, krypton, xenon and 1.56 % water), inflow only, with an entry loss of 3 velocity heads. Argon, neon, helium, krypton and xenon join the network package (`refinery-tier1-r5`).
+  - A liquid hopper (`liquid_hopper`): one block with a 4 000 mB tank, filled by bucket or by a Forge pipe, that converts by the fluid converter's liquid forward rules at 0.1 L per process second and delivers at ambient pressure.
+  - A placeholder crude oil (`icheme:crude_oil`, its bucket, the tag `c:crude_oil`), hidden from the creative tab and JEI while another mod's crude oil is present.
+  - JEI: a "Fluid conversion" category, one recipe per conversion rule; the rules reach the client at login and after a reload.
+  - An orifice plate (`orifice_plate`), a pipe fitting: a fixed pressure loss by its bore ratio β (0.20 to 0.80; K = 29.5 at 0.5).
+  - An automated shutoff valve (`automated_shutoff_valve`), a pipe fitting: open or closed by hand or by a controller loop (above or below its target, with a 2 % band).
+  - An alarm beacon (`alarm_beacon`): a flashing lamp and a horn on a floor, wall or ceiling, raised by one input of its data bus above or below a threshold or by any equipment alarm on the bus; an empty hand acknowledges it.
+- Equipment visual design (`2026-11-15-equipment-visual-design`; `VISUAL_REVIEW.md`): relief sprites for nuts, louvres and shell detail in place of drawn polygons, solid nuts on pipe flanges; the steam turbine in sections (an HP turbine includes its MP and LP sections, an LP class, tandem casings above 45 MW, the LP casing's hood); an air cooler bay up to 6 m by 12 m with two bundles above 3 m (4.12 MW at the largest), the constructor still starting at 2.5 m by 5 m.
+
+### Changed
+
+- Formats (`documentation/reference/FORMATS.md`): fluid facts schema 27 (a device spec's `ambient`, after the pollution system's `breached` at 26; the control valve source `ON_OFF`), accessory facts schema 7, control store format 5, protocol `icheme-3` (after the pollution map's `icheme-2`). `FormatsTableTest` skips a reservation row.
+- A generator's own loss coefficient now reaches its line (`PhysicalFluidTopology.boundaryHalf`); every existing line is bit-identical, since no generator had one.
+- The level loop GameTests pace the server on the drum island's slice in flight (`LevelLoopGameTests.pace`): while a slice has been in flight more than 10 online ticks, each tick waits, as a 20 TPS server with a quick worker would; the run's result line counts the decisions that held.
+
+## [0.32.0] - 2026-11-16
+
+### Added
+
+- Air pollution (`2026-11-15-pollution-system`). The air of every dimension is divided into 16 m cubes that hold four kinds of pollution: toxic, combustible, corrosive and particulate, each measured against its compound's reference (NIOSH IDLH, the lower flammability limit, 1.75 g/m3 of dust). Open vessels, spills, chimneys, flares, flushes and fuel sulfur release into the cubes (`266d8d2d2`); the blanketing vent does not. Every 5 s a worker job spreads, settles and decays the field (`5830c527d`, `08d43d9f5`, `9d58d7ed4`). Players and mobs in a polluted cube take effects and damage by level (`6ae503c32`). A combustible cube at its limit explodes at a flame, and its neighbours follow. A blast that destroys a pipe, valve or one-block tank releases what it held, with a burst sound. A blast breaches constructed equipment, which then stands open until a repair kit mends it (`08512cd5e`, `41a6914e6`; fluid facts schema 26). New: the handheld pollution meter, the pollution monitor on data cables with a lamp, a horn and five DCS channels (`08512cd5e`), the command `/icheme pollution`, and with FTB Chunks installed a pollution overlay on its large map (`05c02394f`; wire protocol `icheme-2`). The pollution store never refuses a world: a damaged store is copied aside or erased (`ace24a1dd`). Config section `pollution`. Code guide chapter `pollution.md` (`b2321f37c`).
+
 ## [0.31.1] - 2026-11-15
 
 ### Changed

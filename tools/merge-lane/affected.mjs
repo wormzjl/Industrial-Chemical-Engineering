@@ -155,7 +155,8 @@ const sourceText = node => { if (!texts.has(node)) { const f = path.join(root, n
 const IGNORED = /^(documentation|research|tools|\.claude|\.github)\/|^[^/]+\.md$|^\.git(ignore|attributes)$|^LICENSE/;
 // build.gradle is not a full-run file (owner, 2026-11-10: "changing build.gradle should not trigger a full test"): its
 // compileOnly dependencies, test JVM settings and gate lists do not change what a test computes, and the game and loader
-// versions live in gradle.properties, which still runs everything beyond mod_version.
+// versions live in gradle.properties. gradle.properties is not a full-run file either (owner, 2026-11-16:
+// "gradle.properties change should not trigger full test"); a game or loader version change is run with --all.
 const FULL = /^(settings\.gradle|gradlew(\.bat)?|gradle\/.*|(?!build\.gradle$)[^/]+\.gradle(\.kts)?)$|^tools\/development\.gradle$/;
 // Compile-time constant candidates of a source file, name -> initializer: static final primitives and Strings, and any
 // primitive or String field with an initializer in a file that declares an interface (its fields are static final).
@@ -213,7 +214,7 @@ function since(commit) {
     if (f === 'build.gradle') { r.notes.push('build.gradle changed: no test selected for it (owner, 2026-11-10)'); continue; }
     if (f === 'gradle.properties') {
       const lines = git('diff', '-U0', ...(range ?? [commit]), '--', f).split('\n').filter(l => /^[+-][^+-]/.test(l));
-      if (lines.some(l => !/^[+-]\s*mod_version\s*=/.test(l))) r.full.push('gradle.properties changed beyond mod_version');
+      if (lines.some(l => !/^[+-]\s*mod_version\s*=/.test(l))) r.notes.push('gradle.properties changed beyond mod_version: no test selected for it (owner, 2026-11-16)');
       continue;
     }
     if (/^src\/(main\/resources\/(data|META-INF)|main\/templates|fluidGameTest)\//.test(f)) r.gametest ??= `${f} changed`;

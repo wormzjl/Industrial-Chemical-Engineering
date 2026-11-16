@@ -246,7 +246,8 @@ class ColumnSolveTest {
     @Test void aNetworkPackageAbove64CompoundsSolvesOnItsFeedIslandsList() {
         var bundled = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
         V3ColumnInput design = V3ColumnPresets.input(bundled.presets().column("tia_juana_nitrogen"), bundled);
-        var wide = MaterialCatalog.parse(widened(4));
+        // Three clone sets since the rare gases (batch 2026-11-15-fluid-interfaces, W1): four would pass the 100-entry axis.
+        var wide = MaterialCatalog.parse(widened(3));
         var narrow = column(bundled, design);
         var whole = FluidThermodynamics.forNetwork(wide, com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(wide));
         assertTrue(whole.compounds().size() > com.wormzjl.icheme.science.column.v3.V3ComponentBasis.MAX_COMPONENTS, "a wide network package: " + whole.compounds().size());

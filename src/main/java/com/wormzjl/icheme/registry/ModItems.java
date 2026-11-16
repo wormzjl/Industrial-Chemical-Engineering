@@ -36,6 +36,12 @@ public final class ModItems {
 
     public static final DeferredHolder<DataComponentType<?>,DataComponentType<Boolean>> PIPE_LAYING_POWER = COMPONENTS.register("pipe_laying_power",
             ()->DataComponentType.<Boolean>builder().persistent(com.mojang.serialization.Codec.BOOL).networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.BOOL).build());
+    /** An orifice plate's bore ratio (batch 2026-11-15-fluid-interfaces, W6): 0.20 to 0.80 in steps of 0.05; absent: 0.50. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Double>> ORIFICE_SETTINGS = COMPONENTS.register("orifice_settings",
+            () -> DataComponentType.<Double>builder().persistent(com.mojang.serialization.Codec.DOUBLE.validate(beta -> com.wormzjl.icheme.science.fluid.network.Orifice.valid(beta)
+                            ? com.mojang.serialization.DataResult.success(com.wormzjl.icheme.science.fluid.network.Orifice.snap(beta))
+                            : com.mojang.serialization.DataResult.error(() -> "An orifice plate's bore ratio is 0.20 to 0.80 in steps of 0.05, not " + beta)))
+                    .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.DOUBLE).build());
     private static DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> linePaint(String name) {
         return COMPONENTS.register(name, () -> DataComponentType.<Integer>builder()
                 .persistent(com.mojang.serialization.Codec.INT.validate(rgb -> com.wormzjl.icheme.science.equipment.Paint.line(rgb) ? com.mojang.serialization.DataResult.success(rgb)
@@ -48,12 +54,15 @@ public final class ModItems {
     public static final DeferredItem<BlockItem> POWER_CABLE=ITEMS.registerSimpleBlockItem(ModBlocks.POWER_CABLE);
     public static final DeferredItem<net.minecraft.world.item.BlockItem> LOCAL_CONTROLLER=ITEMS.registerSimpleBlockItem(ModBlocks.LOCAL_CONTROLLER);
     public static final DeferredItem<net.minecraft.world.item.BlockItem> DCS=ITEMS.registerSimpleBlockItem(ModBlocks.DCS);
+    public static final DeferredItem<net.minecraft.world.item.BlockItem> POLLUTION_MONITOR=ITEMS.registerSimpleBlockItem(ModBlocks.POLLUTION_MONITOR);
     public static final DeferredItem<BlockItem> FLUID_RESERVOIR=ITEMS.registerSimpleBlockItem("fluid_reservoir",ModBlocks.FLUID_RESERVOIR);
     public static final DeferredItem<BlockItem> FLUID_PIPE=ITEMS.registerSimpleBlockItem("fluid_pipe",ModBlocks.FLUID_PIPE);
     public static final DeferredItem<PipelineFittingItem> FLUID_PUMP=fitting("fluid_pump",Instrument.Type.PUMP);
     public static final DeferredItem<PipelineFittingItem> FLUID_COMPRESSOR=fitting("fluid_compressor",Instrument.Type.COMPRESSOR);
     public static final DeferredItem<PipelineFittingItem> PRESSURE_CONTROL_VALVE=fitting("pressure_control_valve",Instrument.Type.PRESSURE_VALVE);
     public static final DeferredItem<BlockItem> FLUID_GENERATOR=ITEMS.registerSimpleBlockItem("fluid_generator",ModBlocks.FLUID_GENERATOR);
+    public static final DeferredItem<BlockItem> GAS_INTAKE=ITEMS.registerSimpleBlockItem("gas_intake",ModBlocks.GAS_INTAKE);
+    public static final DeferredItem<BlockItem> LIQUID_HOPPER=ITEMS.registerSimpleBlockItem("liquid_hopper",ModBlocks.LIQUID_HOPPER);
     public static final DeferredItem<BlockItem> DIVERTER_VALVE=ITEMS.registerSimpleBlockItem("diverter_valve",ModBlocks.DIVERTER_VALVE);
     public static final DeferredItem<BlockItem> FLUID_VOID=ITEMS.registerSimpleBlockItem("fluid_void",ModBlocks.FLUID_VOID);
     public static final DeferredItem<PipelineFittingItem> INLINE_FILTER=fitting("inline_filter",Instrument.Type.FILTER);
@@ -71,6 +80,13 @@ public final class ModItems {
     public static final DeferredItem<PipelineFittingItem> PIPELINE_SIGHT_GLASS=fitting("pipeline_sight_glass",Instrument.Type.SIGHT_GLASS);
     public static final DeferredItem<PipelineFittingItem> PIPELINE_SHUTOFF_VALVE=fitting("pipeline_shutoff_valve",Instrument.Type.SHUTOFF);
     public static final DeferredItem<PipelineFittingItem> PIPELINE_CHECK_VALVE=fitting("pipeline_check_valve",Instrument.Type.CHECK);
+    // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7).
+    /** A restriction orifice plate (W6): its bore ratio on the item ({@link #ORIFICE_SETTINGS}). */
+    public static final DeferredItem<PipelineFittingItem> ORIFICE_PLATE=fitting("orifice_plate",Instrument.Type.ORIFICE);
+    /** An automated shutoff valve (W7): open or closed by hand or by a loop. */
+    public static final DeferredItem<PipelineFittingItem> AUTOMATED_SHUTOFF_VALVE=fitting("automated_shutoff_valve",Instrument.Type.ACTUATED_VALVE);
+    // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9).
+    public static final DeferredItem<net.minecraft.world.item.BlockItem> ALARM_BEACON=ITEMS.registerSimpleBlockItem(ModBlocks.ALARM_BEACON);
 
     public static final DeferredItem<BlockItem> PROCESS_SIMULATOR = ITEMS.registerSimpleBlockItem(
             "process_simulator",
@@ -82,6 +98,8 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.AccessoryWrenchItem> ACCESSORY_WRENCH = ITEMS.registerItem("accessory_wrench", com.wormzjl.icheme.world.item.AccessoryWrenchItem::new);
     /** A pump repair kit (W10b): used on a pump casing or an in-line pump, it restores the pump's health. */
     public static final DeferredItem<com.wormzjl.icheme.world.item.RepairKitItem> REPAIR_KIT = ITEMS.registerItem("repair_kit", com.wormzjl.icheme.world.item.RepairKitItem::new);
+    /** The handheld pollution meter (batch 2026-11-15-pollution-system, WP8): held, it reads the cube's air; used, the full reading in chat. */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.PollutionMeterItem> POLLUTION_METER = ITEMS.registerItem("pollution_meter", com.wormzjl.icheme.world.item.PollutionMeterItem::new);
 
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> PRESSURE_PROBE=sensor("pressure_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE);
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> TEMPERATURE_PROBE=sensor("temperature_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE);

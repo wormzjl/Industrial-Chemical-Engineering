@@ -5,6 +5,7 @@ import com.wormzjl.icheme.runtime.control.ColumnCommands;
 import com.wormzjl.icheme.runtime.control.ConverterCommands;
 import com.wormzjl.icheme.runtime.control.ControlSettings;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
+import com.wormzjl.icheme.world.inventory.AlarmBeaconMenu;
 import com.wormzjl.icheme.world.inventory.ControlPanelMenu;
 
 import net.minecraft.core.*;
@@ -167,6 +168,48 @@ public final class ControlNetwork {
         }
     }
 
+    // The alarm beacon (batch 2026-11-15-fluid-interfaces, W9): its settings edit and its view.
+    public record AlarmEdit(int menu, UUID alarm, long revision, com.wormzjl.icheme.runtime.control.AlarmSettings settings)
+            implements CustomPacketPayload {
+        public static final Type<AlarmEdit> TYPE = ControlNetwork.type("alarm_edit");
+        public static final StreamCodec<RegistryFriendlyByteBuf, AlarmEdit> CODEC =
+                StreamCodec.of(
+                        (b, p) -> {
+                            b.writeVarInt(p.menu);
+                            b.writeUUID(p.alarm);
+                            b.writeLong(p.revision);
+                            b.writeNbt(p.settings.save());
+                        },
+                        b ->
+                                new AlarmEdit(
+                                        b.readVarInt(),
+                                        b.readUUID(),
+                                        b.readLong(),
+                                        com.wormzjl.icheme.runtime.control.AlarmSettings.load(Objects.requireNonNull(b.readNbt()))));
+
+        @Override
+        public Type<AlarmEdit> type() {
+            return TYPE;
+        }
+    }
+
+    public record AlarmView(int menu, UUID alarm, CompoundTag data) implements CustomPacketPayload {
+        public static final Type<AlarmView> TYPE = ControlNetwork.type("alarm_view");
+        public static final StreamCodec<RegistryFriendlyByteBuf, AlarmView> CODEC =
+                StreamCodec.of(
+                        (b, p) -> {
+                            b.writeVarInt(p.menu);
+                            b.writeUUID(p.alarm);
+                            b.writeNbt(p.data);
+                        },
+                        b -> new AlarmView(b.readVarInt(), b.readUUID(), Objects.requireNonNull(b.readNbt())));
+
+        @Override
+        public Type<AlarmView> type() {
+            return TYPE;
+        }
+    }
+
     public static void register(RegisterPayloadHandlersEvent event) {
         // control-5: the converter command (batch 2026-11-12-fluid-conversion, W4).
         var r = event.registrar(NetworkProtocol.VERSION).executesOn(HandlerThread.MAIN);
@@ -196,6 +239,10 @@ public final class ControlNetwork {
                             && player.containerMenu instanceof ControlPanelMenu menu
                             && menu.containerId == p.menu
                             && menu.stillValid(player)) menu.browse(p.controllers, p.devices);
+                    else if (c.player() instanceof ServerPlayer player
+                            && player.containerMenu instanceof AlarmBeaconMenu menu
+                            && menu.containerId == p.menu
+                            && menu.stillValid(player)) menu.browse(p.devices);
                 });
         r.playToServer(
                 ColumnSelect.TYPE,
@@ -227,6 +274,25 @@ public final class ControlNetwork {
                             && menu.containerId == p.menu
                             && menu.stillValid(player))
                         FluidWorldAuthority.find(player.server).ifPresent(w -> w.controls().converter(menu, p.command));
+                });
+        // The alarm beacon (W9): its edit, its page of input choices (Browse: devices is the page) and its view.
+        r.playToServer(
+                AlarmEdit.TYPE,
+                AlarmEdit.CODEC,
+                (p, c) -> {
+                    if (c.player() instanceof ServerPlayer player
+                            && player.containerMenu instanceof AlarmBeaconMenu menu
+                            && menu.containerId == p.menu
+                            && menu.stillValid(player))
+                        FluidWorldAuthority.find(player.server).ifPresent(w -> w.controls().edit(menu, p.alarm, p.revision, p.settings));
+                });
+        r.playToClient(
+                AlarmView.TYPE,
+                AlarmView.CODEC,
+                (p, c) -> {
+                    if (c.player().containerMenu instanceof AlarmBeaconMenu menu
+                            && menu.containerId == p.menu
+                            && menu.alarm().equals(p.alarm)) menu.receive(p.data);
                 });
         r.playToClient(
                 View.TYPE,
@@ -261,5 +327,13 @@ public final class ControlNetwork {
 
     public static void browse(int menu, int controllers, int devices) {
         PacketDistributor.sendToServer(new Browse(menu, controllers, devices));
+    }
+
+    public static void sendAlarm(ServerPlayer p, int menu, UUID alarm, CompoundTag data) {
+        PacketDistributor.sendToPlayer(p, new AlarmView(menu, alarm, data));
+    }
+
+    public static void editAlarm(int menu, UUID alarm, long revision, com.wormzjl.icheme.runtime.control.AlarmSettings settings) {
+        PacketDistributor.sendToServer(new AlarmEdit(menu, alarm, revision, settings));
     }
 }
