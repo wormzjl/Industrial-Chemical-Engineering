@@ -115,7 +115,13 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
 - Full crude unit, start-up trip (with the owner, 2026-11-17). Nothing flows before the column starts, so its first feed
   is the crude standing in the charge line, at about 300 K. `ColumnCycle` then finds a heating condenser
   (`condenser > 0`), trips CLOSURE, and the trip latches: alpha stays 0 and no feed is taken. The feed account fills to
-  180 % of its aim and the inlet valve closes. Options: a start-up circulation in the rig, a trip that clears with its
+  180 % of its aim and the inlet valve closes. The cold first feed is not a start-order fault. The fuel lines read FULL
+  before the start. A heater fires only on a demand read from flow through its radiant coil (`FiredHeaters.booked`: no
+  flow, no demand, no fuel), so it cannot be lit ahead of the feed, and its duty then follows a slice behind on each of the
+  coil's and the fuel's islands. More decisive still: the charge line (0.6 m bore, about 0.28 m³ per metre, some 60 m to the
+  feed nozzle) and the coils hold cold crude from the plant's fill. That is roughly 17 m³, about 85 s of design flow
+  (0.2 m³/s), and it reaches the tower before any heated crude. The trip took the first 9 s of it. Only a path that sends
+  that inventory elsewhere (a start-up circulation) or a column that accepts a cold feed removes it. Options: a start-up circulation in the rig, a trip that clears with its
   condition (engine), or the world as it stands. The owner's direction for the engine: a cold feed goes to the bottom
   instead of holding, and a pumparound works only on what its stages hold. The column screen reads "Upset: inputs closed;
   last solve failed", which does not name the cold feed.
