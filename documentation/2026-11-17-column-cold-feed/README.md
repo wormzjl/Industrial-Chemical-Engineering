@@ -1,6 +1,6 @@
 # Column on a cold feed (2026-11-17)
 
-**Status:** Feasibility study done 2026-11-17, on branch `claude/column-testing-sizing-26b5b9`; nothing built. Class:
+**Status:** Planned 2026-11-17 (feasibility study and plan), on branch `claude/column-testing-sizing-26b5b9`; nothing built. Class:
 PHYSICS. Lanes: column operation (plant layer and engine).
 
 A running column that gets a feed too cold for its solved table trips and holds the feed, and where the hot feed
@@ -20,10 +20,17 @@ pumparounds work only as far as their trays hold liquid.
   simulate temperature impact then we should be able to model the actual exchanged heat during startup". The probe run
   with the pumparound duties alone cut (`-DdrawShare=1`): V3 solves every duty from 1 % to 100 % at feeds of 575 to
   638 K with the draws kept. The review's section 9: the duty follows the cooler, a band and a solve, no ladder.
+- 2026-11-17: the owner: "Yes, plan it". [COLD_FEED_PLAN.md](COLD_FEED_PLAN.md): the pass (a tripping cycle whose
+  condenser would heat, or whose state stands refused, books its feed to the bottoms), the pumparound's duty capped by
+  its cooler with a 5 % band and a solve at a relaxed duty, the cooler's wall law against the pumparound's own stream,
+  the texts; a draw share later. The probe's duty loop (`-Diterate`) on the real solver at 638 K, from 1 % of the
+  design duties: undamped it overshoots (20.3, 10.5, 14.5 MW on the first) and settles in about 7 solves; with a
+  relaxation of 0.5 it settles in 4 without overshoot; both end at 13.1, 21.0 and 13.2 MW. No mod code, no test run.
 
 ## Documents
 
 - [COLD_FEED_REVIEW.md](COLD_FEED_REVIEW.md)
+- [COLD_FEED_PLAN.md](COLD_FEED_PLAN.md)
 
 ## Code areas (when built)
 
@@ -32,6 +39,7 @@ pumparounds work only as far as their trays hold liquid.
 
 ## Open items
 
-- The owner's go-ahead for a detailed plan; then T0, T1 and the notices as Opus packages.
+- The owner's go-ahead for the build: packages 1 to 4 of the plan as Opus threads; decisions D1 to D6 of the plan are
+  the main thread's and open to the owner.
 - Not measured: where the heat-integrated review plant settles when its pumparounds are cut; T2's flash against V3
   at the 455 to 460 K edge; another crude.
