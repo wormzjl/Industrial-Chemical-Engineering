@@ -31,14 +31,44 @@ final class UnitSizingTest {
 
     private static final PumpSizing.Load PUMP = new PumpSizing.Load(731, 71, 204.5, 80.4);
 
+    /** Auto takes the smallest bore whose rated flow holds the design flow with its 20 % spare first: 877.2 m³/h for 731, so 0.35 m (0.30 m holds 763). */
     @Test void aPumpTakesTheSmallestDischargeWhoseRatedFlowFits() {
         var choice = PumpSizing.auto(PUMP);
-        assertEquals(new PumpSizing.Size(.3), choice.size());
+        assertEquals(new PumpSizing.Size(.35), choice.size());
         assertEquals(Lamp.GREEN, choice.rating().lamp());
         assertEquals(PumpSizing.rate(PUMP, choice.size()), choice.rating(), "Fixed reads the same limits");
         var down = PumpSizing.rate(PUMP, new PumpSizing.Size(.25));
         assertEquals(Lamp.YELLOW, down.lamp(), "one step down");
         assertSame(Limit.PUMP_RATED, down.closest().limit());
+    }
+
+    /**
+     * A sized pump is built with its duty (PUMP_DRIVE_FLOW_REVIEW.md, option B): rated at its bore's flow, at the head for which
+     * its curve ({@link com.wormzjl.icheme.science.plant.machine.MachineRatings}) gives the design head at the design flow. The
+     * bore stays the size's; no duty, or a design point outside the pump design's ranges, gives the bore-only shape.
+     */
+    @Test void aSizedPumpIsBuiltWithItsDuty() {
+        var load = new PumpSizing.Load(731, 71, 204.5, 80.4, 850);
+        for (double d : new double[]{.3, .35}) {
+            var size = new PumpSizing.Size(d);
+            var shape = PumpSizing.built(size, PumpSizing.Duty.of(PumpSizing.rate(load, size)));
+            assertNotNull(shape);
+            assertEquals(d, shape.diameter(), 1e-12, "the bore stays the size's");
+            assertEquals(UnitRatings.pumpFlow(d), shape.duty().flow(), 1e-9, "rated at its bore's flow");
+            var control = (com.wormzjl.icheme.science.fluid.network.FlowControl.Machine) com.wormzjl.icheme.science.plant.machine.MachineRatings.machineControl(shape);
+            var law = (com.wormzjl.icheme.science.machine.CentrifugalPump) control.law();
+            assertEquals(71, law.head(731 / 3600., 1), 1e-9, d + " m: the design head at the design flow");
+        }
+        var size = new PumpSizing.Size(.35);
+        assertEquals(size.shape(), PumpSizing.built(size, null), "no duty: the bore-only shape");
+        assertEquals(size.shape(), PumpSizing.built(size, new PumpSizing.Duty(731, 400, Double.NaN, 3.3, Double.NaN)), "a head over the design's 300 m: the bore-only shape");
+        assertEquals(size.shape(), PumpSizing.built(size, new PumpSizing.Duty(731, 2, Double.NaN, 3.3, Double.NaN)), "a head under the design's 5 m: the bore-only shape");
+    }
+
+    /** A bore's rated flow gives the same bore back on every grid size: the built shape keeps its size's discharge. */
+    @Test void everyPumpBoreIsTheBoreOfItsRatedFlow() {
+        for (double d : UnitSize.grid(EquipmentShape.Kind.PUMP))
+            assertEquals(d, UnitRatings.pumpDischarge(UnitRatings.pumpFlow(d)), 1e-12, d + " m");
     }
 
     @Test void aPumpsWorldLimitsAreRed() {

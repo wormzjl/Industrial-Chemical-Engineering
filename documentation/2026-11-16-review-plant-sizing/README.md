@@ -133,6 +133,10 @@ the `Rig` class keep their sizes.
   Then (main thread: option A) the supply at 1.5 bar: Size all gives P-101 171 m and a 400 kW motor (NPSH 11.03 m, 2.56 m
   over the world's limit), but the placed P-101 keeps the default 100 m curve (its shape has no duty); the crude island
   holds at the column's start. Options: the rig builds P-101 with the sizer's duty, or the sizer's shape carries it.
+  Then R (stand-in) showed the island holds on the right curve too (finding 3, to its own diagnosis), and the owner
+  approved the fix (form B): `PumpSizing.built` builds a Size-all centrifugal pump at its bore's flow and the head its
+  curve needs for the design point; Auto takes the smallest bore that holds the flow with the 20 % spare; the Build list
+  reads rated flow, head and discharge. Crude sample P-101 0.30 to 0.35 m, PA 1 0.25 to 0.30 m, PA 2 0.30 to 0.35 m.
 
 ## Full crude unit, sized (2026-11-17)
 

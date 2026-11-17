@@ -214,3 +214,74 @@ On the curve at the set flow (0.19357 m³/s, q = 0.955) the pump makes 173.7 m, 
   one replay only.
 - Separate finding, not to fix here. A pump too weak to fill its line (run 2) gave a HOLD ("Newton line search stalled
   at residual 305.46, active-set pass 0"), not a low or zero flow. A hold is only for a capability limit.
+
+## Option P, form B: a Size-all centrifugal pump is built with its sized duty (owner: "Yes, fix it")
+
+The main thread's call was form B. Form A (rate at 1.2 × the design flow) was dropped: the duty would move the bore and
+override a player's saved manual discharge.
+
+- **`PumpSizing.built(Size, Duty)`** and `built(SizedUnit)`:
+  - The shape is `withDuty(MachineDuty.pump(pumpFlow(d), H_r, poles))`.
+  - H_r is the rated head for which the pump's own curve (`CentrifugalPump`, the law `MachineRatings.machineControl`
+    builds) gives the design head at the design flow: H_r = H_d / head(Q_d) of a 1 m curve.
+  - The poles are the pump design's default for the bore.
+  - With no duty, or a design point outside `PumpDesign.checkDuty` (5 to 300 m, 1 to 3053 m³/h), it gives the bore-only
+    shape; the PUMP_HEAD and PUMP_FLOW rows say why.
+  - `PumpSizing.Size` and its saved form are unchanged.
+- **Auto:** `Selection.smallest(Selection.spareFirst(SIZES, pumpFlow(d), spared(Q)), rate)`, as `autoPlunger`. It takes the
+  smallest bore whose rated flow holds the design flow with the 20 % spare (`Limit.AUTO_SPARE`, factor 1.2). A manual
+  pick keeps the player's bore. PUMP_RATED keeps its window (70 to 120 %) and its meaning: the design flow over the
+  bore's rated flow.
+- **Build list:** `SizingPage.buildText`, used by the glass's Build list and the selected unit's requirements.
+  - A centrifugal pump with a duty reads "1039 m³/h at 64.6 m, discharge 0.35 m": the rated flow in the client's flow
+    unit, the rated head, the bore. These are what the constructor asks for.
+  - Key `gui.icheme.flowsheet.sizing.size.pump_duty` (en_us only). `sizing.size.pump` still serves the Units table.
+- **Rig:** `ColumnOperationReviewWorld.pump` builds with `PumpSizing.built(unit)`; R's stand-in is gone.
+- **`PumpDesign.size(pump(pumpFlow(d), …))` = d on every grid size:** asserted (`everyPumpBoreIsTheBoreOfItsRatedFlow`).
+
+Renders (`SimulatorRender -Donly=sizing` and `-Donly=sizing-controls`; `GuiPrototypes` does not draw the sizing page),
+light and dark:
+- `tmp/pump-drive-flow/sizing-render/04-sizing-build.png`
+- `04-sizing-build-dark.png`
+- `09-build-requirements.png`
+- `09-build-requirements-dark.png`
+
+The longest line, "1039 m³/h at 64.6 m, discharge 0.35 m", fits the Size column with no cut.
+
+Moved references:
+
+| reference | old | new | why |
+|---|---|---|---|
+| crude sample P-101 (`CrudeUnitSampleTest.p101`) | 0.30 m, PUMP_RATED 96 % | 0.35 m, 70.3 % | 730 × 1.2 = 876 m³/h > 763 |
+| crude sample PA 1 pump | 0.25 m, 109 % | 0.30 m, 75.7 % | spare |
+| crude sample PA 2 pump | 0.30 m, 107 % | 0.35 m, 78.6 % | spare |
+| crude sample PA 3, reflux, P-102 | 0.25 / 0.20 / 0.15 m | unchanged | their bores hold the spare |
+| `UnitSizingTest` 731 m³/h at 71 m | Auto 0.30 m | 0.35 m | spare |
+
+Review world, worked from run 3's sizer duties (not rerun, by instruction):
+
+| pump | sizer duty | old bore | new bore |
+|---|---|---|---|
+| reflux | 220.5 m³/h at 38.8 m | 0.20 m | 0.20 m |
+| PA 1 | 585.3 m³/h at 13.2 m | 0.25 m | 0.30 m |
+| PA 2 | 825.3 m³/h at 14.5 m | 0.30 m | 0.35 m |
+| PA 3 | 493.6 m³/h at 14.1 m | 0.25 m | 0.30 m |
+| P-101 | 730 m³/h at 171 m | 0.30 m | 0.35 m |
+
+- P-101 at 0.35 m: rated 1039 m³/h at 156.3 m, shut-off 189.2 m (16.0 bar), against the line's 14.5 bar.
+- No sample or review-world pump lands outside 5 to 300 m.
+- PUMP_RATED: after B the row still reads design over the bore's flow, and Auto's spare keeps it at or under 83 %.
+
+Other kinds (no change):
+- **Motor:** the sizer has no motor unit. `Duty.motor` is a reading shown on the column door's calculator; the player
+  places a motor in the constructor. Not the same gap.
+- **Plunger and vacuum pumps:** their shapes are catalogue models (the model sets capacity and law). They have no
+  flow-and-head design point to lose.
+
+Tests: `affected.mjs select --since c0a5eff0e`, 383 filters, without LanguageFilesTest and UnitTextTest.
+- test 1387, 1 failure: `SizingPageTest.theDoorFitsInEveryViewForEveryItemInChinese`, missing zh keys
+  `sizing.demister`, `demister_hint` from the base branch. Owed to the translation commit, which also takes
+  `size.pump_duty`.
+- holdGates 49, 2 failures: the moved CrudeUnitSampleTest references, fixed, then CrudeUnitSampleTest 40 of 40.
+- columnGates 5 of 5. equipmentGates 76 of 76.
+- `compileFluidGameTestJava` passes. The fluid GameTest step and the review world were not run.

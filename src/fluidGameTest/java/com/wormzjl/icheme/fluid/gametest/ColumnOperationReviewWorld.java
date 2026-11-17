@@ -594,21 +594,14 @@ public final class ColumnOperationReviewWorld {
         return unit;
     }
 
-    /**
-     * A sized pump's shape: the rig drives a centrifugal casing at the sizer's own duty (its rating's flow, m3/h at suction,
-     * and head, m), at the shape's poles.
-     */
+    /** A sized pump's shape: the rig drives a centrifugal casing, built at its sized duty ({@link PumpSizing#built(SheetSizing.SizedUnit)}). */
     private static EquipmentShape pump(SheetSizing.SizedUnit unit) {
         if (!(unit.size() instanceof PumpSizing.Size pump)) throw new IllegalStateException("The sized pump is " + unit.size() + ": the rig builds a centrifugal pump");
-        var shape = pump.shape();
-        // PUMP_DRIVE_FLOW_REVIEW.md, finding 2: PumpSizing.Size.shape() carries no duty, so the casing would get the default
-        // curve (the bore's flow, 100 m). Delete this when the sizer's shape carries its duty (option P).
-        var duty = java.util.Objects.requireNonNull(PumpSizing.Duty.of(unit.rating()), "the sized pump's rating carries no duty");
-        var sized = shape.withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.pump(duty.flow(), duty.head(), shape.duty().poles()));
-        IChemE.LOGGER.info("review_operation sizing pump_duty flow_m3_h={} head_m={} poles={} discharge_m={} built_discharge_m={} default_head_m={}",
-                String.format(Locale.ROOT, "%.1f", duty.flow()), String.format(Locale.ROOT, "%.2f", duty.head()), shape.duty().poles(), shape.diameter(), sized.diameter(),
-                shape.duty().head());
-        return sized;
+        var shape = PumpSizing.built(unit);
+        if (shape == null) throw new IllegalStateException("The constructor refuses the sized pump " + pump + " at " + PumpSizing.Duty.of(unit.rating()));
+        IChemE.LOGGER.info("review_operation sizing pump_duty discharge_m={} rated_m3_h={} head_m={} poles={}", shape.diameter(),
+                String.format(Locale.ROOT, "%.1f", shape.duty().flow()), String.format(Locale.ROOT, "%.2f", shape.duty().head()), shape.duty().poles());
+        return shape;
     }
 
     /** A sized line's bore, m: its runs as one line of the same area, up to the next 0.05 m, at most the largest bore. */
