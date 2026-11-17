@@ -123,7 +123,8 @@ leaves at its account's energy.
 ### Package 2, the pumparound's duty (L2 to L4). Hard.
 
 - `ColumnCycle.step`: remove the `PUMPAROUND_SHORT` limit (lines 300 to 306). After `fed` is known: `pa[j] =
-  max(table per feed x fed, −max(0, rooms.pumparound(j)))` (column sign, negative); where capped, a NOTICE
+  max(set point per feed x fed, −max(0, rooms.pumparound(j)))` (column sign, negative; the set point, not the
+  table's relaxed duty, or the loop could never climb back: corrected in the build); where capped, a NOTICE
   `PUMPAROUND_SHORT` (its rank moves from LIMIT to NOTICE; the constant, its word and its alarm stay) with the share
   taken. The trip compares `condenser` with `solved + Σ (table duty − booked duty)`.
 - `DriftBands`: `PUMPAROUND` = 0.05; `Trigger.PUMPAROUND`, checked after `STEAM_RATIO`; `check` reads the step's
@@ -134,8 +135,9 @@ leaves at its account's energy.
 - `ColumnOperation.request`: for every trigger but START and SETPOINT, each duty = `table + 0.5 (booked − table)`,
   capped by the set point, floored at 1e-6 of it; START and SETPOINT solve at the set points. A refused `PUMPAROUND`
   solve stores the state as any refused solve does.
-- State: the table's reference gains the solved pumparound duties; the column state's validation drops an older
-  state and the unit solves again (state format 53 is this branch's own; `FORMATS.md` row in the same commit).
+- State: the table's reference gains the solved pumparound duties; an older state without them reads as solved at
+  its set points, which is what it was (corrected in the build: nothing is dropped; state format 53 is this branch's
+  own; `FORMATS.md` row in the same commit).
 - Tests: `ColumnCycleTest` (a room of half the duty books half, takes the whole feed, closes energy; the trip does
   not fire on a short pumparound alone; the design case is bit for bit as before); `ColumnSolveTest` (a table solved
   at half the pumparound duties: draw temperatures up, condenser per feed up, the closure exact); `ColumnRunTest` (a
