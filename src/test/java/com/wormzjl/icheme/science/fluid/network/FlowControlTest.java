@@ -118,6 +118,32 @@ class FlowControlTest {
         for(var plans:List.of(new java.util.TreeMap<>(java.util.Map.of(1L,new PortPlan(1,2,.01,0,null),3L,new PortPlan(3,2,.004,0,null))),new java.util.TreeMap<>(java.util.Map.of(1L,new PortPlan(1,2,.004,0,null),3L,new PortPlan(3,2,.01,0,null)))))
             assertEquals(.004,((FlowControl.ControlValve)new PassiveStepSolver(model).ports(graph,plans,()->{}).pipes().get(1).control()).massTarget());
     }
+    /**
+     * L0 of batch 2026-11-17-column-cold-feed: an outlet planned at an enthalpy per mole stands at it, at the generator's
+     * volume, and keeps its graph once there; the same plan without one stands at its temperature as before, bit for bit.
+     */
+    @Test void anOutletPlannedAtAnEnthalpyStandsAtIt(){
+        double p=200000;double[] n=new double[model.componentCount()];n[0]=1;var s=model.flashTP(350,p,n,()->{});
+        var nodes=List.of(new PassiveNetwork.Reservoir(1,0,s,PassiveNetwork.NodeKind.GENERATOR),new PassiveNetwork.Reservoir(2,0,s,PassiveNetwork.NodeKind.JUNCTION),new PassiveNetwork.Reservoir(3,0,s,PassiveNetwork.NodeKind.VOID));
+        var graph=new PassiveNetwork(nodes,List.of(new PassiveNetwork.Pipe(9,0,1,new PipeResistance.Geometry(10,.05,.000045,0),new FlowControl.Passive()),flowValve(10,1,2,.5,PortPlan.COLUMN_SENSOR)));
+        double[] x=n.clone();x[0]=3;
+        double h=model.flashTP(420,p,n,()->{}).enthalpy();
+        var solver=new PassiveStepSolver(model);
+        // By temperature: today's two flashes at the planned temperature, scaled to the generator's volume.
+        var byTemperature=solver.ports(graph,Map.of(1L,new PortPlan(1,2,.01,380,x)),()->{}).reservoirs().get(0).state();
+        var unit=model.flashTP(380,p,x,()->{});double[] scaled=x.clone();for(int c=0;c<scaled.length;c++)scaled[c]*=nodes.get(0).inventory().volume()/unit.volume();
+        var today=model.flashTP(380,p,scaled,()->{});
+        assertEquals(today.temperature(),byTemperature.temperature());assertEquals(today.enthalpy(),byTemperature.enthalpy());assertEquals(today.volume(),byTemperature.volume());
+        // At an enthalpy: the temperature whose state holds it, the planned temperature only the guess.
+        var byEnthalpy=solver.ports(graph,Map.of(1L,new PortPlan(1,2,.01,380,x,com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY,h)),()->{}).reservoirs().get(0).state();
+        double total=0;for(double a:com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(byEnthalpy))total+=a;
+        assertEquals(h,byEnthalpy.enthalpy()/total,1e-5*8.314*420,"the enthalpy per mole is the plan's within the PH tolerance");
+        assertEquals(420,byEnthalpy.temperature(),.01);
+        assertEquals(nodes.get(0).inventory().volume(),byEnthalpy.volume(),1e-9*byEnthalpy.volume());
+        // Once there, the generator keeps its state (its graph certifies).
+        var there=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,byEnthalpy,PassiveNetwork.NodeKind.GENERATOR),nodes.get(1),nodes.get(2)),graph.pipes());
+        assertSame(byEnthalpy,solver.ports(there,Map.of(1L,new PortPlan(1,2,.01,380,x,com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY,h)),()->{}).reservoirs().get(0).state());
+    }
     /** Pressure valves on one node are outside "Lower target wins": they hold their accepted openings. */
     @Test void pressureValvesOnOneNodeHoldTheirAcceptedOpenings(){
         double[] n=new double[model.componentCount()];n[0]=1;

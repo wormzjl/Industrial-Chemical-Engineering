@@ -1144,7 +1144,7 @@ class ColumnRunTest {
      * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6, C1b): its trim's water takes the table's share of each
      * cycle's duty, the air the rest; an outlet's booking difference goes by the temperature its port offered the product
      * at, to the water below the 40 °C split and to the air at or above it (the owner's "divide by temperature"). The totals
-     * book every joule; the water took its part or holds it in transit.
+     * book every joule; the water took its part or holds it in transit. Since L0 the difference is the flash's tolerance.
      */
     @Test void anAirThenWaterCondenserDividesItsBookingDifferencesByTemperature() {
         waterShare=.4;
@@ -1157,7 +1157,9 @@ class ColumnRunTest {
             double differences=removed-cycles;boolean cold=offered<com.wormzjl.icheme.science.equipment.HeatSides.AIR_SPLIT_TEMPERATURE;
             System.out.printf(Locale.ROOT,"C1B_BOOKING offered=%.2f K cycles=%.1f J differences=%.1f J water=%.1f J owed=%.1f J%n",offered,cycles,differences,water,owed);
             assertTrue(cycles>10000,"the column's condenser removed heat: "+cycles+" J");
-            assertTrue(Math.abs(differences)>1e-3*cycles,"the outlet's booking differs from its account: "+differences+" J");
+            // L0 (batch 2026-11-17-column-cold-feed): the outlet gives its account's energy, so its booking differs from the
+            // account by the PH flash's tolerance alone (before L0, at the table's 330 K: -35166.6 J; at 305 K: 1048.5 J).
+            assertEquals(0,differences,1e-6*cycles,"the outlet's booking is its account's: "+differences+" J");
             assertEquals(.4*cycles+(cold?differences:0),water+owed,1e-6*removed,"at "+offered+" K the water took its part or it is in transit: water "+water+" J, owed "+owed+" J, cycles "+cycles+" J, differences "+differences+" J");
             assertTrue(world.held.isEmpty(),"no island held: "+world.held);
             // The share and the temperature are state: the topology unit carries them through a save.

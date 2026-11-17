@@ -1028,14 +1028,18 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     }
     /**
      * An outlet's generator and valve (plan 4.3, LC): the account's moles booked through the slice start less the fence, at
-     * the product's solved temperature; the valve takes the production of the last cycle through the fence corrected by the
-     * account's fill, and never more than those moles over the slice.
+     * the account's own enthalpy per mole as of the fence (L0 of batch 2026-11-17-column-cold-feed: a product leaves at the
+     * energy its account holds, the product's solved temperature the guess); the valve takes the production of the last
+     * cycle through the fence corrected by the account's fill, and never more than those moles over the slice. The account's
+     * energy is its fluid's on the network's datum, as the island books a generator's: its solids are their own inventory,
+     * and an inlet's crystals were melted into the feed's fluid before the cycle split it ({@link #melted}).
      */
     private PortPlan outletPlan(long island,Run r,ColumnUnit.Station s,PassiveNetwork.Reservoir node,IslandClock.Slice slice) {
         long fence=slice.startTick()-FENCE_TICKS;
         var available=s.account().moles();var solids=s.solids();var log=r==null?null:r.credits.get(s.device());
+        double energy=s.account().energy();
         var made=r==null?null:asOf(log,Credit::tick,fence);
-        if(log!=null)for(var c:log)if(c.tick()>fence){PortAccounts.less(available,c.product().moles());solids=solids.less(c.solids());}
+        if(log!=null)for(var c:log)if(c.tick()>fence){PortAccounts.less(available,c.product().moles());solids=solids.less(c.solids());energy-=c.product().energy();}
         double total=0;for(double n:available)total+=n;
         if(!(mass(available)>TRACE_KG))total=0;
         double temperature=node.state().temperature();
@@ -1051,7 +1055,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             double produced=mass(made.product().moles())/cycleSeconds(),aim=produced*bufferSeconds()/2;
             if(aim>0)rate=produced*Math.max(0,Math.min(2,mass/aim));
         }
-        return new PortPlan(node.id(),s.valve(),Math.min(cap,rate),temperature,mine,solids);
+        return new PortPlan(node.id(),s.valve(),Math.min(cap,rate),temperature,mine,solids,Double.isFinite(energy/total)?energy/total:Double.NaN);
     }
     /** The ports whose islands must grow before they give their accounts (V2): queued edits, applied on the engine's tick. */
     private final Set<Long> growth=new LinkedHashSet<>();

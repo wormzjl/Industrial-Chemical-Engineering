@@ -1545,7 +1545,11 @@ public final class PassiveStepSolver {
             if(plan.moles()!=null) {
                 if(n.kind()!=PassiveNetwork.NodeKind.GENERATOR)throw new IllegalArgumentException("An outlet port is a generator");
                 double t=plan.temperature(),p=n.state().pressure();var x=plan.moles();
-                if(!(t==n.state().temperature()&&sameShares(PhaseLayout.totalAmounts(n.state()),x)&&plan.solids().empty()&&n.state().solids().empty())) {
+                boolean same=sameShares(PhaseLayout.totalAmounts(n.state()),x)&&plan.solids().empty()&&n.state().solids().empty();
+                // An outlet at its account's enthalpy (L0 of batch 2026-11-17-column-cold-feed): already there within the deadband,
+                // else the temperature whose flash holds it, the planned one where the PH equilibrium does not converge.
+                if(plan.byEnthalpy()?!(same&&atEnthalpy(n.state(),plan.enthalpy(),t)):!(t==n.state().temperature()&&same)) {
+                    if(plan.byEnthalpy())t=enthalpyTemperature(plan,p,x,checkpoint);
                     var unit=model.flashTP(t,p,x,checkpoint);double factor=n.inventory().volume()/unit.volume();
                     for(int c=0;c<x.length;c++)x[c]*=factor;
                     var state=model.flashTP(t,p,x,checkpoint);
@@ -1568,6 +1572,28 @@ public final class PassiveStepSolver {
             pipes.set(valve,driven.withControl(new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,law.targetPressure(),target,volume,PortPlan.COLUMN_SENSOR,revision)));
         }
         return nodes==null&&pipes==null?graph:new PassiveNetwork(nodes==null?graph.reservoirs():nodes,pipes==null?graph.pipes():pipes,graph.scheduledTransfers());
+    }
+    /**
+     * A generator at a planned enthalpy stands still while its own enthalpy per mole is within this many of the PH
+     * equilibrium's tolerance ({@code FluidTpEquilibrium.SPECIFICATION_TOLERANCE}, per mole R T) of the plan's: ten, so a
+     * generator set by a converged flash keeps its graph at the next slice. About 0.05 J/mol at 600 K, a millikelvin of oil.
+     */
+    public static final double ENTHALPY_DEADBAND=10*com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.SPECIFICATION_TOLERANCE;
+    /** Whether {@code state}'s enthalpy per mole is the plan's {@code enthalpy} (J/mol) within {@link #ENTHALPY_DEADBAND} at {@code t}. */
+    private static boolean atEnthalpy(FluidThermodynamics.State state,double enthalpy,double t) {
+        double total=0;for(double n:PhaseLayout.totalAmounts(state))total+=n;
+        return total>0&&Math.abs(state.enthalpy()/total-enthalpy)<=ENTHALPY_DEADBAND*com.wormzjl.icheme.science.thermo.PengRobinsonKernel.GAS_CONSTANT*Math.max(t,state.temperature());
+    }
+    /**
+     * The temperature at which {@code x} holds the plan's enthalpy per mole at pressure {@code p}: the PH equilibrium's,
+     * guessed at the plan's temperature; the plan's temperature where it does not converge (a rejected trial, never a hold: the
+     * column books the residual).
+     */
+    private double enthalpyTemperature(PortPlan plan,double p,double[] x,Runnable checkpoint) {
+        double total=0;for(double n:x)total+=n;
+        FluidThermodynamics.State at;
+        try{at=model.equilibriumPH(plan.temperature(),p,plan.enthalpy()*total,x.clone(),checkpoint);}catch(IllegalArgumentException refused){at=null;}
+        return at!=null&&at.temperature()>0&&Double.isFinite(at.temperature())?at.temperature():plan.temperature();
     }
     /** Whether {@code a} and {@code b} hold the same shares of their totals, to 1e-12. */
     private static boolean sameShares(double[] a,double[] b) {
