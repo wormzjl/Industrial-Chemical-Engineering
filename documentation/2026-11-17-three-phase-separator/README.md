@@ -1,6 +1,6 @@
 # Three-phase separator (2026-11-17)
 
-**Status:** In progress since 2026-11-17 (packages 1 and 2 built and verified; package 4 half built, one owner decision open; the reflux-water trial merged in), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
+**Status:** In progress since 2026-11-17 (packages 1 and 2 built and verified; package 4's sizer built; the reflux-water trial merged in), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
 fluid step, runtime, plant, flowsheet, client.
 
 A drum of the network gives clean gas, oil and water at any size and flow. The owner (2026-11-17): a drum gives well
@@ -62,6 +62,15 @@ phase carry-over.
   "Yes, merge it"). One conflict, in this file; both sides kept. On the merged tree: it compiles, and
   `V3RefluxFreeWaterTest` (5) and `DrumSettlingTest` (4) pass. Not run on the merged tree: the classes that load both
   package 4's sizer and the trial's column classes; each side passed them apart.
+- 2026-11-17: the drops (owner: "B: 0.5 / 0.2 mm"). `Separation.DROPS`: a water drop of 0.5 mm in the oil (43.7 mm/s
+  in the review plant's naphtha), an oil drop of 0.2 mm in the water (10.4 mm/s); `Separation.Drops` replaces the one
+  drop size in `numbers` and `of`. Moved: the plan's section 3 table (the 0.5 m drum is now clean; the examples that
+  carry are a 1 m drum at 4 times the flow and the sized drum at 16 and 128 times), `SeparationTest` and
+  `DrumSettlingTest` with it. Returned to its value before package 4: Auto's receiver of the sample crude unit, 4 m by
+  10 m (`CrudeUnitSampleTest` passes unchanged). Run on the merged tree: the 50 flowsheet and sizing classes of
+  package 4's selection with `SeparationTest`, `SeparationDrawTest` and `ProcessOutletTest`, 56 classes, 531 tests,
+  0 failed. Not run: the other classes that load `Separation`. A larger drop only raises a settling number, so a
+  vessel that carried nothing at 0.1 mm (package 2's verification: no reference moved) carries nothing now.
 
 ## Documents
 
@@ -80,16 +89,7 @@ phase carry-over.
   (the `Separators` hook) and a component to `PassiveNetwork.Inventory`. That batch's plan is not edited from here; its
   desalter (WP6) takes its phase separation from this model and sets its own drop size.
 - Owner's call: whether a kettle and a still's pot take the gas law (plan section 5.1).
-- **A moved result, the owner's decision.** `CrudeUnitSampleTest$ColumnSizingSampleTest.theReceiversBootSetsIt`: Auto's
-  receiver for the sample crude unit moves from a 4 m by 10 m booted drum (142 m3) to 5 m by 13 m (288 m3), because a
-  settling row is not met at 4 by 10. The cause is the drop size, not the code: a 0.1 mm water drop falls 5 mm/s, so it
-  needs 400 s through the 2 m of oil in a half-full 4 m drum, and the 5 minute hold gives 300 s. Every drum of 3 m or
-  more sized on the hold alone fails the row. Options: (A) keep 0.1 mm, Auto grows large receivers and this reference
-  moves; (B) the design drops of separator practice, 0.5 mm of water in oil and 0.2 mm of oil in water (Arnold and
-  Stewart, from memory, not checked against the book): about 40 and 9.5 mm/s, a drum sized on its hold is clean, and
-  section 3's small-drum examples carry far less (the 0.5 m drum's boot reads about 1.25, clean); (C) keep 0.1 mm and
-  rank the rows so they light the lamp without driving Auto's size. The failing test stands on the branch until then.
 - The drum page's readings: option A or B of the prototype; then `FluidView.Tank` carries `carried` to the client (a wire
   payload change in the runtime lane, which batch `2026-11-16-solute-reaction-system` holds).
 - Package 3 (the held receiver) joins the hydraulics batch's cycle package. The rest of package 4 after the sizer:
-  the 330 other classes the selector names for it are not run.
+  the 330 other classes the selector names for it are not run (history: the drops).

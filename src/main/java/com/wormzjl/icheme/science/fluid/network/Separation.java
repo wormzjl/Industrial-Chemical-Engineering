@@ -13,8 +13,23 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * Brown's. Pure arithmetic: what a vessel carries is a slice input, never an unknown of a step.
  */
 public final class Separation {
-    /** The drop a vessel without a coalescer leaves to settle, m (0.1 mm). A desalter's field makes its own larger. */
-    public static final double DROP=1e-4;
+    /**
+     * The drops a vessel's liquids settle as, m.
+     *
+     * @param water a water drop in the oil
+     * @param oil   an oil drop in the water
+     */
+    public record Drops(double water,double oil) {
+        public Drops {
+            if(!(water>0)||!(oil>0)||!Double.isFinite(water+oil))throw new IllegalArgumentException("Invalid drop sizes");
+        }
+    }
+    /**
+     * The drops a vessel without a coalescer leaves to settle (owner, 2026-11-17, option B): water in oil 0.5 mm, the
+     * oil pad's usual design drop where no laboratory data exists; oil in water 0.2 mm, the upper end of design
+     * practice's 0.15 to 0.2 mm. A desalter's field makes its own water drop larger.
+     */
+    public static final Drops DROPS=new Drops(5e-4,2e-4);
     /** Souders and Brown's K of a standing vessel without a demister, m/s (GPSA's 0.107 m/s halved). */
     public static final double GAS_K=.107/2;
     /** A lying drum's K over a standing one's: its drops fall across the gas, not against it. */
@@ -109,24 +124,24 @@ public final class Separation {
     /**
      * The settling numbers of a vessel's two liquid layers: the oil layer's (water drops leaving the oil) and the water
      * layer's (oil drops leaving the water), each on its plan area at its mid-height, the upper one's inside the body,
-     * above a boot. Positive infinity for both where the vessel does not hold both liquids, and for a layer nothing
-     * leaves. The sizer reads the same numbers at design flow ({@code DrumSizing}).
+     * above a boot, each for its own drop of {@code drops}. Positive infinity for both where the vessel does not hold
+     * both liquids, and for a layer nothing leaves. The sizer reads the same numbers at design flow ({@code DrumSizing}).
      */
-    public static double[] numbers(VesselGeometry geometry,double drop,Layer oil,Layer water) {
+    public static double[] numbers(VesselGeometry geometry,Drops drops,Layer oil,Layer water) {
         if(!oil.held()||!water.held())return new double[]{Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY};
         boolean heavyWater=water.density()>=oil.density();
         Layer lower=heavyWater?water:oil,upper=heavyWater?oil:water;
         double split=geometry.heightAt(lower.volume()),top=geometry.heightAt(lower.volume()+upper.volume());
         double lowerArea=geometry.planArea((-geometry.bootDepth()+split)/2),upperArea=geometry.planArea((Math.max(split,0)+Math.max(top,0))/2);
         double difference=water.density()-oil.density();
-        return new double[]{number(settling(drop,difference,oil.viscosity(),oil.density()),heavyWater?upperArea:lowerArea,oil.outflow()),
-                number(settling(drop,difference,water.viscosity(),water.density()),heavyWater?lowerArea:upperArea,water.outflow())};
+        return new double[]{number(settling(drops.water(),difference,oil.viscosity(),oil.density()),heavyWater?upperArea:lowerArea,oil.outflow()),
+                number(settling(drops.oil(),difference,water.viscosity(),water.density()),heavyWater?lowerArea:upperArea,water.outflow())};
     }
 
     /**
      * What a vessel of {@code geometry} carries for a slice.
      *
-     * @param drop       the drop its liquids settle as, m ({@link #DROP}; a desalter's own)
+     * @param drops      the drops its liquids settle as ({@link #DROPS}; a desalter's own)
      * @param oil        its hydrocarbon layer
      * @param water      its aqueous layer
      * @param twoOutlets whether each liquid has its own outlet (a boot drum, a desalter): with one liquid outlet there is
@@ -134,13 +149,13 @@ public final class Separation {
      * @param gasOutflow what left through its gas outlet, m³/s
      * @param gasDensity kg/m³; 0 with no gas
      */
-    public static Carried of(VesselGeometry geometry,double drop,Layer oil,Layer water,boolean twoOutlets,double gasOutflow,double gasDensity) {
+    public static Carried of(VesselGeometry geometry,Drops drops,Layer oil,Layer water,boolean twoOutlets,double gasOutflow,double gasDensity) {
         boolean heavyWater=water.density()>=oil.density();
         Layer lower=heavyWater?water:oil,upper=heavyWater?oil:water;
         double split=geometry.heightAt(lower.volume()),top=geometry.heightAt(lower.volume()+upper.volume());
         double waterInOil=0,oilInWater=0;
         if(twoOutlets&&oil.held()&&water.held()) {
-            double[] numbers=numbers(geometry,drop,oil,water);
+            double[] numbers=numbers(geometry,drops,oil,water);
             waterInOil=carried(numbers[0],water.inflow(),oil.inflow());
             oilInWater=carried(numbers[1],oil.inflow(),water.inflow());
         }
@@ -195,7 +210,7 @@ public final class Separation {
                 if(scratch==null)scratch=new com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace();
                 Layer oil=layer(model,state,FluidThermodynamics.OIL,out[node][0],in[node][0],scratch),water=layer(model,state,FluidThermodynamics.AQUEOUS,out[node][1],in[node][1],scratch);
                 double gas=FluidThermodynamics.holdsPhase(state,FluidThermodynamics.GAS)?PortStreams.phaseDensity(model,state,FluidThermodynamics.GAS):0;
-                carried=of(inventory.geometry(),DROP,oil,water,liquids,gasPort[node]?out[node][2]:0,gas);
+                carried=of(inventory.geometry(),DROPS,oil,water,liquids,gasPort[node]?out[node][2]:0,gas);
             }
             if(carried.equals(inventory.carried()))continue;
             if(planned==null)planned=new java.util.ArrayList<>(graph.reservoirs());

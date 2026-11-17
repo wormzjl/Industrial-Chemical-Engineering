@@ -38,18 +38,24 @@ class DrumSettlingTest {
         var geometry = size.shape().fluidGeometry();
         var oilLayer = new Separation.Layer(geometry.volumeAt(1) - geometry.bootCapacity(), 666.35, 2.999e-4, .0042, .0042);
         var waterLayer = new Separation.Layer(geometry.bootCapacity(), 983.79, 4.732e-4, 3.74e-4, 3.74e-4);
-        double[] numbers = Separation.numbers(geometry, Separation.DROP, oilLayer, waterLayer);
+        double[] numbers = Separation.numbers(geometry, Separation.DROPS, oilLayer, waterLayer);
         assertEquals(numbers[0], water.value());
         assertEquals(numbers[1], oil.value());
-        assertTrue(Separation.of(geometry, Separation.DROP, oilLayer, waterLayer, true, 0, 0).none());
+        assertTrue(Separation.of(geometry, Separation.DROPS, oilLayer, waterLayer, true, 0, 0).none());
         // What Auto chooses for the same load is green on both rows.
         var choice = DrumSizing.auto(receiver(1), null);
         assertTrue(choice.size().boot());
         assertTrue(choice.rating().reading(Limit.DRUM_SETTLE_WATER).met() && choice.rating().reading(Limit.DRUM_SETTLE_OIL).met());
     }
 
-    @Test void theSameDrumAtSixteenTimesTheFlowDoesNot() {
+    @Test void theSameDrumUnderALargerFlowDoesNot() {
+        // At sixteen times the flow the boot no longer lets the oil drops (0.2 mm) rise; the oil layer still settles its
+        // water drops (0.5 mm).
         var rating = DrumSizing.rate(receiver(16), new DrumSizing.Size(UnitType.LYING_DRUM, 2, 5, true));
+        assertTrue(rating.reading(Limit.DRUM_SETTLE_WATER).met(), "water " + rating.reading(Limit.DRUM_SETTLE_WATER).value());
+        assertFalse(rating.reading(Limit.DRUM_SETTLE_OIL).met(), "oil " + rating.reading(Limit.DRUM_SETTLE_OIL).value());
+        // At 128 times neither does.
+        rating = DrumSizing.rate(receiver(128), new DrumSizing.Size(UnitType.LYING_DRUM, 2, 5, true));
         assertFalse(rating.reading(Limit.DRUM_SETTLE_WATER).met(), "water " + rating.reading(Limit.DRUM_SETTLE_WATER).value());
         assertFalse(rating.reading(Limit.DRUM_SETTLE_OIL).met(), "oil " + rating.reading(Limit.DRUM_SETTLE_OIL).value());
         assertEquals(Limit.Kind.SHOULD, Limit.DRUM_SETTLE_OIL.kind());

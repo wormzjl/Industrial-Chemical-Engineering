@@ -33,14 +33,23 @@ is under 1. Gas leaves clean while its speed through the vapour space stays unde
 `K sqrt((ρ_l − ρ_g) / ρ_g)`.
 
 The review plant's receiver (the probe's streams: gas 0.034 m3/s at 5.2 kg/m3; oil 15.1 m3/h, 666 kg/m3, 0.30 mPa s;
-water 1.35 m3/h, 984 kg/m3, 0.47 mPa s; drops of 0.1 mm settle at 5.0 mm/s in the oil and rise at 3.3 mm/s in the water):
+water 1.35 m3/h, 984 kg/m3, 0.47 mPa s). The drops (owner, 2026-11-17, option B of the sizer's moved result): a water
+drop of 0.5 mm in the oil settles at 43.7 mm/s, an oil drop of 0.2 mm in the water rises at 10.4 mm/s. Before that
+decision both were 0.1 mm (5.0 and 3.3 mm/s), and a drum of 3 m or more sized on its hold did not settle its water.
+The 0.5 mm is the oil pad's usual design drop where no laboratory data exists; the 0.2 mm is the upper end of design
+practice's 0.15 to 0.2 mm (secondary sources; Arnold and Stewart's book itself was not read).
 
 | Drum (lying, with boot) | Oil layer's area, `N` (water out of oil) | Boot's area, `N` (oil out of water) | Gas speed of its limit | Result |
 |---|---|---|---|---|
-| 2.0 x 5 m (sized), boot 0.67 m | 10 m2, 11.9 | 0.35 m2, 3.1 | 3 % | clean |
-| 1.0 x 6 m, boot 0.4 m | 6 m2, 7.1 | 0.13 m2, 1.1 | 12 % | clean |
-| 0.5 x 9 m, boot 0.25 m | 4.5 m2, 5.4 | 0.05 m2, 0.43 | 46 % | clean oil; 57 % of the water outlet's drops stay: oil in the water |
-| 2.0 x 5 m at 16 times the flow | 10 m2, 0.74 | 0.35 m2, 0.19 | 47 % | 26 % of the water stays in the oil; oil in the water |
+| 2.0 x 5 m (sized), boot 0.67 m | 9.8 m2, 102 | 0.35 m2, 9.7 | 3 % | clean |
+| 1.0 x 6 m, boot 0.4 m | 5.5 m2, 57 | 0.13 m2, 3.5 | 12 % | clean |
+| 0.5 x 9 m, boot 0.25 m | 4.0 m2, 41 | 0.05 m2, 1.4 | 46 % | clean |
+| 1.0 x 6 m at 4 times the flow | 5.5 m2, 14 | 0.13 m2, 0.87 | 48 % | clean oil; 13 % of the water outlet's drops stay: oil in the water |
+| 2.0 x 5 m at 16 times the flow | 9.8 m2, 6.4 | 0.35 m2, 0.61 | 47 % | clean oil; 39 % oil in the water |
+| 2.0 x 5 m at 128 times the flow | 9.8 m2, 0.80 | 0.35 m2, 0.08 | 372 % | 20 % of the water stays in the oil (1.8 % by volume); 92 % oil in the water; the gas outlet draws 73 % bulk |
+
+In a light oil the boot is what a small drum loses first: the oil layer settles its water until far past the gas
+limit.
 
 Gas from liquid, in a standing and a lying drum (owner, 2026-11-17: the gas law works with a vertical drum as well). The
 review plant's whole overhead vapour, 0.648 m3/s at 5.1 kg/m3 over a liquid of 666 kg/m3; the limit is 0.61 m/s standing
@@ -57,8 +66,9 @@ review plant's whole overhead vapour, 0.648 m3/s at 5.1 kg/m3 over a liquid of 6
 A standing drum's section does not change with its level; a lying drum's vapour space shrinks as it fills, so a high
 level carries liquid sooner.
 
-A heavier service has more teeth: an oil of 900 kg/m3 and 10 mPa s settles 0.1 mm drops at 0.05 mm/s, so 26.6 m3/h
-of it needs 150 m2 to leave dry. That is the desalter's case, which the solute batch answers with its field (1.3 mm).
+A heavier service has more teeth: an oil of 900 kg/m3 and 10 mPa s settles 0.5 mm drops at 1.2 mm/s, so 26.6 m3/h
+of it needs 6.2 m2 to leave dry; a mix valve's emulsion of 0.1 mm settles at 0.05 mm/s and needs 150 m2. That is the
+desalter's case, which the solute batch answers with its field (1.3 mm, 7.3 mm/s).
 
 ## 4. Laws
 
@@ -103,8 +113,9 @@ coupled.
 ### 4.1 The desalter (owner, 2026-11-17: "based on this, a bit different because it has higher coalescence rate")
 
 The desalter's phase separation is this separator with one parameter changed: the drop size a vessel coalesces to.
-`Separation` takes the drop size from the vessel: 0.1 mm in a drum, 1.3 mm in a desalter with its field on, 0.1 mm in a
-desalter without power. Laws 1 and 2 act on its oil and water outlets, law 3 on its gas.
+`Separation` takes the drop sizes from the vessel (`Separation.Drops`: a water drop in the oil, an oil drop in the
+water): 0.5 mm and 0.2 mm in a drum; in a desalter the water drop is 1.3 mm with its field on and 0.1 mm without power
+(its mix valve's emulsion, which a drum's feed is not). The desalter kind sets both. Laws 1 and 2 act on its oil and water outlets, law 3 on its gas.
 
 On a desalter of 54 m2 at 0.184 m3/s of oil (the solute plan's example and its viscosities):
 
@@ -162,12 +173,12 @@ the cycle does not set the input.
   (`PortStreams`, `InletPhase`, a mover's suction estimate) read the outlet's own phase clean; the step's own stream
   carries the shares.
 - The desalter's drop size (4.1) waits for the solute batch's desalter kind: `Separation.plan` gives every vessel
-  `Separation.DROP`.
+  `Separation.DROPS`.
 
 ## 6. Work packages
 
 1. `science/fluid/network/Separation`: `settling(d, Δρ, μ, ρ)`, `passes(N)`, `gasLimit(standing)`; the drop size a
-   vessel gives (`dropSize`: 0.1 mm; the desalter's kind sets its own); the areas from `VesselGeometry` (a standing
+   vessel gives (`DROPS`: 0.5 mm of water in oil, 0.2 mm of oil in water; the desalter's kind sets its own); the areas from `VesselGeometry` (a standing
    vessel's section; a lying drum's chord at the interface, its boot's section, its vapour segment above the level).
    `SeparationTest` on section 3's numbers, both tables.
 2. The plan: `SeparationPlan(vessel, waterInOil, oilInWater, liquidInGas)`, built at dispatch from the committed slice;

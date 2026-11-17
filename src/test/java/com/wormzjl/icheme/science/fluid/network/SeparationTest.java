@@ -15,14 +15,20 @@ class SeparationTest {
     private static final double OIL=666.35,WATER=983.79,OIL_VISCOSITY=2.999e-4,WATER_VISCOSITY=4.732e-4;
     private static final double OIL_FLOW=.0042,WATER_FLOW=3.74e-4,GAS_FLOW=.0343,GAS=5.22;
 
-    @Test void aTenthOfAMillimetreSettlesAtFiveAndThreeMillimetresASecond() {
-        assertEquals(5.0e-3,Separation.settling(Separation.DROP,WATER-OIL,OIL_VISCOSITY,OIL),.15e-3);
-        assertEquals(3.3e-3,Separation.settling(Separation.DROP,WATER-OIL,WATER_VISCOSITY,WATER),.15e-3);
+    @Test void theDesignDropsSettleAtFortyFourAndTenMillimetresASecond() {
+        // Owner, 2026-11-17 (option B): a water drop of 0.5 mm in the oil, an oil drop of 0.2 mm in the water.
+        assertEquals(5e-4,Separation.DROPS.water());
+        assertEquals(2e-4,Separation.DROPS.oil());
+        assertEquals(43.7e-3,Separation.settling(Separation.DROPS.water(),WATER-OIL,OIL_VISCOSITY,OIL),.5e-3);
+        assertEquals(10.4e-3,Separation.settling(Separation.DROPS.oil(),WATER-OIL,WATER_VISCOSITY,WATER),.2e-3);
+        // A tenth of a millimetre: 5.0 mm/s in the oil and 3.3 mm/s in the water.
+        assertEquals(5.0e-3,Separation.settling(1e-4,WATER-OIL,OIL_VISCOSITY,OIL),.15e-3);
+        assertEquals(3.3e-3,Separation.settling(1e-4,WATER-OIL,WATER_VISCOSITY,WATER),.15e-3);
         // A small drop in a thick oil is Stokes': the correction vanishes with the Reynolds number.
         double stokes=PassiveStepSolver.GRAVITY*1e-10*90/(18*.01);
         assertEquals(stokes,Separation.settling(1e-5,90,.01,900),stokes*1e-3);
-        assertEquals(Separation.settling(Separation.DROP,318,OIL_VISCOSITY,OIL),Separation.settling(Separation.DROP,-318,OIL_VISCOSITY,OIL));
-        assertEquals(0,Separation.settling(Separation.DROP,0,OIL_VISCOSITY,OIL));
+        assertEquals(Separation.settling(1e-4,318,OIL_VISCOSITY,OIL),Separation.settling(1e-4,-318,OIL_VISCOSITY,OIL));
+        assertEquals(0,Separation.settling(1e-4,0,OIL_VISCOSITY,OIL));
     }
 
     @Test void aLayerIsCleanFromASettlingNumberOfOne() {
@@ -53,17 +59,17 @@ class SeparationTest {
         for(double[] row:new double[][]{{.5,.82},{1,.26},{1.5,0}}) {
             var drum=VesselGeometry.round(VesselGeometry.Form.VERTICAL_DRUM,row[0],3,0,0);
             var oil=new Separation.Layer(drum.capacity()/2,OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
-            assertEquals(row[1],Separation.of(drum,Separation.DROP,oil,none,false,.648,5.12).liquidInGas(),.01);
+            assertEquals(row[1],Separation.of(drum,Separation.DROPS,oil,none,false,.648,5.12).liquidInGas(),.01);
         }
         // A lying drum's vapour space is the segment above its level: half full, then three quarters.
         var lyingDrum=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,1.5,5,0,0);
         var half=new Separation.Layer(lyingDrum.volumeAt(.75),OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
-        assertEquals(0,Separation.of(lyingDrum,Separation.DROP,half,none,false,.648,5.12).liquidInGas());
+        assertEquals(0,Separation.of(lyingDrum,Separation.DROPS,half,none,false,.648,5.12).liquidInGas());
         var high=new Separation.Layer(lyingDrum.volumeAt(1.125),OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
-        assertTrue(Separation.of(lyingDrum,Separation.DROP,high,none,false,.648,5.12).liquidInGas()>.4);
+        assertTrue(Separation.of(lyingDrum,Separation.DROPS,high,none,false,.648,5.12).liquidInGas()>.4);
         // No gas leaving, or no liquid to lift: clean.
-        assertEquals(0,Separation.of(lyingDrum,Separation.DROP,half,none,false,0,5.12).liquidInGas());
-        assertEquals(0,Separation.of(lyingDrum,Separation.DROP,none,none,false,.648,5.12).liquidInGas());
+        assertEquals(0,Separation.of(lyingDrum,Separation.DROPS,half,none,false,0,5.12).liquidInGas());
+        assertEquals(0,Separation.of(lyingDrum,Separation.DROPS,none,none,false,.648,5.12).liquidInGas());
     }
 
     /** A lying drum with a boot, half full of oil, its boot full of water, at {@code scale} times the review plant's flows. */
@@ -71,33 +77,46 @@ class SeparationTest {
         var drum=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,diameter,length,bootDiameter,bootLength);
         var oil=new Separation.Layer(drum.volumeAt(diameter/2)-drum.bootCapacity(),OIL,OIL_VISCOSITY,scale*OIL_FLOW,scale*OIL_FLOW);
         var water=new Separation.Layer(drum.bootCapacity(),WATER,WATER_VISCOSITY,scale*WATER_FLOW,scale*WATER_FLOW);
-        return Separation.of(drum,Separation.DROP,oil,water,true,scale*GAS_FLOW,GAS);
+        return Separation.of(drum,Separation.DROPS,oil,water,true,scale*GAS_FLOW,GAS);
     }
 
     @Test void aProperlySizedReceiverIsCleanAndASmallOneCarries() {
         assertTrue(receiver(2,5,2.0/3,.7,1).none());
         assertTrue(receiver(1,6,.4,.5,1).none());
-        // A 0.5 m drum's boot: the water leaves faster than the oil drops rise; its oil layer is wide enough.
-        var small=receiver(.5,9,.25,.4,1);
+        assertTrue(receiver(.5,9,.25,.4,1).none());
+        // A 1 m drum at four times the flow: its water leaves the boot faster than the oil drops rise; its oil layer
+        // is wide enough, and its gas is under its limit.
+        var small=receiver(1,6,.4,.5,4);
         assertEquals(0,small.waterInOil());
-        assertEquals(.57,small.oilInWater(),.03);
+        assertEquals(.13,small.oilInWater(),.01);
         assertEquals(0,small.liquidInGas());
-        // The sized drum at sixteen times the flow: both layers under one.
+        // The sized drum at sixteen times the flow: the boot under one, the oil layer still over six.
         var loaded=receiver(2,5,2.0/3,.7,16);
-        assertTrue(loaded.waterInOil()>.005&&loaded.waterInOil()<.03,"water in oil "+loaded.waterInOil());
-        assertEquals(.81,loaded.oilInWater(),.05);
+        assertEquals(0,loaded.waterInOil());
+        assertEquals(.395,loaded.oilInWater(),.02);
+        assertEquals(0,loaded.liquidInGas());
+        // At 128 times both layers are under one, and the gas is over its limit.
+        var flooded=receiver(2,5,2.0/3,.7,128);
+        assertTrue(flooded.waterInOil()>.005&&flooded.waterInOil()<.03,"water in oil "+flooded.waterInOil());
+        assertEquals(.92,flooded.oilInWater(),.02);
+        assertTrue(flooded.liquidInGas()>.5,"liquid in gas "+flooded.liquidInGas());
     }
 
     @Test void oneLiquidOutletKeepsNothingApartAndAStillVesselSettles() {
         var drum=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,.5,9,.25,.4);
-        var oil=new Separation.Layer(drum.volumeAt(.25)-drum.bootCapacity(),OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
-        var water=new Separation.Layer(drum.bootCapacity(),WATER,WATER_VISCOSITY,WATER_FLOW,WATER_FLOW);
-        assertTrue(Separation.of(drum,Separation.DROP,oil,water,false,0,0).none());
-        var stillOil=new Separation.Layer(oil.volume(),OIL,OIL_VISCOSITY,OIL_FLOW,0);
-        var stillWater=new Separation.Layer(water.volume(),WATER,WATER_VISCOSITY,WATER_FLOW,0);
-        assertTrue(Separation.of(drum,Separation.DROP,stillOil,stillWater,true,0,0).none());
-        // A larger drop settles what a small one leaves: the desalter's field.
-        assertTrue(Separation.of(drum,1.3e-3,oil,water,true,0,0).none());
+        // At 64 times the review plant's flows both of its layers are under one.
+        var oil=new Separation.Layer(drum.volumeAt(.25)-drum.bootCapacity(),OIL,OIL_VISCOSITY,64*OIL_FLOW,64*OIL_FLOW);
+        var water=new Separation.Layer(drum.bootCapacity(),WATER,WATER_VISCOSITY,64*WATER_FLOW,64*WATER_FLOW);
+        var carried=Separation.of(drum,Separation.DROPS,oil,water,true,0,0);
+        assertTrue(carried.waterInOil()>.02&&carried.oilInWater()>.9,carried.toString());
+        assertTrue(Separation.of(drum,Separation.DROPS,oil,water,false,0,0).none());
+        var stillOil=new Separation.Layer(oil.volume(),OIL,OIL_VISCOSITY,64*OIL_FLOW,0);
+        var stillWater=new Separation.Layer(water.volume(),WATER,WATER_VISCOSITY,64*WATER_FLOW,0);
+        assertTrue(Separation.of(drum,Separation.DROPS,stillOil,stillWater,true,0,0).none());
+        // A larger water drop settles what a small one leaves: the desalter's field. The oil drops in its water stay.
+        var field=Separation.of(drum,new Separation.Drops(1.3e-3,Separation.DROPS.oil()),oil,water,true,0,0);
+        assertEquals(0,field.waterInOil());
+        assertEquals(carried.oilInWater(),field.oilInWater());
     }
 
     @Test void aPlanAreaIsTheSlopeOfTheVolume() {

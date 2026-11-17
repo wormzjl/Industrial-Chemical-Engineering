@@ -158,7 +158,7 @@ public final class DrumSizing {
                 // The world's law (Separation) at design flow: the body half full of oil over a boot full of water.
                 var oil = new Separation.Layer(geometry.volumeAt(size.diameter() / 2) - geometry.bootCapacity(), load.oilDensity(), load.oilViscosity(), load.oil(), load.oil());
                 var water = new Separation.Layer(geometry.bootCapacity(), load.waterDensity(), load.waterViscosity(), load.water(), load.water());
-                double[] numbers = Separation.numbers(geometry, Separation.DROP, oil, water);
+                double[] numbers = Separation.numbers(geometry, Separation.DROPS, oil, water);
                 if (Double.isFinite(numbers[0])) readings.add(Limit.DRUM_SETTLE_WATER.read(numbers[0]));
                 if (Double.isFinite(numbers[1])) readings.add(Limit.DRUM_SETTLE_OIL.read(numbers[1]));
             }
