@@ -393,7 +393,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
      * cycle and table, no solve. Each port's rate over that cycle, its temperature (the table's; the feed's moved along the
      * table's slope to the enthalpy taken), the pressure its port holds, its account against its aim (an inlet: 30 s of its
      * set rate; an outlet: its buffer of design production), its valve's opening as {@code opening} reads it (NaN unknown);
-     * the duties booked over the cycle against the table's at the set feed. Null where the ledger has no such unit.
+     * the duties booked over the cycle against the table's at the set feed, a pumparound's against its set point's (L2 of
+     * batch 2026-11-17-column-cold-feed: the duty the cycle asks of its cooler). Null where the ledger has no such unit.
      */
     public com.wormzjl.icheme.science.plant.column.OperationView view(long unit,long now,java.util.function.LongToDoubleFunction opening) {
         var u=topology.column(unit);if(u==null)return null;
@@ -431,7 +432,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             double f=set.feedRate();
             duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.CONDENSER,0,step==null?0:step.condenser()/seconds,t.condenserPerFeed()*f));
             if(set.reboilerPerFeed()!=0)duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.REBOILER,0,step==null?0:step.reboiler()/seconds,t.reboilerPerFeed()*f));
-            var pa=t.pumparoundPerFeed();
+            var pa=demanded.pumparoundsPerFeed();
             for(int j=0;j<pa.length;j++)duties.add(new com.wormzjl.icheme.science.plant.column.OperationView.Duty(com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.PUMPAROUND,j,
                     step==null||j>=step.pumparounds().length?0:step.pumparounds()[j]/seconds,pa[j]*f));
             // An air condenser's fans (U2): their power at the last cycle, and at the set feed, for the electricity network to come.

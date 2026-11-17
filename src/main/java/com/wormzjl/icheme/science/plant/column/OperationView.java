@@ -49,7 +49,10 @@ public record OperationView(Phase phase, List<Condition.Active> conditions, doub
         FANS
     }
 
-    /** A duty, W: what the last cycle booked at its throughput, what the last solve gave at its feed (negative: heat removed). */
+    /**
+     * A duty, W (negative: heat removed): what the last cycle booked at its throughput, and what is asked at the set feed:
+     * the table's, a pumparound's set point (L2 of batch 2026-11-17-column-cold-feed: its cooler may take less).
+     */
     public record Duty(DutyKind kind, int index, double booked, double solved) {
         public Duty {
             Objects.requireNonNull(kind, "kind");

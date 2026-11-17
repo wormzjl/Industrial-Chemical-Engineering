@@ -302,6 +302,7 @@ public class OperationColumnTest {
         assertEquals("—", ports.get(5)[5], "an opening the valve does not read");
         assertEquals("Draw 1", ports.get(7)[0]);
         var duties = OperationColumn.duties(view, t);
+        assertArrayEquals(new String[]{"Duty", "Booked MW", "Asked MW"}, duties.getFirst());
         assertArrayEquals(new String[]{"Condenser", "-7.32", "-8.51"}, duties.get(1));
         assertEquals("Pumparound 4", duties.getLast()[0]);
         // An air condenser's fans (U2) draw power, not heat: their row reads kW, which its name says.
@@ -342,6 +343,7 @@ public class OperationColumnTest {
         assertArrayEquals(new String[]{"High load", "100 %", "Tray 28"}, byName.get("High load"));
         assertArrayEquals(new String[]{"Set points refused", "—", "—"}, byName.get("Set points refused"));
         assertArrayEquals(new String[]{"Steam short", "95 %", "Steam 2"}, byName.get("Steam short"));
+        assertEquals("95 %", byName.get("Pumparound cooling short")[1], "the share of its duty a short cooler takes");
         assertEquals(List.of(), OperationColumn.conditions(OperationView.idle(Phase.STOPPED, "STOPPED", s), t), "no table where nothing holds");
         assertEquals(Palette.RED, OperationColumn.colour(Condition.Rank.TRIP));
         assertEquals(Palette.WARN, OperationColumn.colour(Condition.Rank.LIMIT));

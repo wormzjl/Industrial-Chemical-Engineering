@@ -1617,6 +1617,10 @@ class ColumnRunTest {
             } else {
                 assertEquals(.82*set,booked,.06*Math.abs(set),"a tenth of the surface takes what its wall moves, about 82 % of the duty");
                 assertEquals(booked,duty,DriftBands.PUMPAROUND*Math.abs(duty),"the table within the band of what the cooler takes");
+                // The Operation tab (package 4): the pumparound's duty taken beside the duty its set point asks at the set feed.
+                var pa=r.ops().view(r.unit(),r.world().ledger.onlineTick(),d->Double.NaN).duties().stream().filter(d->d.kind()==com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.PUMPAROUND).findFirst().orElseThrow();
+                assertEquals(set*.5,pa.solved(),1e-9,"asked: the set point at the set 0.5 mol/s");
+                assertEquals(booked*last.feedMoles()/ColumnOperation.CYCLE_TICKS*20,pa.booked(),1e-9*Math.abs(pa.booked()),"taken: what the last cycle booked");
             }
             closesWithDuties(r);
         }
