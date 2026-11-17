@@ -103,6 +103,11 @@ the `Rig` class keep their sizes.
   as well"): [PUMP_VALVE_PLAN.md](PUMP_VALVE_PLAN.md). A constructed centrifugal pump with a set flow compiles to its
   curve and a flow valve in series; the set flow is a loop output and on the DCS; the drawn model, the sizer and the
   rig follow; the drive's speed regulation stays. Plan only, nothing built.
+- 2026-11-17, same branch (main thread; owner: "use drive regulation instead", "Yes, drive only"): the built-in valve
+  is withdrawn. The drive already holds a pump's set flow by speed (`REGULATE_FLOW`); the rig never set a pump flow
+  or a drive mode. [PUMP_DRIVE_FLOW_PLAN.md](PUMP_DRIVE_FLOW_PLAN.md): the rig's charge pump on its drive, the set
+  flow as a loop output and on the DCS, the pump page's unasked set flow fixed, a sized pump built regulating. The
+  stopped valve work stays on `claude/pump-valve-c779f2`, not merged. Plan only, nothing built.
 
 ## Full crude unit, sized (2026-11-17)
 

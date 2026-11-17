@@ -5,7 +5,9 @@ instead of relying on external valves", then "add it to pump model as well". Cho
 model, the simulator's pump unit and the sizer all get it; the driver's speed regulation stays beside it; constructed
 centrifugal pumps only (the in-line pump stays a fitting, the plunger pump keeps its set displacement).
 
-Status: plan. Nothing is built. Lines are at `6ec5f433c`.
+Status: WITHDRAWN 2026-11-17 (owner: "use drive regulation instead", "Yes, drive only"). Replaced by
+[PUMP_DRIVE_FLOW_PLAN.md](PUMP_DRIVE_FLOW_PLAN.md). The work stopped on `claude/pump-valve-c779f2`, not merged. Lines
+are at `6ec5f433c`.
 
 ## 1. Expected (physics)
 
