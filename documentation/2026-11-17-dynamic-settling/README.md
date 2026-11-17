@@ -43,6 +43,10 @@ flow. The drum page gains a level of separation for gas, oil and water. The stir
   class, 5 tests (stored pass); equipmentGates 1 class, 21 tests; no failure, no reference moved. Not run: the
   `fluidSolverRegression` step, the GameTest and the campaign steps the selection names for `Separation.java` (the
   final lane's), `LanguageFilesTest`, `UnitTextTest`.
+- 2026-11-18, merge preparation of 0.35.0 (`2dbcf2424`): `VesselSection` moves from `src/main` to `src/test` beside
+  its test, because no game code reaches it yet (`tools/merge-lane/main-reach.pl`). The package that draws the
+  section on the drum page moves it back (`git mv`, same package, no other change). `GuiPrototypes` reads it from the
+  test classes, which are on its class path.
 
 ## Documents
 

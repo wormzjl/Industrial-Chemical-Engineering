@@ -371,4 +371,7 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   column side (cold feed), seen in the valve-hold work: its feed came at 900.8, 831.8 and 692.6 J/mol against the
   table's 1203.42 (slope 30 J/mol/K), the condenser duty departed 30, 37, then 51 %, and it tripped at tick 1281 while
   the line still flowed (inlet regulating at 0.0032 kg/s at tick 1300). Not changed.
-- No merge preparation (owner).
+- Merge preparation, 2026-11-18 (owner: "do the merge to main when done"; version 0.35.0): `CHANGELOG.md` entry,
+  `mod_version`, `VesselSection` to `src/test` (the only class new on this branch that the game does not reach), the
+  translation commit and the final lane. Code guide: the chapters were updated with each package; the `VesselSection`
+  row of `client-screens.md` says where the class stands.
