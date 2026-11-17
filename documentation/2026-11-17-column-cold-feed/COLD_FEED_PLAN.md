@@ -74,6 +74,28 @@ Each: code and tests in one commit, documents in a second. Tests named by `node 
 after `./gradlew testClasses --max-workers=4`; not run: `check`, `build`, the final lane, `LanguageFilesTest`,
 `UnitTextTest`, the `fluidSolverRegression`, GameTest and campaign steps.
 
+### Package 0, an outlet gives its account's energy (found by the build thread, 2026-11-17). Hard.
+
+Found before package 1: `ColumnOperation.outletPlan` plans every product generator at the table's product temperature,
+`PassiveStepSolver.ports` flashes it at that temperature, and `credit` books `joule − debited` to the condenser
+totals. A passed 300 K slug would leave the bottoms at the table's bottoms temperature (about 150 MW over the 85 s
+slug, the thread's estimate), the heat coming from a ledger line and not from the world. Law L0: a column's product
+leaves at its account's energy.
+
+- `PortPlan`: an optional specific enthalpy (J/mol; none: by temperature, as today). `outletPlan` gives the account's
+  energy over its moles, both as of the fence, the fluid part alone (as `PortAccounts.debit` shares it).
+- `PassiveStepSolver.ports`: where it is set, `equilibriumPH` (the table's temperature as the first guess) in place
+  of `flashTP`, on the worker. A flash that does not converge falls back to the temperature (a rejected trial, never
+  a hold). Without the enthalpy: bit for bit today's. The lines are outside the solute batch's changes to this hot
+  file (checked: its hunks are at 132, 1113, 1293 to 1347, 1487, 1608 and 1922 to 1965; `ports` is at 1547).
+- `credit` and the water rule stay: the residual, now the flash's tolerance, is still booked, so the ledger is exact.
+- Stills and Converters keep their temperature plans.
+- Ruled out: the enthalpy only while the account is off the table (a special case); booking the difference and
+  testing the account alone (the slug would be heated from nothing).
+- Tests: a `ports` case (a plan with an enthalpy gives a generator at that enthalpy; without it the state is today's
+  bit for bit); `ColumnRunTest`'s steady cases, each moved reference with old and new values and its bound (expected:
+  product temperatures within the flash's tolerance, the booked difference toward 0).
+
 ### Package 1, the pass (L1). Standard.
 
 - `science/plant/column/Condition`: `PASSING` (rank NOTICE, word "passing").
