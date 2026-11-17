@@ -1,6 +1,6 @@
 # Column on a cold feed (2026-11-17)
 
-**Status:** Building 2026-11-17, on branch `claude/column-testing-sizing-26b5b9`: packages 0 to 3 built, 4 (the texts) to come.
+**Status:** Built 2026-11-17, on branch `claude/column-testing-sizing-26b5b9`: packages 0 to 4; the check in the world open.
 Class: PHYSICS. Lanes: column operation (plant layer and engine).
 
 A running column that gets a feed too cold for its solved table trips and holds the feed, and where the hot feed
@@ -84,6 +84,16 @@ pumparounds work only as far as their trays hold liquid.
   the real solve: cp 2326, 2577 and 2769 J/kgK at 452, 524 and 587 K), `ColumnRunTest` selected (new: on the rig's
   56 m² the 300 K water takes the 400 J/mol duty with no turndown solve; on a tenth, NTU 0.67, it takes 327 J/mol, 82 %,
   the effectiveness-NTU figure, and the table settles at 336 in 3 solves, the feed kept). No reference moved.
+- 2026-11-17: package 4 built (commit `e69f02204`): the Operation tab's duties read Booked MW against Asked MW, a
+  pumparound's asked duty its set point at the set feed (the others the table's at the set feed, as before); the
+  conditions' table shows the share of its duty a short cooler takes. English lines: the Asked head (the Solved key
+  removed) and the PUMPAROUND trigger's line, which package 2 left out (`OperationColumnTest` found it). Code guide:
+  `column-operation.md` and `column-run.md` describe packages 0 to 4. Package 0's fallback got its own case (commit
+  `38f14a86f`): an outlet planned at 1 GJ/mol, which no PH equilibrium reaches, stands at its planned temperature.
+  The selection of `affected.mjs select --since c4cc8ca79^..HEAD` (`LanguageFilesTest` and `UnitTextTest` left out):
+  `test` 2357 tests, 1 failure, `holdGates` 95, `columnGates` 5, `equipmentGates` 76, all passing. The failure,
+  `SizingPageTest.theDoorFitsInEveryViewForEveryItemInChinese`, is the separator batch's `sizing.demister` keys with no
+  Chinese line (commit `4fd766c56`): it waits for the translation commit. The solver regression (chain-100) was not run.
 
 ## Documents
 
@@ -97,7 +107,9 @@ pumparounds work only as far as their trays hold liquid.
 
 ## Open items
 
-- The owner's go-ahead for the build: packages 1 to 4 of the plan as Opus threads; decisions D1 to D6 of the plan are
-  the main thread's and open to the owner.
+- The check in the world (`runReviewWorldServer -PreviewBatch=review-operation`): PASSING for about 85 s, then RUNNING,
+  no bypass. Not run by the build thread.
+- Package 5 (a draw share) waits for the owner's word.
+- A reload with pumparound coolers solves at the set points (D6's Start solve), then relaxes again over a few solves.
 - Not measured: where the heat-integrated review plant settles when its pumparounds are cut; T2's flash against V3
   at the 455 to 460 K edge; another crude.

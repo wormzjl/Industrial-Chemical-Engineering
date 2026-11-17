@@ -9,7 +9,7 @@ Up: [code guide](README.md) · the split table, the cycle's arithmetic, conditio
 - Start refuses, or a port stands in the wrong place; Stop or a dismantle leaves something behind.
 - A running column's rates or accounts look wrong, or one of its boundary lines holds (the solver side of that:
   [fluid-step.md](fluid-step.md)).
-- A running column reads `LIMITED: condenser`, `reboiler`, `pumparound` or `power`, or its cooling water flow, its
+- A running column reads `LIMITED: condenser`, `reboiler` or `power`, `PASSING` or a pumparound cooler short, or its cooling water flow, its
   water's outlet, its air fans or a utility's valve look wrong.
 - A solve is late, applied at the wrong tick, or not asked again.
 - You change a column unit's facts (`ColumnUnit`), its engine state, the operating point in a saved design
@@ -123,7 +123,9 @@ after the fence (`Gift`, `givenSince`). Each utility's room, the air's most feed
 into `ColumnCycle.Rooms`. After the step: accounts move, every inert solid that arrived by the tick moves to the
 bottoms, a `Credit` is logged, totals grow, each utility is owed its duty (`owed`), new levels are logged, `publish` sets
 conditions, status and phase, and `save` writes the state. A trip asks a solve on the attempted take: STEAM_RATIO where
-rule B's steam is short, else the first band the state left, else CLOSURE. A solve whose product holds a crystal
+rule B's steam is short, else the first band the state left, else CLOSURE. A state standing inside a refused state's
+bands passes (`ColumnCycle.step`'s `refused`), and a passing cycle asks its solve of the state it was given (feed and
+steam at its ratio), the closure's where no band was left; the air fans stand while it passes. A solve whose product holds a crystal
 (`ColumnSolve.Frozen`: a compound solidifies in the column) installs no table and raises `FROZEN` (`Run.frozen`, memory
 only): the cycle takes nothing and asks a solve of the attempted take, none inside the frozen state's bands, until a solve
 finds no crystal; a set-point solve that finds one is refused as `SETPOINT_REFUSED`. An arriving crystal never trips.
@@ -134,11 +136,13 @@ finds no crystal; a set-point solve that finds one is refused as `SETPOINT_REFUS
   gain = clamp(1 + (aim − held)/aim, 0, 2), target = rate × gain × molar mass. An empty account meters at the design
   feed's molar mass (water for steam); with none the rate is 0 and the status says so.
 - Outlet (`outletPlan`): `available` less credits after the fence; rate = produced × clamp(mass/aim, 0, 2), capped by
-  mass/seconds × `TAKE_MARGIN`. An account holding `TRACE_KG` or less plans 0. Composition is the account's,
-  temperature the table's.
-- `PortPlan(node, valve, massTarget, temperature, moles, solids)`. `PassiveStepSolver.ports` runs after
-  `sizeJunctionHoldups` and before `couple`: it restates an outlet's generator unless its shares match to 1e-12 and
-  neither side holds solids, and sets the valve to `ControlValve(MASS_FLOW, …, COLUMN_SENSOR, …)`. A target within
+  mass/seconds × `TAKE_MARGIN`. An account holding `TRACE_KG` or less plans 0. Composition is the account's, and so is
+  the enthalpy per mole: its energy less the credits after the fence (`PortPlan.enthalpy`), the table's temperature a
+  fallback, so a product leaves at its account's energy and the condenser's totals carry no difference.
+- `PortPlan(node, valve, massTarget, temperature, moles, solids, enthalpy)` (enthalpy J/mol, NaN: by temperature).
+  `PassiveStepSolver.ports` runs after `sizeJunctionHoldups` and before `couple`: it restates an outlet's generator
+  unless its shares match to 1e-12, neither side holds solids and (by enthalpy) it stands within `ENTHALPY_DEADBAND` of
+  the plan; by enthalpy it flashes at the PH equilibrium's temperature (the planned one where that does not converge), and sets the valve to `ControlValve(MASS_FLOW, …, COLUMN_SENSOR, …)`. A target within
   `VALVE_DEADBAND` of the standing one stays; a target of 0 always applies. A valve that bounds two columns takes the
   lower plan. `IslandCoordinator.sameControl` counts a planned regulator and the valve's own `FlowControl.Valve` of the
   same target pressure as one control.
@@ -195,9 +199,15 @@ table's `waterBelow` as of the fence, else to the air, in the totals alone. An o
 **The reboiler's and pumparound coolers' utilities.** `ColumnStarts` takes the heat sides of every unit in `REBOILER`
 and each `pumparoundCooler(i)`; `startColumn` keeps them by the condenser's rule (`utilitySides`), at most 6 a duty
 (`Refusal.TOO_MANY_UTILITY_UNITS`). Each cycle owes −reboiler and −pumparound j, shared equally by their sides; `room`
-is the condenser's rule, signed (`Utility.sign`); a duty with no side has no bound. A short room gives HEATING_SHORT or
-PUMPAROUND_SHORT: a feed cut, no solve. A pumparound cooler's side reads `Read.column` with its ceiling at the draw
-tray's temperature less the approach; the reboiler's side reads `ExchangerRelay.Read.heating` with its floor at the
+is the condenser's rule, signed (`Utility.sign`; a pumparound's hold is of its set-point duty); a duty with no side has
+no bound. A short reboiler gives HEATING_SHORT, a feed cut, no solve; a short pumparound cooler books what it takes
+(PUMPAROUND_SHORT, a notice) and its band asks a relaxed solve ([column-operation.md](column-operation.md)). A pumparound
+cooler's side reads `Read.column` with its ceiling at the draw tray's temperature less the approach and the
+pumparound's own stream (`ExchangerRelay.ColumnStream`, `drawStream`): the draw liquid on the curve its table's solve
+sampled, entering at the draw tray's temperature, at the design circulation (the set duty at the design feed over
+`DesignBasis.paFall`). `ExchangerRelay.column` gives back no more than the wall moves from that stream through the
+side's own cells and surface (`wallHeat`, read on the stream whose temperature changes the more); without a curve the
+ceiling alone bounds it; the reboiler's side reads `ExchangerRelay.Read.heating` with its floor at the
 bottoms' temperature plus the approach. A kettle's tube side takes `HeatUnit.Mode.COLUMN`, and the column sets its feed
 valve to heatRate/(h(inlet) − h(floor)).
 
@@ -245,12 +255,13 @@ stopped unit with no stations when its set points are applied. A DCS sends the s
   nothing draws). Corpora: `src/test/resources/compat/fluid/schema-6/`, `schema-8/`, `schema-9/`, `schema-21/`.
 - **State** (`FluidFacts.topologyState`, `columnState`, on the world list): each running unit's `ColumnUnit.State` after
   the queued events (table, enthalpies, `tableTick`, `applied`, `solvedCondenser`, levels and credits, the water and air
-  fields, the probes, the `Flood` record, `pumparoundDraw`). A state that does not validate is dropped and that unit
+  fields, the probes, the `Flood` record, `pumparoundDraw`, the reference's pumparound duties). A state that does not validate is dropped and that unit
   solves again. On a rebuild, accounts and totals map onto the current axis, a removed component or solid is booked
   (`Restated`), `FluidFacts.settled` settles each unit on what stands, and `refresh` restores a run if the state's axis
   equals the current one and every product has a station.
 - Not saved: arrival spans, the utilities' debts, the fans, the conditions, the refused set points and state, the
-  advisories, the seed, the pending solve and the wakes. After a load each utility's heat rate starts from the table.
+  advisories, the seed, the pending solve, the wakes and the draw curves. After a load each utility's heat rate starts
+  from the table, and a unit whose pumparounds have cooler sides asks one Start solve to sample its draw curves.
 - **Shape**: `ColumnTrays.operating` (`ColumnDesignTags.writeOperating`, `ShapeRepair.SavedOperating.resolve`; an
   unreadable one repairs to none). Corpus `src/test/resources/compat/equipment/shapes-4.snbt`.
 - **Protocol**: the assembly protocol's operation view (`AssemblyView.operation`, `OperationPayload`,
