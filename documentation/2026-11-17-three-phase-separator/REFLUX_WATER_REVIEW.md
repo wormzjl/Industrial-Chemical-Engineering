@@ -99,22 +99,63 @@ In plain words:
   7 steps against 3 and 23 % more polls, because tray one turns wet there. The neural seed and the warm starts know
   nothing of `R_w`: every case here is a cold solve.
 
-## 4. Proposal for the owner
+## 4. Proposal and decisions
 
 1. Keep the input as built. The water and energy closures are exact, zero is the column as it was, and the audit
    checks every new term on its own.
-2. Correct law 6's simplification in the plan. Its "heat to boil it again (55 kW of 1938 kW at 8 %, 180 kW at 26 %)
+2. Correct law 6's simplification in the plan (done, `SEPARATOR_PLAN.md` law 6). Its "heat to boil it again (55 kW of 1938 kW at 8 %, 180 kW at 26 %)
    is left out" assumed the drum's duty grows by that heat. With the reboiler duty fixed, the duty stays the same and
    the loss is distillate: about 0.5 % and 1.8 % on the medium crude, 1.9 % and 2.3 % on the review plant. So when
    the cycle feeds the returned water to the solve, it changes the products, not the condenser.
-3. A decision for the owner (options). On a wet tray one, E31 sends the returned water that tray one cannot
-   evaporate straight back to the drum as entrained liquid. In a real column most of it falls to tray two and
-   evaporates there, so tray two also condenses some naphtha. The heat that the model does not cycle is
-   `F_1 λ_w`: 41 kW at 8 % and 208 kW at 26 % on the review plant.
-   - A: keep E31 as it is. A loop of liquid water between the drum and tray one costs no heat, and the
-     `CARRY_OVER` check still reports the entrainment limit.
-   - B: let the returned water fall: tray one's surplus that came from `R_w` goes to tray two, the steam's excess
-     stays carry-over. This changes `V3WetTraySet`'s identity on trays one and two, so it is its own package.
+3. **Decided 2026-11-17: A, the carry-over stays** (owner: "Keep the carry-over"). On a wet tray one, E31 sends the
+   water that tray one's vapour cannot hold to the drum as entrained liquid. `CARRY_OVER` still reports the
+   entrainment limit. The question was whether that water should fall to tray two instead.
+
+### 4.1 Option B, tried and rejected
+
+The owner first chose B ("Fall to tray 2"). With `R_w > 0`, tray one was an ordinary wet tray: `carriesTopTrayWaterOver`
+was false, its free water fell to tray two, `W_1 = (all steam) + R_w` whatever `F_1` was, and `W_2` gained `F_1`.
+The band was unchanged. That one predicate was the whole change. It was not committed, and the diff is kept in the
+worktree's `tmp/reflux-water/option-b.diff`.
+
+The review plant, cold, under B beside E31 (`7bfbc3e42`):
+
+| | E31, 8 % | B, 8 % | E31, 26 % | B, 26 % |
+|---|---|---|---|---|
+| Tray 1 | 369.67 K, wet, on its dew point | 368.35 K (95.2 C), dry | 369.62 K, wet, on its dew point | 362.56 K (89.4 C), dry |
+| Tray 1's water dew point | 96.5 C | 97.6 C (93.1 kPa of steam) | 96.5 C | 101.7 C (107.8 kPa of steam) |
+| Tray 1 saturation ratio | 1 | 1.09 | 1 | 1.58 |
+| Tray 2 | 385.94 K | 385.74 K | 385.92 K | 384.70 K |
+| Free water to the drum | 0.937 mol/s | 0 | 4.741 mol/s | 0 |
+| Distillate (base 7.000 mol/s) | 6.865 | 6.708 | 6.838 | 6.021 |
+| Condenser (base −2126.8 kW) | −2127.6 kW | −2128.2 kW | −2127.7 kW | −2126.9 kW |
+| Newton | 7 | 3 | 3 | 3 |
+
+Under B both cases converged and passed the audit, but tray one was published dry and supersaturated, with the
+`WATER_DEW_POINT` warning: the wet set never admitted it. The free-water continuation declined on tray one ("cannot
+be saturated by any free-water flow"). At 8 %, `ln(ratio)` moved from 0.0880571 to 0.0880574 for `F_1` from 0 to
+10 kmol/h, so `d ln(ratio)/dF` was 3e-8 per kmol/h. At 26 % it was 1.2e-8 to 2.0e-8 per kmol/h. This is the near-null
+lever of 2026-09-08, measured again.
+
+Why there is no lever: tray one's saturation row has no direct term in `F_1`, because `W_1` does not depend on it.
+The indirect path cancels. Water that falls condenses on tray one and evaporates on tray two, which moves heat
+between two adjacent trays: tray two condenses that much more naphtha and tray one boils it back. Tray one's
+hydrocarbon vapour and its temperature, which the hydrocarbon equilibrium pins at these specifications, do not move.
+
+Why there is no wet steady state under B: without a liquid route out of the top, every mole of `steam + R_w` must
+leave tray one as vapour. A top below its water dew point then has no steady state. Water builds up on the top trays,
+the known top-tray water problem, until it carries over or floods. To hold `W_1` as vapour, tray one would have to run
+2.4 K hotter (8 %) or 12.3 K hotter (26 %), or carry about 14 % more hydrocarbon vapour at 8 % and twice as much at
+26 %. The carry-over is the liquid route. A top-tray water draw would give the same balances.
+
+**Option C**, tray one dry with the water it does not evaporate fed to tray two as liquid, gives the same water state
+as B. That water evaporates on tray two and comes back up, so `W_1` is still `steam + R_w` and tray one stays
+supersaturated. Only the tray that takes the latent heat differs. Not built.
+
+### 4.2 Open, not taken
+
+**Option D**, proposed and not taken by the owner: a top-temperature margin above the water dew point, about 14 K in
+refinery practice, as a sizing or operating advisory beside A. It is not built.
 
 ## 5. What a production form still needs
 

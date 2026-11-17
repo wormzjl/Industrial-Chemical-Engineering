@@ -72,6 +72,7 @@ public final class RefluxWaterProbe {
                 }
             }
             System.out.println("      " + result.acceptanceAudit().advisoryEvidence());
+            if (Boolean.getBoolean("events")) success.diagnostics().events().forEach(event -> System.out.println("      event: " + event));
         }
     }
 

@@ -21,7 +21,8 @@ java "-Dfile.encoding=UTF-8" -cp "build\classes\java\main;build\resources\main;<
 - `RefluxWaterProbe.java` (batch `2026-11-17-three-phase-separator`, `REFLUX_WATER_REVIEW.md`): the same column solved
   directly by the V3 calculator, cold, with 0, 8 % and 26 % of its decanted water returned with the reflux
   (`V3ColumnInput#refluxFreeWaterMolPerSecond`). Prints the condenser duty, the top temperatures, tray one's free
-  water, the products and the solver's counters. Run it as `ReviewPlantProbe.java`, with its own file name.
+  water, the products and the solver's counters; `-Devents=true` adds the solver's events. Run it as
+  `ReviewPlantProbe.java`, with its own file name.
 
 ## Results, 2026-11-17
 

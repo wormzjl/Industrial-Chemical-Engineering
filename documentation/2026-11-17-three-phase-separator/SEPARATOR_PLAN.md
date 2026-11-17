@@ -85,8 +85,17 @@ coupled.
 6. **A column's held receiver.** The same three numbers from the receiver's shape and the table's overhead streams.
    The carried water moves from the sour water product to the distillate, the carried oil the other way, the liquid
    the gas carries to the off-gas. Simplification, to approve: the reflux's share of the carried water returns to the
-   top tray and comes back overhead; the heat to boil it again (55 kW of the condenser's 1938 kW where 8 % of the
-   water is carried, 180 kW at 26 %) is left out, and the table is not re-solved.
+   top tray and comes back overhead, and the table is not re-solved. Corrected 2026-11-17 by the trial
+   ([REFLUX_WATER_REVIEW.md](REFLUX_WATER_REVIEW.md)): returned water does not cost condenser duty. With the reboiler
+   duty fixed, the duty moves by at most 20 kW of 110.9 MW and 0.9 kW of 2127 kW. The cost is lost distillate and a
+   cooler tray one, because the water's latent heat takes the place of naphtha condensation:
+   - medium crude wet column, 8 % and 26 % of its decanted water returned: distillate −0.55 % and −1.8 %, tray one
+     1.3 K and 4.4 K cooler;
+   - review plant: −1.9 % and −2.3 %, tray one 1.05 K and 1.10 K cooler. There, tray one turns wet and carries 0.94
+     and 4.74 mol/s back to the drum (E31, kept by the owner: "Keep the carry-over").
+
+   The solver now takes the returned water as an input (`V3ColumnInput#refluxFreeWaterMolPerSecond`); the cycle does
+   not set it yet.
 7. **The simulator.** `DrumSizing.rate` gains the two `N` rows (Must: 1; Auto sizes for 1.2, the 20 % spare) beside
    the hold rows, so "properly sized" on the sheet is "clean" in the world. A drum's page shows `N` and what its
    outlets carry.
@@ -129,6 +138,11 @@ The owner asked whether the column solver takes a reflux with water (2026-11-17)
   no more.
 So the simplification stands until the solver has a free water reflux input, which changes the column solver and its
 Rust twin: its own batch, the owner's call.
+
+Update 2026-11-17: the Rust library is archived (batch `2026-11-17-rust-solver-archive`). The solver has the input on a
+basis without Water (`V3ColumnInput#refluxFreeWaterMolPerSecond`, [REFLUX_WATER_REVIEW.md](REFLUX_WATER_REVIEW.md)),
+and the top tray keeps the carry-over (owner: "Keep the carry-over"). Law 6's note above is corrected. Still open:
+the cycle does not set the input.
 
 ## 5.1 As built (packages 1 and 2)
 

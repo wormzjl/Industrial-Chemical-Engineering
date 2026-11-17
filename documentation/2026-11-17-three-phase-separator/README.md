@@ -42,12 +42,25 @@ phase carry-over.
   moves; only this test reads it), and the class then passes (6 tests). No production code serialises the record.
   No other reference moved: every column gate that loads the changed classes passes as recorded.
 
+- 2026-11-17: the top tray under returned water. The owner chose "Fall to tray 2" (option B). It was tried and
+  rejected: on the review plant tray one could not hold free water (d ln(ratio)/dF of 3e-8 per kmol/h at 8 %, 1.2e-8
+  to 2.0e-8 at 26 %). The solver published it dry and supersaturated, 2.4 K and 12.3 K below its water dew point.
+  Without a liquid route out of the top there is no wet steady state. The owner then decided A: "Keep the carry-over".
+  `7bfbc3e42` stands, and B is not committed. Option C gives the same water state as B; option D (a top-temperature
+  margin above the dew point, about 14 K) is open and not taken. Law 6's note in the plan is corrected: the cost is
+  lost distillate and a cooler tray one, not condenser duty. Documents only; no test run.
+
 ## Documents
 
 - [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md)
 - [REFLUX_WATER_REVIEW.md](REFLUX_WATER_REVIEW.md): the trial of a reflux that returns free water to tray one
 
 ## Open items
+
+- Option D of `REFLUX_WATER_REVIEW.md` (a top-temperature margin above the water dew point as a sizing or operating
+  advisory): proposed, not taken.
+- The returned water's production form: the cycle's input, the ratio form, the mode with Water on the basis, the
+  sizing and editor rebuilds that drop it, tray one's liquid load (`REFLUX_WATER_REVIEW.md`, section 5).
 
 - The affected tests are not run: 318 of 523 test classes, 9 hold gates, 9 equipment gates and the solver regression.
   A world whose drums are small for their flows now carries, so a reference there may move. The hold-fuzz campaign on
