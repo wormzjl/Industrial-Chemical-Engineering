@@ -56,6 +56,12 @@ the `Rig` class keep their sizes.
   Copied to `run/saves/column-operation-full-2026-11-17` (worktree) after `nbt.js review`. Shots
   `tmp/review-plant-fix/shots/21` to `29`. Tests: `compileFluidGameTestJava`, `testClasses`, and the 5 classes
   `affected.mjs select` named (all new on this branch with no load set; 4 ran and passed, `V3RefluxFreeWaterTest` up to date).
+- 2026-11-17, same branch (main thread, owner: "Yes, derive it"): the hold of builds 6 and 7 reviewed on a small line,
+  [VALVE_HOLD_REVIEW.md](VALVE_HOLD_REVIEW.md), with `tools/valve-hold/`. Two mechanisms. M1, derived: a carried
+  regulating flow valve whose new target is above what its line passes is solved as regulating, which has no solution,
+  so the mode never becomes open and the island holds (no pump or second valve needed). M2, located only: with a pump
+  on its curve and a parallel pair, the pass that regulates again from the open line stalls at a residual of 14.93.
+  The carried start fails on M1 and the fresh start on M2; one of the two solved every case tried. No mod code, no fix.
 
 ## Full crude unit, sized (2026-11-17)
 
