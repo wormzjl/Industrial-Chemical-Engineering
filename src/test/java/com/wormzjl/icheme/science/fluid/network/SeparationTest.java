@@ -72,6 +72,37 @@ class SeparationTest {
         assertEquals(0,Separation.of(lyingDrum,Separation.DROPS,none,none,false,.648,5.12).liquidInGas());
     }
 
+    @Test void aStandingVesselsGasLimitFallsWithItsGasSpace() {
+        // API 12J's table: 0.24 ft/s at 5 ft against 0.35 at 10 ft is 0.686; the exponent 0.56 gives 0.678.
+        assertEquals(0,Separation.gasSpaceFactor(0));
+        assertEquals(0,Separation.gasSpaceFactor(-.2));
+        assertEquals(.678,Separation.gasSpaceFactor(.762),1e-3);
+        assertEquals(1,Separation.gasSpaceFactor(1.524));
+        assertEquals(1,Separation.gasSpaceFactor(7));
+        // A standing drum 1 m by 4 m (4.5 m high) at 0.4 m/s, between its limit 0.3 m under the top and its full limit.
+        var drum=VesselGeometry.round(VesselGeometry.Form.VERTICAL_DRUM,1,4,0,0);
+        var none=new Separation.Layer(0,0,0,0,0);
+        double full=Separation.gasLimit(false,OIL,5.12),reduced=full*Separation.gasSpaceFactor(.3),flow=.4*Math.PI/4;
+        assertTrue(reduced<.4&&.4<full,reduced+" "+full);
+        var half=new Separation.Layer(drum.capacity()/2,OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
+        assertEquals(0,Separation.of(drum,Separation.DROPS,half,none,false,flow,5.12).liquidInGas());
+        var high=new Separation.Layer(drum.volumeAt(drum.height()-.3),OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
+        assertEquals(1-reduced/.4,Separation.of(drum,Separation.DROPS,high,none,false,flow,5.12).liquidInGas(),1e-6);
+        assertEquals(reduced,Separation.gasLimit(drum,drum.height()-.3,OIL,5.12),1e-12);
+        // Liquid-full with gas leaving: the gas outlet draws the bulk, as in a lying drum.
+        var brim=new Separation.Layer(drum.capacity(),OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
+        assertEquals(1,Separation.of(drum,Separation.DROPS,brim,none,false,flow,5.12).liquidInGas());
+        assertEquals(0,Separation.gasLimit(drum,drum.height(),OIL,5.12));
+        // A lying drum does not read its gas space: its result is the full-height law's, bit for bit.
+        var lying=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,1,3,0,0);
+        for(double level:new double[]{.3,.5,.8}) {
+            var oil=new Separation.Layer(lying.volumeAt(level),OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
+            double top=lying.heightAt(oil.volume()),expected=Separation.entrained(.648/lying.vapourSection(top),Separation.gasLimit(true,OIL,5.12));
+            assertEquals(expected,Separation.of(lying,Separation.DROPS,oil,none,false,.648,5.12).liquidInGas());
+            assertEquals(Separation.gasLimit(true,OIL,5.12),Separation.gasLimit(lying,top,OIL,5.12));
+        }
+    }
+
     /** A lying drum with a boot, half full of oil, its boot full of water, at {@code scale} times the review plant's flows. */
     private static Separation.Carried receiver(double diameter,double length,double bootDiameter,double bootLength,double scale) {
         var drum=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,diameter,length,bootDiameter,bootLength);

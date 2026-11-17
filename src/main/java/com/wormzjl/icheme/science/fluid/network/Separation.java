@@ -34,6 +34,20 @@ public final class Separation {
     public static final double GAS_K=.107/2;
     /** A lying drum's K over a standing one's: its drops fall across the gas, not against it. */
     public static final double LYING=1.25;
+    /**
+     * The gas space a standing vessel needs above its liquid for its full {@link #GAS_K}, m (batch
+     * 2026-11-17-three-phase-separator, owner: "what happens if rules are not followed"). Drops need height to fall back:
+     * API 12J's K table, read from secondary copies, gives 0.35 ft/s for a standing vessel 10 ft high and 0.24 ft/s for one
+     * 5 ft high. Assumed: the table is on the vessel's height and a design vessel runs half full, so the full K needs half
+     * of 10 ft of gas space, 1.524 m.
+     */
+    public static final double GAS_SPACE=1.524;
+    /**
+     * The exponent of a standing vessel's gas space factor {@code (gas space / GAS_SPACE)^0.56}: API 12J's own for a lying
+     * vessel's length, {@code (L / 10 ft)^0.56}. On the standing row it gives 0.678 for 5 ft against the table's 0.686
+     * (0.24 / 0.35). Assumed: under 5 ft of vessel the factor is extrapolated; the table stops there.
+     */
+    public static final double GAS_SPACE_EXPONENT=.56;
     private static final int PASSES=5;
 
     private Separation(){}
@@ -118,11 +132,36 @@ public final class Separation {
     }
 
     /** The gas speed a vessel's vapour space takes, m/s: {@code K sqrt((ρ_l − ρ_g) / ρ_g)}, {@link #LYING} times that in a
-     * lying drum; positive infinity where the gas is no lighter than the liquid (nothing to carry). */
+     * lying drum; positive infinity where the gas is no lighter than the liquid (nothing to carry). A standing vessel's
+     * value with a gas space of at least {@link #GAS_SPACE}. */
     public static double gasLimit(boolean lying,double liquidDensity,double gasDensity) {
+        return limit(lying,1,liquidDensity,gasDensity);
+    }
+    /**
+     * The gas limit of a vessel of {@code geometry} with its liquid surface at {@code level}, m/s: {@link #gasLimit(boolean,
+     * double, double)} times, in a standing vessel, {@link #gasSpaceFactor} of the gas space from the surface to the top.
+     * A lying drum's drops fall across the gas: its limit does not read the level. 0 for a standing vessel full of liquid.
+     */
+    public static double gasLimit(VesselGeometry geometry,double level,double liquidDensity,double gasDensity) {
+        if(Double.isNaN(level))throw new IllegalArgumentException("Invalid level");
+        return limit(geometry.lying(),geometry.lying()?1:gasSpaceFactor(Math.max(0,geometry.height()-level)),liquidDensity,gasDensity);
+    }
+    /** The one formula of the gas limit: {@code factor} times the full-height limit. */
+    private static double limit(boolean lying,double factor,double liquidDensity,double gasDensity) {
         if(!(liquidDensity>0)||!(gasDensity>0))throw new IllegalArgumentException("Invalid densities");
         if(liquidDensity<=gasDensity)return Double.POSITIVE_INFINITY;
-        return (lying?LYING:1)*GAS_K*Math.sqrt((liquidDensity-gasDensity)/gasDensity);
+        double full=(lying?LYING:1)*GAS_K*Math.sqrt((liquidDensity-gasDensity)/gasDensity);
+        return factor==1?full:full*factor;
+    }
+    /**
+     * A standing vessel's gas limit over its full value at a gas space of {@code gasSpace} m above the liquid:
+     * {@code (gasSpace / GAS_SPACE)^GAS_SPACE_EXPONENT}, 1 from {@link #GAS_SPACE} up, 0 with no gas space.
+     */
+    public static double gasSpaceFactor(double gasSpace) {
+        if(Double.isNaN(gasSpace))throw new IllegalArgumentException("Invalid gas space");
+        if(gasSpace<=0)return 0;
+        if(gasSpace>=GAS_SPACE)return 1;
+        return DeterministicMath.pow(gasSpace/GAS_SPACE,GAS_SPACE_EXPONENT);
     }
 
     /** The share of a gas outlet's volume it draws as the vessel's bulk: {@code 1 − limit / speed} above the limit. */
@@ -189,8 +228,10 @@ public final class Separation {
         double liquidInGas=0;
         if(gasOutflow>0&&gasDensity>0&&(oil.held()||water.held())) {
             // The liquid the gas would lift: the lighter one the vessel holds, which lies on top.
+            // No gas space (a lying drum's section, a standing vessel's height): the gas outlet draws the bulk.
             double liquid=upper.held()?upper.density():lower.density(),section=geometry.vapourSection(top);
-            liquidInGas=section>0?entrained(gasOutflow/section,gasLimit(geometry.lying(),liquid,gasDensity)):1;
+            boolean space=section>0&&(geometry.lying()||geometry.height()-top>0);
+            liquidInGas=space?entrained(gasOutflow/section,gasLimit(geometry,top,liquid,gasDensity)):1;
         }
         return new Carried(waterInOil,oilInWater,liquidInGas);
     }

@@ -26,6 +26,24 @@ class DrumSettlingTest {
         assertEquals(1.25 * .107 / 2, Limit.DRUM_GAS_LYING.value());
     }
 
+    @Test void aShortStandingDrumTakesLessGas() {
+        // Half full, a 2:1-head drum's gas space is half its height, L + D/2: the factor (gas space / 1.524 m)^0.56.
+        double full = Separation.gasLimit(false, 700, 5);
+        for (double[] row : new double[][]{{.5, 1, .607}, {.5, 2, .844}, {1, 2, .895}, {.5, 3, 1}, {1, 3, 1}, {2, 6, 1}}) {
+            var size = new DrumSizing.Size(UnitType.STANDING_DRUM, row[0], (int) row[1], false);
+            var reading = DrumSizing.rate(new DrumSizing.Load(.01, 0, 0, 5, 700, 5), size).reading(Limit.DRUM_GAS_STANDING);
+            assertEquals(row[2], reading.high() / full, 1e-3, row[0] + " by " + row[1]);
+        }
+        // At 0.7 of the full limit through 0.5 m: the 1 m drum fails what its diameter alone would pass; 1 m longer passes.
+        double gas = .7 * full * Math.PI * .25 / 4;
+        var load = new DrumSizing.Load(gas, 0, 0, 5, 700, 5);
+        assertFalse(DrumSizing.rate(load, new DrumSizing.Size(UnitType.STANDING_DRUM, .5, 1, false)).reading(Limit.DRUM_GAS_STANDING).met());
+        assertTrue(DrumSizing.rate(load, new DrumSizing.Size(UnitType.STANDING_DRUM, .5, 2, false)).reading(Limit.DRUM_GAS_STANDING).met());
+        // A lying drum's limit does not read its gas space.
+        var lying = DrumSizing.rate(load, new DrumSizing.Size(UnitType.LYING_DRUM, .5, 1, false)).reading(Limit.DRUM_GAS_LYING);
+        assertEquals(Limit.DRUM_GAS_LYING.value() * Math.sqrt(695 / 5.), lying.high());
+    }
+
     @Test void aSizedReceiverSettlesBothLiquids() {
         var size = new DrumSizing.Size(UnitType.LYING_DRUM, 2, 5, true);
         var rating = DrumSizing.rate(receiver(1), size);

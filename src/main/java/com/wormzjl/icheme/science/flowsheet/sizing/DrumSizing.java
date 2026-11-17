@@ -145,9 +145,13 @@ public final class DrumSizing {
         double slender = size.length() / size.diameter();
         readings.add(size.lying() ? Limit.DRUM_SLENDERNESS_LYING.read(slender) : Limit.DRUM_SLENDERNESS_STANDING.read(slender));
         if (load.gas() > 0 && load.heavy() > 0) {
-            double section = Math.PI * size.diameter() * size.diameter() / (size.lying() ? 8 : 4), allowed = Math.sqrt((load.heavy() - load.light()) / load.light());
+            // The world's law (Separation) at design flow, half full: a standing drum's limit falls with its gas space.
+            double section = Math.PI * size.diameter() * size.diameter() / (size.lying() ? 8 : 4);
             var row = size.lying() ? Limit.DRUM_GAS_LYING : Limit.DRUM_GAS_STANDING;
-            readings.add(row.against(load.gas() / section, row.value() * allowed));
+            var geometry = shape == null ? null : shape.fluidGeometry();
+            double limit = geometry == null ? Separation.gasLimit(size.lying(), load.heavy(), load.light())
+                    : Separation.gasLimit(geometry, geometry.heightAt(geometry.capacity() / 2), load.heavy(), load.light());
+            readings.add(row.against(load.gas() / section, limit));
         }
         if (shape != null) {
             double held = boot ? size.withBoot(false).volume() : shape.volume(), settled = boot ? load.oil() : load.oil() + load.water();

@@ -201,7 +201,11 @@ public enum Limit {
     DRUM_HOLD(SHOULD, least(5), "min", "[BLOG], [COST]"),
     DRUM_SLENDERNESS_LYING(SHOULD, within(2.5, 5), "", "[BLOG]", QUIET),
     DRUM_SLENDERNESS_STANDING(SHOULD, least(2), "", "[TOW]", QUIET),
-    /** K of the gas speed's law, √((ρL − ρV)/ρV) times this: half the padded value, as the world's drum has no pad. */
+    /**
+     * K of the gas speed's law, √((ρL − ρV)/ρV) times this: half the padded value, as the world's drum has no pad. The row's
+     * K is the full-height value; the reading's limit is the world's ({@code Separation.gasLimit}) at half full, and falls
+     * for a gas space under {@code Separation.GAS_SPACE}, 1.52 m.
+     */
     DRUM_GAS_STANDING(SHOULD, most(Separation.GAS_K), "m/s", "[GPSA]"),
     DRUM_GAS_LYING(SHOULD, most(Separation.LYING * Separation.GAS_K), "m/s", "[GPSA], [FLU]"),
     DRUM_BOOT_HOLD(SHOULD, least(5), "min", "[REDBAG]"),
