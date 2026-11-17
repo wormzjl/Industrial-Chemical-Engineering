@@ -446,7 +446,7 @@ public final class ColumnOperationReviewWorld {
         var receiver = (DrumSizing.Size) require(sized, SheetSizing.member(TOWER, "receiver")).size();
         if (receiver.type() != UnitType.LYING_DRUM || !receiver.boot())
             throw new IllegalStateException("The sized receiver is " + receiver + ": the rig builds a lying drum with a boot");
-        var refluxPump = pump(require(sized, SheetSizing.member(TOWER, "reflux pump")).size());
+        var refluxPump = pump(require(sized, SheetSizing.member(TOWER, "reflux pump")));
         var coolers = new ArrayList<EquipmentShape>();
         var pumps = new ArrayList<EquipmentShape>();
         for (var pumparound : door.pumparounds()) {
@@ -454,7 +454,7 @@ public final class ColumnOperationReviewWorld {
             if (cooler.shells() != 1)
                 throw new IllegalStateException("Pumparound " + pumparound.id() + "'s cooler is sized at " + cooler.shells() + " shells: the rig places one cooler shell a pumparound");
             coolers.add(cooler.shape());
-            pumps.add(pump(require(sized, SheetSizing.member(TOWER, SheetSizing.PumparoundMember.name(pumparound.id(), "pump"))).size()));
+            pumps.add(pump(require(sized, SheetSizing.member(TOWER, SheetSizing.PumparoundMember.name(pumparound.id(), "pump")))));
         }
         // The column's own lines by the rig's names. The condenser's outlet to the receiver has no line of its own on the sheet:
         // the rig lays it at the overhead's bore. The reflux pump's discharge and the reflux are one laid line: the larger.
@@ -483,7 +483,7 @@ public final class ColumnOperationReviewWorld {
         for (var unit : List.of(CHARGE_PUMP, RESIDUE_EXCHANGER, HEATER))
             IChemE.LOGGER.info("review_operation sizing readings unit=\"{}\" {} rating={}", unit, all.run().reports().containsKey(unit) ? all.run().reports().get(unit).readings() : all.run().reports().keySet(),
                     require(sized, unit).rating().readings().stream().map(r -> r.limit().name() + "=" + String.format(Locale.ROOT, "%.4g[%.4g,%.4g]", r.value(), r.low(), r.high())).toList());
-        var chargePump = pump(require(sized, CHARGE_PUMP).size());
+        var chargePump = pump(require(sized, CHARGE_PUMP));
         var exchanger = (ExchangerSizing.Size) require(sized, RESIDUE_EXCHANGER).size();
         if (exchanger.shells() != 1) throw new IllegalStateException("The residue exchanger is sized at " + exchanger.shells() + " shells: the rig places one");
         if (!(require(sized, HEATER).size() instanceof com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.Size running))
@@ -594,10 +594,21 @@ public final class ColumnOperationReviewWorld {
         return unit;
     }
 
-    /** A sized pump's shape: the rig drives a centrifugal casing. */
-    private static EquipmentShape pump(UnitSize size) {
-        if (!(size instanceof PumpSizing.Size pump)) throw new IllegalStateException("The sized pump is " + size + ": the rig builds a centrifugal pump");
-        return pump.shape();
+    /**
+     * A sized pump's shape: the rig drives a centrifugal casing at the sizer's own duty (its rating's flow, m3/h at suction,
+     * and head, m), at the shape's poles.
+     */
+    private static EquipmentShape pump(SheetSizing.SizedUnit unit) {
+        if (!(unit.size() instanceof PumpSizing.Size pump)) throw new IllegalStateException("The sized pump is " + unit.size() + ": the rig builds a centrifugal pump");
+        var shape = pump.shape();
+        // PUMP_DRIVE_FLOW_REVIEW.md, finding 2: PumpSizing.Size.shape() carries no duty, so the casing would get the default
+        // curve (the bore's flow, 100 m). Delete this when the sizer's shape carries its duty (option P).
+        var duty = java.util.Objects.requireNonNull(PumpSizing.Duty.of(unit.rating()), "the sized pump's rating carries no duty");
+        var sized = shape.withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.pump(duty.flow(), duty.head(), shape.duty().poles()));
+        IChemE.LOGGER.info("review_operation sizing pump_duty flow_m3_h={} head_m={} poles={} discharge_m={} built_discharge_m={} default_head_m={}",
+                String.format(Locale.ROOT, "%.1f", duty.flow()), String.format(Locale.ROOT, "%.2f", duty.head()), shape.duty().poles(), shape.diameter(), sized.diameter(),
+                shape.duty().head());
+        return sized;
     }
 
     /** A sized line's bore, m: its runs as one line of the same area, up to the next 0.05 m, at most the largest bore. */
@@ -1200,8 +1211,10 @@ public final class ColumnOperationReviewWorld {
             var s = driver.settings();
             plant.world.shafts().queue(new com.wormzjl.icheme.runtime.fluid.ShaftTrains.Configure(driver.id(),
                     new com.wormzjl.icheme.runtime.fluid.ShaftUnit.Settings(false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, s.setPoint(), s.powerLimit(), s.ratio())));
-            IChemE.LOGGER.info("review_operation charge_pump hold pump={} driver={} kind={} set_m3_s={} rated_m3_s={} wired={}", pump, driver.id(), driver.kind(),
-                    String.format(Locale.ROOT, "%.5f", set), String.format(Locale.ROOT, "%.5f", m.law().ratedFlow()), options.motors());
+            IChemE.LOGGER.info("review_operation charge_pump hold pump={} driver={} kind={} set_m3_s={} rated_m3_s={} rated_head_m={} shutoff_head_m={} design_speed_rpm={} wired={}", pump, driver.id(), driver.kind(),
+                    String.format(Locale.ROOT, "%.5f", set), String.format(Locale.ROOT, "%.5f", m.law().ratedFlow()), String.format(Locale.ROOT, "%.2f", m.law().ratedHead()),
+                    m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump c ? String.format(Locale.ROOT, "%.2f", c.head(0, 1)) : "-",
+                    plant.world.shafts().unitOfDevice(pump) == null ? "-" : plant.world.shafts().unitOfDevice(pump).designSpeed(), options.motors());
         }
 
         /**
@@ -1487,6 +1500,10 @@ public final class ColumnOperationReviewWorld {
             double speed = train == null ? Double.NaN : train.driverSpeed();
             double top = driver == null ? Double.NaN : driver.kind() == com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR ? com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM
                     : driver.settings().setPoint() > 0 ? driver.settings().setPoint() : com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED;
+            var discharge = plant.world.view(id(AssemblyGameTests.Plant.front(chargePump, Role.DISCHARGE)));
+            IChemE.LOGGER.info("review_operation t={} charge_pump suction_kPa={} discharge_kPa={} rise_kPa={}", ticks, state == null ? "-" : String.format(Locale.ROOT, "%.1f", state.pressure() / 1000),
+                    discharge.state() == null ? "-" : String.format(Locale.ROOT, "%.1f", discharge.state().pressure() / 1000),
+                    view.devicePressureChange() == null ? "-" : String.format(Locale.ROOT, "%.1f", view.devicePressureChange() / 1000));
             IChemE.LOGGER.info("review_operation t={} charge_pump set_m3_s={} flow_m3_s={} kg_s={} suction_kg_m3={} speed_rpm={} top_rpm={} speed_share={} mode={} status=\"{}\"", ticks,
                     String.format(Locale.ROOT, "%.5f", set), String.format(Locale.ROOT, "%.5f", flow), String.format(Locale.ROOT, "%.2f", view.massFlow()),
                     String.format(Locale.ROOT, "%.1f", density), String.format(Locale.ROOT, "%.0f", speed), String.format(Locale.ROOT, "%.0f", top),

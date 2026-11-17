@@ -169,3 +169,48 @@ Options:
   head. A production change; it belongs with package 4 ("a sized pump built regulating").
 - If the hold stays on the right curve, it is a solver finding (start of a liquid line onto an opening valve), as in
   the series-valve start holds of builds 7 and 8.
+
+## Option R: every sized pump built at the sizer's duty (rig stand-in)
+
+`ColumnOperationReviewWorld.pump(SizedUnit)` gives each sized pump's shape
+`withDuty(MachineDuty.pump(Duty.of(rating).flow(), .head(), shape poles))`. The flow is in m³/h and the head in m, which
+are `MachineDuty`'s units: `UnitDesign.pumpRating` 483-486 divides the flow by 3600. `MachineRatings.machineControl` 27-30
+builds the curve from that rating, and `PumpDesign.checkDuty` 54-61 accepts it.
+
+One replay, `tmp/pump-drive-flow/review-operation-run3.log`, fresh world. 1 test, failed at report 1.
+
+Pumps as placed, old (bore-only, default duty) → new:
+
+| pump | sizer duty | discharge, m | rated head, m |
+|---|---|---|---|
+| reflux | 220.5 m³/h, 38.81 m | 0.20 → 0.20 | 100 → 38.81 |
+| pa1 | 585.3 m³/h, 13.20 m | 0.25 → 0.30 | 100 → 13.20 |
+| pa2 | 825.3 m³/h, 14.52 m | 0.30 → 0.35 | 100 → 14.52 |
+| pa3 | 493.6 m³/h, 14.09 m | 0.25 → 0.25 | 100 → 14.09 |
+| P-101 | 730.0 m³/h, 170.98 m | 0.30 → 0.30 | 100 → 170.98 |
+
+- Where the design flow is above the bore's own flow, `withDuty` sets the bore from the duty, so pa1 and pa2 grow a grid
+  step. The layout moved one block south from pa3 on: pump z 54 → 55, cooler 53 → 54, E-101 71 → 72.
+- The member pumps' heads fall from 100 m to 13 to 39 m. The column did not run, so its effect on the column's own
+  numbers is not seen.
+
+P-101 placed: rated flow 0.20279 m³/s (730 m³/h), rated head 170.98 m, shut-off head 206.89 m. The rise at zero flow,
+read in the world, is 1754.5 kPa. The line needs 14.5 bar at design (the sizer's 16 bar discharge less 1.5 bar suction).
+On the curve at the set flow (0.19357 m³/s, q = 0.955) the pump makes 173.7 m, 14.7 bar.
+
+## Finding 3: the crude island holds on the right curve
+
+- Island 1402 (supply, P-101, the coolers' and E-101's tubes, both heaters, the feed port) HELD at committed tick 1226,
+  at the column's start: "Substep refinement exhausted: Newton line search stalled at residual 295.89; active-set pass 0".
+- At report 1 (t=1326) the island read SOLVING. Charge flow 0. Drive at 2950 of 2950 rpm (share 1.0), RUNNING. Pump
+  suction 150.0 kPa, rise 1754.5 kPa (shut-off). Tower feed valve `SOLVING / CLOSED`. Column LIMITED, FEED_SHORT, 0 %.
+- Run 2 (100 m curve, 11.8 bar at shut-off) held the same way (residual 305.46, committed tick 1206). Run 1 (10 bar
+  supply, same 100 m curve) did not hold.
+- What changed between the run that solves and the two that hold is the suction pressure, 10 bar → 1.5 bar, not the
+  pump head.
+- At 1.5 bar the sizer's NPSH margin over the world's suction limit (the crude's gas zone edge) is 2.56 m (about
+  0.22 bar) at design flow. The tower's feed valve asks up to twice its rate at the start. At twice the flow the suction
+  line's drop is four times larger and NPSH3 grows. Whether the suction crosses the gas edge in that step is not traced:
+  one replay only.
+- Separate finding, not to fix here. A pump too weak to fill its line (run 2) gave a HOLD ("Newton line search stalled
+  at residual 305.46, active-set pass 0"), not a low or zero flow. A hold is only for a capability limit.
