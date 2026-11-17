@@ -81,6 +81,11 @@ the `Rig` class keep their sizes.
   regulates at 167.39 kg/s from the first report, both heaters hold 634 to 635 K, and the column runs on a solved table
   from t=26619 (three reports in a row). No island of the new plant held but for "round deadline" lines; the world
   still runs the plants of builds 6 and 7. The rig's reports run to 900 s or end after three solved reports.
+- 2026-11-17, same branch (sub-thread, owner: "Yes, do that"): build 9 on a fresh world, the old one set aside as
+  `run/review-world/world-before-build-9`. 0 islands at load. The column runs on a solved table from t=5620 (reports 8
+  to 10); at t=6818 charge 167.39 kg/s regulating, feed 634.0 K, heaters 634.4 and 634.6 K (26.0 and 25.2 MW), bottoms
+  831.9 kmol/h. Build 8's one "round deadline" recurs on the same island (column unit + 11: 1399 here, 4215 in build 8),
+  so it is the plant's own, not the old plants'. The world (9.5 MB) is saved for the owner's client.
 
 ## Full crude unit, sized (2026-11-17)
 
@@ -244,9 +249,12 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   - long unsupported aerial runs;
   - E-101 stands on tall legs so its shell outlet's boundary line clears the ground;
   - the GameTest pass beacons (4 green beams) and structure blocks stay in the world.
-- The review world keeps the plants of earlier builds running (build 8 loaded 26 islands from builds 6 and 7, one of
-  them held). A clean world per build is not set up; until then a build's solve times and "round deadline" lines share
-  the solver with the old plants.
+- The review world keeps the plants of earlier builds running unless `run/review-world/world` is set aside before a
+  build (build 8 loaded 26 islands from builds 6 and 7). Build 9 ran fresh; a later build reuses build 9's world unless
+  it is renamed first.
+- One "HELD: round deadline" about 420 ticks after the column's start, on the island numbered the column unit + 11
+  (build 8: 4215 at committed tick 22838; build 9: 1399 at 1846), on a fresh world too. No view of the rig read HELD at
+  any report, and the column reached a solved table after it. The island's line is not named; not chased.
 - Valve hold (VALVE_HOLD_TRACE.md, section 9), not done: the review world rebuilt on C3 and B (build 8, above); the solver
   regression not run; `openStarved` may be redundant beside B (its test passes without it), owner to decide; the
   viscosity guard `MixtureViscosity.own` line 216 seen reached under C1 with a bundle prepared at another temperature,
