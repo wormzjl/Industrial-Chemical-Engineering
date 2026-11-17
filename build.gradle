@@ -173,6 +173,10 @@ neoForge {
             // The bridge never moves, grabs or confines the OS cursor, nor sends java.awt.Robot input (agents drive the
             // client while the owner works in other windows).
             systemProperty 'mcp.background_input', 'true'
+            // Since bridge 0.4.27 a remote enter_control_mode needs this consent (otherwise only ESC > MCP Take Over).
+            systemProperty 'mcp.remote_control', 'true'
+            // Since 0.4.28 screenshot_to_file writes only inside this folder: the worktree's scratch tmp/.
+            systemProperty 'mcp.screenshot.dir', layout.projectDirectory.dir('tmp').asFile.absolutePath
         }
 
         configureEach {
@@ -216,20 +220,14 @@ configurations {
 
 // Optional MCP test-client tooling never enters the production jar or ordinary test runtime.
 // The bridge is the official langyo/minecraft-mod-mcp release, run in its background input mode (mcpClient's
-// mcp.background_input: the OS cursor is left alone while the game window is in the background); jar and notes:
-// tools/minecraft-mcp-bridge/ (main checkout).
-def mcpControlModJar = 'minecraft-mcp-1.21.1-neoforge-v0.4.18.jar'
+// mcp.background_input: the OS cursor is left alone while the game window is in the background). The jar is tracked in
+// tools/minecraft-mcp-bridge/ (README: version notes and how to update); the run copies it from there.
+def mcpControlModJar = 'minecraft-mcp-1.21.1-neoforge-v0.4.28.jar'
 def prepareMcpControlMod = tasks.register('prepareMcpControlMod', Copy) {
     def mcpMods = layout.projectDirectory.dir('run/mcp-client/mods').asFile
-    from layout.projectDirectory.file("run/mcp-client-mods/${mcpControlModJar}")
+    from layout.projectDirectory.file("tools/minecraft-mcp-bridge/${mcpControlModJar}")
     into mcpMods
     doFirst {
-        def jar = inputs.files.singleFile
-        if (!jar.isFile()) throw new GradleException("Copy ${mcpControlModJar} from tools/minecraft-mcp-bridge/ (main checkout) into run/mcp-client-mods/ first.")
-        def digest = java.security.MessageDigest.getInstance('SHA-256').digest(jar.bytes).encodeHex().toString()
-        if (digest != 'e9359fce30b13e6337b8a40410ad57bdd31e1b9241ce03502bf668b380bd25f0') {
-            throw new GradleException('Minecraft MCP control mod checksum mismatch')
-        }
         // One bridge jar in the client: drop earlier pinned versions, leave every other mod alone (plain files: the
         // configuration cache forbids the project at execution time, and the task reruns whenever the folder changes).
         mcpMods.listFiles()?.findAll { it.name.startsWith('minecraft-mcp-') && it.name.endsWith('.jar') && it.name != mcpControlModJar }*.delete()

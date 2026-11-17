@@ -148,7 +148,7 @@ Status words:
 | [2026-09-25-non-full-block-occlusion](2026-09-25-non-full-block-occlusion/README.md) | Face culling around partial fluid-device models | In progress since 2026-09-25 (not committed) |
 | [2026-09-24-column-gui](2026-09-24-column-gui/README.md) | Editable column GUI, JSON presets, shared process GUI parts | Implemented 2026-09-24 (0.5.0) |
 | [2026-09-24-coolprop-low-temperature](2026-09-24-coolprop-low-temperature/README.md) | Unified multiphase thermo engine: cubic extension, crystals, ice, range extrapolation | Implemented 2026-10-19 (0.9.0) |
-| [2026-09-24-minecraft-mcp-skill](2026-09-24-minecraft-mcp-skill/README.md) | Agent skill for the dev-client MCP bridge; transcript mining | In progress since 2026-09-24 (not on `main`) |
+| [2026-09-24-minecraft-mcp-skill](2026-09-24-minecraft-mcp-skill/README.md) | Agent skill for the dev-client MCP bridge; transcript mining; bridge v0.4.28 | Implemented 2026-11-17 (0.34.4) |
 | [2026-09-24-mixed-gas-junction](2026-09-24-mixed-gas-junction/README.md) | Mixed-gas junction start-up: backward-Euler basis, owned junction holdup | Implemented 2026-09-26 (0.6.0) |
 | [2026-09-24-pipe-thermal-loss](2026-09-24-pipe-thermal-loss/README.md) | Zero-inventory pipe heat-loss assessment and 561-case experiment | Concluded 2026-09-24 |
 | [2026-09-23-fluid-followups](2026-09-23-fluid-followups/README.md) | Pumped fills, start-up determinism, placement cost, checkpoint storage | Implemented 2026-09-24 (0.4.0) |

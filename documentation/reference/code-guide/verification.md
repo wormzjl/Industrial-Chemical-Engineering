@@ -70,7 +70,7 @@ The load map is `tools/merge-lane/logs/load-map.json.gz` in the main checkout (g
 | `runColumnGameTestServer` | Namespace `icheme_column_test` (`ProcessSimulatorGameTests`) in `run/column-gametest-<columnGameTestRunId>` | The simulator's block |
 | `runReviewWorldServer` | Namespace `icheme_review` in `run/review-world`: review plants left standing; `-PreviewBatch` runs one batch (`ReviewBatch`) | A hand review; not a gate |
 | `fluidServerBenchmark` | `prepareFluidBenchmark`, `runFluidBenchmarkServer`: `FluidServerBenchmark` in `run/fluid-benchmark/<fluidBenchmarkRunId>`, refusing an existing world; reports under `build/reports/fluid/M9/<id>/`. `-PfluidBenchmarkProfile` names the fixture (`mixed100`; `mixed400`, four times its ladders, loads the workers fully), `-PfluidBenchmarkWorkers` the worker count (2; 0 is a world's automatic sizing) | Paced cost; runs alone; 60 s warm-up and 60 s measurement |
-| `runMcpClient` | The dev client with `mcpCompat` in `run/mcp-client`; `prepareMcpControlMod` copies the pinned bridge jar from `run/mcp-client-mods/`; `-PmcpClientWidth`, `-PmcpClientHeight` | A check the owner asks for ([client-kit.md](client-kit.md)) |
+| `runMcpClient` | The dev client with `mcpCompat` in `run/mcp-client`; `prepareMcpControlMod` copies the bridge jar tracked in `tools/minecraft-mcp-bridge/` (no digest check); the run sets `mcp.background_input`, `mcp.remote_control` and `mcp.screenshot.dir` (`tmp/`); `-PmcpClientWidth`, `-PmcpClientHeight` | A check the owner asks for ([client-kit.md](client-kit.md)) |
 | `runClient`, `runServer` | Ordinary dev runs | Manual play |
 | `verifyMaterialIndex` | `materials-index.json` lists each bundled material file once; `processResources` depends on it | Automatic |
 | `generateModMetadata` | Expands `neoforge.mods.toml` from the templates | Automatic |
@@ -109,4 +109,4 @@ Which check decides what, in the least measurement (AGENTS.md):
 - Under memory load the GameTest server can fail to start; rerun on a new run id. GameTest worlds persist between runs of one id: use a fresh id.
 - `lane.sh` warns, and does not stop, when other test or client JVMs run.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `549b9faab`, 2026-11-17.
