@@ -49,6 +49,7 @@ Every payload registrar of the mod carries one version, [`network/NetworkProtoco
 | Tutorial | `icheme-5` (was `tutorial-1`) | `NetworkProtocol#VERSION` | `TutorialNetwork.register` |
 | Process simulator | `icheme-5` (was `3`) | `NetworkProtocol#VERSION` | `ProcessSimulatorNetwork.register` |
 | Pollution map request and answer | `icheme-5` (joined at `icheme-2`, batch 2026-11-15-pollution-system WP9) | `NetworkProtocol#VERSION` | `PollutionMapNetwork.register` |
+| Protocol version `icheme-7` | reserved by `2026-11-17-three-phase-separator` (a vessel's view carries what its outlets carry beside their own phase) | not on `main` yet | `icheme-6` is used by `2026-11-16-solute-reaction-system` on its branch. The next batch takes `icheme-8` |
 
 Sixteen registrars in ten classes, one version. A new payload joins one of them; a new registrar gets a row here. `icheme-2` (batch 2026-11-15-pollution-system, WP9): the pollution map's request (`Request`: a boolean, the map opened or closed) and answer (`Answer`: the dimension, a denied flag, then at most 4096 columns of chunk x, chunk z and four index bytes, the nearest first; `MapColumns`).
 
