@@ -282,6 +282,18 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
     }
     /** Whether the shown aqueous liquid is named water (plan N7, {@link DeviceColumn#aqueousIsWater}). */
     public boolean aqueousWater(){return DeviceColumn.aqueousIsWater(amounts()[1],data.components().indexOf("Water"));}
+    /**
+     * A vessel's Carry-over meters (batch 2026-11-17-three-phase-separator, package 4), percent by volume: the water its
+     * oil outlet draws per volume of oil, the oil its water outlet draws per volume of water, the share of its gas
+     * outlet's volume drawn as the vessel's contents. Null for an outlet the separation law does not act on: no meter.
+     */
+    public List<DeviceColumn.Meter> carried(@Nullable Double waterInOil,@Nullable Double oilInWater,@Nullable Double liquidInGas){
+        var rows=new ArrayList<DeviceColumn.Meter>();
+        if(waterInOil!=null)rows.add(new DeviceColumn.Meter("carried_water",value(100*waterInOil),"%",tr("carried_water.hint")));
+        if(oilInWater!=null)rows.add(new DeviceColumn.Meter("carried_oil",value(100*oilInWater),"%",tr("carried_oil.hint")));
+        if(liquidInGas!=null)rows.add(new DeviceColumn.Meter("carried_liquid",value(100*liquidInGas),"%",tr("carried_liquid.hint")));
+        return List.copyOf(rows);
+    }
     /** A tank's Level group: its fill (NaN while unknown), and its contents of its capacity in litres. */
     public DeviceColumn.Level level(){
         if(!tank()||converter()!=null)return null;

@@ -1389,29 +1389,23 @@ public final class GuiPrototypes {
     }
 
     /**
-     * A drum's carry-over readings (batch 2026-11-17-three-phase-separator, package 4), two options: A, three meters at
-     * the end of the Readings group; B, a group of their own under it. The drum is small for its water: its boot's water
-     * leaves with oil in it.
+     * A drum's Carry-over group (batch 2026-11-17-three-phase-separator, package 4; owner: "B: own group"), from the
+     * shipped builder: a lying drum small for its water, whose boot's water leaves with oil in it, and a standing drum
+     * whose gas is faster than its vapour space allows (one liquid outlet: the gas's meter alone).
      */
     static List<Prototype> separator() {
         var out = new ArrayList<Prototype>();
         var base = List.of(meter("temperature", "40.0", "°C"), meter("pressure", "2.50", "bar"), new DeviceColumn.Meter("net_flow", "0.0", "kg/h", TEXTS.get("net_flow.hint")));
-        var carried = List.of(new DeviceColumn.Meter("carried_water", "0.0", "%", TEXTS.get("carried_water.hint")),
-                new DeviceColumn.Meter("carried_oil", "57.0", "%", TEXTS.get("carried_oil.hint")), new DeviceColumn.Meter("carried_liquid", "0.0", "%", TEXTS.get("carried_liquid.hint")));
-        for (boolean own : new boolean[]{false, true}) {
-            var readings = new ArrayList<>(base);
-            if (!own) readings.addAll(carried);
+        var lying = List.of(new DeviceColumn.Meter("carried_water", "0.0", "%", TEXTS.get("carried_water.hint")),
+                new DeviceColumn.Meter("carried_oil", "39.5", "%", TEXTS.get("carried_oil.hint")), new DeviceColumn.Meter("carried_liquid", "0.0", "%", TEXTS.get("carried_liquid.hint")));
+        var standing = List.of(new DeviceColumn.Meter("carried_liquid", "26.0", "%", TEXTS.get("carried_liquid.hint")));
+        for (boolean boot : new boolean[]{true, false}) {
             var input = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false,
-                    new DeviceColumn.Level(.5, "885.0", "1770.0", false), null, List.of(), phases("volume", 44, 6, 50, 0), readings, null, null);
-            var rows = new ArrayList<>(DeviceColumn.rows(input, TEXTS));
-            if (own) {
-                var group = new ArrayList<Column.Row>();
-                for (var m : carried) group.add(new Column.Reading("carried:" + m.key(), TEXTS.get(m.key()), m.value(), m.unit(), m.hint()));
-                rows.add(new Column.Group(TEXTS.get("device_group.carry_over"), TEXTS.get("carry_over.hint"), group));
-            }
-            out.add(devicePage(own ? "separator-carry-over-b-own-group" : "separator-carry-over-a-in-readings", WINDOW[0], WINDOW[1], rows, (d, k) -> {
-                d.title("Lying drum");
-                d.name("V-101", false);
+                    new DeviceColumn.Level(.5, "885.0", "1770.0", false), null, List.of(), phases("volume", 44, 6, 50, 0), base, null, null).withCarried(boot ? lying : standing);
+            var rows = DeviceColumn.rows(input, TEXTS);
+            out.add(devicePage(boot ? "separator-carry-over-lying-drum" : "separator-carry-over-standing-drum", WINDOW[0], WINDOW[1], rows, (d, k) -> {
+                d.title(boot ? "Lying drum" : "Standing drum");
+                d.name(boot ? "V-101" : "V-102", false);
                 d.tabs(0, "Overview", "Outlets", "Datasheet");
                 d.status("RUNNING", Palette.ACCENT);
                 var box = device(d, input, rows, Map.of());

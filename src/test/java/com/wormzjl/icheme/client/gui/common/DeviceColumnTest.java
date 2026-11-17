@@ -47,6 +47,12 @@ class DeviceColumnTest {
     private record Case(String name, DeviceColumn.Input in) {
     }
 
+    /** A vessel's carry-over meters: the gas's alone (a standing drum), or all three (a lying drum with a boot). */
+    private static List<DeviceColumn.Meter> carried(boolean liquids) {
+        var gas = new DeviceColumn.Meter("carried_liquid", "26.0", "%", "a hint");
+        return liquids ? List.of(new DeviceColumn.Meter("carried_water", "1.8", "%", "a hint"), new DeviceColumn.Meter("carried_oil", "100.0", "%", "a hint"), gas) : List.of(gas);
+    }
+
     /** Every kind as an editor and a reader, a valve in every setting, a mover with and without its switch, every phase basis. */
     private static List<Case> cases() {
         var out = new ArrayList<Case>();
@@ -58,6 +64,10 @@ class DeviceColumnTest {
                         for (boolean switchable : kind == Kind.PUMP || kind == Kind.COMPRESSOR || kind == Kind.GENERATOR ? new boolean[]{true, false} : new boolean[]{false})
                             out.add(new Case(kind + " " + valve + (switchable ? " switch" : "") + (edit ? "" : " reader") + " " + basis, input(kind, edit, switchable, valve, 6, "Holding 2.0 kg/s", basis)));
                 }
+        // A vessel the separation law acts on (batch 2026-11-17-three-phase-separator): its Carry-over group.
+        for (boolean edit : new boolean[]{true, false})
+            for (boolean liquids : new boolean[]{true, false})
+                out.add(new Case("RESERVOIR carry-over " + (liquids ? "boot" : "gas") + (edit ? "" : " reader"), input(Kind.RESERVOIR, edit, false, DeviceColumn.Valve.NONE, 6, "", "volume").withCarried(carried(liquids))));
         return out;
     }
 
@@ -309,6 +319,39 @@ class DeviceColumnTest {
                     assertEquals(before, widgets(after), kind + " " + valve + " at " + width);
                     assertFalse(before.isEmpty(), kind + " has its phase basis key at least");
                 }
+    }
+
+    /**
+     * Batch 2026-11-17-three-phase-separator, package 4 (owner: "B: own group"): a vessel the separation law acts on has
+     * a Carry-over group of its own, right under Readings, one meter an outlet; any other device has none. The group
+     * moves no widget, and the other inputs carry it along.
+     */
+    @Test
+    void aVesselTheLawActsOnShowsItsCarryOverUnderReadings() {
+        var texts = new HeatControlColumnTest.Recording();
+        var plain = input(Kind.RESERVOIR, true, false, DeviceColumn.Valve.NONE, 6, "", "volume");
+        for (var row : DeviceColumn.rows(plain, texts)) assertFalse(row instanceof Column.Group g && g.title().equals(texts.get("device_group.carry_over")), "no group without meters");
+        for (boolean liquids : new boolean[]{true, false}) {
+            var rows = DeviceColumn.rows(plain.withCarried(carried(liquids)), texts);
+            int readings = -1, group = -1;
+            for (int i = 0; i < rows.size(); i++)
+                if (rows.get(i) instanceof Column.Group g) {
+                    if (g.title().equals(texts.get("device_group.readings"))) readings = i;
+                    if (g.title().equals(texts.get("device_group.carry_over"))) group = i;
+                }
+            assertTrue(readings >= 0 && group == readings + 1, "the group stands right under Readings: " + readings + ", " + group);
+            var carry = (Column.Group) rows.get(group);
+            assertEquals(texts.get("carry_over.hint"), carry.hint());
+            var ids = carry.rows().stream().map(r -> ((Column.Reading) r).key()).toList();
+            assertEquals(liquids ? List.of("carried:carried_water", "carried:carried_oil", "carried:carried_liquid") : List.of("carried:carried_liquid"), ids);
+            for (var r : carry.rows()) assertEquals("%", ((Column.Reading) r).unit());
+            for (int width : new int[]{300, 464, 790})
+                assertEquals(widgets(place(plain, texts, width)), widgets(place(plain.withCarried(carried(liquids)), texts, width)), "no widget moves at " + width);
+        }
+        var carrying = plain.withCarried(carried(true));
+        assertEquals(carrying.carried(), carrying.withFixedDuty("x").carried());
+        assertEquals(carrying.carried(), carrying.withIntegrity(null, null).carried());
+        assertEquals(carrying.carried(), carrying.withSuction(null).carried());
     }
 
     /** What an editor sets on each kind, by its fields' keys; a reader sets nothing. */

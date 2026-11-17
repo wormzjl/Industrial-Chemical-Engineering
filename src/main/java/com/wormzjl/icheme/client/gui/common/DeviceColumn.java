@@ -105,18 +105,24 @@ public final class DeviceColumn {
      * What the column reads: the device's kind; whether this client may edit; whether it has a switch (a generator, a
      * built mover) and where it stands; the player's pressure and temperature symbols and flow time (/s, /min, /h); how a
      * valve is set and how open it stands; whether a filter holds solids to recover; a tank's level; a junction's line;
-     * the rows that lead (a heat side's side selector); the phases; the readings.
+     * the rows that lead (a heat side's side selector); the phases; the readings; what a vessel's outlets carry beside
+     * their own phase (batch 2026-11-17-three-phase-separator; empty for a device the separation law does not act on).
      */
     public record Input(Kind kind, boolean canEdit, boolean switchable, boolean powerOn, String pressureUnit, String temperatureUnit, String flowTime,
                         Valve valve, @Nullable Opening opening, boolean recoverable, @Nullable Level level, @Nullable String junction,
-                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction,@Nullable String fixedDuty,@Nullable Wall wall,@Nullable Trim trim) {
+                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction,@Nullable String fixedDuty,@Nullable Wall wall,@Nullable Trim trim,List<Meter> carried) {
+        /** A device whose outlets the separation law does not act on: no Carry-over group. */
+        public Input(Kind kind,boolean canEdit,boolean switchable,boolean powerOn,String pressureUnit,String temperatureUnit,String flowTime,Valve valve,@Nullable Opening opening,boolean recoverable,@Nullable Level level,@Nullable String junction,List<Column.Row> lead,@Nullable Phases phases,List<Meter> readings,@Nullable Drive drive,@Nullable Power power,@Nullable Suction suction,@Nullable String fixedDuty,@Nullable Wall wall,@Nullable Trim trim) {this(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,wall,trim,List.of());}
+        /** This input with a vessel's carry-over meters: the Carry-over group, under Readings. */
+        public Input withCarried(List<Meter> value){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,wall,trim,value);}
         public Input(Kind kind,boolean canEdit,boolean switchable,boolean powerOn,String pressureUnit,String temperatureUnit,String flowTime,Valve valve,@Nullable Opening opening,boolean recoverable,@Nullable Level level,@Nullable String junction,List<Column.Row> lead,@Nullable Phases phases,List<Meter> readings,@Nullable Drive drive,@Nullable Power power,@Nullable Suction suction) {this(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,null,null,null);}
-        public Input withFixedDuty(String text){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,text,wall,trim);}
+        public Input withFixedDuty(String text){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,text,wall,trim,carried);}
         /** This input with a constructed device's wall and a control valve's trim (batch 2026-11-16-fouling-corrosion, WP4). */
-        public Input withIntegrity(@Nullable Wall w,@Nullable Trim v){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,w,v);}
+        public Input withIntegrity(@Nullable Wall w,@Nullable Trim v){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,w,v,carried);}
         public Input {
             lead = List.copyOf(lead);
             readings = List.copyOf(readings);
+            carried = List.copyOf(carried);
         }
 
         /** A device that is no pump: no Suction and Health groups. */
@@ -128,7 +134,7 @@ public final class DeviceColumn {
 
         /** This input with a pump's readings. */
         public Input withSuction(@Nullable Suction value) {
-            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value,fixedDuty,wall,trim);
+            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value,fixedDuty,wall,trim,carried);
         }
 
         /** A device with no driver and no fans. */
@@ -283,8 +289,19 @@ public final class DeviceColumn {
             readings.add(new Column.Reading("meter:" + i, t.get(m.key()), m.value(), m.unit(), m.hint()));
         }
         if (!readings.isEmpty()) rows.add(new Column.Group(t.get("device_group.readings"), null, readings));
+        if (!in.carried().isEmpty()) rows.add(carryOver(in.carried(), t));
         if (in.power() != null) rows.add(power(in.power(), t));
         return rows;
+    }
+
+    /**
+     * A vessel's Carry-over group (batch 2026-11-17-three-phase-separator, package 4; owner: "B: own group"): one meter
+     * for each outlet the separation law acts on, what it draws beside its own phase. A vessel large enough reads 0.
+     */
+    static Column.Group carryOver(List<Meter> carried, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        for (var m : carried) rows.add(new Column.Reading("carried:" + m.key(), t.get(m.key()), m.value(), m.unit(), m.hint()));
+        return new Column.Group(t.get("device_group.carry_over"), t.get("carry_over.hint"), rows);
     }
 
     /** What the player sets on the device: its set points, a mover's limit, a valve's target, a pipe's bore. */
