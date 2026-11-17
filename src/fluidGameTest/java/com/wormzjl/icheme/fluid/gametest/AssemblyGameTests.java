@@ -70,7 +70,6 @@ public final class AssemblyGameTests {
      * tools ({@link ColumnReviewWorld}).
      */
     static final class Plant {
-        final GameTestHelper helper;
         final ServerLevel level;
         final FluidWorldAuthority world;
         final BlockPos base, low, high;
@@ -94,8 +93,15 @@ public final class AssemblyGameTests {
 
         /** A plant built from {@code base}, its pipes kept inside the box from {@code base + below} to {@code base + above}. */
         Plant(GameTestHelper helper, BlockPos base, BlockPos below, BlockPos above) {
-            this.helper = helper;
-            level = helper.getLevel();
+            this(helper.getLevel(), base, below, above);
+        }
+
+        /**
+         * A plant in {@code level} outside a GameTest (the column test world, {@link ColumnTestWorld}): the same plant from
+         * {@code base} in the same box; nothing of the plant reads a GameTest's helper.
+         */
+        Plant(ServerLevel level, BlockPos base, BlockPos below, BlockPos above) {
+            this.level = level;
             world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
             this.base = base;
             low = base.offset(below);

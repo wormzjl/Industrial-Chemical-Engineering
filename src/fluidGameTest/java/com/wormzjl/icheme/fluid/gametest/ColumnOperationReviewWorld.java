@@ -195,9 +195,18 @@ public final class ColumnOperationReviewWorld {
             level.getChunk(at.getX() >> 4, at.getZ() >> 4);
             int ground = level.getHeight(Heightmap.Types.WORLD_SURFACE, at.getX(), at.getZ());
             if (clear(level, at.offset(below), at.offset(above), ground))
-                return new Rig(new AssemblyGameTests.Plant(helper, new BlockPos(at.getX(), ground, at.getZ()), below, above), options);
+                return rig(level, new BlockPos(at.getX(), ground, at.getZ()), options);
         }
         throw new IllegalStateException("No clear ground for the column plant north of " + corner.toShortString());
+    }
+
+    /**
+     * The rig built as {@code options} say with its column's origin at {@code base} (on the ground: the first free block) in
+     * {@code level}, its pipes in the layout's box round it: the one entry both the GameTest ({@link #rig(GameTestHelper, Options)})
+     * and the column test world ({@link ColumnTestWorld}) build through. The ground in the box must be clear.
+     */
+    static Rig rig(net.minecraft.server.level.ServerLevel level, BlockPos base, Options options) {
+        return new Rig(new AssemblyGameTests.Plant(level, base, options.layout().below(), options.layout().above()), options);
     }
 
     /**
