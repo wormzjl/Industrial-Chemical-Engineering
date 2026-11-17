@@ -1,6 +1,6 @@
 # V3 column calculator: input, route, seeds, audit and publication
 
-Up: [code guide](README.md) · the equations, Newton, linear algebra, thermo and the Rust library:
+Up: [code guide](README.md) · the equations, Newton, linear algebra and thermo:
 [column-v3-solver.md](column-v3-solver.md)
 
 ## Read this when

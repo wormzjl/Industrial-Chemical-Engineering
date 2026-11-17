@@ -46,7 +46,7 @@ Production code is under `src/main/java/com/wormzjl/icheme/`; `node tools/code-g
 | Package / area | Owns | Chapter |
 |---|---|---|
 | `science/column/v3/**` (88 + `thermo/` 19 + `linalg/` 2), `network/ColumnWire`, `V3InspectionCodec` | The calculator's route: input contract, admission, seeds (neural and classical), continuation, audit, streams and duties, tray hydraulics, the wire form | [column-v3.md](column-v3.md) |
-| (the same), `src/main/rust` | The problem, the degree-of-freedom ledger, residuals and Jacobian, Newton, the band LU, the column's thermo session, free water, the Rust library | [column-v3-solver.md](column-v3-solver.md) |
+| (the same) | The problem, the degree-of-freedom ledger, residuals and Jacobian, Newton, the band LU, the column's thermo session, free water | [column-v3-solver.md](column-v3-solver.md) |
 | `science/flowsheet/` (30), `ProcessSimulatorBlock`, `ProcessSimulatorBlockEntity`, `ProcessSimulatorMenu`, `network/ProcessSimulatorNetwork`, `SimulatorResults` | The sheet and its file, compiler, graph and tears, solver, the block's store, replay, autosave and the packets | [process-simulator.md](process-simulator.md) |
 | `science/flowsheet/unit/` (22) | The unit models and their doors, the column and still on the sheet | [simulator-units.md](simulator-units.md) |
 | `science/flowsheet/sizing/` (35), `science/flowsheet/metallurgy/` (1), `SentDesign`, `SentDesignTags` | Sizing (`Limit`, lamps, Auto, Size all, lines and pressure paths), the Materials tab's ratings, Send to block and Import | [simulator-sizing.md](simulator-sizing.md) |

@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.column.v3.linalg;
 
-import com.wormzjl.icheme.science.column.v3.NativeColumnSolver;
 import java.util.Objects;
 
 /**
@@ -33,10 +32,6 @@ public final class V3BandedPivotedSolver {
         rightHandSide = copiedFiniteRightHandSide(matrix, rightHandSide);
         double[] originalRightHandSide = rightHandSide.clone();
         workspace = Objects.requireNonNull(workspace, "workspace");
-        if (NativeColumnSolver.bandedSolveEnabled()) {
-            Result carried = librarySolve(matrix, rightHandSide, workspace);
-            if (carried != null) return carried;
-        }
         BandRows work = workspace.factorization(matrix);
         double originalMatrixInfinityNorm = infinityNorm(matrix);
         double originalRightHandSideInfinityNorm = infinityNorm(rightHandSide);
@@ -147,41 +142,6 @@ public final class V3BandedPivotedSolver {
         }
         return new Result.Success(solution, backwardError, minimumPivot, maximumPivot, pivotSwaps,
                 pivotGrowth(maximumDuringFactorization, initialMaximum));
-    }
-
-    /**
-     * The same solve in the Rust library ({@code src/main/rust/LAYOUT.md}, {@code nativeBandedSolve}), which gives
-     * this class's bits: the outcome maps to the same result or exception, and the workspace takes the same P8
-     * counters the loop below adds before it returns or throws. Null when the library answers with any status but 0
-     * (or an outcome it does not define): the caller then runs the Java body.
-     */
-    private static Result librarySolve(V3BandedMatrix matrix, double[] rightHandSide, Workspace workspace) {
-        int size = matrix.size();
-        double[] solution = new double[size];
-        double[] evidence = new double[4];
-        int[] counts = new int[7];
-        int status = NativeColumnSolver.bandedSolve(size, matrix.lowerBandwidth(), matrix.upperBandwidth(),
-                matrix.storage(), rightHandSide, solution, evidence, counts);
-        if (status != 0 || counts[0] < 0 || counts[0] > 7) return null;
-        workspace.fullWidthSolves += counts[2];
-        workspace.updatedEntries += ((long) counts[4] << 32) | (counts[3] & 0xffffffffL);
-        workspace.fullWidthEntries += ((long) counts[6] << 32) | (counts[5] & 0xffffffffL);
-        return switch (counts[0]) {
-            case 0 -> new Result.Success(solution, evidence[0], evidence[1], evidence[2], counts[1], evidence[3]);
-            case 1 -> new Result.Failure(FailureCode.SINGULAR, "V3 band matrix contains no nonzero pivot", 0.0, 0.0, 0, 0.0);
-            case 2 -> new Result.Failure(FailureCode.ILL_CONDITIONED,
-                    "V3 banded LU scaling exceeds the finite numerical range", 0.0, 0.0, 0, 0.0);
-            case 3 -> new Result.Failure(FailureCode.SINGULAR, "V3 banded LU encountered a zero or tiny pivot",
-                    evidence[1], evidence[2], counts[1], evidence[3]);
-            case 4 -> new Result.Failure(FailureCode.ILL_CONDITIONED,
-                    "V3 banded LU pivot spread exceeds the configured conditioning guard", evidence[1], evidence[2],
-                    counts[1], evidence[3]);
-            case 5 -> new Result.Failure(FailureCode.BACKWARD_ERROR_EXCEEDED,
-                    "V3 banded LU correction does not satisfy the backward-error guard", evidence[1], evidence[2],
-                    counts[1], evidence[3]);
-            case 6 -> throw new IllegalStateException("V3 banded LU produced a non-finite entry");
-            default -> throw new IllegalStateException("V3 banded LU lost a usable back-substitution pivot");
-        };
     }
 
     /**

@@ -34,8 +34,6 @@ FORKS=${LANE_FORKS:-8}; WORKERS=${LANE_WORKERS:-8}; GROUP=${LANE_GROUP:-8}
 cd "$WT" || exit 2
 rm -f "$SEL" "$PICKS"
 if [ -n "${LANE_SINCE:-}" ]; then git merge-base --is-ancestor "${LANE_SINCE%%..*}" HEAD 2>/dev/null || { echo "LANE_SINCE=$LANE_SINCE does not start at a commit before HEAD"; exit 2; }; fi
-# As build.gradle finds cargo: on the PATH or in ~/.cargo/bin. Without it nativeSmoke cannot build the library.
-have_cargo(){ command -v cargo > /dev/null 2>&1 || [ -f "$HOME/.cargo/bin/cargo.exe" ] || [ -f "$HOME/.cargo/bin/cargo" ]; }
 export JAVA_OPTS=-Xshare:off
 busy(){ powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | Where-Object { \$_.CommandLine -match 'Gradle Test Executor|GradleWorkerMain.*Test|net.neoforged.devlaunch|runClient|runMcpClient' } | Measure-Object | Select-Object -ExpandProperty Count"; }
 n=$(busy | tr -d '\r'); [ "${n:-0}" = 0 ] || echo "WARNING: $n test or client JVMs are running"
@@ -68,9 +66,8 @@ for s in $steps; do
   echo "== $side $s at $(git rev-parse --short HEAD)"
   case $s in
     test) select_tests; filters=()
-          if $force; then ran=(test holdGates columnGates equipmentGates nativeSmoke)
+          if $force; then ran=(test holdGates columnGates equipmentGates)
           else grep '^PICK ' "$SEL" | cut -d' ' -f2- > "$PICKS"; ran=($(cut -d' ' -f1 "$PICKS" | sort -u)); filters=(-PlaneTests=$REL/picks.txt); fi
-          if ! have_cargo; then for i in "${!ran[@]}"; do [ "${ran[$i]}" = nativeSmoke ] && { unset "ran[$i]"; echo "   nativeSmoke: no cargo found, the native tests do not run"; }; done; ran=("${ran[@]}"); fi
           rm -rf "$OUT/results"; mkdir -p "$OUT/results"
           if [ ${#ran[@]} = 0 ]; then echo "== test skipped: no test class loads anything that changed"; continue; fi
           echo "   tasks: ${ran[*]}"

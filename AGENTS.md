@@ -33,7 +33,7 @@ This file holds the core of each subject. The full rules are in `documentation/r
 ## Gradle, measurement and verification
 
 - At most two Gradle invocations run at a time on the machine, each in its own worktree; the second uses at most 4 worker threads. Never run a test suite while a dev client is running.
-- Every test run names its test classes with `--tests` (tasks `test`, `holdGates`, `columnGates`, `equipmentGates`, `nativeSmoke`). Take the classes from `node tools/merge-lane/affected.mjs select` (after `testClasses`), never a hand list or a package tree. `check`, `build`, `slowGates` and whole tasks are the final lane's alone.
+- Every test run names its test classes with `--tests` (tasks `test`, `holdGates`, `columnGates`, `equipmentGates`). Take the classes from `node tools/merge-lane/affected.mjs select` (after `testClasses`), never a hand list or a package tree. `check`, `build`, `slowGates` and whole tasks are the final lane's alone.
 - No repeated tests. A pass stands until the test or something it loads changes. Read stored results first (`build/test-results`, the lane's output, the batch review). Before a run, list the files changed since the last pass and run only the tests that can load them:
   - Documents, `tools/`, comments, `AGENTS.md`, `CHANGELOG.md`: no test run.
   - A test removed, or test code left without a user removed: `compileTestJava` only.
@@ -96,11 +96,6 @@ This file holds the core of each subject. The full rules are in `documentation/r
 
 - Before a batch starts beside another, read `documentation/reference/COLLABORATION.md`: lanes and hot files, how a format or schema number is reserved, the brief template, how a moved result is reported.
 - Two batches never change the same file at the same time. A hot file has one owner batch at a time.
-
-## Native code
-
-- The Java path is the reference and the fallback. A Java method with a Rust twin changes in both in the same batch, or the batch lowers the native ceiling below it.
-- Read `rules/native.md` before native work or a `cargo` run.
 
 ## Merging to main
 

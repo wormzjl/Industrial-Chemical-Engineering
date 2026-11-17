@@ -98,21 +98,17 @@ const nodeOf = name => { // a loaded or referenced class name -> its source file
   return null;
 };
 
-// Test classes and the task that runs each (build.gradle: test, holdGates, columnGates, equipmentGates, nativeSmoke,
+// Test classes and the task that runs each (build.gradle: test, holdGates, columnGates, equipmentGates,
 // fluidSolverRegression).
 const gradle = fs.readFileSync(path.join(root, 'build.gradle'), 'utf8');
 const slow = new Set([...((gradle.match(/def slowGateClasses = \[([\s\S]*?)\]\.collect/) || [, ''])[1]).matchAll(/'([\w.]+)'/g)]
   .map(m => 'com.wormzjl.icheme.' + m[1]));
 if (!slow.size) { console.error('slowGateClasses not found in build.gradle'); process.exit(2); }
-// The native tests are in the column package, but columnGates excludes them and nativeSmoke runs them.
-const native = new Set([...((gradle.match(/def nativeTestClasses = \[([\s\S]*?)\]/) || [, ''])[1]).matchAll(/'([\w.]+)'/g)].map(m => m[1]));
-if (!native.size) { console.error('nativeTestClasses not found in build.gradle'); process.exit(2); }
 const JUNIT = /^Lorg\/junit\/jupiter\/api\/(Test|TestFactory|RepeatedTest|TestTemplate);$|^Lorg\/junit\/jupiter\/params\/ParameterizedTest;$/;
 const hasTests = c => { for (let k = c; k; k = classes.get(k.superName)) if (k.utf.some(u => JUNIT.test(u))) return true; return false; };
 const taskOf = fqn => {
   const r = fqn.slice('com.wormzjl.icheme.'.length);
   if (r.startsWith('fluid.benchmark.')) return r === 'fluid.benchmark.FluidSolverRegressionTest' ? 'fluidSolverRegression' : null;
-  if (native.has(fqn)) return 'nativeSmoke';
   if (r.startsWith('science.column.v3.')) return 'columnGates';
   if (r.startsWith('science.equipment.')) return 'equipmentGates';
   return slow.has(fqn) ? 'holdGates' : 'test';
@@ -390,7 +386,7 @@ for (const filter of lines('./left-out.txt').map(l => l.split(/\s+/)[0])) {
   leftOut.get(fqn).push(filter);
 }
 let left = 0;
-for (const task of ['test', 'holdGates', 'columnGates', 'equipmentGates', 'nativeSmoke', 'fluidSolverRegression']) {
+for (const task of ['test', 'holdGates', 'columnGates', 'equipmentGates', 'fluidSolverRegression']) {
   const picked = (chosen.get(task) ?? []).sort(), all = [...tests].filter(([, t]) => t.task === task).length;
   if (!picked.length) { emit(`TASK ${task} NONE 0/${all}`); continue; }
   emit(`TASK ${task} ${picked.length}/${all}`);

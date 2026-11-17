@@ -51,12 +51,3 @@ Every payload registrar of the mod carries one version, [`network/NetworkProtoco
 | Pollution map request and answer | `icheme-5` (joined at `icheme-2`, batch 2026-11-15-pollution-system WP9) | `NetworkProtocol#VERSION` | `PollutionMapNetwork.register` |
 
 Sixteen registrars in ten classes, one version. A new payload joins one of them; a new registrar gets a row here. `icheme-2` (batch 2026-11-15-pollution-system, WP9): the pollution map's request (`Request`: a boolean, the map opened or closed) and answer (`Answer`: the dimension, a denied flag, then at most 4096 columns of chunk x, chunk z and four index bytes, the nearest first; `MapColumns`).
-
-## Native library
-
-The JNI layout between Java and the Rust column library `icheme_column` (`src/main/rust/LAYOUT.md`). No compatibility: the library is built with the jar, and a library of another ABI or formulation is refused at load and the column runs on its Java path. Nothing is saved.
-
-| Format | Value | Declared at | What a mismatch does |
-|---|---|---|---|
-| Native column ABI | 1 | [`science/column/v3/NativeColumnSolver.java`](../../src/main/java/com/wormzjl/icheme/science/column/v3/NativeColumnSolver.java), `NativeColumnSolver#ABI`; its twin `src/main/rust/icheme-jni/src/layout.rs` line 7, `ABI` | The library is refused (one log line) and the column runs on its Java path; the copy in the game folder is named `icheme_column-<ABI>`, so another ABI is never picked up |
-| Native formulation token | `FORMULATION_REVISION;WET_ASSUMPTIONS_REVISION;HEAT_ASSUMPTIONS_REVISION` of `V3ColumnLabels` | `NativeColumnSolver.java` line 40, `FORMULATION`; its twin `layout.rs` line 13, `FORMULATION` | The same: refused, Java path |

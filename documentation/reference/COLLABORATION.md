@@ -22,7 +22,7 @@ A lane is a set of packages with one writer at a time. A batch names its lane in
 | Lane | Packages | Hot files (one writer, always) |
 |---|---|---|
 | thermo | `science/math`, `science/thermo/**`, `science/material` | `PengRobinsonKernel`, `FluidTpEquilibrium`, `MaterialCatalog` |
-| column | `science/column/**`, the Rust column crates | `V3ColumnCalculator`, `V3SimultaneousColumnSolver` |
+| column | `science/column/**` | `V3ColumnCalculator`, `V3SimultaneousColumnSolver` |
 | fluid step | `science/fluid/network/PassiveStepSolver` and its split, `fluid/solver`, `fluid/linalg` | `PassiveStepSolver` |
 | fluid laws | the rest of `science/fluid/**` | `ConservativeTransport`, `FlowControl` |
 | plant | `science/plant` (when it exists), `science/plant/column`, the still, `runtime/fluid` column and still classes | `ColumnOperation`, `Stills` |
@@ -111,13 +111,8 @@ What the main thread keeps for itself: anything that needs a measurement, any de
 
 ## 8. Java and Rust twins
 
-Once a solver has a Rust twin ([RUST_COLUMN_PORT_PLAN.md](../2026-11-13-codebase-review/RUST_COLUMN_PORT_PLAN.md), section 9):
-
-1. Change Java first; it is the reference and the publication audit.
-2. Port the change in the same batch, or lower the default native ceiling below the changed layer in the same commit. A stale native layer is never left on.
-3. Re-record the parity fixtures when an accepted state moves, under section 7.
-4. Run the anchor tool; each changed Java method names its Rust function, or the batch review says why not.
-5. Build native code through Gradle only; it counts as a Gradle lane.
+None. The Rust column library was archived on 2026-11-17 (`tools/rust-column-archive/`, batch `2026-11-17-rust-solver-archive`): the
+column runs on its Java path alone, and no Java method has a Rust twin.
 
 ## 9. Handing over
 

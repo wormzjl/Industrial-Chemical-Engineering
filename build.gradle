@@ -352,132 +352,8 @@ if (configuredTestForks < 1 || configuredTestForks > 8) throw new GradleExceptio
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
     maxParallelForks = configuredTestForks
-    if (providers.gradleProperty('nativeLibraryPath').isPresent())
-        systemProperty 'icheme.native.path', providers.gradleProperty('nativeLibraryPath').get()
-    // The Rust column library's ceiling (NativeColumnSolver): off (the default) or band.
-    if (providers.gradleProperty('nativeColumn').isPresent())
-        systemProperty 'icheme.native.column', providers.gradleProperty('nativeColumn').get()
 }
 
-// The Rust column library icheme_column (src/main/rust, batch 2026-11-13-codebase-review). Cargo builds a platform
-// shared library (DLL/SO/DYLIB), never an executable, and the jar carries it under natives/<os>-<arch>/, where
-// NativeColumnSolver loads it when its ceiling (-PnativeColumn, default off) asks for it. Cargo comes from -Pcargo, the
-// PATH or ~/.cargo/bin; without one the jar carries no library and the column runs on its Java path. Cargo runs in
-// src/main/rust, whose .cargo/config.toml sets 4 jobs, the vendored crates and the static C runtime; a cargo run is
-// part of its Gradle invocation's lane (AGENTS.md "Gradle, measurement and verification", "Native code").
-def rustDirectory = layout.projectDirectory.dir('src/main/rust')
-def nativeCargoDirectory = layout.buildDirectory.dir('native/cargo').get().asFile
-def nativeLibraryName = System.mapLibraryName('icheme_column')
-def nativeLibraryDirectory = new File(nativeCargoDirectory, 'release')
-// The folder name NativeColumnSolver.platform() gives at run time.
-def nativePlatform = {
-    def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
-    def arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
-    def system = os.startsWith('windows') ? 'windows' : os.startsWith('mac') ? 'macos'
-            : os.startsWith('linux') ? 'linux' : os.replace(' ', '_')
-    def machine = arch in ['amd64', 'x86_64'] ? 'x86_64' : arch in ['aarch64', 'arm64'] ? 'aarch64' : arch
-    "${system}-${machine}".toString()
-}()
-def nativeCargo = {
-    if (providers.gradleProperty('cargo').isPresent()) return providers.gradleProperty('cargo').get()
-    def executable = nativePlatform.startsWith('windows') ? 'cargo.exe' : 'cargo'
-    def onPath = providers.environmentVariable('PATH').getOrElse('').split(File.pathSeparator)
-            .findAll { !it.isEmpty() }.collect { new File(it, executable) }.find { it.isFile() }
-    if (onPath != null) return onPath.absolutePath
-    def home = new File(System.getProperty('user.home'), ".cargo/bin/${executable}")
-    return home.isFile() ? home.absolutePath : null
-}()
-def nativeCargoCommand = nativeCargo ?: 'cargo'
-def nativeNoCargo = 'No cargo found: pass -Pcargo=<path to cargo>, or put cargo on the PATH or in ~/.cargo/bin'
-// rustCheck: the formatting, clippy with warnings as errors, and cargo's tests (the bit tables, the band LU, the JNI
-// layout). Each step leaves a stamp, so it runs again only when src/main/rust (or the Java token it reads) changed.
-def rustCheckStamps = layout.buildDirectory.dir('native/checks').get().asFile
-def rustCheckSteps = [
-        rustFmtCheck: [['fmt', '--all', '--check'], 'Checks the Rust formatting (cargo fmt --check).'],
-        rustClippy  : [['clippy', '--locked', '--offline', '--all-targets', '--', '-D', 'warnings'],
-                       'Runs clippy on the Rust workspace with every warning an error.'],
-        rustTest    : [['test', '--locked', '--offline'],
-                       'Runs the Rust tests: the Java bit tables, the band LU and the JNI layout and self-test.']]
-// The Java side of the Rust tests: the bit tables of the mathematics (RustBitTables) and the band LU table
-// (RustNativeTables), written from this build's own classes into icheme-math/tests/data. Git ignores them (6 MB of
-// generated rows); the Rust tests read them, so rustTest writes them first. By hand: gradlew rustTables, then the tests.
-def rustTablesDirectory = rustDirectory.dir('icheme-math/tests/data').asFile
-def rustSelfTestCopy = layout.buildDirectory.dir('native/tables').get().asFile
-def rustBitTables = tasks.register('rustBitTables', JavaExec) {
-    group = 'native'
-    description = 'Writes the bit tables the Rust tests compare the Rust mathematics with (RustBitTables).'
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.wormzjl.icheme.science.math.RustBitTables'
-    args rustTablesDirectory.absolutePath
-    outputs.files(fileTree(rustTablesDirectory) { include '*.txt'; exclude 'banded.txt' }).withPropertyName('bitTables')
-}
-def rustBandTable = tasks.register('rustBandTable', JavaExec) {
-    group = 'native'
-    description = 'Writes the band LU table the Rust tests compare the Rust band solve with (RustNativeTables).'
-    classpath = sourceSets.test.runtimeClasspath
-    mainClass = 'com.wormzjl.icheme.science.column.v3.linalg.RustNativeTables'
-    // The self-test vector it also writes is tracked (icheme-jni/tests/data/self_test.txt); this copy is not read.
-    args rustTablesDirectory.absolutePath, rustSelfTestCopy.absolutePath, 'this build'
-    outputs.file(new File(rustTablesDirectory, 'banded.txt')).withPropertyName('bandTable')
-    outputs.dir(rustSelfTestCopy).withPropertyName('selfTestCopy')
-}
-tasks.register('rustTables') {
-    group = 'native'
-    description = 'Writes the tables the Rust tests read (src/main/rust/icheme-math/tests/data, not tracked).'
-    dependsOn rustBitTables, rustBandTable
-}
-def previousRustStep = null
-rustCheckSteps.each { stepName, step ->
-    def stamp = new File(rustCheckStamps, "${stepName}.ok")
-    def after = previousRustStep
-    tasks.register(stepName, Exec) {
-        group = 'verification'
-        description = step[1]
-        workingDir rustDirectory.asFile
-        commandLine([nativeCargoCommand] + step[0])
-        // Only rustTest reads the generated tables; the other steps leave them out of their inputs.
-        inputs.files(fileTree(rustDirectory) { if (stepName != 'rustTest') exclude '**/tests/data/**' })
-                .withPropertyName('rustWorkspace').withPathSensitivity(PathSensitivity.RELATIVE)
-        if (stepName == 'rustTest') {
-            dependsOn rustBitTables, rustBandTable
-            // icheme-jni's formulation test reads the Java constants of the token.
-            inputs.file('src/main/java/com/wormzjl/icheme/science/column/v3/V3ColumnLabels.java')
-                    .withPropertyName('formulationSource').withPathSensitivity(PathSensitivity.RELATIVE)
-        }
-        outputs.file(stamp)
-        if (after != null) mustRunAfter after
-        doFirst { if (nativeCargo == null) throw new GradleException(nativeNoCargo) }
-        doLast { stamp.text = 'passed\n' }
-    }
-    previousRustStep = stepName
-}
-tasks.register('rustCheck') {
-    group = 'verification'
-    description = 'Checks the Rust workspace: cargo fmt --check, clippy -D warnings, cargo test --locked --offline.'
-    dependsOn rustCheckSteps.keySet().toList()
-}
-def nativeBuild = tasks.register('nativeBuild', Exec) {
-    group = 'native'
-    description = 'Builds the Rust column library (cargo build --release -p icheme-jni); no executable is produced.'
-    workingDir rustDirectory.asFile
-    commandLine nativeCargoCommand, 'build', '--release', '--locked', '--offline', '-p', 'icheme-jni',
-            '--target-dir', nativeCargoDirectory.absolutePath
-    inputs.files(fileTree(rustDirectory) { exclude 'vendor/**', '**/tests/data/**' })
-            .withPropertyName('rustSources').withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.file(new File(nativeLibraryDirectory, nativeLibraryName))
-    doFirst { if (nativeCargo == null) throw new GradleException(nativeNoCargo) }
-}
-def nativeResources = tasks.register('nativeResources', Sync) {
-    group = 'native'
-    description = 'Puts the Rust column library where the jar carries it, natives/<os>-<arch>/.'
-    from(nativeBuild) {
-        into "natives/${nativePlatform}"
-    }
-    into layout.buildDirectory.dir('generated/nativeResources')
-}
-if (nativeCargo != null) sourceSets.main.resources.srcDir nativeResources
-else logger.lifecycle('No cargo found: the jar carries no column library, and the column runs on its Java path.')
-tasks.withType(Test).configureEach { systemProperty 'icheme.native.packaged', nativeCargo != null }
 // Only PackagedSparseLuTest reads the packaged jar (the jar alone solves a sparse system; no EJML inside); it runs under
 // test and fluidScienceTest.
 tasks.withType(Test).matching { it.name in ['test', 'fluidScienceTest'] }.configureEach {
@@ -577,10 +453,6 @@ tasks.register('fluidSolverRegression', Test) {
         systemProperty 'fluid.regression.traceCutoff', providers.gradleProperty('fluidRegressionTraceCutoff').get()
     outputs.upToDateWhen { false }
 }
-// The column library is no input of a test task's class path: a relink can stamp the DLL, and with the ceiling off (the
-// default) no test reads it. Only nativeSmoke, the native tests' task, declares the built library as its input.
-normalization { runtimeClasspath { ignore 'natives/**' } }
-
 // A gate group loads a small part of the mod (by -Xlog:class+load, batch 2026-11-02-test-suite-optimization: 115 of the
 // source files for the column, 113 for equipment). Its task sees only that part, so a change anywhere else leaves it up to
 // date or restores it from the build cache: it does not run at all. A class left out of a list fails its test with
@@ -629,7 +501,7 @@ def columnGates = gateGroup('column', 'science/column/v3',
          'science/material/MaterialTestBasis*', 'science/material/PilotCryogenicTestCatalog*',
          'science/material/PilotAqueousTestCatalog*', 'science/material/TjlReferenceExtension*', 'science/material/TiaJuanaTestCatalog*', 'science/material/TiaJuanaExtension*',
          'science/thermo/PengRobinson78*', 'science/thermo/PhaseProperties*'],
-        ['column/**', 'materials/**', 'science/column/**', 'compat/presets/**'], ['data/icheme/neural/**', 'natives/**', 'assets/icheme/columnpreset/**', 'assets/icheme/mixturepreset/**'])
+        ['column/**', 'materials/**', 'science/column/**', 'compat/presets/**'], ['data/icheme/neural/**', 'assets/icheme/columnpreset/**', 'assets/icheme/mixturepreset/**'])
 def equipmentGates = gateGroup('equipment', 'science/equipment',
         ['science/material', 'science/math', 'science/machine', 'science/integrity/Metallurgy*', 'science/integrity/Mechanism*', 'science/fluid/topology/TopologyCompiler*', 'science/thermo/IdealGasFunction*',
          'science/thermo/PengRobinsonKernel*', 'science/thermo/ThermoRefusal*', 'runtime/fluid/FluidView*', 'runtime/instrument/Instrument*', 'runtime/control/DataPort*',
@@ -682,34 +554,11 @@ def holdGates = tasks.register('holdGates', Test) {
     }
     systemProperty 'icheme.fluid.scheduler.verify', 'true'
 }
-// The Rust column library's tests (NativeColumnSolverTest: the handshake, the band solve bit for bit, a column with the
-// ceiling off and at band) run here and not in columnGates, on the column group's copy of what they load and on the
-// library as built in build/native/cargo/release, which is their declared input. They skip where no library is built.
-def nativeTestClasses = ['com.wormzjl.icheme.science.column.v3.NativeColumnSolverTest']
-tasks.named('columnGates', Test) { filter { nativeTestClasses.each { excludeTestsMatching it } } }
-def nativeSmoke = tasks.register('nativeSmoke', Test) {
-    group = 'verification'
-    description = 'Loads the Rust column library from build/native/cargo/release and runs its tests through JNI; no executable is run.'
-    def gateInputs = tasks.named('columnGateInputs')
-    def gateDirectory = layout.buildDirectory.dir('gate-inputs/column')
-    testClassesDirs = files(gateDirectory.map { it.dir('tests') }).builtBy(gateInputs)
-    classpath = files(gateDirectory.map { it.dir('tests') }, gateDirectory.map { it.dir('lib') }).builtBy(gateInputs) +
-            configurations.testRuntimeClasspath + configurations.runtimeClasspath
-    maxHeapSize = '1g'
-    filter {
-        nativeTestClasses.each { includeTestsMatching it }
-        failOnNoMatchingTests = true
-    }
-    systemProperty 'icheme.native.path', nativeLibraryDirectory.absolutePath
-    inputs.files(nativeBuild).withPropertyName('nativeLibrary')
-    maxParallelForks = 1
-}
 // No task of its own, so the groups run side by side: a Test task that depended on them would wait for them.
 def slowGates = tasks.register('slowGates') {
     group = 'verification'
-    description = 'Runs what the everyday test leaves out: the hold gates, the gate groups and, where cargo is found, the native tests.'
+    description = 'Runs what the everyday test leaves out: the hold gates and the gate groups.'
     dependsOn holdGates, columnGates, equipmentGates
-    if (nativeCargo != null) dependsOn nativeSmoke
 }
 tasks.named('check') { dependsOn slowGates }
 
