@@ -44,7 +44,8 @@ rm src/test/java/com/wormzjl/icheme/runtime/fluid/ValveHoldTraceScratchTest.java
 
 `analyse_trace.py` needs numpy. It prints per iteration the norm, the residual by row group, the largest rows, the
 point, the Jacobian's singular values and near-null vectors, the direction and the trials. Results are in
-`VALVE_HOLD_TRACE.md`. The patch is against `df742782f`.
+`VALVE_HOLD_TRACE.md`. The patch is against `df742782f` and applies unchanged to `2919f7b83` (C3 and B are in
+`PassiveStepSolver` and `DeviceModes`, which it does not touch).
 
 ## Results, 2026-11-17
 

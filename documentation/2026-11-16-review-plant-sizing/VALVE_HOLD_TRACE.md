@@ -105,7 +105,7 @@ pump head -161 kPa past its runout, valve head -211 kPa. From iteration 2 only t
 trial below 1 Pa. This is a different stall. M1 has no root: at 60 kg/s the pump would need a discharge below zero, so
 the Newton walks to the box's edge. M2 has a root, which the carried start finds, and the Newton never takes a step.
 
-## 8. Options (none built)
+## 8. Options (B and C3 built: section 9)
 
 | Option | Stage | Removes / adds | Normal-path cost | Does not cover |
 |---|---|---|---|---|
@@ -118,3 +118,76 @@ the Newton walks to the box's edge. M2 has a root, which the carried start finds
 
 Recommended, for the owner: C1 with C3 for M2 (the balance belongs to the start stage, and an unconverged start is
 refused). B for M1. A only as a backstop. C3 and B touch the solute batch's hot file and wait for its slot.
+
+## 9. As built (2026-11-17)
+
+The owner approved B, C1 and C3. C3 and B are built. C1 was built, tried and withdrawn (below): C3 alone fixes M2.
+
+| Fix | Where | What it does |
+|---|---|---|
+| C3 | `PassiveStepSolver`, the mode-switch block of a flow valve moved into `VALVE_REGULATING` | Takes the balance's law flows only where `Start.converged`; otherwise the regulating pass starts from the converged open pass's own flows, as every other change does. No new state. |
+| B | `PassiveStepSolver` failure branch, after every other remedy and before the throw; `DeviceModes.openFailedRegulators` | Where nothing else changed, every regulating flow valve not yet opened in this solve is set `VALVE_OPEN` (`openedOnFailure`, once per valve per solve). A valve asked for more than its line passes has no root while it regulates (M1). |
+
+A2 fresh with C3: the open pass converges (10 iterations), the switch balance ends unconverged (residual 2.37, then 1.92;
+8 and 4 iterations, 5 sweeps), C3 refuses it, and pass 1 starts from the open line's 51.22 kg/s and converges in 11
+iterations (norm 5.9e-10). Passes 2 and 3 converge in 12 and 11. Before: pass 1 stalled at iteration 0.
+A2 carried, no pair and charge 30 (section 4's controls): every dump is bit for bit the same as before the fixes. Their
+switch balances converge, so C3 does not act, and no pass fails, so B does not act. L carried: pass 0 stalls as before
+(M1, residual 0.00449), B opens the valve, and the open pass converges in 12 iterations.
+
+`FlowValveCapacityTest` (15 tests; the line is the review's small rig: generator, pump on its curve, a 5 kg/s charge
+valve, a parallel pair, the inlet valve into a 200 kPa void; open at 51.0 kg/s alone, 51.22 with a pair):
+
+| Case | Plan | Result |
+|---|---|---|
+| I | inlet set above the line, from closed | stands open at the line's flow |
+| J, K | set within the line | regulates at the target |
+| L, P, Q | regulating at 3 (or 30, 1000), set to 60 (or 1000) | opens (B) |
+| M | stepped 3, 20, 40, 50, 60, 1000 | regulates at each target below the line, then opens |
+| N | a stronger supply | passes the target |
+| O | no pump, 600 kPa supply | opens to the 172.2 kg/s its supply drives |
+| C | a valve behind the pair, above the line | opens |
+| E | inlet opened from closed to 10, charge 5 | the charge regulates |
+| F | inlet 3, then 4.9, charge 5 | the inlet regulates |
+| A, G, H | inlet raised above the charge (3 to 10, 3 to 5.1; charge 30: 3 to 40) | the charge regulates |
+| B, D | two valves above the line, with and without the pair | both stand open |
+| pairs | pairs on both sides, charge 5, inlet 0 to 10 | the charge regulates (the case built for C3, carried and fresh) |
+| series | `FlowValvesInSeriesTest`'s plans 10, 3, 10, 0, 10 | the lower target regulates through every plan |
+| replays | A2, B, C, L, O: carried and fresh at 0.1, 1, 5 and 20 s | both starts solve and agree (flows within 1e-6, same modes) |
+
+Moved references: none. C3 and B act only where a balance failed or a pass failed with nothing else to change.
+
+**C1, tried and withdrawn.** A balance Newton step was bounded so that no junction crossed the pressure at which an
+open one-way connection to a held end stops passing (`crossingLimit`, landing at 0.99 of the drive). It fixed A2's
+balance (it converges from above, 200.18 to 200.06 kPa, in 5 iterations), but:
+- it moved every balance that crosses a stop and recovers: section 4's controls were no longer bit for bit (start
+  flows about 1e-7 off; A2 carried took 17 balance iterations instead of 13);
+- it held `JunctionSeedingGateTest.aBackPressureValvePlacedUnderAChokedGasSupplyOpensAtTheStart`, which passes
+  without it. The island's 21 balances all converged, but the bound turned the Newton into a creep: on the valve-open
+  balance the drive into the tank fell 417 541, 4 175, 2 109, 1 065, 10.6 Pa toward a root 107 Pa above the stop, and
+  the closed-network balance, whose junction ends on the stop, took 27 of its 30 iterations. The moved start then held
+  the step: 19 substeps rejected at `MixtureViscosity.own` line 216 (below), one line-search stall at pass 1;
+- a variant that cuts a junction once and takes the next crossing step as it is (keyed by the junction: two parallel
+  pipes into one tank share a stop) passes the gate test but ends three of its balances unconverged, and A2 carried's
+  switch balance too (residual 2.31, against 13 iterations converged before the fixes). A second crossing does not
+  show the root is at the stop: in A2 carried and the gate test the root lies above it.
+
+Do not build C1 again without a balance that only it solves.
+
+**Latent defect seen under C1, not fixed.** With C1, a start the physics allows (the gate test's back-pressure valve
+regulating at 200 kPa, junctions at 189.5, 906.6 and 200 kPa) reached `MixtureViscosity.own` line 216 ("Prepared
+viscosities belong to another model/temperature"): a caller passed a viscosity bundle prepared at another temperature.
+The interval solver counts it as a rejected trial. It is not reproduced on the final code, and the caller is not named.
+
+Tests on the final code (`affected.mjs select --since HEAD` on the C3 and B diff, through
+`record.init.gradle`; LanguageFilesTest and UnitTextTest left out): test 292 classes, 1745 tests, one failure, the
+expected `SizingPageTest.theDoorFitsInEveryViewForEveryItemInChinese`; holdGates 9 classes, 85 tests; columnGates 1
+class, 5 tests; equipmentGates 1 class, 23 tests; `FlowValveCapacityTest` 15 and the gate method above in their own run.
+No existing test changed result.
+
+`openStarved` (D11) may be redundant now: with its call removed, `StarvedRegulatingValveTest` (1) and
+`FlowValveCapacityTest` (15) pass, B opening the starved valve instead. Proposed, not removed: the rest of the
+selection was not run without it.
+
+Not covered: the review world was not run on these fixes; the solver regression (`fluidSolverRegression`), the
+GameTests and a campaign were not run.

@@ -70,6 +70,13 @@ the `Rig` class keep their sizes.
   singular (cond 2.9e9), and every trial leaves the property box. The 14.932 is the pump's rated 19.932 kg/s start
   against the 5 kg/s line. M1 is a different stall: it has no root, and the pump's discharge walks to 1 Pa. Options A to
   C4 go to the owner. No mod code.
+- 2026-11-17, same branch (sub-thread, owner: "Yes, build them"): options C3 and B built (`e75044d7c`, `2919f7b83`),
+  C1 tried and withdrawn; [VALVE_HOLD_TRACE.md](VALVE_HOLD_TRACE.md), section 9. C3: a flow valve moved into
+  regulating starts its pass on the balance only where the balance converged, else on the open pass's flows (A2 solves:
+  pass 1 in 11 iterations). B: a pass that fails with nothing else to change solves its regulating flow valves open,
+  once per solve (M1). C1 (a balance step bounded at a one-way stop) moved every balance that crosses and recovers and
+  held `JunctionSeedingGateTest`'s back-pressure valve case; its junction-keyed variant left balances unconverged.
+  `FlowValveCapacityTest` (15) added; the selected classes pass but the expected `SizingPageTest` Chinese case.
 
 ## Full crude unit, sized (2026-11-17)
 
@@ -210,4 +217,12 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   - long unsupported aerial runs;
   - E-101 stands on tall legs so its shell outlet's boundary line clears the ground;
   - the GameTest pass beacons (4 green beams) and structure blocks stay in the world.
+- Valve hold (VALVE_HOLD_TRACE.md, section 9), not done: the review world not rebuilt on C3 and B; the solver
+  regression not run; `openStarved` may be redundant beside B (its test passes without it), owner to decide; the
+  viscosity guard `MixtureViscosity.own` line 216 seen reached under C1 with a bundle prepared at another temperature,
+  caller not named, not reproduced on the final code.
+- `ColumnRunTest.aColumnsOutletFeedsAnother` (left out of the lane) trips the second column on its feed enthalpy,
+  column side (cold feed), seen in the valve-hold work: its feed came at 900.8, 831.8 and 692.6 J/mol against the
+  table's 1203.42 (slope 30 J/mol/K), the condenser duty departed 30, 37, then 51 %, and it tripped at tick 1281 while
+  the line still flowed (inlet regulating at 0.0032 kg/s at tick 1300). Not changed.
 - No merge preparation (owner).
