@@ -71,6 +71,20 @@ The sized 0.15 m line loses 0.5 kPa over the same 30 m. Liquid speed never nears
 - In the review plant as built, a real plant would be limited by the overhead line (7 to 18 % of feed) and by nothing
   else. The 0.05 m liquid lines cost head the pumps have.
 
+### 2.5 Outlet ports: head and elevation (owner, 2026-11-17)
+
+An outlet's port is a generator in the cell on its boundary valve's column side, stated at the design's stage pressure
+(`PortConditions.estimate`, fixed at Start) wherever that valve stands. The pipes between the nozzle and the valve are
+held, so the liquid column between them counts for nothing. The network beyond the port has gravity
+(`PassiveStepSolver.GRAVITY`, the nodes' elevations); the fence has none.
+
+- Expected: the liquid at the valve has the nozzle's pressure less its own column up to the valve,
+  `P = P_design - density x g x (z_valve - z_source)`. A bottoms liquid of 700 kg/m3 loses 6.9 kPa a metre.
+- What the code does: a bottoms valve placed 29 m up (the review column's height) still gives the design 2.0 bar: 2.0 bar
+  of head from nothing, the bottoms' whole absolute pressure. A draw valve placed at grade, 20 m under its nozzle, gives
+  1.4 bar less than a real line would.
+- So a product can be delivered higher than its design pressure lifts it, with no pump.
+
 ## 3. Proposed laws
 
 One new LIMIT, `HYDRAULICS` (status word `hydraulics`, the index a loop: 0 overhead, 1 reflux, 2 + j pumparound j; the
@@ -91,7 +105,17 @@ every limit does. At one table every internal flow is proportional to the feed t
    - A (recommended): the cooler's utility inlet temperature plus the approach the cooler side already uses
      (`Read.column`'s ceiling rule, mirrored at the cold end).
    - B: no floor: a pumparound pump never binds, only its head against the lines.
-4. Not modelled: suction boiling and NPSH (the receiver and the draw trays stand above their pumps), two-phase flow in
+4. **Outlet ports.** Owner option O4.
+   - A (recommended): each slice the port's pressure is the design pressure less the product's own column,
+     `density x g x lift`, the lift the port's cell above its source (the column's nozzle for a draw and the bottoms; the
+     receiver's nozzles for the off-gas, the sour water and the distillate, whose reflux pump adds nothing: the design value
+     is the top's pressure). The density is the product's at the port. A valve under its source gains the column, as a
+     real line does. Start refuses (`Refusal.OUTLET_TOO_HIGH`, naming the outlet and both heights) where the lift passes
+     the head the design pressure gives at the design's liquid, `P_design / (density x g)`: the port's pressure would not
+     be positive. Inlets keep their rule.
+   - B: a check alone: Start refuses a liquid outlet whose valve stands above its source; no pressure change. Simpler,
+     but a valve under its nozzle still misses its real head, and a riser of one block is refused.
+5. Not modelled: suction boiling and NPSH (the receiver and the draw trays stand above their pumps), two-phase flow in
    the condenser's outlet, the condenser's shell-side drop (O1's budget covers the line alone).
 
 ## 4. Work packages
@@ -112,7 +136,14 @@ every limit does. At one table every internal flow is proportional to the feed t
    `HYDRAULICS` beside `FLOODING`. `ColumnOperation.cycle` computes the shares from `Internal`, `Lines`, the members'
    movers and the registry (pure arithmetic in a new `science/plant/column/LoopHydraulics`). `Condition.HYDRAULICS`;
    `ColumnStatus` words; `en_us.json`.
-5. **The review world** is rebuilt with the fixed builder; its report shows no `HYDRAULICS`. A second plant with a
+5. **Outlet head** (O4 A). `ColumnUnit.Station` gains `lift`, m (facts schema 31 with package 3; 0 is the behaviour
+   before), set by `ColumnStarts` from the port's cell and its source nozzle (the walk of package 3 gives the source);
+   `PortPlan` gains `lift`; `PassiveStepSolver.ports` states the generator at the port's pressure less
+   `density x GRAVITY x lift`, the density the stated product's at the port's pressure (one evaluation, no iteration).
+   `Refusal.OUTLET_TOO_HIGH` in `ColumnStarts.build`. Tests: `RegulatingValveHoldTest` (a lift of 0 is as before,
+   bit for bit; a lift of 10 m lowers the generator by the hand number), `ColumnStartsTest` or the Start GameTest (the
+   refusal). `PassiveStepSolver` is the fluid step lane's hot file: one method, stated here.
+6. **The review world** is rebuilt with the fixed builder; its report shows no `HYDRAULICS`. A second plant with a
    0.05 m overhead reads `LIMITED: hydraulics`.
 
 Tests: `ColumnCycleTest` (the share binds, is the lowest, the text), a new `LoopHydraulicsTest` (each law against hand
@@ -132,5 +163,6 @@ bit for bit), the facts round trip and corpus gate. Classes for each run come fr
 
 - O1: the overhead's drop budget (A, B or C).
 - O2: the pumparound's return floor (A or B).
+- O4: the outlet ports' head (A or B).
 - O3: the order against the solute batch in the hot files, and the reservation of state format 54 and facts schema 31
   on `main` (a documentation-only commit).

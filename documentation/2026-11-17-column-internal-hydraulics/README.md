@@ -12,6 +12,9 @@ the review plant, the proposed laws, the work packages and the owner's decisions
 - 2026-11-17: the plan. Its numbers changed the first proposal: a liquid line never nears the speed cap, and a pumparound
   pump's size sets the fall across its cooler, not the duty. In the review plant as built only the 0.05 m overhead line
   would limit a real plant (7 to 18 % of feed). No code.
+- 2026-11-17: the owner added the outlets' head. An outlet port gives the design stage pressure wherever its boundary
+  valve stands, so a valve 29 m up a riser still gives 2.0 bar. Plan sections 2.5 and 3 (law 4), work package 5, option O4.
+  No code.
 
 ## Documents
 
@@ -19,6 +22,6 @@ the review plant, the proposed laws, the work packages and the owner's decisions
 
 ## Open items
 
-- Owner decisions O1 (the overhead's drop budget), O2 (the pumparound's return floor), O3 (the order against batch
+- Owner decisions O1 (the overhead's drop budget), O2 (the pumparound's return floor), O4 (the outlet ports' head), O3 (the order against batch
   `2026-11-16-solute-reaction-system` in the hot files, and the reservation of state format 54 and facts schema 31).
 - The plan's overhead flow and pressure drops are estimates; work package 1 solves them.
