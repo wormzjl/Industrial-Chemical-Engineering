@@ -17,8 +17,9 @@ import java.util.*;
  * <ul>
  * <li>at each commit or replay of a radiant coil, its <em>demand</em>: the heat it would take to hold its set point at its
  * design duty, W, read from the slice it solved (its heat where it reached the set point, its available heat over its
- * firing share where it fell short, its design duty where it had no fuel or air to try; 0 for no flow or an inlet at the set
- * point). It never reads the capped heat as the demand, so a short slice cannot ratchet the fuel down;</li>
+ * firing share where it fell short, its design duty where it had no fuel or air to try, and its design duty for still tubes
+ * whose contents stand below the set point, so the next stream finds the burners lit; 0 for an inlet or still contents at the
+ * set point). It never reads the capped heat as the demand, so a short slice cannot ratchet the fuel down;</li>
  * <li>at each commit or replay of the fuel's island, the heat the burners fired, W: the mass flow into the firebox over the
  * span times the fuel's lower heating value per kilogram ({@link Burners#perKilogram}, the material records'
  * {@code combustion} sub-records), and the combustion-air fans' draw at that firing, booked on the burners' electric store;</li>
@@ -33,6 +34,8 @@ import java.util.*;
 public final class FiredHeaters {
     /** A moved demand or fired heat wakes the other island past this share (plus 1 W). */
     static final double WAKE=1e-2;
+    /** A coil carrying less than this, kg/s, stands still (a packed line replays flows of 1e-27 kg/s). */
+    static final double STILL=1e-6;
     /** A heater as its page shows it: its radiant demand, the fuel asked for and fired (W), the fuel's mass flow (kg/s) and heat (J/kg), the fans' draw (W), its alarms. */
     public record View(double demand,double asked,double fired,double fuelFlow,double heatingValue,double fanDraw,List<EquipmentAlarm> alarms) {}
 
@@ -150,9 +153,13 @@ public final class FiredHeaters {
                 double rate=heat.getOrDefault(pipe.id(),0.)/seconds,flow=Math.abs(average[e]);
                 var inlet=solved.reservoirs().get(average[e]>=0?pipe.first():pipe.second()).state();
                 double demand;
-                if(coil.firing()>0&&coil.firing()<1)demand=coil.available()/coil.firing();
+                // Still tubes (owner, 2026-11-17: "if it is set to a temperature it should output at given temperature unless
+                // duty is not satisfied"): a lit coil whose contents stand below the set point keeps its design duty's fuel
+                // burning, so the stream that comes next, the first fill included, leaves at the set point.
+                if(flow<STILL)demand=coil.duty()>0&&!(inlet.temperature()>=coil.setTemperature()-.05)?coil.duty():0;
+                else if(coil.firing()>0&&coil.firing()<1)demand=coil.available()/coil.firing();
                 else if(coil.firing()==1)demand=Math.max(0,rate);
-                else demand=flow>0&&inlet.temperature()<coil.setTemperature()-.05&&coil.duty()>0?coil.duty():0;
+                else demand=inlet.temperature()<coil.setTemperature()-.05&&coil.duty()>0?coil.duty():0;
                 demand=Math.min(coil.duty(),demand);
                 double before=h.demand;h.demand=demand;h.radiantIsland=island;h.demandSeen=true;
                 if(moved(Burners.fired(before),Burners.fired(demand))&&h.fuelIsland!=null)wake.add(h.fuelIsland);

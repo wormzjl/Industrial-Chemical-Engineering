@@ -78,8 +78,13 @@ class FiredHeaterFuelTest {
     }
 
     private Islands compile(FluidThermodynamics.State fuel) {
-        var compiled = PhysicalFluidTopology.compile(devices(), Map.of(1L, reservoir(1, pure("Water", 323.15, 1_000_000), PassiveNetwork.NodeKind.GENERATOR),
-                2L, reservoir(2, pure("Water", 300, 900_000), PassiveNetwork.NodeKind.VOID), 3L, reservoir(3, pure("Water", 323.15, 1_000_000), PassiveNetwork.NodeKind.GENERATOR),
+        return compile(fuel, 323.15, 900_000);
+    }
+
+    /** The heater's islands with the radiant coil's water at {@code water} K, drawn off to a void at {@code drain} Pa (1 MPa: still). */
+    private Islands compile(FluidThermodynamics.State fuel, double water, double drain) {
+        var compiled = PhysicalFluidTopology.compile(devices(), Map.of(1L, reservoir(1, pure("Water", water, 1_000_000), PassiveNetwork.NodeKind.GENERATOR),
+                2L, reservoir(2, pure("Water", Math.min(water, 300), drain), PassiveNetwork.NodeKind.VOID), 3L, reservoir(3, pure("Water", 323.15, 1_000_000), PassiveNetwork.NodeKind.GENERATOR),
                 4L, reservoir(4, pure("Water", 300, 900_000), PassiveNetwork.NodeKind.VOID), FUEL, reservoir(FUEL, fuel, PassiveNetwork.NodeKind.GENERATOR),
                 BURNERS, reservoir(BURNERS, pure("Nitrogen", Burners.AIR, Burners.PRESSURE), PassiveNetwork.NodeKind.VOID)));
         PassiveNetwork radiant = null, burner = null;
@@ -257,6 +262,29 @@ class FiredHeaterFuelTest {
         assertEquals(view.fuelFlow() + Burners.AIR_PER_FIRED * view.fired(), flue.flueFlow(), 1e-12, "the fuel and its air");
         assertTrue(flue.flueFlow() > 20 * flue.fuelFlow(), "about 20 kg of flue gas per kg of methane: " + flue.flueFlow() / flue.fuelFlow());
         assertNull(rig.heaters.flue(RADIANT), "the flue is the burners'");
+    }
+
+    /**
+     * Still tubes (owner, 2026-11-17): a lit coil whose water stands still below its 443 K set point keeps its design duty's
+     * fuel burning, so the first stream through it leaves at the set point; still water above the set point asks for none.
+     * The coil takes no heat while nothing flows.
+     */
+    @Test
+    void stillTubesBelowTheSetPointKeepTheBurnersLit() {
+        var cold = new Rig(compile(pure("Methane", 300, 500_000), 323.15, 1_000_000));
+        cold.power();
+        cold.run(6, true);
+        var view = cold.heaters.view(BURNERS);
+        System.out.printf(Locale.ROOT, "still tubes: demand %.0f kW, fired %.0f kW, coil %.0f kW%n", view.demand() / 1e3, view.fired() / 1e3, cold.heat() / 1e3);
+        assertTrue(view.demand() > 0, "still cold water asks for the coil's duty");
+        assertEquals(view.asked() * Burners.MARGIN, view.fired(), .02 * view.asked(), "the burners fire what the duty asks");
+        assertEquals(List.of(), view.alarms(), "no alarm");
+        assertEquals(0, cold.heat(), 1, "nothing flows: the coil takes no heat");
+        var hot = new Rig(compile(pure("Methane", 300, 500_000), 450, 1_000_000));
+        hot.power();
+        hot.run(6, true);
+        assertEquals(0, hot.heaters.view(BURNERS).demand(), 1e-9, "still water above the set point asks for nothing");
+        assertEquals(0, hot.heaters.view(BURNERS).fuelFlow(), 1e-9, "and the fuel valve stays shut");
     }
 
     @Test
