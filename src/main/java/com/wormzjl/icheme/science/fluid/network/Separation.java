@@ -249,4 +249,134 @@ public final class Separation {
         if(!FluidThermodynamics.holdsPhase(state,phase))return new Layer(0,0,0,outflow,inflow);
         return new Layer(FluidThermodynamics.phaseVolume(state,phase),PortStreams.phaseDensity(model,state,phase),model.phaseCarrierViscosity(state,phase,scratch),outflow,inflow);
     }
+
+    // ---- The band law (batch 2026-11-17-dynamic-settling, plan sections 3 and 4, laws L2, L4, L5). No vessel reads it yet.
+
+    /** The equal parts a slice is advanced in (plan L2: one part is 47 % high above one turnover a slice). */
+    public static final int PARTS=16;
+
+    /**
+     * A liquid layer's turbid band (plan L1): the part of the layer that still holds drops of the other liquid. In a
+     * uniform dispersion every drop moves at one speed, so the band keeps its concentration and loses height behind a
+     * sharp front (Kynch, Trans. Faraday Soc. 48 (1952) 166, doi:10.1039/TF9524800166).
+     *
+     * @param turbid the layer's own liquid that still holds drops, m³
+     * @param held   the other liquid in those drops, m³
+     */
+    public record Band(double turbid,double held) {
+        /** A settled layer. */
+        public static final Band NONE=new Band(0,0);
+        public Band {
+            if(!(turbid>=0)||!(held>=0)||!Double.isFinite(turbid+held))throw new IllegalArgumentException("Invalid band");
+        }
+        public boolean none(){return turbid==0&&held==0;}
+        /**
+         * The band within what the vessel holds (plan L4): {@code turbid} at most {@code layer}, the layer's own liquid,
+         * and {@code held} at most {@code other}, the vessel's volume of the other liquid. Where {@code turbid} is clamped
+         * down, {@code held} scales with it. A layer of 0 loses its band.
+         */
+        public Band within(double layer,double other) {
+            if(!(layer>=0)||!(other>=0)||!Double.isFinite(layer+other))throw new IllegalArgumentException("Invalid layer");
+            if(layer==0)return NONE;
+            double t=turbid,h=held;
+            if(t>layer){h*=layer/t;t=layer;}
+            h=Math.min(h,other);
+            return t==turbid&&h==held?this:new Band(t,h);
+        }
+    }
+
+    /**
+     * One slice of a band.
+     *
+     * @param next    the band at the slice's end
+     * @param carried the dispersed volume the layer's outlet carried per own volume drawn; 0 where nothing was drawn
+     */
+    public record Slice(Band next,double carried) {}
+
+    /**
+     * Advances a layer's band over one slice (plan L2), in {@link #PARTS} equal parts, each in this order: the front
+     * clears {@code min(turbid, v A dt)} at the swarm speed {@code v = speed (1 − φ)^exponent}, {@code φ} the band's own
+     * dispersed fraction (Richardson and Zaki, Trans. Inst. Chem. Eng. 32 (1954) 35); the feed arrives turbid; the
+     * outlet draws the layer's oldest liquid, clear until the band fills the layer. At steady flow it gives Hazen's ideal
+     * basin, the carried share {@code (1 − N) r} with {@code N = v_s A / Q} (Hazen, Trans. ASCE 53 (1904) 45; Camp,
+     * Trans. ASCE 111 (1946) 895); filled turbid and left alone, the layer clears after {@code h / v}. Pure arithmetic.
+     *
+     * @param band     the band at the slice's start
+     * @param volume   the layer's own liquid at the slice's start, m³
+     * @param area     its plan area, m²
+     * @param speed    one drop's settling speed, m/s ({@link #settling})
+     * @param exponent Richardson and Zaki's {@code n} ({@link #swarmExponent}); 0: no swarm factor
+     * @param inflow   own liquid entering, m³/s
+     * @param ratio    dispersed volume per own volume entering, 0 to 1 ({@link #dispersed})
+     * @param outflow  own liquid drawn through its outlet, m³/s
+     * @param seconds  the slice
+     */
+    public static Slice advance(Band band,double volume,double area,double speed,double exponent,double inflow,double ratio,double outflow,double seconds) {
+        if(band==null||!(volume>=0)||!(area>=0)||!(speed>=0)||!(exponent>=0)||!(inflow>=0)||!(ratio>=0&&ratio<=1)||!(outflow>=0)||!(seconds>=0)
+                ||!Double.isFinite(volume+area+speed+exponent+inflow+outflow+seconds))
+            throw new IllegalArgumentException("Invalid settling slice");
+        double turbid=band.turbid(),held=band.held(),dt=seconds/PARTS,carried=0,drawn=0;
+        for(int part=0;part<PARTS;part++) {
+            // (a) The front.
+            if(turbid>0) {
+                double phi=held/(turbid+held),v=exponent==0||phi==0?speed:speed*DeterministicMath.pow(1-phi,exponent);
+                double swept=Math.min(turbid,v*area*dt);
+                held-=held*swept/turbid;turbid-=swept;
+                if(turbid<=0){turbid=0;held=0;}
+            }
+            // (b) The feed.
+            turbid+=inflow*dt;held+=inflow*ratio*dt;
+            // (c) The outlet: the oldest liquid first.
+            double out=outflow*dt,clear=volume+inflow*dt-turbid,taken=Math.min(turbid,Math.max(0,out-clear));
+            if(turbid>0&&taken>0) {
+                double c=held*taken/turbid;
+                carried+=c;held-=c;turbid-=taken;
+            }
+            drawn+=out;
+            volume=Math.max(0,volume+(inflow-outflow)*dt);
+            // Rounding never leaves a negative band, nor drops without the liquid that holds them.
+            if(turbid<=0){turbid=0;held=0;}
+            else if(held<0)held=0;
+        }
+        return new Slice(turbid==0&&held==0?Band.NONE:new Band(turbid,held),drawn>0?carried/drawn:0);
+    }
+
+    /**
+     * Richardson and Zaki's exponent {@code n} of the swarm factor {@code (1 − φ)^n}, by their steps on the single
+     * drop's Reynolds number {@code Re = ρ v d / μ} (Trans. Inst. Chem. Eng. 32 (1954) 35, reprinted
+     * doi:10.1016/S0263-8762(97)80006-8): 4.65 under Re 0.2, {@code 4.35 Re^-0.03} to Re 1, {@code 4.45 Re^-0.1} to
+     * Re 500, 2.39 above. The steps are the paper's own ({@code n} jumps by 0.1 at Re 1); 4.65, 4.45 and 2.39 were
+     * confirmed against the paper, the factor 4.35 is from memory and not confirmed (plan section 10: at most 2 % in
+     * speed at a fraction of 0.3).
+     *
+     * @param speed     the single drop's settling speed, m/s
+     * @param drop      its diameter, m
+     * @param viscosity the continuous liquid's, Pa s
+     * @param density   the continuous liquid's, kg/m³
+     */
+    public static double swarmExponent(double speed,double drop,double viscosity,double density) {
+        if(!(speed>=0)||!(drop>0)||!(viscosity>0)||!(density>0)||!Double.isFinite(speed+drop+viscosity+density))
+            throw new IllegalArgumentException("Invalid swarm state");
+        double re=density*speed*drop/viscosity;
+        if(re<.2)return 4.65;
+        if(re<1)return 4.35*DeterministicMath.pow(re,-.03);
+        if(re<500)return 4.45*DeterministicMath.pow(re,-.1);
+        return 2.39;
+    }
+
+    /**
+     * The feed ratios of a vessel's two layers, {@code {oil layer's, water layer's}}, dispersed volume per own volume
+     * entering (plan L5, owner's decision D1 B): the liquid with the smaller volume inflow enters as drops in the other,
+     * which is continuous (phase inversion by volume share: Selker and Sleicher, Can. J. Chem. Eng. 43 (1965) 298); the
+     * dispersed liquid's own layer receives nothing from the feed and grows by what settles. Equal inflows: water in oil.
+     *
+     * @param oilIn   oil entering, m³/s
+     * @param waterIn water entering, m³/s
+     */
+    public static double[] dispersed(double oilIn,double waterIn) {
+        if(!(oilIn>=0)||!(waterIn>=0)||!Double.isFinite(oilIn+waterIn))throw new IllegalArgumentException("Invalid feed");
+        if(oilIn==0&&waterIn==0)return new double[]{0,0};
+        if(waterIn<=oilIn)return new double[]{waterIn/oilIn,0};
+        return new double[]{0,oilIn/waterIn};
+    }
 }
