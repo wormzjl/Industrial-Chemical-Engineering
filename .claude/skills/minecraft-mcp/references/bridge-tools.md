@@ -3,8 +3,8 @@
 The command set is the mod's own whitelist (`McpMessageHandler.KNOWN_COMMANDS`, read from the v0.4.28
 jar on 2026-11-17). A name outside it answers `unknown command: <name>`. The "status" column is what
 IChemE sessions observed with v0.3.0 (to 2026-09-24) and v0.4.18 (2026-10-15 to 2026-10-27), on the
-`runMcpClient` lane unless noted. Nothing in this table was re-observed on v0.4.28; the first check on
-v0.4.28 confirms or corrects it. "compat" means it works only with the `icheme_mcp_compat` mixins
+`runMcpClient` lane unless noted. Rows marked **0.4.28 ok** were confirmed in the 2026-11-17 check on
+v0.4.28 (fluid generator screen, superflat world); the rest are carried over unconfirmed. "compat" means it works only with the `icheme_mcp_compat` mixins
 (`src/mcpCompat`), which only `runMcpClient` loads.
 
 Every command is one HTTP call: `POST http://127.0.0.1:9876/api/cmd`, header
@@ -18,42 +18,42 @@ the port, the pid and the mod version.
 |---|---|---|
 | `ping` | | `pong` |
 | `screenshot` | | base64 PNG; too large for a tool result, use `screenshot_to_file` |
-| `get_screen_buttons` | | ids for `click_button_id`, index order for `click_button_index`; `{"error":"no screen"}` in the world |
+| `get_screen_buttons` | | **0.4.28 ok**; every widget is listed twice (the second copy repeats the first); ids for `click_button_id`, index order for `click_button_index`; `{"error":"no screen"}` in the world |
 | `enumerate_widgets` | | full widget tree, GUI-scaled coordinates and messages |
 | `get_world_info` | | untested |
 | `get_player_info` | | unreliable (game mode wrong, name empty); read `/data get entity @s` in the log instead |
 | `debug_fields` | | unusable; F3 cannot be toggled through the bridge |
 | `overlay_click` | `x`, `y` | the mod's own overlay button; not needed |
-| `enter_control_mode` | | needed once per client start before any input command; refused remotely without `-Dmcp.remote_control=true` (the lane sets it) |
+| `enter_control_mode` | | **0.4.28 ok** (`"hook":true`); needed once per client start before any input command; refused remotely without `-Dmcp.remote_control=true` (the lane sets it) |
 | `exit_control_mode` | | works |
 | `set_gamemode` | `mode` | replies true without proof; use `/gamemode` through chat |
 | `release_mouse` | | works |
-| `pause_game` | | opens the pause screen; the only way to it in background mode |
-| `close_screen` | | closes the open screen (not a pause screen forced by `pauseOnLostFocus`) |
-| `open_chat` | | opens chat; its text argument is dropped; wait ~400 ms before typing |
+| `pause_game` | | **0.4.28 ok**; opens the pause screen; the only way to it in background mode |
+| `close_screen` | | **0.4.28 ok**; closes the open screen (not a pause screen forced by `pauseOnLostFocus`) |
+| `open_chat` | | **0.4.28 ok** (with `type_text` + `press_key enter`: `bridge.js cmds`); opens chat; its text argument is dropped; wait ~400 ms before typing |
 
 ## Control mode required
 
 | command | params | status |
 |---|---|---|
-| `screenshot_to_file` | `path` | since 0.4.28 only inside `mcp.screenshot.dir` (the lane: `<worktree>/tmp`); relative paths resolve against it; PNG alpha is 0 on every pixel, flatten it (`bridge.js shot` does) |
-| `click` | `x`, `y` (framebuffer pixels), `button` | buttons; an `EditBox` focuses with compat; with no screen open it attacks (breaks) the block at the crosshair |
+| `screenshot_to_file` | `path` | **0.4.28 ok** into `tmp/`; since 0.4.28 only inside `mcp.screenshot.dir` (the lane: `<worktree>/tmp`); relative paths resolve against it; PNG alpha is 0 on every pixel, flatten it (`bridge.js shot` does) |
+| `click` | `x`, `y` (framebuffer pixels), `button` | **0.4.28 ok** (focuses an `EditBox`, caret at the click point); buttons; an `EditBox` focuses with compat; with no screen open it attacks (breaks) the block at the crosshair |
 | `click_button_id` | `id` | works |
-| `click_button_index` | `index` | fires `onPress`; on a `CycleButton` replies `"via":"manual_cycle"` (see pitfalls); does not focus an `EditBox`; two back-to-back clicks can land as one: click, wait, screenshot, click |
+| `click_button_index` | `index` | **0.4.28 ok**; fires `onPress`; on a `CycleButton` replies `"via":"manual_cycle"` (see pitfalls); does not focus an `EditBox`; two back-to-back clicks can land as one: click, wait, screenshot, click |
 | `right_click` | | in the world routes to the control-mode screen on 0.4.18; prefer `use_item` |
-| `use_item` | | opens a block GUI at the crosshair (empty hand works); compat `UseItemMixin` runs it on the render thread, without it a client-side screen can crash before init |
+| `use_item` | | **0.4.28 ok** (`minecraft_use_path_render_thread`); opens a block GUI at the crosshair (empty hand works); compat `UseItemMixin` runs it on the render thread, without it a client-side screen can crash before init |
 | `place_block` | | works |
 | `set_view_angle` | `yaw`, `pitch` | works |
 | `look_delta` | `delta_yaw`, `delta_pitch` | works |
-| `press_key` / `key` | `key` (`enter`, `escape`, `tab`, `key.keyboard.w`), `hold_seconds` | `enter` submits chat, `escape` closes a GUI; `escape` in the world does nothing; `hold_seconds` does not walk; `tab` moves focus by two widgets |
+| `press_key` / `key` | `key` (`enter`, `escape`, `tab`, `backspace`, `delete`, `key.keyboard.w`), `hold_seconds` | **0.4.28 ok**: `backspace` and `delete` edit a focused field; `end` replies pressed but does not move the caret; `enter` submits chat, `escape` closes a GUI; `escape` in the world does nothing; `hold_seconds` does not walk; `tab` moves focus by two widgets |
 | `press_enter` / `enter` | | alias of `press_key enter` (new since 0.4.18; untested) |
 | `type_text` | `text`, `press_enter` | chat and vanilla screens; a container `EditBox` with compat |
-| `paste_text` | `text`, `press_enter` | inserts into the focused `EditBox` with compat |
+| `paste_text` | `text`, `press_enter` | **0.4.28 ok**; inserts at the caret of the focused `EditBox` with compat |
 | `hotkey` | `keys` comma-separated, e.g. `key.keyboard.left control,key.keyboard.a` or `enter` | compat routes it; Ctrl+A did not select on one 0.4.18 run, use backspaces |
 | `scroll` | `clicks` | in the world it changes the hotbar slot between ticks |
 | `scroll_at` / `direct_scroll` | `x`, `y`, `clicks` | untested |
 | `mouse_drag` / `drag` | `x_start`/`x1`, `y_start`/`y1`, `x_end`/`x2`, `y_end`/`y2`, `button` | untested |
-| `switch_tab` | `index` (also `tab_index`) | Create World tabs; a wrong name is ignored; mod tab rows are ordinary buttons |
+| `switch_tab` | `index` (also `tab_index`) | **0.4.28 ok**; Create World tabs; a wrong name is ignored; mod tab rows are ordinary buttons |
 | `select_list_item` | `index` | fails on the world list; click the entry instead |
 | `call_screen_method` | `methodName` | untested |
 | `execute_command` | `command` | **broken here**: runs through KubeJS's client dispatcher, every server command is "Unknown or incomplete command". Use chat |

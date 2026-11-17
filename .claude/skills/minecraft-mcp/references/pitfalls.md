@@ -17,7 +17,7 @@ unless the owner is watching. Read this before improvising.
 | Port 9876 already bound (another client, the owner's game) | `Address already in use`; commands reach the wrong game | `bridge.js status` must fail before launch; check its `pid` after launch |
 | Compat mod not loaded | typing and `use_item` misbehave | `runMcpClient`, not `runClient`; `icheme_mcp_compat` must be in the log's mod list |
 | `execute_command` | `"sent":true` yet "Unknown or incomplete command", even `/help` | chat: `bridge.js chat` / `bridge.js cmds` |
-| Git Bash path mangling | `/tp ...` arrives as `C:/Program Files/Git/tp ...` | `MSYS_NO_PATHCONV=1` (`new-world.sh` sets it) |
+| Git Bash path mangling | `/tp ...` arrives as `C:/Program Files/Git/tp ...` | `MSYS_NO_PATHCONV=1` (`new-world.sh` sets it); then script paths for Windows `node` must be in `pwd -W` form, or `node` cannot find `/d/...` |
 | Shell-built JSON | `MalformedJsonException` | pass the params as one quoted JSON argument, or `bridge.js batch` |
 
 ## Client state
@@ -30,6 +30,8 @@ unless the owner is watching. Read this before improvising.
 | Sodium or Iris in `run/mcp-client/mods` | 0.4.x crashed in `glfw.dll` on `enter_control_mode` | fixed by compat `WindowHandleMixin`; the Sodium lanes run unattended through the autopilot (`tools/custom-equipment-rendering-poc/README.md`) |
 | Old save format | the integrated server stops, `level.dat` already rewritten | a fresh world; no compatibility work on old saves |
 | Unexpected screen open | input lands on the wrong screen | `get_screen_buttons` before acting |
+| Fresh `run/mcp-client/` | the accessibility onboarding screen comes first | `onboardAccessibility:false` in `options.txt` before the first launch |
+| Tutorial toasts | "Move with W, A, S and D" covers the screen's top right | ignore, or crop; it stays in the first minutes of a new world |
 
 ## Menus and world creation
 
@@ -62,6 +64,7 @@ unless the owner is watching. Read this before improvising.
 | Teleport into mid-air | the player falls, the crosshair moves | stand on a block (`/fill` a glass column), creative flight off |
 | `click_button_index` on an `EditBox` | does not focus it | `click {x,y}` at the field's framebuffer pixel (GUI x scale), backspaces, `paste_text` or `type_text` (compat) |
 | `press_key tab` | moves focus by two widgets | click the field instead |
+| Clearing a field with backspaces only | the caret sits at the click point, so the digits after it stay (`101.3` became `2503`) | after the `click`, alternate `press_key delete` and `press_key backspace` about 8 times each; `press_key end` does not move the caret |
 | Hover tooltips | do not render at a `click` point | judge tooltip texts by tests |
 | Screenshot right after a click | the old frame | wait 2-3 s; a background client repaints slowly: shots less than ~2 s apart are byte-identical |
 

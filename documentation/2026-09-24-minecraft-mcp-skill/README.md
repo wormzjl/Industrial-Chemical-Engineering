@@ -40,8 +40,8 @@ Rebuilt 2026-11-17 for bridge v0.4.28 on `claude/mcp-skill-status-632852`; not m
 skill was lost: its branch was deleted and its commits are gone from the object store. The rebuild
 starts from the copies kept in `tools/p6-pilot-acceptance/mcp/` (driver, two references) and the
 2026-10 lanes' gotchas. It drops `robot.ps1` and the `java.awt.Robot` helpers (desktop input is
-forbidden unless the owner watches). Open: one in-game check on v0.4.28, started by the owner, to
-confirm control mode, chat commands, `use_item`, text entry and `screenshot_to_file` into `tmp/`.
+forbidden unless the owner watches). The owner's in-game check on v0.4.28 passed on 2026-11-17 (below).
+Nothing open.
 
 ## v0.4.28 update (2026-11-17)
 
@@ -56,6 +56,26 @@ confirm control mode, chat commands, `use_item`, text entry and `screenshot_to_f
   from the jar's command whitelist, `pitfalls.md`, `screen-map.md`), `.agents/skills/minecraft-mcp`
   symlink, `.gitignore` re-includes `/.claude/skills/**/scripts/`. AGENTS.md and
   `rules/in-game-checks.md` name the skill.
+
+## In-game check on v0.4.28 (2026-11-17, owner asked)
+
+`runMcpClient` from this worktree, fresh `run/mcp-client/`, zero desktop input. Confirmed:
+
+- `/api/status` reports `mcpmod` 0.4.28; `icheme_mcp_compat` loads with the range `[0.4.28,0.5.0)`.
+- Before `enter_control_mode` an input command answers `not in control mode`; the remote
+  `enter_control_mode` succeeds with the lane's consent (`"hook":true`).
+- `new-world.sh` built a creative superflat world (screenshot of the Create World screen: Creative,
+  commands on); five chat commands all reached the server (`latest.log`).
+- `use_item` standing on a fluid generator opened `FluidDeviceScreen`.
+- Text entry: `click` on the pressure field, `delete`/`backspace`, `paste_text`, Apply
+  (`click_button_index 11`); reopened, the set point read 300.3 then 400 as typed. Backspaces
+  alone leave the digits after the caret, and `press_key end` does not move the caret: the skill now
+  says to alternate `delete` and `backspace`.
+- `screenshot_to_file` wrote into `tmp/mcp-check/` (the jailed folder).
+- `press_key escape` in the world does nothing; `pause_game`, index 8, title screen after ~8 s, index 6;
+  Gradle ended with exit 0.
+- Fix found: `new-world.sh` set `MSYS_NO_PATHCONV=1` and then passed a `/d/...` script path to Windows
+  `node`; it now uses `pwd -W`. `get_screen_buttons` lists every widget twice on 0.4.28.
 
 ## Index record (moved from INDEX.md on 2026-10-26)
 
@@ -75,6 +95,7 @@ Status: In progress since 2026-09-24 (rebuilt for v0.4.28 2026-11-17, not on `ma
 
 - In progress since 2026-09-24 on `claude/minecraft-mcp-skill-c3f0f0` (skill written, mining consolidated; eval runs skipped; `runMcpClient` typing lane unconfirmed)
 - 2026-11-17: skill lost with its branch; rebuilt for bridge v0.4.28 on `claude/mcp-skill-status-632852` (jar updated, lane consent and screenshot folder set, robot helpers dropped); in-game check open
+- 2026-11-17: owner's in-game check on v0.4.28 passed; text-field clearing recipe and the `new-world.sh` path fix added to the skill
 
 ### Notes
 

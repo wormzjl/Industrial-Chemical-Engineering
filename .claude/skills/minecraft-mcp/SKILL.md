@@ -19,7 +19,7 @@ no MCP tools need to be loaded.
 ## Lane setup (once per worktree)
 
 1. Copy `tools/minecraft-mcp-bridge/minecraft-mcp-1.21.1-neoforge-v0.4.28.jar` into `<worktree>/run/mcp-client-mods/`. `prepareMcpControlMod` checks the SHA-256 and copies it into `run/mcp-client/mods/`.
-2. With the client stopped, set `pauseOnLostFocus:false` in `run/mcp-client/options.txt` (create the file with that line if it is missing). Optional: `guiScale:1` makes GUI units equal framebuffer pixels.
+2. With the client stopped, set `pauseOnLostFocus:false` and `onboardAccessibility:false` in `run/mcp-client/options.txt` (create the file with those lines if it is missing). Optional: `guiScale:1` makes GUI units equal framebuffer pixels.
 3. The `mcpClient` run in `build.gradle` already sets `mcp.background_input=true` (the OS cursor is never touched), `mcp.remote_control=true` (a remote `enter_control_mode` is allowed) and `mcp.screenshot.dir=<worktree>/tmp` (screenshots may only go there).
 4. Make sure nothing answers on port 9876: `node .claude/skills/minecraft-mcp/scripts/bridge.js status` must fail.
 
@@ -58,7 +58,7 @@ Then `get_screen_buttons` must name the expected screen. Never `click` with no s
 ## Inside a screen
 
 - Buttons: `click_button_index {"index":N}` (indices from `get_screen_buttons`). Click, wait 1-2 s, then the next.
-- Text fields: `click {"x":…,"y":…}` at the field's framebuffer pixel (GUI units x GUI scale), backspaces, then `paste_text {"text":"…"}` or `type_text`. Needs the compat mixins (this lane only).
+- Text fields: `click {"x":…,"y":…}` at the field's framebuffer pixel (GUI units x GUI scale; centre of the field's `get_screen_buttons` box), then alternate `press_key {"key":"delete"}` and `press_key {"key":"backspace"}` about 8 times each (the caret sits where you clicked), then `paste_text {"text":"…"}`. Screenshot before Apply. Needs the compat mixins (this lane only).
 - Close: `close_screen` or `press_key {"key":"escape"}`.
 
 ## Screenshots and engine waits
@@ -75,6 +75,7 @@ line contains `mcpClientRunProgramArgs` (a stopped background Bash leaves it run
 
 ## References
 
+- Last confirmed end to end on v0.4.28: 2026-11-17 (launch, consent, world, chat commands, `use_item`, text entry, Apply, screenshots into `tmp/`, Save and Quit, Quit Game).
 - `references/bridge-tools.md`: every v0.4.28 command, its parameters, the control-mode gate and what worked here.
 - `references/pitfalls.md`: failure catalogue with fixes. Read it before improvising.
 - `references/screen-map.md`: vanilla widget indices.

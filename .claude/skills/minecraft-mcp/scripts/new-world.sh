@@ -4,7 +4,7 @@
 #   bash .claude/skills/minecraft-mcp/scripts/new-world.sh [setup.txt] [shot-folder under tmp/]
 # Index map: references/screen-map.md. Adapted from tools/custom-equipment-rendering-poc/new-world.sh (bridge 0.4.18).
 set -euo pipefail
-S="$(cd "$(dirname "$0")" && pwd)"
+S="$(cd "$(dirname "$0")" && (pwd -W 2>/dev/null || pwd))"   # Windows form: MSYS_NO_PATHCONV stops /d/... conversion
 B="node $S/bridge.js"
 SETUP="${1:-}"
 SHOTS="${2:-tmp/mcp-shots}"
