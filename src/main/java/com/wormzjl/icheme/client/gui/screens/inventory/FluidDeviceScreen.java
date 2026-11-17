@@ -127,6 +127,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean pipe(){return menu.clientData()!=null&&menu.clientData().kind()==TopologyCompiler.Kind.PIPE;}
     private boolean transport(){return menu.clientData()!=null&&menu.clientData().view().pipeInfo()!=null;}
     private com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE;
+    /** A control valve's selected sensor, a draft until Apply (ValveSignal; null for none); and the published choices and selection the widgets were placed for. */
+    private UUID valveSensor;private String sensorsShown="";
+    /** The choice row under the pointer this frame and its hover (KitDoor.choice): a choice's hover stands beside the door column, level with its row. */
+    private Rect hoverChoice;private String hoverChoiceText;
     private boolean canEdit(){return !menu.debug()&&menu.clientData()!=null;}
     /** A tank with contents shows Copy in the footer's second push slot, where Apply would stand. */
     private boolean copies(){var data=menu.clientData();return data!=null&&tank()&&!tower()&&data.view().state()!=null;}
@@ -284,9 +288,12 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             if(selected!=phase){phase=selected;scroll.reset();rebuildNext=true;}
         }
         stillDrafts.refresh(data.view().still(),fields,()->rebuildNext=true);converterDrafts.refresh(data.view().converter(),fields,flowRateUnit,()->rebuildNext=true);
+        // A control valve's Sensor group lists the sensors linked to it: a sensor fitted, removed or wired moves the rows under it.
+        String sensors=data.valve()==null||data.valve().sensors()==null?"":data.valve().sensors().stream().map(v->v.id()+" "+v.label()).toList()+" "+data.controls().sensor();
+        if(!sensors.equals(sensorsShown)){sensorsShown=sensors;rebuildNext=true;}
         if(data.view().inputRevision()==revision)return;
         revision=data.view().inputRevision();var c=data.controls();
-        powerOn=c.power()==FluidNetwork.Power.ON;valveSource=c.valveSource();
+        powerOn=c.power()==FluidNetwork.Power.ON;valveSource=c.valveSource();valveSensor=c.sensor();
         fields.clear();fields.put("temperature",new NumericDraft(c.temperature(),temperatureUnit));
         fields.put("pressure",new NumericDraft(c.pressure(),pressureUnit));fields.put("diameter",new NumericDraft(c.diameter()));
         fields.put("blanket",new NumericDraft(c.blanket()>0?c.blanket():com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec.DEFAULT_BLANKET,pressureUnit));
@@ -564,7 +571,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             var controls=new FluidNetwork.Controls(fields.get("temperature").si(),fields.get("pressure").si(),
                 fields.get("diameter").value(),PipeResistance.DEFAULT_ROUGHNESS_METRES,fields.get("volumeFlow").si(),
                 fields.get("maximumAddedPressure").si(),composition.moleFractions(),solids(),fields.get("maximumPressureRatio").value(),powerOn?FluidNetwork.Power.ON:FluidNetwork.Power.OFF,valveSource,fields.get("massFlow").si(),
-                heatControl(),towerControl()).withBlanket(blanket()?fields.get("blanket").si():0).withRelief(relief()?fields.get("relief").si():0);
+                heatControl(),towerControl()).withBlanket(blanket()?fields.get("blanket").si():0).withRelief(relief()?fields.get("relief").si():0).withSensor(valveSensor);
             if(still()!=null)controls=controls.withStill(stillDrafts.controls(fields));
             FluidNetwork.sendEdit(menu,revision,controls);message=tr("waiting");
         }catch(IllegalArgumentException e){message=tr("invalid_input");}
@@ -620,7 +627,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(shown.length()<value.length()&&hoverX>=x&&hoverX<x+width&&hoverY>=y&&hoverY<y+9)hovered=value;
     }
     @Override public void render(GuiGraphics g,int mouseX,int mouseY,float partialTick){
-        ProcessUi.restoreCursor(minecraft,this);refresh();if(rebuildNext)rebuild();hovered=null;
+        ProcessUi.restoreCursor(minecraft,this);refresh();if(rebuildNext)rebuild();hovered=null;hoverChoice=null;hoverChoiceText=null;
         // The door column's widgets follow its scroll before they draw.
         door.place(leftPos,topPos);
         // An open tour takes the pointer: the page under it shows no hover.
@@ -629,7 +636,9 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(hovered!=null&&(componentDropdown==null||!componentDropdown.popupContains(mouseX,mouseY))){
             var lines=new ArrayList<net.minecraft.util.FormattedCharSequence>();
             for(var line:hovered.split("\\n"))lines.addAll(font.split(Component.literal(line),Math.max(160,width/2)));
-            g.renderTooltip(font,lines,mouseX,mouseY);
+            // A choice's hover beside the door column, level with its row, so it covers none of the list (the tooltip draws 12 px right of and above its point).
+            if(hoverChoice!=null&&hovered==hoverChoiceText)g.renderTooltip(font,lines,leftPos+hoverChoice.right()+6-12,topPos+hoverChoice.y()+12);
+            else g.renderTooltip(font,lines,mouseX,mouseY);
         }
         if(componentDropdown!=null)componentDropdown.renderSuggestions(g,mouseX,mouseY);
     }
@@ -681,8 +690,11 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         }
         // The status in words, once, on the message display (a pipe's reversed interval first); the engine's own line on hover.
         String words=(pipe()&&view.pipeInfo().changedDirection()?tr("reversed_interval")+" ":"")+statusText(view.status());
-        doorStatus(canvas,skin,words,warning(view.status())?WARN:MUTED);
-        if(hoverX>=10&&hoverX<imageWidth-10&&hoverY>=55&&hoverY<69)hovered=words.equals(view.status())?words:words+"\n"+view.status();
+        // A control valve with no signal says so in place of the engine's words (ValveSignal), the engine's line still on hover.
+        boolean noSignal=data.valve()!=null&&data.valve().noSignal();
+        if(noSignal)words=tr("valve_no_signal");
+        doorStatus(canvas,skin,words,noSignal||warning(view.status())?WARN:MUTED);
+        if(hoverX>=10&&hoverX<imageWidth-10&&hoverY>=55&&hoverY<69)hovered=noSignal?tr("valve_no_signal.hint")+"\n"+view.status():words.equals(view.status())?words:words+"\n"+view.status();
         skin.vDivider(canvas,side()+13,controlTop(),controlBottom());
         for(var label:labels)text(g,label.text(),label.x(),label.y(),MUTED,label.width());
         renderDevice(canvas,skin);
@@ -724,17 +736,44 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     /** What the door column reads on a device's page (DeviceColumn): this device's view and drafts, the player's units. */
     private DeviceColumn.Input deviceInput(){
         var data=menu.clientData();var view=data.view();
-        var valve=data.kind()!=TopologyCompiler.Kind.VALVE?DeviceColumn.Valve.NONE:data.valve()!=null&&!data.valve().configured()?DeviceColumn.Valve.UNCONFIGURED:switch(valveSource){
+        // A control valve that takes a selection shows its set point for the selected sensor's kind (a draft until Apply), none while none is selected.
+        var sensors=data.valve()==null?null:data.valve().sensors();var chosen=selectedSensor();
+        var valve=data.kind()!=TopologyCompiler.Kind.VALVE?DeviceColumn.Valve.NONE:sensors!=null?(chosen==null?DeviceColumn.Valve.UNCONFIGURED:chosen.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE?DeviceColumn.Valve.PRESSURE:valveSource==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?DeviceColumn.Valve.VOLUME_FLOW:DeviceColumn.Valve.MASS_FLOW)
+            :data.valve()!=null&&!data.valve().configured()?DeviceColumn.Valve.UNCONFIGURED:switch(valveSource){
             case MASS_FLOW->DeviceColumn.Valve.MASS_FLOW;case VOLUME_FLOW->DeviceColumn.Valve.VOLUME_FLOW;default->DeviceColumn.Valve.PRESSURE;};
-        var opening=data.valve()==null?null:new DeviceColumn.Opening(data.valve().opening(),data.valve().status());
+        // NO SIGNAL stands on the message display alone, not again under the opening.
+        var opening=data.valve()==null?null:new DeviceColumn.Opening(data.valve().opening(),data.valve().noSignal()?"":data.valve().status());
         String junction=pipe()&&view.pipeInfo().junction()?tr("junction",view.pipeInfo().connections().size()):null;
         // A paired heat side leads with its side selector, as its Control tab does.
-        var lead=converter()!=null?hopper()?ConverterDoor.plant(converterInput(),FluidDeviceScreen::tr,false):ConverterDoor.rows(converterInput(),FluidDeviceScreen::tr):still()!=null?StillDoor.rows(stillInput(),FluidDeviceScreen::tr):tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr):List.<Column.Row>of();
+        var lead=converter()!=null?hopper()?ConverterDoor.plant(converterInput(),FluidDeviceScreen::tr,false):ConverterDoor.rows(converterInput(),FluidDeviceScreen::tr):still()!=null?StillDoor.rows(stillInput(),FluidDeviceScreen::tr):tower()?DeviceColumn.towerControl(menu.clientData().controls().tower().draft()==com.wormzjl.icheme.science.fluid.network.CoolingTower.Draft.INDUCED,towerAuto,canEdit(),temperatureUnit.symbol(),FluidDeviceScreen::tr):heat()!=null?HeatControlColumn.sideSelector(controlInput(),FluidDeviceScreen::tr)
+            :sensors!=null?DeviceColumn.sensors(sensorChoices(sensors),canEdit()&&!fixed(),FluidDeviceScreen::tr):List.<Column.Row>of();
         var m=deviceMeters();var input=new DeviceColumn.Input(data.kind(),canEdit()&&!fixed(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
             view.filter()!=null&&!view.filter().captured().empty(),m.level(),junction,lead,m.phases(),m.meters(),m.drive(),m.power(),m.suction())
             // The wall and the trim (batch 2026-11-16-fouling-corrosion, WP4); the names are lines under gui.icheme.
             .withIntegrity(m.wall((key,args)->Component.translatable("gui.icheme."+key,args).getString()),m.trim()).withCarried(m.carried());
         return data.controls().fixedMover()?input.withFixedDuty(tr(data.kind()==TopologyCompiler.Kind.PUMP?"inline.pump_rating":"inline.compressor_rating",value(data.controls().volumeFlow()*3600))):input;
+    }
+    /** The selected sensor among the valve's published choices (the draft), or null: a law whose sensor is not linked shows none selected. */
+    private FluidNetwork.ValveSensor selectedSensor(){
+        var data=menu.clientData();if(data==null||data.valve()==null||data.valve().sensors()==null||valveSensor==null)return null;
+        return data.valve().sensors().stream().filter(v->v.id().equals(valveSensor)).findFirst().orElse(null);
+    }
+    /** The Sensor group's rows: each linked sensor by its label, where it is on hover, the draft's selection marked. */
+    private List<DeviceColumn.SensorChoice> sensorChoices(List<FluidNetwork.ValveSensor> sensors){
+        var chosen=selectedSensor();
+        return sensors.stream().map(v->{var p=net.minecraft.core.BlockPos.of(v.position());
+            String hint=ControlColumns.sensorHint(new ControlColumns.SensorLocation(v.located(),v.mount(),p.getX(),p.getY(),p.getZ(),v.equipment()),(k,a)->Component.translatable("gui.icheme."+k,a).getString());
+            return new DeviceColumn.SensorChoice(v.label(),hint,chosen!=null&&chosen.id().equals(v.id()),DeviceColumn.SENSOR_KEY+v.id());}).toList();
+    }
+    /** A Sensor group choice: none, or a linked sensor, whose kind picks what the set point holds (a probe the upstream pressure, a flowmeter a flow). */
+    private void selectSensor(String action){
+        if(action.equals(DeviceColumn.SENSOR_NONE)){valveSensor=null;return;}
+        UUID id;try{id=UUID.fromString(action.substring(DeviceColumn.SENSOR_KEY.length()));}catch(IllegalArgumentException e){return;}
+        var data=menu.clientData();if(data==null||data.valve()==null||data.valve().sensors()==null)return;
+        var v=data.valve().sensors().stream().filter(x->x.id().equals(id)).findFirst().orElse(null);if(v==null)return;
+        valveSensor=id;
+        if(v.kind()==com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE)valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.PRESSURE;
+        else if(valveSource!=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW&&valveSource!=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW)valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW;
     }
     /** Whether the Overview's glass draws this pump's curve (W10d): a constructed centrifugal pump with a driver. In-line pumps keep their tables. */
     private boolean curve(){var view=menu.clientData()==null?null:menu.clientData().view();return view!=null&&view.pump()!=null&&view.pump().curve()!=null&&view.drive()!=null;}
@@ -1034,6 +1073,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         else if(action.equals("recover")){FluidNetwork.recoverSolids(menu,revision);message=tr("waiting");}
         // A solid still's fuel slot (W6): an item move, sent at once; the page's next bucket shows the slot.
         else if(action.equals("still_fuel:load")||action.equals("still_fuel:unload")){FluidNetwork.stillFuel(menu,action.endsWith(":load"));message=tr("waiting");}
+        // A control valve's Sensor group (ValveSignal): a draft until Apply.
+        else if(action.startsWith(DeviceColumn.SENSOR_KEY)){selectSensor(action);rebuild();}
         else{
             switch(action){
                 case "tower:manual","tower:auto"->towerAuto=action.endsWith(":auto");
@@ -1056,7 +1097,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     /** The door columns as placed: drawn clipped to their view, the view's bar, a row's hint read on hover. */
     private void drawDoor(GuiCanvas canvas,Skin skin){
-        var hover=door.draw(canvas,skin,hoverX,hoverY);if(hover!=null)hovered=hover;
+        var hover=door.draw(canvas,skin,hoverX,hoverY);if(hover!=null){hovered=hover;hoverChoice=door.choice(hoverX,hoverY);hoverChoiceText=hover;}
     }
     /** The name's entry in the title strip (N1): the name as typed, at most DeviceName.MAX characters, sent with Apply; its hint while empty. */
     private EditBox nameBox(Rect slot){

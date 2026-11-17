@@ -98,6 +98,14 @@ the `Rig` class keep their sizes.
   `LanguageFilesTest` (and a fault of the new test, fixed). The fluid GameTests found 7 routed nozzles unjoined. The
   trace showed the rig placing bare default states, which a player never places; `Plant.pipe` now places a player's
   state. Fluid GameTests 116 of 116.
+- 2026-11-17, same branch (sub-thread; owner: "The control valve needs to select sensor first in order to function",
+  picked sheet A): a control valve regulates only on a sensor linked to it and selected on its screen,
+  [VALVE_SENSOR_REVIEW.md](VALVE_SENSOR_REVIEW.md). `ValveSignal` (linked over the valve and its data cables' hosts;
+  choices; the slice bare with no signal; the selection's law; a removed sensor frees its laws); no law on fitting; the
+  screen's Sensor group (None and the linked sensors, a draft until Apply), NO SIGNAL on the display, a choice's hover
+  beside the column. The rig step dropped (the charge pump's built-in valve, `PUMP_VALVE_PLAN.md`). Selected classes
+  (test, holdGates, columnGates, equipmentGates): 1457 tests, 1 failure, the expected `SizingPageTest` in Chinese; fluid
+  GameTests 117 of 117.
 
 ## Full crude unit, sized (2026-11-17)
 
@@ -143,10 +151,17 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
 `science/equipment/NozzlePorts`, `runtime/fluid/StructureNozzles`, `PhysicalFluidTopology.builtFaces`, `Placement`,
 `FluidWorldAuthority` (lines 84-85, 129, 328-329), `AssemblyWalker.port`, `ColumnStarts.build`,
 `EquipmentShellBlockEntity.port`, `RegistryRealignment.restate`; `DrawnJointGameTests`, `AssemblyGameTests.Plant.joined`,
-`unjoined`, the rig's check after its valves.
+`unjoined`, the rig's check after its valves. The valve's sensor (2026-11-17): `runtime/control/ValveSignal`,
+`ControlPlans.apply`, `ControlService.planned`, `InstrumentService` (`changeSensor`, `release`, `sensors`),
+`FluidNetwork` (`Controls.sensor`, `ValveSensor`, `ValveData`, the edit handler), `ExchangerLines`, `DeviceColumn.sensors`,
+`KitDoor.choice`, `FluidDeviceScreen`; `ValveSignalTest`, `DeviceColumnTest`, `ValveSignalGameTests`.
 
 ## Open items
 
+- Valve sensor (VALVE_SENSOR_REVIEW.md): the network version for the fluid menu's new JSON fields is chosen at the merge
+  (`icheme-8` is reserved by the solute batch). A flow valve's page with three sensors scrolls at the 480 px design height
+  (377 px in a 338 px view at 464 wide); its Sensor group and Set point stand in the view. `PUMP_SENSOR` to be exempted
+  once the pump's built-in valve exists. No in-game check.
 - Nozzle join (NOZZLE_JOIN_REVIEW.md): tested (116 of 116 fluid GameTests). Owner options: the column start takes any registration in front of a nozzle, joined or
   not (one test in `startColumn`); the reactors and other non-fluid-device kinds now draw joined pipes too (COLUMN alone
   would be one condition); the immediate `server.execute` in `FluidDeviceBlock.updateShape` (a neighbour's stale faces).

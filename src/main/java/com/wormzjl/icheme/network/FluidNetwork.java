@@ -91,19 +91,24 @@ public final class FluidNetwork {
     public static final double MAXIMUM_REFLUX=100;
     /**
      * A menu's edit form. {@code heat} is a controllable heat side's control (batch 2026-10-27-heat-exchanger-design, W4: an
-     * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device; {@code still} a batch still's settings (W6), null for any other device.
+     * exchanger side's or an air cooler's mode, set point, low limit and manual share), null for any other device; {@code still} a batch still's settings (W6), null for any other device;
+     * {@code sensor} a control valve's selected sensor (batch 2026-11-16-review-plant-sizing, VALVE_SENSOR_REVIEW.md), null for none or any other device.
      */
-    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still,double blanket,double relief) {
+    public record Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still,double blanket,double relief,java.util.UUID sensor) {
+        /** Controls with no selected sensor. */
+        public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still,double blanket,double relief){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,blanket,relief,null);}
+        /** These controls with control valve sensor {@code value} selected, null for none. */
+        public Controls withSensor(java.util.UUID value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,blanket,relief,value);}
         /** Controls of a device without a pressure safety valve ({@code relief} 0). */
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still,double blanket){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,blanket,0);}
         /** These controls with a pressure safety valve set to {@code value} Pa absolute (batch 2026-11-11-gas-blanketing); 0 without a valve. */
-        public Controls withRelief(double value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,blanket,value);}
+        public Controls withRelief(double value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,blanket,value,sensor);}
         /** Controls of a device without a gas blanketing valve ({@code blanket} 0). */
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover,StillControls still){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,0);}
         /** These controls with a drum's gas blanketing valve set to {@code value} Pa absolute (batch 2026-11-11-gas-blanketing); 0 without a valve. */
-        public Controls withBlanket(double value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,value,relief);}
+        public Controls withBlanket(double value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,still,value,relief,sensor);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower,boolean fixedMover){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,null);}
-        public Controls withStill(StillControls value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,value,blanket,relief);}
+        public Controls withStill(StillControls value){return new Controls(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,fixedMover,value,blanket,relief,sensor);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow,HeatUnit.Control heat,com.wormzjl.icheme.science.fluid.network.CoolingTower tower){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,heat,tower,false);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power,FlowControl.ValveSource valveSource,double massFlow){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,valveSource,massFlow,null,null);}
         public Controls(double temperature,double pressure,double diameter,double roughness,double volumeFlow,double maximumAddedPressure,double[] composition,SlurryFeed solids,double maximumPressureRatio,Power power){this(temperature,pressure,diameter,roughness,volumeFlow,maximumAddedPressure,composition,solids,maximumPressureRatio,power,FlowControl.ValveSource.NONE,1);}
@@ -135,7 +140,7 @@ public final class FluidNetwork {
             var power=!d.generatorEnabled()||d.control() instanceof FlowControl.Mover m&&!m.enabled()||heat!=null&&(heat.fans()||heat.burners())&&heat.control().share()==0?Power.OFF:Power.ON;
             double temperature=heat!=null&&heat.burners()?heat.control().target():record.spec().temperature();
             return new Controls(temperature,pressure,d.geometry().diameter(),d.geometry().roughness(),flow,head,record.spec().composition(),record.spec().solids(),ratio,power,valve==null?(d.control() instanceof FlowControl.PressureValve?FlowControl.ValveSource.PRESSURE:FlowControl.ValveSource.NONE):valve.source(),valve==null?1:valve.massTarget(),
-                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower(),d.kind()==TopologyCompiler.Kind.PIPE&&d.control() instanceof FlowControl.Machine).withBlanket(record.spec().blanket()).withRelief(record.spec().relief());
+                    heat!=null&&heat.controllable()?heat.control():null,record.spec().tower(),d.kind()==TopologyCompiler.Kind.PIPE&&d.control() instanceof FlowControl.Machine).withBlanket(record.spec().blanket()).withRelief(record.spec().relief()).withSensor(valve==null||com.wormzjl.icheme.runtime.control.ValveSignal.exempt(valve)?null:valve.sensor());
         }
     }
     /**
@@ -184,7 +189,20 @@ public final class FluidNetwork {
         }
     }
     /** The live payload: the bucket's view, the device's current controls, and the engine's reply (empty for none). */
-    public record ValveData(boolean configured,double opening,String status){public ValveData{if(!Double.isFinite(opening)||opening<0||opening>1)throw new IllegalArgumentException("Invalid opening");Objects.requireNonNull(status);}}
+    /** A sensor a control valve's screen lists: its instance, its label ("FT-0012 / FLOW"), its kind, and where it is ({@code position} 0 with {@code located} false where unknown). */
+    public record ValveSensor(java.util.UUID id,String label,com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind,boolean located,long position,boolean mount,long equipment){public ValveSensor{Objects.requireNonNull(id);Objects.requireNonNull(label);Objects.requireNonNull(kind);if(label.length()>64)throw new IllegalArgumentException("Sensor label too long");}}
+    /**
+     * A valve's opening and its controller's words; {@code sensors} the sensors linked to a control valve that takes a
+     * selection (ValveSignal.choices), null for one that takes none (equipment or a running column works it).
+     */
+    public record ValveData(boolean configured,double opening,String status,List<ValveSensor> sensors){
+        /** The status a control valve with no signal reads: no sensor selected, or the selected one not linked. */
+        public static final String NO_SIGNAL="NO SIGNAL";
+        public ValveData(boolean configured,double opening,String status){this(configured,opening,status,null);}
+        public ValveData{if(!Double.isFinite(opening)||opening<0||opening>1)throw new IllegalArgumentException("Invalid opening");Objects.requireNonNull(status);if(sensors!=null){sensors=List.copyOf(sensors);if(sensors.size()>64)throw new IllegalArgumentException("Too many valve sensors");}}
+        /** Whether this valve has no signal. */
+        public boolean noSignal(){return NO_SIGNAL.equals(status);}
+    }
     public record LiveData(FluidView view,Controls controls,String message,List<com.wormzjl.icheme.runtime.instrument.Sensor.Reading> sensors,ValveData valve) {
         public LiveData(FluidView view,Controls controls,String message){this(view,controls,message,List.of(),null);}
         public LiveData {
@@ -296,9 +314,20 @@ public final class FluidNetwork {
             world.materialNames(),world.molecularWeights(),world.instruments().sensorReadings(record.device().id(),view),valveData(world,record,view));
     }
     /** The opening of valve {@code id} as its screen reads it, 0 to 1, or NaN where it has none or no signal (the column's Operation tab, C7). */
-    public static double opening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveData(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
+    public static double opening(FluidWorldAuthority world,long id){var record=world.registrations().get(id);if(record==null)return Double.NaN;var data=valveState(world,record,world.view(id));return data==null||!data.configured()?Double.NaN:data.opening();}
+    /** A valve's screen data: its opening and words, and for a control valve that takes a selection the sensors linked to it (ValveSignal.choices). */
     private static ValveData valveData(FluidWorldAuthority world,WorldTopologyLedger.Registration record,FluidView view){
+        var state=valveState(world,record,view);
+        if(state==null||!(record.device().control() instanceof FlowControl.ControlValve law)||com.wormzjl.icheme.runtime.control.ValveSignal.exempt(law))return state;
+        var sensors=com.wormzjl.icheme.runtime.control.ValveSignal.choices(world,record.device().id()).stream().limit(64)
+            .map(c->new ValveSensor(c.sensor().instance(),c.label(),c.sensor().kind(),c.position()!=null,c.position()==null?0:c.position().asLong(),c.mount(),c.equipment())).toList();
+        return new ValveData(state.configured(),state.opening(),state.status(),sensors);
+    }
+    /** A valve's opening and its controller's words, as its screen reads them; a control valve with no sensor selected, or one not linked, reads NO SIGNAL and stands open. */
+    private static ValveData valveState(FluidWorldAuthority world,WorldTopologyLedger.Registration record,FluidView view){
         if(!(record.device().control() instanceof FlowControl.Valve valve)||valve instanceof FlowControl.Turbine)return null;
+        if(valve instanceof FlowControl.ControlValve law&&!com.wormzjl.icheme.runtime.control.ValveSignal.signal(world,record.device().id(),law))
+            return new ValveData(false,1,ValveData.NO_SIGNAL);
         if(valve.bare())return new ValveData(false,1,"Lacking components");
         double head=view.devicePressureChange()==null?0:Math.max(0,view.devicePressureChange());
         double rho=view.state()==null?1:view.state().mass()/Math.max(1e-300,view.state().volume());
@@ -453,13 +482,25 @@ public final class FluidNetwork {
                         if(control instanceof FlowControl.ControlValve valve){
                             // An automated shutoff valve (batch 2026-11-15-fluid-interfaces, W7) opens and closes by hand or by its loop, never by this edit.
                             if(valve.onOffValve())throw new IllegalArgumentException("An automated shutoff valve only opens and closes");
-                            if(valve.bare())throw new IllegalArgumentException("Lacking components");
-                            var source=valve.source();
-                            if(source!=FlowControl.ValveSource.PRESSURE){
-                                if(controls.valveSource!=FlowControl.ValveSource.MASS_FLOW&&controls.valveSource!=FlowControl.ValveSource.VOLUME_FLOW)throw new IllegalArgumentException("Flowmeter required for flow control");
-                                source=controls.valveSource;
-                            }else if(controls.valveSource!=FlowControl.ValveSource.PRESSURE)throw new IllegalArgumentException("Pressure probe controls upstream pressure");
-                            control=new FlowControl.ControlValve(source,controls.pressure,controls.massFlow,controls.volumeFlow,valve.sensor(),Math.addExact(valve.revision(),1));
+                            if(com.wormzjl.icheme.runtime.control.ValveSignal.exempt(valve)){
+                                // A valve a running column works keeps its sensor; the player sets its target alone.
+                                if(valve.bare())throw new IllegalArgumentException("Lacking components");
+                                var source=valve.source();
+                                if(source!=FlowControl.ValveSource.PRESSURE){
+                                    if(controls.valveSource!=FlowControl.ValveSource.MASS_FLOW&&controls.valveSource!=FlowControl.ValveSource.VOLUME_FLOW)throw new IllegalArgumentException("Flowmeter required for flow control");
+                                    source=controls.valveSource;
+                                }else if(controls.valveSource!=FlowControl.ValveSource.PRESSURE)throw new IllegalArgumentException("Pressure probe controls upstream pressure");
+                                control=new FlowControl.ControlValve(source,controls.pressure,controls.massFlow,controls.volumeFlow,valve.sensor(),Math.addExact(valve.revision(),1));
+                            }else{
+                                // The selected sensor (ValveSignal): one linked to the valve, of a kind it regulates on, or none.
+                                com.wormzjl.icheme.runtime.instrument.Sensor.Kind kind=null;
+                                if(controls.sensor!=null){
+                                    var chosen=com.wormzjl.icheme.runtime.control.ValveSignal.choices(world,d.id()).stream().filter(c->c.sensor().instance().equals(controls.sensor)).findFirst().orElse(null);
+                                    if(chosen==null)throw new IllegalArgumentException("That sensor is not linked to this valve");
+                                    kind=chosen.sensor().kind();
+                                }
+                                control=com.wormzjl.icheme.runtime.control.ValveSignal.select(valve,controls.sensor,kind,controls.valveSource,controls.pressure,controls.massFlow,controls.volumeFlow);
+                            }
                         }else control=new FlowControl.PressureValve(controls.pressure);
                     }
                     // A gas intake is the atmosphere (batch 2026-11-15-fluid-interfaces, W2): nothing on it is the player's to set.

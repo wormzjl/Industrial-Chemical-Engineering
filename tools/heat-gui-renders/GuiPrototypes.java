@@ -69,6 +69,11 @@ public final class GuiPrototypes {
         Files.createDirectories(out);
         var jar = Path.of(args.length > 2 ? args[2] : "build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar");
         HeatDiagramRender.font = Files.exists(jar) ? HeatDiagramRender.GameFont.load(jar) : null;
+        // The valve's Sensor option sheets alone (they need no material catalog).
+        if (System.getProperty("only", "").startsWith("valve-sensor")) {
+            valveSensorSheets(out);
+            return;
+        }
         for (var p : prototypes()) {
             if (!p.file().startsWith(System.getProperty("only", ""))) continue;
             var titles = new ArrayList<>(List.of("Light panel (3a)", "Dark panel (3c)"));
@@ -1608,6 +1613,72 @@ public final class GuiPrototypes {
                     contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", "2.5"}));
                     d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
                 }));
+    }
+
+    /** The hover as the game draws it: its text at ({@code x}, {@code y}), its frame round it (renderTooltip's look). */
+    static void hover(Door d, String text, int x, int y) {
+        var lines = text.split("\n");
+        int w = 0;
+        for (var line : lines) w = Math.max(w, d.m.width(line));
+        int left = x - 3, top = y - 3, h = lines.length * 10 + 4;
+        d.c.fill(left, top, left + w + 6, top + h, 0xF0100010);
+        d.c.outline(left, top, w + 6, h, 0xFF5000FF);
+        for (int i = 0; i < lines.length; i++) d.c.text(lines[i], x, y + i * 10, 0xFFFFFFFF);
+    }
+
+    /**
+     * The control valve's Sensor group as shipped (batch 2026-11-16-review-plant-sizing, owner's pick A of
+     * VALVE_SENSOR_REVIEW.md), from {@code DeviceColumn.sensors}: no sensor linked, three linked and none selected (NO
+     * SIGNAL: the valve stands open), FT-0012 selected with its hover beside the door column as FluidDeviceScreen places it,
+     * and PT-0007 selected (the set point an upstream pressure); an editor beside a reader, at 464 by 254. Run with
+     * {@code -Donly=valve-sensor}.
+     */
+    static void valveSensorSheets(Path out) throws Exception {
+        String[] labels = {"FT-0012 / FLOW", "PT-0007 / PRESSURE", "FT-0015 / FLOW"};
+        String[] hints = {"Sensor block: 104, 64, -31", "Sensor block: 98, 66, -31\nEquipment: #0042", "Sensor block: 112, 64, -28"};
+        String[] states = {"no sensor linked", "linked, none selected (NO SIGNAL)", "FT-0012 selected, its hover", "PT-0007 selected"};
+        int[][] state = {{0, -1}, {3, -1}, {3, 0}, {3, 1}};
+        var prototypes = new ArrayList<Prototype>();
+        var titles = new ArrayList<String>();
+        for (int st = 0; st < states.length; st++)
+            for (boolean editor : new boolean[]{true, false}) {
+                var choices = new ArrayList<DeviceColumn.SensorChoice>();
+                for (int i = 0; i < state[st][0]; i++) choices.add(new DeviceColumn.SensorChoice(labels[i], hints[i], i == state[st][1], DeviceColumn.SENSOR_KEY + i));
+                titles.add((editor ? "Editor" : "Reader") + " · " + states[st]);
+                prototypes.add(valveSensorPage(choices, state[st][1], editor, st == 2));
+            }
+        for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK)) {
+            var pages = new ArrayList<BufferedImage>();
+            for (var p : prototypes) pages.add(render(p, skin, false));
+            HeatDiagramRender.grid(out.resolve("valve-sensor-" + (skin == PanelSkin.LIGHT ? "light" : "dark") + ".png"), titles, pages);
+        }
+    }
+
+    /** One valve page of the Sensor sheet: {@code selected} the index into {@code choices} (-1: none), its hover shown where {@code hover}. */
+    static Prototype valveSensorPage(List<DeviceColumn.SensorChoice> choices, int selected, boolean editor, boolean hover) {
+        boolean set = selected >= 0, pressure = set && choices.get(selected).label().startsWith("PT");
+        var meters = set ? List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"), meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar"))
+                : List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"), meter("throughput", "4.1", "kg/s"), meter("pressure_change", "-0.35", "bar"));
+        var in = new DeviceColumn.Input(Kind.VALVE, editor, false, true, "bar", "°C", "/s", !set ? DeviceColumn.Valve.UNCONFIGURED : pressure ? DeviceColumn.Valve.PRESSURE : DeviceColumn.Valve.MASS_FLOW,
+                new DeviceColumn.Opening(set ? 0.63 : 1, set ? "Regulating" : ""), false, null, null, DeviceColumn.sensors(choices, editor, TEXTS), phases("volume", 1, 0, 0, 0), meters);
+        var rows = DeviceColumn.rows(in, TEXTS);
+        return new Prototype("valve-sensor", 464, 254, (d, k) -> {
+            d.title("Control valve");
+            d.name("FV-101", editor);
+            d.tabs(0, "Overview");
+            d.status(set ? Door.tr("gui.icheme.fluid.flowing") : TEXTS.get("valve_no_signal"), set ? Palette.MUTED : Palette.WARN);
+            var box = device(d, in, rows, Map.of("massFlow", "2.50", "pressure", "2.00"));
+            contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", set ? "2.5" : "4.1"}));
+            if (editor) d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
+            else d.footer(1, "Close", "Mass", "°C", "bar", "/s");
+            if (!hover) return;
+            // The selected choice's hover beside the door column, level with its row (FluidDeviceScreen: KitDoor.choice).
+            for (var p : Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(d.w) - 10, d.m, Column.Metrics.COMPACT).rows())
+                if (p.row() instanceof Column.Choice c && c.selected()) {
+                    hover(d, c.hint(), p.rect().right() + 6, p.rect().y());
+                    break;
+                }
+        });
     }
 
     /** The valve, the tallest page, in a {@link #WINDOW} window; and in a 1366 by 768 one, where scale 2 still leaves it a bar. */
