@@ -26,6 +26,18 @@ pumparounds work only as far as their trays hold liquid.
   the texts; a draw share later. The probe's duty loop (`-Diterate`) on the real solver at 638 K, from 1 % of the
   design duties: undamped it overshoots (20.3, 10.5, 14.5 MW on the first) and settles in about 7 solves; with a
   relaxation of 0.5 it settles in 4 without overshoot; both end at 13.1, 21.0 and 13.2 MW. No mod code, no test run.
+- 2026-11-17: package 0 built (commit `c4cc8ca79`), found by the build thread before package 1: a column's product
+  generator stood at the table's temperature, and the difference to its account went to the condenser totals. Now
+  `PortPlan` carries the account's enthalpy per mole as of the fence and `PassiveStepSolver.ports` stands the generator
+  at the PH equilibrium's temperature (the planned one where it does not converge); a generator within ten PH
+  tolerances of its plan keeps its graph. Basis checked: an account's energy and a generator's booking are both the
+  fluid's enthalpy on the network's datum (solids are their own inventory; an inlet's crystals are melted into the feed
+  before the split). Tests: `FlowControlTest` 14/14 (new: an outlet at an enthalpy), `ColumnRunTest` 48/48 of the
+  selected methods. Moved reference: `anAirThenWaterCondenserDividesItsBookingDifferencesByTemperature`, the outlet's
+  booking difference at 330 K from -35166.6 J to 0.0 J and at 305 K from 1048.5 J to 0.0 J (bound: the PH tolerance);
+  its assertion now asks for 0 within 1e-6 of the cycles' duty. The rig's table prices its product 1000 J/mol under the
+  feed (about 306 K for its nitrogen) while naming 330 K: the rig's product now leaves at about 306 K. A table V3 solves
+  prices each product at its own temperature, so a real column's products stay at the table's temperatures.
 
 ## Documents
 
