@@ -74,6 +74,10 @@ A pipe's `onLoad` (authority open) calls `refreshGeometry` → `connectedState`,
   change: `EquipmentShellBlockEntity.onLoad` calls no `refreshNozzles` (read, not traced through `restateLater`). The nozzle sizes are saved on
   the shell cells, so this is a first-load case of an old world only.
 
+Main-thread review of `2abc30a5a`: `StructureNozzles` answered from the first structure whose box held the cell, so a
+nozzle inside another structure's (bounding) box could be missed. It now asks every one; `origin(cell, outward)`
+replaces `origin(cell)` (only the tests call it). Gate: `PhysicalFluidTopologyTest.aNozzleInsideAnotherStructuresBoxIsFoundInEitherOrder`.
+
 ## Hot-file lines
 
 | File | Lines (after the change) | What |

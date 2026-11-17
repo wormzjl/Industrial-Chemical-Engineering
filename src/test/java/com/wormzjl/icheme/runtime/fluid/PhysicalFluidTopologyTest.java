@@ -692,14 +692,14 @@ class PhysicalFluidTopologyTest {
             assertTrue(index.faces(flange,outward),"the index finds port "+p.nozzle());
             assertFalse(index.faces(flange,PhysicalFluidTopology.opposite(outward)),"port "+p.nozzle()+" backwards in the index");
             assertFalse(index.faces(flange.withLane(2),outward),"a rack lane's place");
-            assertEquals(origin,index.origin(flange));
+            assertEquals(origin,index.origin(flange,outward));assertNull(index.origin(flange,PhysicalFluidTopology.opposite(outward)));
         }
         var first=ports.getFirst().cell();
         var flange=new PhysicalFluidTopology.Position(origin.dimension(),origin.x()+first.x(),origin.y()+first.y(),origin.z()+first.z());
         var outward=PhysicalFluidTopology.Direction.valueOf(net.minecraft.core.Direction.fromDelta(ports.getFirst().dx(),ports.getFirst().dy(),ports.getFirst().dz()).name());
         assertFalse(index.faces(new PhysicalFluidTopology.Position("minecraft:the_nether",flange.x(),flange.y(),flange.z()),outward),"another dimension");
         index.index(origin,record,false);
-        assertFalse(index.faces(flange,outward),"a removed record");assertNull(index.origin(flange));
+        assertFalse(index.faces(flange,outward),"a removed record");assertNull(index.origin(flange,outward));
         // A drum is a fluid device: its registration's ports decide, so the index keeps none of its nozzles.
         var drum=com.wormzjl.icheme.science.equipment.EquipmentShape.drum(1.5,4,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.HORIZONTAL,com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.NORTH,2,
                 com.wormzjl.icheme.science.equipment.EquipmentShape.defaultConnections(1.5,4,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.HORIZONTAL,2,true),true);
@@ -708,5 +708,38 @@ class PhysicalFluidTopologyTest {
         for(var p:com.wormzjl.icheme.science.equipment.ShapeRasterizer.ports(drum))
             assertFalse(index.faces(new PhysicalFluidTopology.Position(origin.dimension(),origin.x()+p.cell().x(),origin.y()+p.cell().y(),origin.z()+p.cell().z()),
                     PhysicalFluidTopology.Direction.valueOf(net.minecraft.core.Direction.fromDelta(p.dx(),p.dy(),p.dz()).name())),"a drum's nozzle");
+    }
+
+    /**
+     * Boxes are bounding boxes and may overlap: two columns side by side, a flange cell of the second inside the first's
+     * box. The index asks every structure whose box holds the cell, so it finds that port whichever was recorded first.
+     */
+    @Test void aNozzleInsideAnotherStructuresBoxIsFoundInEitherOrder() {
+        var components=new com.wormzjl.icheme.science.equipment.ColumnComponents(com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.EXCHANGER,
+                com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD,List.of(),false,false);
+        var trays=new com.wormzjl.icheme.science.equipment.ColumnTrays(8,4,List.of(),List.of(9),List.of(),components);
+        var column=com.wormzjl.icheme.science.equipment.EquipmentShape.column(2,trays,com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.NORTH,com.wormzjl.icheme.science.equipment.EquipmentShape.minimumSkirt(2));
+        var port=com.wormzjl.icheme.science.equipment.ShapeRasterizer.ports(column).getFirst();
+        int dx=port.dx(),dy=port.dy(),dz=port.dz();
+        // A cell of the first column's box where it has no nozzle facing either way along the port's step: its corner cells.
+        com.wormzjl.icheme.science.equipment.ShapeRasterizer.Cell inside=null;
+        for(int x:new int[]{0,column.sizeX()-1})for(int z:new int[]{0,column.sizeZ()-1})for(int y:new int[]{0,column.sizeY()-1})
+            if(inside==null&&com.wormzjl.icheme.science.equipment.NozzlePorts.at(column,x,y,z,dx,dy,dz)==null&&com.wormzjl.icheme.science.equipment.NozzlePorts.at(column,x,y,z,-dx,-dy,-dz)==null)
+                inside=new com.wormzjl.icheme.science.equipment.ShapeRasterizer.Cell(x,y,z);
+        assertNotNull(inside,"a corner of the first column's box without a nozzle");
+        var a=new PhysicalFluidTopology.Position("minecraft:overworld",96,64,-48);
+        var flange=new PhysicalFluidTopology.Position(a.dimension(),a.x()+inside.x(),a.y()+inside.y(),a.z()+inside.z());
+        var b=new PhysicalFluidTopology.Position(a.dimension(),flange.x()-port.cell().x(),flange.y()-port.cell().y(),flange.z()-port.cell().z());
+        assertNotEquals(a,b);
+        var outward=PhysicalFluidTopology.Direction.valueOf(net.minecraft.core.Direction.fromDelta(dx,dy,dz).name());
+        var record=WorldTopologyLedger.Structure.of(column,com.wormzjl.icheme.science.equipment.Paint.DEFAULT);
+        for(boolean firstA:new boolean[]{true,false}) {
+            var index=new StructureNozzles();
+            for(var origin:firstA?List.of(a,b):List.of(b,a))index.index(origin,record,true);
+            String order=firstA?"A then B":"B then A";
+            assertTrue(index.faces(flange,outward),"the second column's port inside the first's box, "+order);
+            assertEquals(b,index.origin(flange,outward),order);
+            assertFalse(index.faces(flange,PhysicalFluidTopology.opposite(outward)),"at the opposite step, "+order);
+        }
     }
 }
