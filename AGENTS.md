@@ -51,7 +51,7 @@ This file holds the core of each subject. The full rules are in `documentation/r
 - Before any GUI work, read the `gui-creation` skill and the reference it names for the job.
 - Do not start a dev-client check on your own. Judge GUI work by the gates, the compile and the software renders of `tools/heat-gui-renders/`. Where nothing else can judge, offer a check and let the owner start it. At most one in-game check per task.
 - Never send real desktop keyboard or mouse input unless the owner is watching.
-- Read `rules/in-game-checks.md` before a check the owner asks for.
+- Read `rules/in-game-checks.md` and the `minecraft-mcp` skill before a check the owner asks for.
 
 ## New equipment
 

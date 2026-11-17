@@ -36,17 +36,32 @@ nothing in the world (`pause_game`); block screens open from `tp @s x.5 -58 z.5 
 
 ## Status
 
-In progress since 2026-09-24 on `claude/minecraft-mcp-skill-c3f0f0`; not merged. The skill-creator
-eval runs and description optimisation were skipped because they would launch the dev client
-repeatedly. Open: confirm text entry on the `runMcpClient` lane once in a client; the coordinate
-mapping in `robot.ps1` (GUI units times scale over the DPI factor) is taken from the proven
-`poke.ps1` constant and has not been re-run here.
+Rebuilt 2026-11-17 for bridge v0.4.28 on `claude/mcp-skill-status-632852`; not merged. The 2026-09-24
+skill was lost: its branch was deleted and its commits are gone from the object store. The rebuild
+starts from the copies kept in `tools/p6-pilot-acceptance/mcp/` (driver, two references) and the
+2026-10 lanes' gotchas. It drops `robot.ps1` and the `java.awt.Robot` helpers (desktop input is
+forbidden unless the owner watches). Open: one in-game check on v0.4.28, started by the owner, to
+confirm control mode, chat commands, `use_item`, text entry and `screenshot_to_file` into `tmp/`.
+
+## v0.4.28 update (2026-11-17)
+
+- Jar: official release v0.4.28, SHA-256 equal to the published digest; `tools/minecraft-mcp-bridge/`
+  (README lists the changes since v0.4.18). `build.gradle` pins it; the compat range is `[0.4.28,0.5.0)`.
+- Breaking for the lane: a remote `enter_control_mode` needs `-Dmcp.remote_control=true`, and
+  `screenshot_to_file` writes only inside `mcp.screenshot.dir`. The `mcpClient` run now sets both
+  (the folder is the worktree's `tmp/`). `Content-Type: application/json` was already sent by every driver.
+- The `src/mcpCompat` mixin targets have the same signatures in v0.4.28 (`javap`).
+- Skill: `.claude/skills/minecraft-mcp/` (`SKILL.md`, `scripts/bridge.js` with the bearer token and
+  the screenshot folder, `scripts/new-world.sh`, `scripts/Flatten.java`, `references/bridge-tools.md`
+  from the jar's command whitelist, `pitfalls.md`, `screen-map.md`), `.agents/skills/minecraft-mcp`
+  symlink, `.gitignore` re-includes `/.claude/skills/**/scripts/`. AGENTS.md and
+  `rules/in-game-checks.md` name the skill.
 
 ## Index record (moved from INDEX.md on 2026-10-26)
 
 Purpose: Tracked agent skill `.claude/skills/minecraft-mcp/` distilling all dev-client bridge experience; transcript mining of about 15 agents (four opus reports) into a pitfalls catalogue and screen map
 
-Status: In progress since 2026-09-24 (not on `main`). Index: [../INDEX.md](../INDEX.md).
+Status: In progress since 2026-09-24 (rebuilt for v0.4.28 2026-11-17, not on `main`). Index: [../INDEX.md](../INDEX.md).
 
 ### Documents
 
@@ -54,12 +69,14 @@ Status: In progress since 2026-09-24 (not on `main`). Index: [../INDEX.md](../IN
 
 ### Code areas
 
-`.claude/skills/minecraft-mcp/`, `.gitignore`; read-only: `src/mcpCompat`, `tools/mcp-gui-helpers/`
+`.claude/skills/minecraft-mcp/`, `.agents/skills/minecraft-mcp`, `.gitignore`, `build.gradle` (`mcpClient` run, `prepareMcpControlMod`), `src/mcpCompat/resources/META-INF/neoforge.mods.toml`, `tools/minecraft-mcp-bridge/`, `AGENTS.md`, `documentation/reference/rules/in-game-checks.md`; read-only: `src/mcpCompat`, `tools/mcp-gui-helpers/`
 
 ### History
 
 - In progress since 2026-09-24 on `claude/minecraft-mcp-skill-c3f0f0` (skill written, mining consolidated; eval runs skipped; `runMcpClient` typing lane unconfirmed)
+- 2026-11-17: skill lost with its branch; rebuilt for bridge v0.4.28 on `claude/mcp-skill-status-632852` (jar updated, lane consent and screenshot folder set, robot helpers dropped); in-game check open
 
 ### Notes
 
 - 2026-10-26: `.claude/skills/minecraft-mcp/` is not on `main`; no branch holds the skill commits `20b1587` and `1287d6d` (branch `claude/minecraft-mcp-skill-c3f0f0` is gone), which are still in the object store.
+- 2026-11-17: the two commits are no longer in the object store either.
