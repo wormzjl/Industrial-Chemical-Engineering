@@ -215,8 +215,11 @@ public final class OperationColumn {
      */
     public static AssemblyColumn.Status status(OperationView v, HeatControlColumn.Texts t) {
         var binding = v.binding();
+        // The binding member where the condition names one (the outlet that is full, the tray that floods), as the conditions table names it.
         String text = v.phase() == OperationView.Phase.LIMITED && binding != null
-                ? t.get(KEY + "status.limited", t.get(KEY + "limit." + limit(binding.condition())), Math.round(100 * v.alpha()))
+                ? binding.index() >= 0
+                        ? t.get(KEY + "status.limited_member", t.get(KEY + "limit." + limit(binding.condition())), member(binding, t), Math.round(100 * v.alpha()))
+                        : t.get(KEY + "status.limited", t.get(KEY + "limit." + limit(binding.condition())), Math.round(100 * v.alpha()))
                 : t.get(KEY + "status." + v.phase().name().toLowerCase(Locale.ROOT));
         // One line: the phase and the one note that matters most; the engine's line in the hover says the rest.
         if (v.refused()) text = t.get(KEY + "status.failed", text);
