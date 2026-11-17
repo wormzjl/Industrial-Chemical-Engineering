@@ -32,6 +32,12 @@ public enum Condition {
     SOLVE_REFUSED(Rank.OFF_TABLE, "solve refused"),
     /** The closure departs from the solved one, or the condenser would heat: the cycle takes nothing. */
     CLOSURE(Rank.TRIP, "upset"),
+    /**
+     * The cycle passes its feed to the bottoms at the feed's own energy (L1 of batch 2026-11-17-column-cold-feed): the
+     * closed condenser would heat the overhead, or the state's solve stands refused. No steam is taken and no duty owed.
+     * The text is the trip's.
+     */
+    PASSING(Rank.NOTICE, "passing"),
     /** The solve of the applied set points failed; the accepted ones stay. */
     SETPOINT_REFUSED(Rank.NOTICE, "set points refused"),
     /** What the accepted solve advised (V3's bounded texts). */

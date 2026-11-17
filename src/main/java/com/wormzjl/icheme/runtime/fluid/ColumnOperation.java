@@ -884,14 +884,16 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         var rooms=powered(r,u,t,tick,new ColumnCycle.Rooms(room(r,u,t,Utility.CONDENSER,tick),room(r,u,t,Utility.REBOILER,tick),pas,t.airFeed(u.airSurface())))
                 .withTrays(com.wormzjl.icheme.science.integrity.ColumnWear.capacity(u.trayFouling()));
         ColumnCycle.ProductEnergy priced=(k,n)->{double e=0;var h=energy[k];for(int i=0;i<n.length;i++)e+=n[i]*h[i];return e;};
-        var b=ColumnCycle.step(t,set,cycleSeconds(),feedAvailable,steam,room,rooms,priced,false);
+        // A state whose solve stands refused (W2) passes a cycle that trips to the bottoms (L1): no solve of it is coming.
+        boolean refused=r.refused!=null&&feedAvailable.total()>0&&inside(r.refused,set,attempted(set,feedAvailable,steam),designDemand);
+        var b=ColumnCycle.step(t,set,cycleSeconds(),feedAvailable,steam,room,rooms,priced,false,refused);
         // Rule A stays while the steam is short and its shortage inside the bands of the refused state; then rule B tries once more.
         if(r.ruleA&&(Condition.find(b.conditions(),Condition.STEAM_SHORT)==null||r.refused==null||!inside(r.refused,set,b,designDemand)))r.ruleA=false;
-        var step=r.ruleA?ColumnCycle.step(t,set,cycleSeconds(),feedAvailable,steam,room,rooms,priced,true):b;
+        var step=r.ruleA?ColumnCycle.step(t,set,cycleSeconds(),feedAvailable,steam,room,rooms,priced,true,refused):b;
         r.last=step;
         // The fans at the feed the cycle took, and their power by the cube of their speed (HeatSides.fanPower). Banks without
-        // power (W5) hold what natural draught holds; the powered ones the rest.
-        double natural=Math.min(u.airSurface(),surface(u,r.unpoweredFans)),driven=u.airSurface()-natural,airTaken=step.feedMoles()/cycleSeconds();
+        // power (W5) hold what natural draught holds; the powered ones the rest. A passing cycle owes the condenser nothing.
+        double natural=Math.min(u.airSurface(),surface(u,r.unpoweredFans)),driven=u.airSurface()-natural,airTaken=step.passing()?0:step.feedMoles()/cycleSeconds();
         if(natural>0)airTaken=Math.max(0,airTaken-t.airFeed(0,natural));
         r.fans=natural>0&&!(driven>0)?(Double.isNaN(t.fans(u.airSurface(),airTaken))?Double.NaN:0):t.fans(driven,airTaken);
         r.fanPower=Double.isNaN(r.fans)?Double.NaN:com.wormzjl.icheme.science.equipment.HeatSides.fanPower(driven,r.fans);
@@ -940,10 +942,12 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         // A refusal of set points the player has since moved from is forgotten: what now stands is solved once.
         if(r.refusedSetpoints!=null&&u.setpoints().intensivelyDiffers(r.refusedSetpoints)){r.refusedSetpoints=null;r.setpointRefusal=null;}
         // A new solve where the state taken left the table's bands, or the requested set points moved from the accepted ones
-        // and were not refused (plan section 6, W2).
+        // and were not refused (plan section 6, W2). A passing cycle (L1) took no steam: its solve is of the state it was
+        // given, as a trip's, the closure's where no band was left.
+        var given=step.passing()?attempted(set,feedAvailable,steam):step;
         DriftBands.Trigger trigger=r.refusedSetpoints==null&&u.setpoints().intensivelyDiffers(t.reference().setpoints())?DriftBands.Trigger.SETPOINT
-                :DriftBands.check(t,step,designDemand).map(DriftBands.Crossing::trigger).orElse(null);
-        if(trigger!=null&&step.feedMoles()>0)request(r,u,tick,trigger,step);
+                :DriftBands.check(t,given,designDemand).map(DriftBands.Crossing::trigger).orElse(step.passing()?DriftBands.Trigger.CLOSURE:null);
+        if(trigger!=null&&step.feedMoles()>0)request(r,u,tick,trigger,given);
         publish(r,step.conditions(),unmetered);
     }
     /** The state a tripped cycle was given: the feed it holds at the set rate, the steam at its ratios (both of {@code set}). */

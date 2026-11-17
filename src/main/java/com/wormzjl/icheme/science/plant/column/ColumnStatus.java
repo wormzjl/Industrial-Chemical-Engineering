@@ -20,7 +20,9 @@ public final class ColumnStatus {
     public static OperationView.Phase phase(boolean table, List<Condition.Active> conditions) {
         if (!table) return notReady(conditions) != null ? OperationView.Phase.NOT_READY : OperationView.Phase.STARTING;
         var binding = Condition.binding(conditions);
-        if (binding == null) return OperationView.Phase.RUNNING;
+        // A passing cycle runs (L1): its feed goes to the bottoms, whatever bounds how much.
+        if (binding == null || binding.condition().rank != Condition.Rank.TRIP && Condition.find(conditions, Condition.PASSING) != null)
+            return OperationView.Phase.RUNNING;
         return binding.condition().rank == Condition.Rank.TRIP ? OperationView.Phase.UPSET : OperationView.Phase.LIMITED;
     }
 
@@ -54,7 +56,11 @@ public final class ColumnStatus {
                 break;
         }
         var binding = Condition.binding(conditions);
-        var out = new StringBuilder(binding == null ? "RUNNING" : String.format(Locale.ROOT, "LIMITED: %s, %.0f %%", binding.condition().word, 100 * alpha));
+        // A passing cycle (L1 of batch 2026-11-17-column-cold-feed) runs its feed to the bottoms: the line says so first.
+        var passing = Condition.find(conditions, Condition.PASSING);
+        var out = new StringBuilder(passing != null ? "PASSING: " + passing.text() + "; the feed leaves as bottoms" : "");
+        if (passing == null || binding != null)
+            out.append(passing == null ? "" : "; ").append(binding == null ? "RUNNING" : String.format(Locale.ROOT, "LIMITED: %s, %.0f %%", binding.condition().word, 100 * alpha));
         if (!Double.isNaN(fans)) out.append(String.format(Locale.ROOT, "; air fans %.0f %%, %.1f kW", 100 * fans, fanPower / 1000));
         var steam = Condition.find(conditions, Condition.STEAM_SHORT);
         if (steam != null && !steam.text().isEmpty()) out.append(", ").append(steam.text());

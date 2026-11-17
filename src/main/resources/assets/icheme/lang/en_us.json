@@ -1239,6 +1239,7 @@
   "gui.icheme.assembly.operation.condition.off_table": "Off table",
   "gui.icheme.assembly.operation.condition.solve_refused": "Solve refused",
   "gui.icheme.assembly.operation.condition.closure": "Upset",
+  "gui.icheme.assembly.operation.condition.passing": "Feed passing to bottoms",
   "gui.icheme.assembly.operation.condition.setpoint_refused": "Set points refused",
   "gui.icheme.assembly.operation.condition.advisory": "Advisory",
   "gui.icheme.assembly.operation.condition.feed_water_routed": "Feed water routed",
