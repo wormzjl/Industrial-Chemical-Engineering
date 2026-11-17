@@ -48,6 +48,22 @@ public final class AssemblyGameTests {
     private AssemblyGameTests() {}
 
     /**
+     * Removes the GameTest framework's start controls from a review world: the command block ({@code test runclosest}) and
+     * its button that {@code GameTestInfo.prepareTestStructure} sets beside the structure block, at (1, 0, -1) and (1, 0, -2)
+     * in the test's frame. A hand-test world opens in a client that has no {@code /test} command, so they do nothing
+     * there, and where they could run they would rebuild the test over the plant. The button first, so it drops nothing.
+     */
+    static void clearStartControls(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var button = helper.absolutePos(new BlockPos(1, 0, -2));
+        if (level.getBlockState(button).is(net.minecraft.world.level.block.Blocks.STONE_BUTTON))
+            level.setBlock(button, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+        var command = helper.absolutePos(new BlockPos(1, 0, -1));
+        if (level.getBlockState(command).is(net.minecraft.world.level.block.Blocks.COMMAND_BLOCK))
+            level.setBlock(command, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+    }
+
+    /**
      * A small column plant: a 2 m column of 8 trays with sump steam and no kettle (an exchanger condenser, a standard
      * reflux pump), its condenser, its receiver and its reflux pump, the lines between them routed so that no pipe touches
      * another line, and a valve and a tank on every boundary line. The review world builds a larger plant with the same
@@ -62,6 +78,11 @@ public final class AssemblyGameTests {
         final LinkedHashSet<BlockPos> devices = new LinkedHashSet<>();
         final Set<BlockPos> reserved = new HashSet<>();
         final Map<BlockPos, Direction> valves = new LinkedHashMap<>();
+        /**
+         * Each bend a route makes costs as many pipes as this: 0, the shortest line of any shape (the plants' own); above 0, the
+         * line with the fewest bends among the short ones, so a line runs straight where it can.
+         */
+        int bendCost;
         Vessel column, drum;
         BlockPos offgasEnd;
         /** An exchanger plant's bypass valve and the bypass pipe before it (W8). */
@@ -330,6 +351,7 @@ public final class AssemblyGameTests {
             var allowed = new HashSet<BlockPos>(joins);
             allowed.add(from);
             allowed.add(to);
+            if (bendCost > 0) return straightRoute(from, to, allowed);
             var previous = new HashMap<BlockPos, BlockPos>();
             var queue = new ArrayDeque<BlockPos>();
             previous.put(from, from);
@@ -348,6 +370,52 @@ public final class AssemblyGameTests {
             for (var at = to; ; at = previous.get(at)) {
                 path.add(at);
                 if (at.equals(from)) break;
+            }
+            Collections.reverse(path);
+            for (var at : path) pipe(at);
+            return path;
+        }
+
+        /**
+         * {@link #route(BlockPos, BlockPos, Set)} by least cost, a pipe 1 and a bend {@link #bendCost}: a search over (block,
+         * heading), the first pipe off {@code from} free to leave any way.
+         */
+        private List<BlockPos> straightRoute(BlockPos from, BlockPos to, Set<BlockPos> allowed) {
+            var dirs = Direction.values();
+            record State(BlockPos at, int heading) {}
+            record Node(State state, int cost) {}
+            var best = new HashMap<State, Integer>();
+            var previous = new HashMap<State, State>();
+            var queue = new PriorityQueue<Node>(Comparator.comparingInt(Node::cost));
+            var first = new State(from, -1);
+            best.put(first, 0);
+            queue.add(new Node(first, 0));
+            State end = null;
+            while (!queue.isEmpty()) {
+                var node = queue.poll();
+                var s = node.state();
+                if (best.getOrDefault(s, Integer.MAX_VALUE) < node.cost()) continue;
+                if (s.at().equals(to)) {
+                    end = s;
+                    break;
+                }
+                for (int d = 0; d < 6; d++) {
+                    var n = s.at().relative(dirs[d]);
+                    if (!free(n, allowed)) continue;
+                    int cost = node.cost() + 1 + (s.heading() < 0 || s.heading() == d ? 0 : bendCost);
+                    var next = new State(n, d);
+                    if (cost < best.getOrDefault(next, Integer.MAX_VALUE)) {
+                        best.put(next, cost);
+                        previous.put(next, s);
+                        queue.add(new Node(next, cost));
+                    }
+                }
+            }
+            if (end == null) throw new IllegalStateException("No route from " + from.toShortString() + " to " + to.toShortString());
+            var path = new ArrayList<BlockPos>();
+            for (var s = end; ; s = previous.get(s)) {
+                path.add(s.at());
+                if (s.equals(first)) break;
             }
             Collections.reverse(path);
             for (var at : path) pipe(at);

@@ -65,8 +65,8 @@ import java.util.Map;
 
 /**
  * A world to try the column's Operation tab in by hand (batch 2026-10-28-column-operation): the default column template
- * (Tia Juana Light: 40 trays, three side draws, three pumparounds, sump steam) at a sixteenth of its feed on a quarter of
- * its column area, built with a water-cooled condenser (C6b), its receiver, a reflux pump and each pumparound's pump and
+ * (Tia Juana Light: 40 trays, three side draws, three pumparounds, sump steam) at its full feed ({@link #SIZED_SCALE}; the
+ * column tests' fixed plant at a sixteenth of its feed on a quarter of its column area), built with a water-cooled condenser (C6b), its receiver, a reflux pump and each pumparound's pump and
  * exchanger. The column's diameter, every unit and the boundary lines' bores are the process simulator's Size all on the same
  * column ({@link #sized}, batch 2026-11-16-review-plant-sizing); the column tests keep the fixed units of {@link Options#REVIEW}. The feed and the steam come from generators, the
  * condenser's and each pumparound cooler's water from a generator into a void (W4: the column owes them their duties);
@@ -83,22 +83,28 @@ public final class ColumnOperationReviewWorld {
 
     /** The share of the template's feed the column takes; its area takes the same share, so each tray carries the template's loading. */
     static final double SCALE = 1 / 16.0;
+    /** The sized review plant's share of the template's feed ({@link #sized}, {@link #review}): the template's full flow. */
+    static final double SIZED_SCALE = 1;
     /** The supply pressure of the feed, the steam and the cooling water, Pa; the atmosphere the products leave to. */
     static final double SUPPLY = 500_000, WATER = 400_000, ATMOSPHERE = 101_325;
     /** The cooling water's supply temperature, K. */
     static final double WATER_TEMPERATURE = 298.15;
+    /** Liquid water's viscosity at {@link #WATER_TEMPERATURE}, Pa s; the world's velocity limit for water, m/s (its 100 m/s cap). */
+    static final double WATER_VISCOSITY = 8.9e-4, WATER_SPEED_LIMIT = 100;
     /** The condenser's shell size, m: larger than the least exchanger, for the overhead's duty. */
     static final double CONDENSER_SIZE = 1.5;
     /** The feed's and the steam's line bores, m (their generators' too). */
     static final double FEED_BORE = .25, STEAM_BORE = .15;
     /** The review plant's least receiver saddles, m: the boot's drain line, three pipes and its void, clears the ground. */
     static final int RECEIVER_SUPPORT = 5;
+    /** The sized review plant's cost of a bend, in pipes: its lines run straight where a few pipes more allow it (owner, 2026-11-17). */
+    static final int BEND_COST = 8;
     /**
      * The reports of the running column: their number and the online ticks between them. A GameTest server runs its ticks as
      * fast as it can, far ahead of the solves a cycle and its islands wait for (plan section 9), and an island behind the
      * clock plans from the column's past: from the start on, the test holds the server to 20 ticks a second, as a game runs.
      */
-    static final int REPORTS = 4, REPORT_TICKS = 600;
+    static final int REPORTS = 4, REPORT_TICKS = 600, PREHEAT_REPORTS = 12;
 
     @GameTest(template = "empty", timeoutTicks = Integer.MAX_VALUE, batch = "review-operation")
     public static void aCrudeColumnRuns(GameTestHelper helper) {
@@ -116,11 +122,17 @@ public final class ColumnOperationReviewWorld {
                 .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || plant.valvesInstalled(), "Waiting for the valves"))
                 .thenIdle(20)
                 .thenExecute(() -> {
+                    if (failure[0] == null) rig.light(failure);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.fueled(), "Waiting for the heaters' fuel"))
+                .thenExecute(() -> {
                     if (failure[0] == null) rig.start(failure);
                     if (failure[0] == null) rig.spawn();
                 })
                 .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.past(), "Waiting for the first solve"));
-        for (int i = 1; i <= REPORTS; i++) {
+        // The crude unit fills its preheat train before the tower sees a feed: it reports for longer.
+        int reports = rig.options.preheat() == null ? REPORTS : PREHEAT_REPORTS;
+        for (int i = 1; i <= reports; i++) {
             int n = i;
             int[] ticks = {0};
             sequence = sequence.thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && ++ticks[0] >= REPORT_TICKS, "Waiting for the column"))
@@ -186,13 +198,14 @@ public final class ColumnOperationReviewWorld {
      * pump and cooler (a list shorter than the pumparounds: the least pump, {@code coolerUnit}), and a bore by product line
      * name ({@code offgas}, {@code water}, {@code distillate}, {@code drawN}, {@code bottoms}) over {@code productBore}, and a
      * bore by internal line name ({@link Rig#routes}: {@code overhead}, {@code receiver out}, {@code reflux}, {@code paN draw},
-     * {@code paN return}; a line not named stays as laid).
+     * {@code paN return}, {@code condenser water}, {@code paN water}; a line not named stays as laid), and the cost of a bend
+     * in pipes for the lines between units ({@code AssemblyGameTests.Plant#bendCost}: 0, the shortest line of any shape).
      */
     record Options(double scale, @Nullable java.util.function.Function<MaterialCatalog, V3ColumnInput> design, ColumnComponents.Condenser condenser,
                    EquipmentShape condenserUnit, @Nullable EquipmentShape trimUnit, EquipmentShape coolerUnit, @Nullable EquipmentShape kettleUnit,
                    double feedBore, double steamBore, double waterBore, double productBore, boolean motors, boolean shutoffs, Layout layout,
                    @Nullable Double diameter, @Nullable EquipmentShape refluxPumpUnit, List<EquipmentShape> pumpUnits, List<EquipmentShape> coolerUnits,
-                   Map<String, Double> productBores, Map<String, Double> lineBores) {
+                   Map<String, Double> productBores, Map<String, Double> lineBores, int bendCost, @Nullable Preheat preheat) {
         /** The fixed units of the column tests and the failure-modes plants. */
         static final Options REVIEW = new Options(SCALE, null, ColumnComponents.Condenser.EXCHANGER, exchanger(CONDENSER_SIZE), null,
                 AssemblyGameTests.Plant.unit(Kind.EXCHANGER), null, FEED_BORE, STEAM_BORE, 0, 0, false, false, Layout.REVIEW);
@@ -209,7 +222,7 @@ public final class ColumnOperationReviewWorld {
                 EquipmentShape condenserUnit, @Nullable EquipmentShape trimUnit, EquipmentShape coolerUnit, @Nullable EquipmentShape kettleUnit,
                 double feedBore, double steamBore, double waterBore, double productBore, boolean motors, boolean shutoffs, Layout layout) {
             this(scale, design, condenser, condenserUnit, trimUnit, coolerUnit, kettleUnit, feedBore, steamBore, waterBore, productBore, motors, shutoffs, layout,
-                    null, null, List.of(), List.of(), Map.of(), Map.of());
+                    null, null, List.of(), List.of(), Map.of(), Map.of(), 0, null);
         }
 
         EquipmentShape pumpUnit(int j) {
@@ -275,6 +288,28 @@ public final class ColumnOperationReviewWorld {
         return e;
     }
 
+    /** The rig's receiver: a lying drum heading north on saddles {@code support} high, with its boot. */
+    static EquipmentShape receiver(double diameter, double length, int support) {
+        return EquipmentShape.drum(diameter, length, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, support,
+                EquipmentShape.defaultConnections(diameter, length, EquipmentShape.Orientation.HORIZONTAL, support, true), true);
+    }
+
+    /** The height above the ground of the foot of the boundary line out of {@code shape}'s {@code role} nozzle ({@link Rig#line}: three pipes, then its end). */
+    static int foot(EquipmentShape shape, Role role) {
+        for (var p : ShapeRasterizer.ports(shape))
+            if (shape.nozzles().get(p.nozzle()).role() == role) return p.cell().y() + p.dy() + 3 * p.dy();
+        throw new IllegalStateException("The " + shape.kind() + " has no " + role);
+    }
+
+    /** {@code exchanger} on the least support from its own up that its {@code role} boundary line stands on. */
+    static EquipmentShape standing(EquipmentShape exchanger, Role role) {
+        var shape = exchanger;
+        for (int support = exchanger.support(); foot(shape, role) < 0; )
+            shape = EquipmentShape.designed(exchanger.kind(), exchanger.diameter(), (int) Math.round(exchanger.tangentLength()), EquipmentShape.Heading.NORTH, ++support, exchanger.bank())
+                    .withExchangerType(exchanger.exchangerType());
+        return shape;
+    }
+
     /** The column's tag on the review plant's sheet. */
     private static final String TOWER = "T-1";
 
@@ -285,12 +320,26 @@ public final class ColumnOperationReviewWorld {
      * ({@link Rig#routes}).
      */
     record SizedPlant(V3ColumnInput input, double diameter, EquipmentShape condenser, int condensers, EquipmentShape receiver, EquipmentShape refluxPump,
-                      List<EquipmentShape> coolers, List<EquipmentShape> pumps, Map<String, Double> bores, Map<String, Double> lines) {
+                      List<EquipmentShape> coolers, List<EquipmentShape> pumps, Map<String, Double> bores, Map<String, Double> lines,
+                      EquipmentShape chargePump, EquipmentShape exchanger, EquipmentShape heater, int heaters, double fuelBore) {
+    }
+
+    /**
+     * The crude unit ahead of the tower (owner, 2026-11-17): the charge pump, the residue exchanger and the fired heaters (in
+     * parallel), each shape and where each stands (offsets from the column's origin); the crude's supply bore, m, and each
+     * heater's fuel line's. The pumparound coolers' cold sides carry the crude (no cooling water), the bottoms runs through the
+     * exchanger's shell to the residue's void, and the heaters' outlets are the tower's feed line.
+     */
+    record Preheat(EquipmentShape chargePump, BlockPos chargePumpAt, EquipmentShape exchanger, BlockPos exchangerAt, EquipmentShape heater, List<BlockPos> heatersAt,
+                   double crudeBore, double fuelBore) {
+        Preheat {
+            heatersAt = List.copyOf(heatersAt);
+        }
     }
 
     /**
      * The review plant sized by the process simulator's rules: a one-column sheet of the network's default template at
-     * {@link #SCALE} (its feed at its own temperature and {@link #SUPPLY}, its steam rows as wired steam at {@link #SUPPLY}, a
+     * {@link #SIZED_SCALE} (its feed at its own temperature and {@link #SUPPLY}, its steam rows as wired steam at {@link #SUPPLY}, a
      * product stream on every outlet, the condenser's and the pumparound coolers' water ports free, so each is rated on tower
      * water), run, then Size all ({@code Proposal.sizeAll}: the column's half-metre diameters by real solves, every member
      * Auto, exchangers on their design deposit with the 20 % spare, at {@link DesignBasis#DEFAULT}'s design flow). Logs one
@@ -305,7 +354,7 @@ public final class ColumnOperationReviewWorld {
 
     private static SizedPlant sizing(MaterialCatalog catalog, String network) {
         var template = com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog);
-        var input = scaled(template, SCALE);
+        var input = scaled(template, SIZED_SCALE);
         var model = FluidThermodynamics.forNetwork(catalog, network);
         var params = ColumnDoor.from(input, ColumnComponents.Condenser.EXCHANGER);
         var door = ColumnDoor.of(params);
@@ -313,7 +362,29 @@ public final class ColumnOperationReviewWorld {
         double[] flows = input.feedComponentMolarFlowsMolPerSecond();
         for (int c = 0; c < flows.length; c++) amounts.merge(input.componentBasis().componentId(c), flows[c], Double::sum);
         var streams = new ArrayList<Flowsheet.Stream>();
-        streams.add(new Flowsheet.Stream("feed", "feed", null, new Flowsheet.End(TOWER, ColumnUnit.FEED), new Flowsheet.Feed(input.feedTemperatureKelvin(), SUPPLY, amounts, List.of())));
+        // The crude unit (owner, 2026-11-17): the crude from storage through the charge pump, the pumparound coolers' cold sides
+        // from the coolest (the top) down, the residue exchanger's tubes and the fired heater into the tower's feed; the bottoms
+        // through the exchanger's shell to the residue's rundown.
+        streams.add(new Flowsheet.Stream(CRUDE, CRUDE, null, new Flowsheet.End(CHARGE_PUMP, "in"), new Flowsheet.Feed(CRUDE_TEMPERATURE, CRUDE_SUPPLY, amounts, List.of())));
+        var from = new Flowsheet.End(CHARGE_PUMP, "out");
+        for (int j = 0; j < door.pumparounds().size(); j++) {
+            var pa = door.pumparounds().get(j);
+            // A pumparound cooler's cold side by its passage's ends (ColumnUnit.passages): a in, b out.
+            streams.add(new Flowsheet.Stream(preheat(j), preheat(j), from, new Flowsheet.End(TOWER, ColumnUnit.PUMPAROUND + pa.id() + "/a"), null));
+            from = new Flowsheet.End(TOWER, ColumnUnit.PUMPAROUND + pa.id() + "/b");
+        }
+        int n = door.pumparounds().size();
+        streams.add(new Flowsheet.Stream(preheat(n), preheat(n), from, new Flowsheet.End(RESIDUE_EXCHANGER, "tube_a"), null));
+        streams.add(new Flowsheet.Stream(preheat(n + 1), preheat(n + 1), new Flowsheet.End(RESIDUE_EXCHANGER, "tube_b"), new Flowsheet.End(HEATER, "a"), null));
+        streams.add(new Flowsheet.Stream(CHARGE, CHARGE, new Flowsheet.End(HEATER, "b"), new Flowsheet.End(TOWER, ColumnUnit.FEED), null));
+        streams.add(new Flowsheet.Stream(BOTTOMS, BOTTOMS, new Flowsheet.End(TOWER, ColumnUnit.BOTTOMS), new Flowsheet.End(RESIDUE_EXCHANGER, "shell_a"), null));
+        streams.add(new Flowsheet.Stream(RESIDUE, RESIDUE, new Flowsheet.End(RESIDUE_EXCHANGER, "shell_b"), null, null));
+        var units = List.of(new Flowsheet.Unit(TOWER, "column", TOWER, 0, 0, params),
+                new Flowsheet.Unit(CHARGE_PUMP, "pump", CHARGE_PUMP, 0, 0, json("{\"target\":\"outlet\",\"pressure\":" + CHARGE_PRESSURE + "}")),
+                new Flowsheet.Unit(RESIDUE_EXCHANGER, "exchanger", RESIDUE_EXCHANGER, 0, 0, json("{\"target\":\"outlet\",\"side\":\"shell\",\"temperature\":" + RESIDUE_TEMPERATURE
+                        + ",\"tube_drop\":0.5e5,\"shell_drop\":0.3e5}")),
+                new Flowsheet.Unit(HEATER, "fired_heater", HEATER, 0, 0, json("{\"coils\":\"series\",\"target\":\"outlet\",\"temperature\":" + input.feedTemperatureKelvin()
+                        + ",\"radiant_drop\":5.1e5,\"convection_drop\":2.5e5}")));
         for (int s = 0; s < door.steam().size(); s++) {
             var row = door.steam().get(s);
             streams.add(new Flowsheet.Stream("steam" + (s + 1), "steam" + (s + 1), null, new Flowsheet.End(TOWER, ColumnUnit.steamPort(row)),
@@ -323,9 +394,7 @@ public final class ColumnOperationReviewWorld {
         streams.add(product("distillate", ColumnUnit.DISTILLATE));
         streams.add(product("water", ColumnUnit.WATER));
         for (int j = 0; j < door.draws().size(); j++) streams.add(product("draw" + (j + 1), ColumnUnit.drawPort(door.draws().get(j))));
-        streams.add(product("bottoms", ColumnUnit.BOTTOMS));
-        var sheet = new Flowsheet(new Flowsheet.Basis(network, catalog.requirePackage(network).revision(), model.components()),
-                List.of(new Flowsheet.Unit(TOWER, "column", TOWER, 0, 0, params)), streams, FlowsheetSolver.Settings.DEFAULT);
+        var sheet = new Flowsheet(new Flowsheet.Basis(network, catalog.requirePackage(network).revision(), model.components()), units, streams, FlowsheetSolver.Settings.DEFAULT);
         var run = steady(FlowsheetEngine.run(sheet, catalog, () -> {
         }, null, FlowsheetSolver.Progress.NONE), "run");
         var thermo = new FlowThermo(model, catalog, network, () -> {
@@ -374,17 +443,78 @@ public final class ColumnOperationReviewWorld {
             lines.put("pa" + (j + 1) + " draw", internal(sized, SheetSizing.PumparoundMember.name(id, "draw")));
             lines.put("pa" + (j + 1) + " return", internal(sized, SheetSizing.PumparoundMember.name(id, "return")));
         }
+        // The condenser's tower water (its free water side), at the flow its rating gives, on the sizer's water line rule; the
+        // pumparound coolers' cold sides are the crude's.
+        lines.put("condenser water", water("condenser", require(sized, SheetSizing.member(TOWER, "condenser")).rating(), condenser.shells()));
         var bores = new LinkedHashMap<String, Double>();
         for (var stream : streams) {
             var line = sized.lines().get(stream.id());
             if (line == null || line.size() == null) throw new IllegalStateException("The " + stream.id() + " line has no size");
             bores.put(stream.id(), bore(line.size()));
         }
+        // The crude unit's lines between units are laid by the rig under their stream's name.
+        for (int k = 0; k < door.pumparounds().size() + 2; k++) lines.put(preheat(k), bores.remove(preheat(k)));
+        lines.put(CHARGE, bores.remove(CHARGE));
+        lines.put(BOTTOMS, bores.remove(BOTTOMS));
+        for (var unit : List.of(CHARGE_PUMP, RESIDUE_EXCHANGER, HEATER))
+            IChemE.LOGGER.info("review_operation sizing readings unit=\"{}\" {} rating={}", unit, all.run().reports().containsKey(unit) ? all.run().reports().get(unit).readings() : all.run().reports().keySet(),
+                    require(sized, unit).rating().readings().stream().map(r -> r.limit().name() + "=" + String.format(Locale.ROOT, "%.4g", r.value())).toList());
+        var chargePump = pump(require(sized, CHARGE_PUMP).size());
+        var exchanger = (ExchangerSizing.Size) require(sized, RESIDUE_EXCHANGER).size();
+        if (exchanger.shells() != 1) throw new IllegalStateException("The residue exchanger is sized at " + exchanger.shells() + " shells: the rig places one");
+        if (!(require(sized, HEATER).size() instanceof com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.Size running))
+            throw new IllegalStateException("The heater's size is not a fired heater's");
+        // The heater for the cold start (owner, 2026-11-17: "Bigger furnace"): the crude from the charge pump to the tower's feed
+        // with no pumparound or residue heat yet, the charge's enthalpy over the pumped crude's, at the design flow, on Auto.
+        var streamsRun = all.run().streams();
+        double cold = (streamsRun.get(CHARGE).enthalpy() - streamsRun.get(preheat(0)).enthalpy()) * DesignBasis.DEFAULT.designFlow() / 1e6;
+        var heater = com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.auto(new com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.Load(cold, null), null).size();
+        if (heater == null) throw new IllegalStateException("No heater holds the cold start's " + cold + " MW");
+        IChemE.LOGGER.info("review_operation sizing heater running={} cold_start_MW={} cold_start={}", running, String.format(Locale.ROOT, "%.1f", cold), heater);
+        // Each of Auto's heaters in parallel fires its share; its fuel line is sized for that share of the cold start.
+        double heaterDuty = cold * 1e6 / DesignBasis.DEFAULT.designFlow() / heater.count();
         IChemE.LOGGER.info("review_operation sizing column diameter_m={} trays={} flood_pct={} condenser_shells={} condenser_MW={} bores={}", columnSize.diameter(),
                 input.stageCount(), flood == null ? "none" : String.format(Locale.ROOT, "%.1f", flood.value()), condenser.shells(),
                 String.format(Locale.ROOT, "%.3f", run.reports().get(TOWER).readings().getOrDefault("condenser", Double.NaN) / 1e6), bores);
         double diameter = ColumnDesign.builtDiameter(columnSize.diameter());
-        return new SizedPlant(withDiameter(input, diameter), diameter, condenser.shape(), condenser.shells(), receiver.shape(), refluxPump, coolers, pumps, bores, lines);
+        return new SizedPlant(withDiameter(input, diameter), diameter, condenser.shape(), condenser.shells(), receiver.shape(), refluxPump, coolers, pumps, bores, lines,
+                chargePump, exchanger.shape(), heater.shape(), heater.count(), fuel(heaterDuty));
+    }
+
+    /**
+     * The bore of the heater's fuel gas line, m: methane at {@link #FUEL_SUPPLY} and 25 °C, fired at {@code duty} W over the
+     * burners' share ({@code Burners}: the heater takes 80 % of the fuel's heat) at its lower heating value, 50.0 MJ/kg, at the
+     * design flow, on Auto's line rule for gas.
+     */
+    private static double fuel(double duty) {
+        double mass = duty / .80 / 50.0e6 * DesignBasis.DEFAULT.designFlow(), density = FUEL_SUPPLY * .01604 / (8.314 * 298.15);
+        var line = new com.wormzjl.icheme.science.flowsheet.sizing.LineSizing.Line(com.wormzjl.icheme.science.flowsheet.sizing.Service.GAS, mass, mass / density, density,
+                1.1e-5, FUEL_SUPPLY, DesignBasis.DEFAULT.length(null), PipeSizes.MAX_BORE, WATER_SPEED_LIMIT, null);
+        var size = com.wormzjl.icheme.science.flowsheet.sizing.LineSizing.auto(line).size();
+        if (size == null) throw new IllegalStateException("No line size takes the heater's fuel, " + mass + " kg/s");
+        IChemE.LOGGER.info("review_operation sizing line=\"fuel\" heater_MW={} kg_s={} bore={} runs={}", String.format(Locale.ROOT, "%.1f", duty / 1e6),
+                String.format(Locale.ROOT, "%.2f", mass), size.bore(), size.runs());
+        return bore(size);
+    }
+
+    /** The crude unit's sheet names (owner, 2026-11-17): its feed, units and the streams between them. */
+    static final String CRUDE = "crude", CHARGE_PUMP = "P-101", RESIDUE_EXCHANGER = "E-101", HEATER = "H-101", CHARGE = "charge", BOTTOMS = "bottoms", RESIDUE = "residue";
+    /**
+     * The crude from storage, K and Pa: 25 °C, at 10 bar so it reaches the charge pump liquid; the charge pump's outlet, Pa
+     * (16 bar: the coolers' and the exchanger's tube drops, the heater's coils, 7.6 bar, and the feed valve above the tower's
+     * 2.5 bar); the residue's outlet from the residue exchanger, K (200 °C, as the sheet example's E-101).
+     */
+    static final double CRUDE_TEMPERATURE = 298.15, CRUDE_SUPPLY = 10e5, CHARGE_PRESSURE = 16e5, RESIDUE_TEMPERATURE = 473.15;
+    /** The heater's fuel gas supply, Pa: methane at 3 bar. */
+    static final double FUEL_SUPPLY = 3e5;
+
+    /** The {@code k}th preheat stream: the charge pump to the first cooler is 0, the residue exchanger to the heater the last. */
+    static String preheat(int k) {
+        return "crude " + (k + 1);
+    }
+
+    private static com.wormzjl.icheme.science.flowsheet.Params json(String text) {
+        return new com.wormzjl.icheme.science.flowsheet.Params(com.google.gson.JsonParser.parseString(text).getAsJsonObject());
     }
 
     /** The sized bore of the column's own line {@code name}, m. */
@@ -392,6 +522,24 @@ public final class ColumnOperationReviewWorld {
         var line = sized.lines().get(SheetSizing.member(TOWER, name));
         if (line == null || line.size() == null) throw new IllegalStateException("The " + name + " line has no size: " + sized.lines().keySet());
         return bore(line.size());
+    }
+
+    /**
+     * The bore of {@code unit}'s tower water line, m: the free water side's flow at design flow from its {@code rating}
+     * ({@link Rating#WATER}, {@link Rating#WATER_VOLUME}) sized by Auto's line rule for water ({@code LineSizing.auto},
+     * {@code Service.WATER}: at most 3 m/s and 0.45 bar per 100 m), liquid water at {@link #WATER_TEMPERATURE} and {@link #WATER};
+     * one shell's share where the unit has {@code shells} in parallel.
+     */
+    private static double water(String unit, Rating rating, int shells) {
+        Double total = rating.values().get(Rating.WATER), hourly = rating.values().get(Rating.WATER_VOLUME);
+        if (total == null || hourly == null) throw new IllegalStateException("The " + unit + "'s rating gives no tower water: " + rating.values());
+        double mass = total / shells, volume = hourly / 3600 / shells;
+        var line = new com.wormzjl.icheme.science.flowsheet.sizing.LineSizing.Line(com.wormzjl.icheme.science.flowsheet.sizing.Service.WATER, mass, volume, mass / volume,
+                WATER_VISCOSITY, WATER, DesignBasis.DEFAULT.length(null), PipeSizes.MAX_BORE, WATER_SPEED_LIMIT, null);
+        var size = com.wormzjl.icheme.science.flowsheet.sizing.LineSizing.auto(line).size();
+        if (size == null) throw new IllegalStateException("No line size takes the " + unit + "'s tower water, " + mass + " kg/s");
+        IChemE.LOGGER.info("review_operation sizing line=\"{} water\" kg_s={} bore={} runs={}", unit, String.format(Locale.ROOT, "%.1f", mass), size.bore(), size.runs());
+        return bore(size);
     }
 
     private static Flowsheet.Stream product(String id, String port) {
@@ -422,7 +570,8 @@ public final class ColumnOperationReviewWorld {
     }
 
     private static String describe(EquipmentShape shape) {
-        return String.format(Locale.ROOT, "%s:%.2fx%.1f:support=%d", shape.kind(), shape.diameter(), shape.tangentLength(), shape.support());
+        return String.format(Locale.ROOT, "%s:%.2fx%.1f:support=%d%s", shape.kind(), shape.diameter(), shape.tangentLength(), shape.support(),
+                shape.kind() == Kind.EXCHANGER ? ":" + shape.exchangerType() : "");
     }
 
     private static List<String> offGreen(Rating rating) {
@@ -454,8 +603,9 @@ public final class ColumnOperationReviewWorld {
         var drumShape = s.receiver();
         double dd = drumShape.diameter(), dl = drumShape.tangentLength();
         int support = Math.max(RECEIVER_SUPPORT, drumShape.support());
-        var receiver = EquipmentShape.drum(dd, dl, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, support,
-                EquipmentShape.defaultConnections(dd, dl, EquipmentShape.Orientation.HORIZONTAL, support, true), true);
+        var receiver = receiver(dd, dl, support);
+        // The boot's drain line (three pipes, then its void) runs down from the boot's nozzle: the least support it stands on.
+        while (foot(receiver, Role.BOOT_DRAIN) < 0) receiver = receiver(dd, dl, ++support);
         var r = extent(receiver);
         var drumAt = new BlockPos(first.getX() + e[0] - gap - r[1], 0, north - r[5]);
         var p = extent(s.refluxPump());
@@ -474,15 +624,37 @@ public final class ColumnOperationReviewWorld {
             south = Math.max(south, z + Math.max(cj[5] - cj[4], pj[5] - pj[4]));
             z += Math.max(cj[5] - cj[4], pj[5] - pj[4] + 8) + gap;
         }
+        // The crude unit: the charge pump west of the first cooler, the residue exchanger at the end of the coolers' row (the
+        // crude runs down the row), the heater south-east of the column, where the tower's feed line can reach it.
+        var c0 = extent(s.coolers().getFirst());
+        var cp = extent(s.chargePump());
+        var chargeAt = new BlockPos(coolers.getFirst().getX() + c0[0] - gap - cp[1], 0, coolers.getFirst().getZ() + c0[4] - cp[4]);
+        west = Math.min(west, chargeAt.getX() + cp[0]);
+        var cl = extent(s.coolers().getLast());
+        // Its shell's outlet is the residue's boundary line, straight out: its saddles high enough for that line to clear the ground.
+        var exchanger = standing(s.exchanger(), Role.SHELL_OUTLET);
+        var ex = extent(exchanger);
+        var exchangerAt = new BlockPos(coolers.getLast().getX() + cl[1] - ex[1], 0, z - ex[4]);
+        west = Math.min(west, exchangerAt.getX() + ex[0]);
+        south = Math.max(south, z + ex[5] - ex[4]);
+        var hx = extent(s.heater());
+        var heatersAt = new ArrayList<BlockPos>();
+        for (int k = 0; k < s.heaters(); k++) heatersAt.add(new BlockPos(column[1] + 2 * gap - hx[0] + k * (hx[1] - hx[0] + 1 + 2 * gap), 0, column[5] + gap - hx[4]));
+        var heaterAt = heatersAt.getLast();
+        south = Math.max(south, heaterAt.getZ() + hx[5]);
+        int east = Math.max(column[1] + 24, heaterAt.getX() + hx[1] + 12), top = Math.max(Math.max(column[3] + 8, 44), hx[3] + 8);
         var layout = new Layout(condensers, List.of(), drumAt, dd, dl, support, refluxAt, pumps, coolers, null, Layout.REVIEW.corner(),
-                new BlockPos(west - 12, 0, north - Math.max(depth, r[5] - r[4]) - 16), new BlockPos(column[1] + 24, Math.max(column[3] + 8, 44), south + 16));
+                new BlockPos(west - 12, 0, north - Math.max(depth, r[5] - r[4]) - 16), new BlockPos(east, top, south + 16));
         var bores = new LinkedHashMap<>(s.bores());
-        double feed = bores.remove("feed"), steam = bores.remove("steam1");
+        double crude = bores.remove(CRUDE), steam = bores.remove("steam1");
         bores.keySet().removeIf(k -> k.startsWith("steam"));
-        IChemE.LOGGER.info("review_operation sizing layout condensers={} drum={} support={} reflux_pump={} pumps={} coolers={} below={} above={}", condensers, drumAt.toShortString(),
-                support, refluxAt.toShortString(), pumps, coolers, layout.below().toShortString(), layout.above().toShortString());
-        return new Options(SCALE, null, ColumnComponents.Condenser.EXCHANGER, s.condenser(), null, s.coolers().getFirst(), null, feed, steam, 0, 0, false, false, layout,
-                s.diameter(), s.refluxPump(), s.pumps(), s.coolers(), bores, s.lines());
+        var preheat = new Preheat(s.chargePump(), chargeAt, exchanger, exchangerAt, s.heater(), heatersAt, crude, s.fuelBore());
+        IChemE.LOGGER.info("review_operation sizing layout condensers={} drum={} support={} reflux_pump={} pumps={} coolers={} charge_pump={} exchanger={} heater={} below={} above={}",
+                condensers, drumAt.toShortString(), support, refluxAt.toShortString(), pumps, coolers, chargeAt.toShortString(), exchangerAt.toShortString(), heatersAt,
+                layout.below().toShortString(), layout.above().toShortString());
+        // The tower's feed line is the charge line out of the heater.
+        return new Options(SIZED_SCALE, null, ColumnComponents.Condenser.EXCHANGER, s.condenser(), null, s.coolers().getFirst(), null, s.lines().get(CHARGE), steam, 0, 0, false, false, layout,
+                s.diameter(), s.refluxPump(), s.pumps(), s.coolers(), bores, s.lines(), BEND_COST, preheat);
     }
 
     static final class Rig {
@@ -496,6 +668,10 @@ public final class ColumnOperationReviewWorld {
         final List<BlockPos> condenserWater = new ArrayList<>();
         /** The kettle's hot utility's generator, or null. */
         BlockPos heating;
+        /** The crude unit's fired heaters in parallel and their fuel gas generators ({@link Options#preheat}), {@code heater} the first or null. */
+        final List<Vessel> heaters = new ArrayList<>();
+        final List<BlockPos> fuels = new ArrayList<>();
+        Vessel heater;
         /** The shutoff valves beyond the boundary valves, each with its axis ({@link Options#shutoffs}), and which line each is on. */
         final java.util.Map<BlockPos, Direction> shutoffs = new java.util.LinkedHashMap<>();
         final java.util.Map<String, BlockPos> lines = new java.util.LinkedHashMap<>();
@@ -507,6 +683,10 @@ public final class ColumnOperationReviewWorld {
          * column), {@code paN draw} (to the pump), {@code paN return} (the pump through the cooler back to the column).
          */
         final java.util.Map<String, List<List<BlockPos>>> routes = new java.util.LinkedHashMap<>();
+        /** Each utility line's generator and void by its internal line's name ({@link #water(Vessel, BlockState, BlockState, String, String)}). */
+        final java.util.Map<BlockPos, String> utilities = new java.util.LinkedHashMap<>();
+        /** The bore each internal line was laid at by {@link #finish} ({@link Options#lineBores}, within its nozzles'), m. */
+        final java.util.Map<String, Double> laidBores = new java.util.LinkedHashMap<>();
         /** The units as placed: the condenser's, the trim's, the receiver, the pumps (the reflux pump first), the coolers, the kettle. */
         final List<Vessel> condensers = new ArrayList<>(), trims = new ArrayList<>(), pumps = new ArrayList<>(), coolers = new ArrayList<>(), motors = new ArrayList<>();
         Vessel kettle;
@@ -539,14 +719,19 @@ public final class ColumnOperationReviewWorld {
          */
         void layout(boolean openFeed) {
             plant.hold();
+            plant.bendCost = options.bendCost();
             MaterialCatalog catalog = MaterialRuntime.active();
             var base = options.design() == null ? com.wormzjl.icheme.science.column.v3.V3ColumnPresets.input(catalog.presets().column(catalog.presets().network().defaultColumnPreset()), catalog) : options.design().apply(catalog);
             input = scaled(base, options.scale());
             if (options.diameter() != null) input = withDiameter(input, options.diameter());
             var layout = options.layout();
             int pumparounds = input.pumparounds().size();
+            // The blueprint asks for the configuration of the exchangers the rig places (a sized shell may be crossflow).
+            var coolerTypes = new ArrayList<com.wormzjl.icheme.science.equipment.ExchangerType>();
+            for (int j = 0; j < pumparounds; j++) coolerTypes.add(type(options.coolerUnit(j)));
             var choices = new ColumnComponents.Choices(options.condenser(), ColumnComponents.Pump.STANDARD, java.util.Collections.nCopies(pumparounds, ColumnComponents.Pump.STANDARD),
-                    new ColumnComponents.Units(layout.condenser().size(), 1, java.util.Collections.nCopies(pumparounds, 1), Math.max(1, layout.trim().size())));
+                    new ColumnComponents.Units(layout.condenser().size(), 1, java.util.Collections.nCopies(pumparounds, 1), Math.max(1, layout.trim().size())),
+                    new ColumnComponents.Exchangers(type(options.condenserUnit()), options.trimUnit() == null ? com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD : type(options.trimUnit()), coolerTypes));
             design = ColumnDesign.of(input, choices);
             var shape = EquipmentShape.column(design.diameter(), design.trays(), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(design.diameter()));
             ColumnDesign.misfit(shape).ifPresent(reason -> {
@@ -556,8 +741,7 @@ public final class ColumnOperationReviewWorld {
             for (var at : layout.condenser()) condensers.add(plant.place(options.condenserUnit(), at.getX(), at.getY(), at.getZ()));
             for (var at : layout.trim()) trims.add(plant.place(java.util.Objects.requireNonNull(options.trimUnit()), at.getX(), at.getY(), at.getZ()));
             double dd = layout.drumDiameter(), dl = layout.drumLength();
-            var drum = plant.drum = plant.place(EquipmentShape.drum(dd, dl, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, layout.drumSupport(),
-                    EquipmentShape.defaultConnections(dd, dl, EquipmentShape.Orientation.HORIZONTAL, layout.drumSupport(), true), true), layout.drum().getX(), layout.drum().getY(), layout.drum().getZ());
+            var drum = plant.drum = plant.place(receiver(dd, dl, layout.drumSupport()), layout.drum().getX(), layout.drum().getY(), layout.drum().getZ());
             var refluxPump = plant.place(options.refluxPumpUnit() != null ? options.refluxPumpUnit() : AssemblyGameTests.Plant.unit(Kind.PUMP),
                     layout.refluxPump().getX(), layout.refluxPump().getY(), layout.refluxPump().getZ());
             pumps.add(refluxPump);
@@ -569,6 +753,15 @@ public final class ColumnOperationReviewWorld {
                 coolers.add(plant.place(options.coolerUnit(j), c.getX(), c.getY(), c.getZ()));
             }
             pumps.addAll(paPumps);
+            var preheat = options.preheat();
+            Vessel chargePump = null, exchanger = null;
+            if (preheat != null) {
+                chargePump = plant.place(preheat.chargePump(), preheat.chargePumpAt().getX(), 0, preheat.chargePumpAt().getZ());
+                exchanger = plant.place(preheat.exchanger(), preheat.exchangerAt().getX(), 0, preheat.exchangerAt().getZ());
+                for (var at : preheat.heatersAt()) heaters.add(plant.place(preheat.heater(), at.getX(), 0, at.getZ()));
+                heater = heaters.getFirst();
+                pumps.add(chargePump);
+            }
             if (design.components().kettle()) {
                 var k = java.util.Objects.requireNonNull(layout.kettle(), "the design has a kettle: the layout places it");
                 kettle = plant.place(java.util.Objects.requireNonNull(options.kettleUnit()), k.getX(), k.getY(), k.getZ());
@@ -579,24 +772,35 @@ public final class ColumnOperationReviewWorld {
             // Boundary lines: the feed and steam valves point at the column, the products' away from it.
             var generator = ModBlocks.FLUID_GENERATOR.get().defaultBlockState();
             var sink = ModBlocks.FLUID_VOID.get().defaultBlockState();
-            if (openFeed) feedLine = line(column, Role.FEED, 0, false, null, "feed");
+            if (openFeed || preheat != null) feedLine = line(column, Role.FEED, 0, false, null, "feed");
             else feed = line(column, Role.FEED, 0, false, generator, "feed");
+            BlockPos bottomsLine = null;
+            if (preheat != null) {
+                // The crude's supply into the charge pump and the heater's fuel gas: no valve of the plant's on either (the
+                // pump draws what the tower's feed valve passes; the burners' own valve meters the fuel).
+                feed = supplyLine(chargePump, Role.SUCTION, generator, CRUDE);
+                for (int k = 0; k < heaters.size(); k++) fuels.add(supplyLine(heaters.get(k), Role.FUEL, generator, "fuel" + (k + 1)));
+                // The bottoms to the residue exchanger's shell, the residue out of it to its void.
+                bottomsLine = line(column, Role.BOTTOMS, 0, true, null, BOTTOMS);
+                sinks.add(line(exchanger, Role.SHELL_OUTLET, 0, true, sink, RESIDUE));
+                for (var h : heaters) power(h);
+            }
             for (int s = 0; s < input.steamFeeds().size(); s++) {
                 var at = line(column, Role.STEAM, s, false, generator, "steam" + (s + 1));
                 if (s == 0) steam = at;
             }
             for (int j = 0; j < input.sideDraws().size(); j++) sinks.add(line(column, Role.DRAW, j, true, sink, "draw" + (j + 1)));
-            sinks.add(kettle == null ? line(column, Role.BOTTOMS, 0, true, sink, "bottoms") : line(kettle, Role.LIQUID_OUTLET, 0, true, sink, "bottoms"));
+            if (preheat == null) sinks.add(kettle == null ? line(column, Role.BOTTOMS, 0, true, sink, "bottoms") : line(kettle, Role.LIQUID_OUTLET, 0, true, sink, "bottoms"));
             sinks.add(line(drum, Role.VAPOUR_OUTLET, 0, true, sink, "offgas"));
             sinks.add(line(drum, Role.BOOT_DRAIN, 0, true, sink, "water"));
             // The condenser's water: a generator into its tubes, out into a void (the trim's, with air then water).
             var cooled = options.condenser() == ColumnComponents.Condenser.AIR_THEN_WATER ? trims : options.condenser() == ColumnComponents.Condenser.EXCHANGER ? condensers : List.<Vessel>of();
-            for (int i = 0; i < cooled.size(); i++) condenserWater.add(water(cooled.get(i), generator, sink, i == 0 ? "trim" : "trim" + (i + 1)));
+            for (int i = 0; i < cooled.size(); i++) condenserWater.add(water(cooled.get(i), generator, sink, i == 0 ? "trim" : "trim" + (i + 1), "condenser water"));
             water = condenserWater.isEmpty() ? null : condenserWater.getFirst();
             // Each pumparound cooler's water the same way (W4: the column owes it the pumparound's duty; without it the column
             // reads LIMITED: pumparound).
-            for (int j = 0; j < coolers.size(); j++) coolingWater.add(water(coolers.get(j), generator, sink, "pa" + (j + 1)));
-            if (kettle != null) heating = water(kettle, generator, sink, "heating");
+            if (preheat == null) for (int j = 0; j < coolers.size(); j++) coolingWater.add(water(coolers.get(j), generator, sink, "pa" + (j + 1), "pa" + (j + 1) + " water"));
+            if (kettle != null) heating = water(kettle, generator, sink, "heating", "heating");
 
             // The overhead: column, condenser (an air cooler's process side, then the trim's shell, or an exchanger's shell),
             // receiver, reflux pump, the distillate's tee, the reflux back.
@@ -642,6 +846,82 @@ public final class ColumnOperationReviewWorld {
                 plant.route(AssemblyGameTests.Plant.front(column, Role.BOTTOMS), AssemblyGameTests.Plant.front(kettle, Role.FEED));
                 plant.route(AssemblyGameTests.Plant.front(kettle, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(column, Role.VAPOUR_RETURN));
             }
+            if (preheat != null) layPreheat(chargePump, exchanger, bottomsLine);
+        }
+
+        /**
+         * The crude unit's lines (owner, 2026-11-17), each a laid path under its sheet stream's name: the charge pump into the
+         * first pumparound cooler's tubes, cooler to cooler down the row, the last into the residue exchanger's tubes, out to the
+         * heater's convection coil; the convection coil's outlet into both radiant passes, both passes' outlets onto the tower's
+         * feed line ({@code charge}); the bottoms line into the exchanger's shell.
+         */
+        void layPreheat(Vessel chargePump, Vessel exchanger, BlockPos bottomsLine) {
+            var from = AssemblyGameTests.Plant.front(chargePump, Role.DISCHARGE);
+            for (int j = 0; j < coolers.size(); j++) {
+                laid(preheat(j), plant.route(from, AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_INLET)));
+                from = AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_OUTLET);
+            }
+            int n = coolers.size();
+            laid(preheat(n), plant.route(from, AssemblyGameTests.Plant.front(exchanger, Role.TUBE_INLET)));
+            // The first heater on the line's own path, each further one's convection inlet off it; every radiant outlet onto the charge line.
+            var heated = laid(preheat(n + 1), plant.route(AssemblyGameTests.Plant.front(exchanger, Role.TUBE_OUTLET), AssemblyGameTests.Plant.front(heater, Role.CONVECTION_INLET)));
+            var out = laid(CHARGE, toOpen(front(heater, Role.RADIANT_OUTLET, 0), feedLine, out(plant.column, Role.FEED, 0)));
+            for (var h : heaters) {
+                if (h != heater) laid(preheat(n + 1), plant.join(heated, AssemblyGameTests.Plant.front(h, Role.CONVECTION_INLET)));
+                var radiant = laid(CHARGE, plant.route(AssemblyGameTests.Plant.front(h, Role.CONVECTION_OUTLET), front(h, Role.RADIANT_INLET, 0)));
+                for (int k = 1; k < count(h, Role.RADIANT_INLET); k++) laid(CHARGE, plant.join(radiant, front(h, Role.RADIANT_INLET, k)));
+                for (int k = h == heater ? 1 : 0; k < count(h, Role.RADIANT_OUTLET); k++) laid(CHARGE, plant.join(out, front(h, Role.RADIANT_OUTLET, k)));
+            }
+            laid(BOTTOMS, toOpen(AssemblyGameTests.Plant.front(exchanger, Role.SHELL_INLET), bottomsLine, out(plant.column, Role.BOTTOMS, 0)));
+        }
+
+        /**
+         * A route from {@code from} to the open end {@code open} of a boundary line laid along {@code d} ({@link #line} with no
+         * end: the cell beyond its last pipe), allowed beside that line's pipes.
+         */
+        List<BlockPos> toOpen(BlockPos from, BlockPos open, Direction d) {
+            return plant.route(from, open, java.util.Set.of(open.relative(d.getOpposite()), open.relative(d), open.relative(d, 2)));
+        }
+
+        /**
+         * A supply line straight out of {@code vessel}'s {@code role} nozzle to {@code end} (a generator), as {@link #line} lays
+         * it but without its valve. Returns the end's position.
+         */
+        BlockPos supplyLine(Vessel vessel, Role role, BlockState end, String name) {
+            var at = line(vessel, role, 0, false, end, name);
+            plant.valves.remove(front(vessel, role, 0).relative(out(vessel, role, 0)));
+            return at;
+        }
+
+        /** A creative power source beside {@code vessel}'s terminal box, its burners' and fans' FE (as a player wires one). */
+        void power(Vessel vessel) {
+            var cell = ShapeRasterizer.terminal(vessel.shape());
+            if (cell == null) throw new IllegalStateException("The " + vessel.shape().kind() + " has no terminal box");
+            var box = vessel.origin().offset(cell.x(), cell.y(), cell.z());
+            for (var d : Direction.values()) {
+                var at = box.relative(d);
+                if (!plant.level.getBlockState(at).isAir() || plant.devices.contains(at) || plant.reserved.contains(at)) continue;
+                plant.level.setBlock(at, ModBlocks.CREATIVE_POWER.get().defaultBlockState(), Block.UPDATE_ALL);
+                plant.devices.add(at);
+                return;
+            }
+            throw new IllegalStateException("No room for power beside the " + vessel.shape().kind() + "'s terminal box at " + box.toShortString());
+        }
+
+        /** Every heater's coils fire to the tower's feed temperature (FIRING), once their registrations have applied. */
+        void fire() {
+            for (var h : heaters) fire(h);
+        }
+
+        private void fire(Vessel heater) {
+            var ids = com.wormzjl.icheme.world.level.block.EquipmentStructure.sideIdentities(plant.level, heater);
+            var sides = com.wormzjl.icheme.science.equipment.HeatSides.of(heater.shape());
+            for (int i = 0; i < Math.min(ids.length, sides.size()); i++) {
+                var r = plant.world.registrations().get(ids[i]);
+                if (r == null || r.device().heat() == null) throw new IllegalStateException("No registered " + sides.get(i).side() + " side on the heater");
+                var control = new com.wormzjl.icheme.runtime.fluid.HeatUnit.Control(com.wormzjl.icheme.runtime.fluid.HeatUnit.Mode.FIRING, input.feedTemperatureKelvin(), 0, 1);
+                plant.world.edit(ids[i], r.revision(), r.device().withHeat(r.device().heat().withControl(control)), r.spec());
+            }
         }
 
         /**
@@ -676,7 +956,13 @@ public final class ColumnOperationReviewWorld {
                     if (bore < line.getValue())
                         IChemE.LOGGER.info("review_operation sizing line=\"{}\" sized_bore={} laid_bore={} (the nozzle's largest)", line.getKey(), line.getValue(), bore);
                     for (var at : path) if (plant.world.at(plant.position(at)).isPresent()) resizeLine(at, bore);
+                    laidBores.merge(line.getKey(), bore, Math::min);
                 }
+            }
+            // A sized utility line's void connects at its bore (as its generator, below: a connection is the least bore unless set).
+            for (var end : utilities.entrySet()) {
+                var bore = laidBores.get(end.getValue());
+                if (bore != null && sinks.contains(end.getKey())) connect(end.getKey(), bore);
             }
             if (options.waterBore() > 0) {
                 var utilities = new ArrayList<BlockPos>(condenserWater);
@@ -690,7 +976,16 @@ public final class ColumnOperationReviewWorld {
             if (!options.motors()) for (var pump : pumps) plant.drive(pump);
 
             // The supplies and the sinks.
-            if (feed != null) supply(feed, options.feedBore(), new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));
+            var preheat = options.preheat();
+            if (preheat != null) {
+                // The crude from storage into the charge pump; the fuel gas into the heater's burners.
+                resize(feed, preheat.crudeBore());
+                supply(feed, preheat.crudeBore(), new FluidDeviceSpec(1, CRUDE_TEMPERATURE, CRUDE_SUPPLY, crude(catalog)));
+                for (var fuel : fuels) {
+                    resize(fuel, preheat.fuelBore());
+                    supply(fuel, preheat.fuelBore(), new FluidDeviceSpec(1, 298.15, FUEL_SUPPLY, only(catalog, "Methane")));
+                }
+            } else if (feed != null) supply(feed, options.feedBore(), new FluidDeviceSpec(1, input.feedTemperatureKelvin(), SUPPLY, crude(catalog)));
             var waterFluid = FluidDeviceSpec.water(catalog).composition();
             if (steam != null) supply(steam, options.steamBore(), new FluidDeviceSpec(1, input.steamFeeds().getFirst().temperatureKelvin(), SUPPLY, waterFluid));
             var spec = new FluidDeviceSpec(1, WATER_TEMPERATURE, WATER, waterFluid);
@@ -703,10 +998,31 @@ public final class ColumnOperationReviewWorld {
             }
         }
 
-        /** A utility's generator at {@code at} set to {@code spec}: charged at the laid bore, or switched on at {@link Options#waterBore}. */
+        /**
+         * A utility's generator at {@code at} set to {@code spec}: switched on at {@link Options#waterBore}, or at its line's sized
+         * bore ({@link #laidBores}), else charged at the laid bore.
+         */
         void water(BlockPos at, FluidDeviceSpec spec) {
+            var sized = laidBores.get(utilities.get(at));
             if (options.waterBore() > 0) supply(at, options.waterBore(), spec);
+            else if (sized != null) supply(at, sized, spec);
             else TankCharge.run(plant.world, id(at), spec);
+        }
+
+        /** The void at {@code at} connected at bore {@code bore}, m, its fluid as it is. */
+        void connect(BlockPos at, double bore) {
+            long id = id(at);
+            var r = plant.world.registrations().get(id);
+            var g = r.device().geometry();
+            plant.world.edit(id, r.revision(), r.device().withGeometry(new PipeResistance.Geometry(g.length(), bore, g.roughness(), g.minorLoss(), g.channels())), r.spec());
+        }
+
+        /** The pipes of the straight line from {@code from} up to the end block {@code end}, not the end. */
+        static List<BlockPos> straight(BlockPos from, BlockPos end) {
+            var d = Direction.fromDelta(Integer.signum(end.getX() - from.getX()), Integer.signum(end.getY() - from.getY()), Integer.signum(end.getZ() - from.getZ()));
+            var path = new ArrayList<BlockPos>();
+            for (var at = from; !at.equals(end); at = at.relative(d)) path.add(at);
+            return path;
         }
 
         /** Every pipe of the straight line that ends at {@code end} (a generator or a void) at bore {@code bore}, m, up to the unit it leaves. */
@@ -750,15 +1066,21 @@ public final class ColumnOperationReviewWorld {
         /**
          * Cooling water through {@code exchanger}'s tubes, straight out of its nozzles: a generator into the inlet, out into a
          * void (a sink), the water running free (branching pipes off the tube nozzles left valves on the water lines: they go;
-         * with {@link Options#shutoffs} the inlet's becomes a shutoff named by {@code line}); returns the generator.
+         * with {@link Options#shutoffs} the inlet's becomes a shutoff named by {@code line}); returns the generator. Both
+         * branches are laid paths of the internal line {@code route} ({@link #routes}), the generator and the void its ends
+         * ({@link #utilities}).
          */
-        BlockPos water(Vessel exchanger, net.minecraft.world.level.block.state.BlockState generator, net.minecraft.world.level.block.state.BlockState sink, String line) {
+        BlockPos water(Vessel exchanger, net.minecraft.world.level.block.state.BlockState generator, net.minecraft.world.level.block.state.BlockState sink, String line, String route) {
             var in = AssemblyGameTests.Plant.front(exchanger, Role.TUBE_INLET);
             plant.pipe(in);
             var source = plant.branch(in, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_INLET), false, generator);
             var out = AssemblyGameTests.Plant.front(exchanger, Role.TUBE_OUTLET);
             plant.pipe(out);
             var drain = plant.branch(out, AssemblyGameTests.Plant.out(exchanger, Role.TUBE_OUTLET), true, sink);
+            laid(route, straight(in, source));
+            laid(route, straight(out, drain));
+            utilities.put(source, route);
+            utilities.put(drain, route);
             sinks.add(drain);
             if (options.shutoffs()) lines.put(line + " out", drain);
             for (var q : Direction.values()) {
@@ -784,6 +1106,16 @@ public final class ColumnOperationReviewWorld {
             plant.world.edit(id, r.revision(), r.device().withGeometry(geometry).withGeneratorEnabled(true), spec);
         }
 
+        /** The pure component {@code id} on the network's axis, as mole fractions. */
+        double[] only(MaterialCatalog catalog, String id) {
+            var ids = new ArrayList<>(catalog.requirePackage(FluidMaterialCatalog.networkPackage(catalog)).components());
+            ids.add("Water");
+            var axis = new MaterialAxis(ids);
+            double[] z = new double[axis.size()];
+            z[axis.requireIndex(id)] = 1;
+            return z;
+        }
+
         /** The design's feed on the network's axis, as mole fractions. */
         double[] crude(MaterialCatalog catalog) {
             var ids = new ArrayList<>(catalog.requirePackage(FluidMaterialCatalog.networkPackage(catalog)).components());
@@ -795,6 +1127,27 @@ public final class ColumnOperationReviewWorld {
             for (double f : flows) total += f;
             for (int c = 0; c < flows.length; c++) z[axis.requireIndex(input.componentBasis().componentId(c))] += flows[c] / total;
             return z;
+        }
+
+        /** Lights the heaters (FIRING), when the plant has any. */
+        void light(String[] failure) {
+            if (heater != null) try {
+                fire();
+            } catch (RuntimeException e) {
+                failure[0] = "heater: " + e.getMessage();
+            }
+        }
+
+        /**
+         * Whether every heater's fuel line holds its gas: a cold start's crude reaches the tower only through lit heaters
+         * (without fuel the tower takes 25 °C crude and trips on CLOSURE). Always true without heaters.
+         */
+        boolean fueled() {
+            for (var f : fuels) {
+                var status = plant.world.view(id(f)).status();
+                if (!status.startsWith("FULL") && !status.startsWith("STEADY")) return false;
+            }
+            return true;
         }
 
         /** Validates the plant complete and starts its column. */
@@ -881,6 +1234,29 @@ public final class ColumnOperationReviewWorld {
             for (var d : view.duties())
                 IChemE.LOGGER.info("review_operation t={} duty={}{} booked_kW={} solved_kW={}", ticks, d.kind(), d.index(),
                         String.format(Locale.ROOT, "%.1f", d.booked() / 1000), String.format(Locale.ROOT, "%.1f", d.solved() / 1000));
+            // The crude unit's units: each heat side's status, outlet and duty, the charge pump's status.
+            if (heater != null) {
+                var units = new ArrayList<>(coolers);
+                units.addAll(heaters);
+                for (var v : plant.structures)
+                    if (v.shape().kind() == Kind.EXCHANGER && !coolers.contains(v) && !condensers.contains(v)) units.add(v);
+                for (var v : units) {
+                    var ids = com.wormzjl.icheme.world.level.block.EquipmentStructure.sideIdentities(plant.level, v);
+                    var sides = com.wormzjl.icheme.science.equipment.HeatSides.of(v.shape());
+                    for (int i = 0; i < Math.min(ids.length, sides.size()); i++) {
+                        var side = plant.world.view(ids[i]);
+                        var heat = side.heat();
+                        IChemE.LOGGER.info("review_operation t={} unit={}@{} side={} status=\"{}\" outlet_K={} duty_kW={}", ticks, v.shape().kind(), v.origin().toShortString(), sides.get(i).side(),
+                                side.status(), heat == null ? "-" : String.format(Locale.ROOT, "%.1f", heat.outletTemperature()), heat == null ? "-" : String.format(Locale.ROOT, "%.0f", heat.heatWatt() / 1000));
+                    }
+                }
+                for (int j = 1; j < pumps.size() - 1; j++)
+                    IChemE.LOGGER.info("review_operation t={} pa{}_loop status=\"{}\" draw=\"{}\"", ticks, j, plant.world.view(id(AssemblyGameTests.Plant.front(pumps.get(j), Role.DISCHARGE))).status(),
+                            plant.world.view(id(front(plant.column, Role.PUMPAROUND_DRAW, j - 1))).status());
+                var pump = pumps.getLast();
+                IChemE.LOGGER.info("review_operation t={} charge_pump status=\"{}\" fuel=\"{}\"", ticks, plant.world.view(id(AssemblyGameTests.Plant.front(pump, Role.DISCHARGE))).status(),
+                        fuels.stream().map(f -> plant.world.view(id(f)).status()).toList());
+            }
             if (view.solve() != null)
                 IChemE.LOGGER.info("review_operation t={} solve trigger={} warm={} age_s={}", ticks, view.solve().trigger(), view.solve().warm(),
                         String.format(Locale.ROOT, "%.0f", view.solve().age()));
@@ -926,6 +1302,11 @@ public final class ColumnOperationReviewWorld {
         }
     }
 
+    /** {@code shape}'s exchanger configuration; a unit that is not an exchanger (an air cooler's bank) reads standard. */
+    static com.wormzjl.icheme.science.equipment.ExchangerType type(EquipmentShape shape) {
+        return shape.kind() == Kind.EXCHANGER ? shape.exchangerType() : com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD;
+    }
+
     /** An exchanger of shell size {@code size}, m, at its default length and support. */
     static EquipmentShape exchanger(double size) {
         var d = UnitDesign.of(Kind.EXCHANGER);
@@ -939,6 +1320,13 @@ public final class ColumnOperationReviewWorld {
         for (var p : ShapeRasterizer.ports(vessel.shape()))
             if (vessel.shape().nozzles().get(p.nozzle()).role() == role && seen++ == n) return p;
         throw new IllegalStateException("No " + role + " " + n + " on the " + vessel.shape().kind());
+    }
+
+    /** How many {@code role} ports {@code vessel} has. */
+    static int count(Vessel vessel, Role role) {
+        int seen = 0;
+        for (var p : ShapeRasterizer.ports(vessel.shape())) if (vessel.shape().nozzles().get(p.nozzle()).role() == role) seen++;
+        return seen;
     }
 
     static BlockPos front(Vessel vessel, Role role, int n) {
