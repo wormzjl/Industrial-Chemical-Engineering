@@ -118,6 +118,12 @@ the `Rig` class keep their sizes.
   eight sides: an exchanger's four leads 320 faces, now 32). Tests: the 100 classes `affected.mjs select --since HEAD`
   picked passed before the last valve change; the 7 classes that load the valve's mesh passed after it. No in-game
   check. Open: the exchanger instrument the owner said looks unlike the others is not identified.
+- 2026-11-17, same branch (main thread; owner: "go with your new model"): the exchanger instrument identified and
+  fixed, a drawing only. A heat exchanger's four built-in temperature probes were blind (`display` false in
+  `EquipmentInstruments`), so the game drew a bare cap with the cable's gland hanging below where a head would be; they
+  now have the transmitter head every other instrument has. The scratch renderer had drawn a head on every probe, which
+  hid it. The 108 classes `affected.mjs select --since HEAD` picked pass. A cooling tower's two blind temperature
+  probes are left as they are. No in-game check.
 - 2026-11-17, same branch (sub-thread; owner: "The control valve needs to select sensor first in order to function",
   picked sheet A): a control valve regulates only on a sensor linked to it and selected on its screen,
   [VALVE_SENSOR_REVIEW.md](VALVE_SENSOR_REVIEW.md). `ValveSignal` (linked over the valve and its data cables' hosts;

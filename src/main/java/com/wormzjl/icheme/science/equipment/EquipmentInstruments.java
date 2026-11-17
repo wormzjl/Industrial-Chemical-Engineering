@@ -467,7 +467,8 @@ public final class EquipmentInstruments {
                                     new double[] {1, 0, 0},
                                     false,
                                     false,
-                                    false,
+                                    // The transmitter head every other instrument has (owner, 2026-11-17), not a blind cap.
+                                    true,
                                     axis,
                                     null));
                 }
