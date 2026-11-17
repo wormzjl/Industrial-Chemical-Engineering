@@ -1,48 +1,52 @@
 # Column internal hydraulics: plan (2026-11-17)
 
 Class: PHYSICS (owner's option, with numbers). Lanes: plant (`science/plant/column`, `ColumnOperation`), flowsheet and
-control (`runtime/assembly`), runtime (`FluidFacts`, `FluidWorldAuthority`), client (one status word). Nothing is coded.
+control (`runtime/assembly`), runtime (`FluidFacts`, `FluidWorldAuthority`), fluid step (one method of
+`PassiveStepSolver`), client (status words). Nothing is coded but the probe of work package 1.
 
 ## 1. The gap
 
 A running column holds every device inside its boundary valves out of the fluid network. `ColumnCycle.step` weighs the
 feed, the steam, the products' room, each utility's room, flooding and the members' power. No term reads an internal
-line's bore or a member pump's size. The process simulator rates both (`LineSizing.rate`, `PumpSizing.rate`), but a
-rating is advice and does not reach the run. The owner (2026-11-17): a plant whose internal lines and pumps are too
-small must not run as if they were right.
+line's bore, a member pump's size, or where a boundary valve stands. The process simulator rates lines and pumps
+(`LineSizing.rate`, `PumpSizing.rate`), but a rating is advice and does not reach the run. The owner (2026-11-17): a
+plant whose internal lines and pumps are too small must not run as if they were right, an outlet must not give more
+head than its design, the same holds for the exchanger structure, and the fence must leave nothing else to exploit.
 
-## 2. Physics, per loop, on the review plant
+## 2. Physics, in numbers, on the review plant
 
-The review plant is the default template at 1/16: feed 159.8 kmol/h, condenser 1.94 MW, sour water 73.5 kmol/h. The pump
-flows below are exact (the sizing log's `PUMP_RATED` readings, taken off the 1.10 design flow). The overhead's flow and
-every pressure drop are estimates (about 30 %) from the duties; work package 1 replaces them with solved numbers.
+The review plant is the default template at 1/16: feed 44.4 mol/s (159.8 kmol/h), top 2.5 bar, condenser 1.94 MW. The
+numbers are solved (`tools/column-hydraulics/ReviewPlantProbe.java`: the plant's sheet run and sized, steady flows, the
+world's `PipeResistance` law for every drop).
 
 The world's own laws, which the network applies to every pipe and pump outside the fence:
 - a pipe passes at most `density x area x velocityLimit` (100 m/s or the acoustic bound) and loses
-  `PipeResistance.pressureDrop`;
-- a pump (`FlowControl.Pump`) moves its set volume flow and adds at most its set pressure. A casing's rated flow is
-  liquid at 3 m/s in its discharge (`UnitRatings.pumpFlow`: 21.2 m3/h at 0.05 m, 84.8 at 0.10 m), its head 100 m.
+  `PipeResistance.pressureDrop`; a column of fluid weighs `density x g x height`;
+- a pump moves at most its rated flow and adds at most its head. A casing's rated flow is liquid at 3 m/s in its
+  discharge (`UnitRatings.pumpFlow`: 21.2 m3/h at 0.05 m, 84.8 at 0.10 m), its head 100 m of water (205 m of the
+  review plant's condensate).
 
 ### 2.1 Overhead vapour line (column top, condenser, receiver)
 
-About 57 mol/s of vapour (the steam and the naphtha), 1.1 m3/s at 1.7 bar and 400 K, 3.6 kg/m3.
+3.32 kg/s of vapour, 0.648 m3/s at 2.5 bar, 5.12 kg/m3. The flow is fixed by the split table, so a line that passes
+less cuts the feed. The drop's share is the square root of the budget (0.25 bar, option O1 A) over the drop.
 
-| Bore | Speed | Drop over 20 m | Share the 100 m/s cap allows | Share a 10 % drop budget allows |
+| Bore | Speed | Drop over 20 m | Share the 100 m/s cap allows | Share the 10 % budget allows |
 |---|---|---|---|---|
-| 0.20 m (sized) | 36 m/s | 0.04 bar | 100 % | 100 % |
-| 0.15 m | 63 m/s | 0.16 bar | 100 % | 100 % |
-| 0.10 m | 143 m/s | 1.2 bar | 70 % | 38 % |
-| 0.05 m (as built) | 570 m/s | 38 bar | 18 % | 7 % |
+| 0.20 m (sized) | 20.6 m/s | 0.016 bar | 100 % | 100 % |
+| 0.15 m | 36.7 m/s | 0.070 bar | 100 % | 100 % |
+| 0.10 m | 82.6 m/s | 0.57 bar | 100 % | 66 % |
+| 0.075 m | 147 m/s | 2.6 bar | 68 % | 31 % |
+| 0.05 m (as built) | 330 m/s | 21.4 bar | 30 % | 11 % |
 
-The flow is fixed by the split table, so a line that passes less cuts the feed. The speed cap alone is lenient: at the
-cap a 0.05 m line would lose more than the column's whole pressure. The drop is what binds in a real plant.
+The speed cap alone is lenient: at the cap a 0.05 m line would lose eight times the column's whole pressure.
 
 ### 2.2 Reflux loop (receiver, pump, tee, column top)
 
-The pump must move the whole condensate (reflux and distillate): its flow is fixed by the table. A pump whose rated flow
-is under it cuts the feed in proportion. The review plant's 0.05 m pump is inside its window (14.8 to 25.4 m3/h), so it
-does not bind. Head: at 20 m3/h a 0.05 m line loses about 1.3 kPa/m, 0.4 bar over 30 m, against 100 m of head (about
-7 bar): the pump takes it. A 0.025 m line would lose about 40 kPa/m, 12 bar over 30 m: share about 75 %.
+The pump moves the whole condensate, 15.1 m3/h (reflux 12.2, distillate 2.9): its flow is fixed by the table. The
+0.05 m casing (21.2 m3/h) runs at 71 %. A casing whose rated flow is under the condensate cuts the feed in proportion.
+Head: the loop needs 41 m (the lift to the top tray, the sized lines, the valve). A 0.05 m receiver line loses 0.19 bar
+over 30 m (3 m). Even a 0.025 m line (6.8 bar, 104 m) stays under the casing's 205 m. Liquid lines bind late.
 
 ### 2.3 Pumparound loops
 
@@ -51,118 +55,147 @@ fall across the cooler (`DesignBasis.paFall`, `BlockSizing.circulation`), and `P
 real plant a smaller pump circulates less and the liquid returns colder; the duty stays until the return temperature
 meets the cooler's cold end.
 
-| Pumparound | Needed at a 60 K fall | Pump | Fall at the pump's rated flow |
-|---|---|---|---|
-| 1 | 32.7 m3/h | 0.05 m, 21.2 m3/h (170 % at design flow) | 93 K |
-| 2 | 46.5 m3/h | 0.10 m, 84.8 m3/h (60 %) | 33 K |
-| 3 | 27.6 m3/h | 0.05 m, 21.2 m3/h (143 %) | 78 K |
+| Pumparound | Duty | Needed at a 60 K fall | Pump | Fall at the pump's rated flow |
+|---|---|---|---|---|
+| 1 (draw tray 10) | 818 kW | 32.7 m3/h | 0.05 m, 21.2 m3/h | 93 K |
+| 2 (draw tray 18) | 1313 kW | 46.5 m3/h | 0.10 m, 84.8 m3/h | 33 K |
+| 3 (draw tray 28) | 827 kW | 27.7 m3/h | 0.05 m, 21.2 m3/h | 78 K |
 
-With cooling water at 30 C and draws from about 150 C upward, a 93 K fall is feasible. So the small pumparound pumps of
-the review plant would not cut the duty in a real plant. They would where the fall the pump forces exceeds the draw
-temperature less the water's inlet temperature and the approach.
+The side draws leave at 150, 227 and 276 C. With cooling water at 30 C a 93 K fall is feasible, so the small
+pumparound pumps of the review plant would not cut the duty. They would where the fall the pump forces exceeds the draw
+temperature less the return floor.
 
-The lines: at 36 m3/h a 0.05 m line runs at 5.1 m/s and loses about 4 kPa/m, 1.2 bar over 30 m. A 100 m pump takes it.
-The sized 0.15 m line loses 0.5 kPa over the same 30 m. Liquid speed never nears the 100 m/s cap (707 m3/h at 0.05 m).
+The lines: pumparound 1's 32.7 m3/h in a 0.05 m line runs at 4.6 m/s and loses 0.88 bar over 30 m (13 m of head);
+the pump has it. The sized 0.15 m line loses 0.003 bar. Liquid speed never nears the cap (707 m3/h at 0.05 m).
 
 ### 2.4 What follows
 
-- The first proposal (lines by speed alone, pumps by rated capacity with 20 % spare) is wrong on both counts: speed
+- The first proposal (lines by speed alone, pumps by rated capacity with 20 % spare) was wrong on both counts: speed
   never binds a liquid line, and a pumparound pump's size sets the fall, not the duty.
-- In the review plant as built, a real plant would be limited by the overhead line (7 to 18 % of feed) and by nothing
-  else. The 0.05 m liquid lines cost head the pumps have.
+- In the review plant as built, a real plant would be limited by the overhead line (11 % of feed) and by nothing else.
 
-### 2.5 Outlet ports: head and elevation (owner, 2026-11-17)
+### 2.5 Boundary ports: head, elevation and length
 
-An outlet's port is a generator in the cell on its boundary valve's column side, stated at the design's stage pressure
-(`PortConditions.estimate`, fixed at Start) wherever that valve stands. The pipes between the nozzle and the valve are
-held, so the liquid column between them counts for nothing. The network beyond the port has gravity
-(`PassiveStepSolver.GRAVITY`, the nodes' elevations); the fence has none.
+A port is a void (inlet) or a generator (outlet) in the cell on its boundary valve's column side, stated at the design's
+stage pressure (`PortConditions.estimate`, fixed at Start) wherever that valve stands. The pipes between the nozzle and
+the valve are held: their height and their length count for nothing. The network beyond the port has gravity and
+friction. `startColumn` holds up to `COLUMN_LIMIT` (4096) devices.
 
-- Expected: the liquid at the valve has the nozzle's pressure less its own column up to the valve,
-  `P = P_design - density x g x (z_valve - z_source)`. A bottoms liquid of 700 kg/m3 loses 6.9 kPa a metre.
-- What the code does: a bottoms valve placed 29 m up (the review column's height) still gives the design 2.0 bar: 2.0 bar
-  of head from nothing, the bottoms' whole absolute pressure. A draw valve placed at grade, 20 m under its nozzle, gives
-  1.4 bar less than a real line would.
-- So a product can be delivered higher than its design pressure lifts it, with no pump.
+- Expected: the fluid at the valve has the nozzle's pressure less its own column up to the valve and less the line's
+  drop: `P = P_design - density x g x (z_valve - z_source) - drop`.
+- What the code does, bottoms (822 kg/m3, 2.66 bar, 8.1 kPa a metre): a valve 29 m up (the column's height) still gives
+  2.66 bar, a free 2.3 bar; the design pressure lifts this liquid 33 m at most. A draw (680 kg/m3) whose valve stands
+  at grade, 20 m under its nozzle, gives 1.3 bar less than a real line would.
+- Length: a bottoms line of 0.05 m loses 2.5 bar per 100 m at 26.6 m3/h. Held, it loses nothing over any length, and
+  loses no heat: a boundary valve a thousand blocks away is a free pipeline.
+- Inlets: a liquid feed whose valve stands under its nozzle is lifted for nothing; the void takes it at the stage's
+  pressure.
 
-## 3. Proposed laws
+### 2.6 The exchanger structure
+
+Checked in the code: the exchanger's structure holds nothing. Its tees, valves, flowmeters and both sides stay in the
+network. A side is a connection with its passage's friction (`HeatSides`, heat-exchangers.md: tubes of 14.8 mm in two
+passes, the shell's crossflow), and its outlet's junction stands at the outlet nozzle's height
+(`PhysicalFluidTopology`, the side's `OUTLET` port's cell). A control valve is a throttle: it regulates forward only and
+adds no work (fluid-laws.md). So a standalone exchanger gives no free head and passes no more than its lines let it.
+
+What does apply: the exchangers a running column holds (its condenser, each pumparound cooler's process side, a kettle's
+shell). Held, their passage drop and their nozzles' heights count for nothing, as the lines'. Section 3 puts each held
+side's drop and height into its loop.
+
+### 2.7 What else the fence lets a player take
+
+| # | What | State | Answer |
+|---|---|---|---|
+| E1 | A boundary line of any length or height carries with no drop, no lift and no heat loss (2.5) | open | law 4, with option O5 |
+| E2 | A liquid feed lifted to its nozzle for nothing (2.5) | open | law 4, option O5 |
+| E3 | Internal lines and member pumps of any size (2.1 to 2.3) | open | laws 1 to 3 |
+| E4 | Held exchangers' drop and height (2.6) | open | laws 1 to 3 |
+| E5 | A small pump books little power: a pump books its rated shaft power times the cycle's share, whatever it would have to move | open | closed by laws 2 and 3: a pump moves at most its rated flow |
+| E6 | A receiver of any size: the product buffers are 24 cycles of make (`BUFFER_CYCLES`), not the drum's volume, and the check takes any lying drum with a boot | open | no steady-state effect; option O6 |
+| E7 | An exchanger side with no lines regulates by its internal bypass: no tee, valve or flowmeter, no drop | by design (heat-units.md) | the owner's call, option O7 |
+| E8 | A held device's wall: `Integrity.idle` says a held device is not idle, so it wears | closed | none |
+| E9 | The condenser's, coolers' and reboiler's surface: each duty passes through its utility side's room | closed | none (`COOLING_SHORT`, `PUMPAROUND_SHORT`, `HEATING_SHORT`) |
+| E10 | The column's diameter and trays: flooding by the design's own trays | closed | none (`FLOODING`) |
+| E11 | A held member's pressure rating against the design pressure | not checked here | work package 1b reads `Integrity` for held vessels |
+| E12 | Two columns on one valve: an outlet's generator against an inlet's void | closed with law 4 | the valve is a throttle; the lower plan binds |
+
+## 3. Laws
 
 One new LIMIT, `HYDRAULICS` (status word `hydraulics`, the index a loop: 0 overhead, 1 reflux, 2 + j pumparound j; the
-text names what binds: a line or a pump). Each loop gives the share of the set feed it allows; the lowest binds, as
-every limit does. At one table every internal flow is proportional to the feed taken, as the flood fraction is.
+text names what binds: a line, a pump or a cooler). Each loop gives the share of the set feed it allows; the lowest
+binds, as every limit does. At one table every internal flow is proportional to the feed taken, as the flood fraction is.
+A loop's drop is its held pipes' (their bores and lengths, parallel branches sharing the flow) and its held exchanger
+sides' passages, by the world's own laws.
 
-1. **Overhead.** Share = the least of the speed cap's share and the share whose drop over the built line (its pipes'
-   bores and lengths, parallel branches sharing the flow) meets the budget. Owner option O1: the budget.
-   - A (recommended): 10 % of the top's absolute pressure, twice the simulator's `VACUUM_DROP`, a round rule at a
-     simulator's depth.
-   - B: the speed cap alone (lenient: 0.10 m passes 70 %).
-   - C: the design's own condenser drop (`condenser_drop`), 0 on most designs, so most lines would bind.
-2. **Reflux.** Share = the least of pump rated flow over condensate flow, and the share whose rise (lift, the lines'
-   drop, the valve) meets the pump's head. The world's pump law, no curve.
-3. **Pumparound.** Circulation = the pumps' rated flow (parallel pumps add), less where the lines' drop passes the head.
-   The fall follows from the duty. Share = the least of 1 and (the draw temperature less the return floor) over the
-   fall at the set feed. Owner option O2: the return floor.
-   - A (recommended): the cooler's utility inlet temperature plus the approach the cooler side already uses
-     (`Read.column`'s ceiling rule, mirrored at the cold end).
-   - B: no floor: a pumparound pump never binds, only its head against the lines.
-4. **Outlet ports.** Owner option O4.
-   - A (recommended): each slice the port's pressure is the design pressure less the product's own column,
-     `density x g x lift`, the lift the port's cell above its source (the column's nozzle for a draw and the bottoms; the
-     receiver's nozzles for the off-gas, the sour water and the distillate, whose reflux pump adds nothing: the design value
-     is the top's pressure). The density is the product's at the port. A valve under its source gains the column, as a
-     real line does. Start refuses (`Refusal.OUTLET_TOO_HIGH`, naming the outlet and both heights) where the lift passes
-     the head the design pressure gives at the design's liquid, `P_design / (density x g)`: the port's pressure would not
-     be positive. Inlets keep their rule.
-   - B: a check alone: Start refuses a liquid outlet whose valve stands above its source; no pressure change. Simpler,
-     but a valve under its nozzle still misses its real head, and a riser of one block is refused.
-5. Not modelled: suction boiling and NPSH (the receiver and the draw trays stand above their pumps), two-phase flow in
-   the condenser's outlet, the condenser's shell-side drop (O1's budget covers the line alone).
+1. **Overhead** (decided, O1 A). Share = the least of the speed cap's share and the share whose drop over the line and
+   the condenser's process side meets 10 % of the top's absolute pressure.
+2. **Reflux.** Share = the least of pump rated flow over condensate flow, and the share whose rise (the lift from the
+   receiver to the top tray, the loop's drop, the valve) meets the pump's head. The world's pump law, no curve.
+3. **Pumparound** (decided, O2 A). Circulation = the pumps' rated flow (parallel pumps add), less where the loop's drop
+   and lift pass the head. The fall follows from the duty. Share = the least of 1 and (the draw temperature less the
+   return floor) over the fall at the set feed; the floor is the cooler's utility inlet temperature plus the approach
+   the cooler side already uses.
+4. **Boundary ports** (decided for outlets' height, O4 A; option O5 for the rest). Each slice an outlet's pressure is
+   the design pressure less the product's own column up to the port, the lift from its source (the column's nozzle for
+   a draw and the bottoms; the receiver's nozzles for the off-gas, the sour water and the distillate, whose reflux pump
+   adds nothing). A port under its source gains the column. Start refuses (`Refusal.OUTLET_TOO_HIGH`, naming the outlet
+   and both heights) where the lift passes `P_design / (density x g)`.
+5. Not modelled: suction boiling and NPSH, two-phase flow in the condenser's outlet, heat lost by held pipes.
 
 ## 4. Work packages
 
-1. **Numbers.** A plain-JVM probe in `tools/column-hydraulics/` on the review plant's sheet (`ColumnOperationReviewWorld.sizing`
-   as its model): each internal stream's mass flow, density, viscosity and speed limit per mole of feed; this plan's
-   tables with solved values. Done: the tables replaced, the estimate note removed.
+1. **Numbers** (done 2026-11-17). `tools/column-hydraulics/ReviewPlantProbe.java`; section 2's tables.
+   1b. `Integrity` for held vessels and pipes: whether a held member's rating is read against the design pressure (E11).
 2. **The table's streams.** `SplitTable` gains `internal` (`Internal`: overhead, condensate, reflux, and per pumparound
-   the draw liquid's density, viscosity, heat capacity and draw temperature; each as kg per mole of feed with its
-   density, viscosity and speed limit), built in `ColumnSolve.run` from the V3 result, `Internal.NONE` at a table
-   without it. State: fluid checkpoint state format 54 (53 is reserved); an old state is dropped and rebuilt.
-3. **The plant's lines.** `ColumnStarts` walks each loop with `AssemblyWalker` (`PortGraph.run` from the column's
-   vapour outlet, the pumps' and coolers' nozzles) and hands `startColumn` a `ColumnUnit.Lines`: per loop, its pipes'
-   device ids with the number of parallel ways at each. Bores and lengths are read from the registry at each cycle, so
-   a resize acts at once. Facts: fluid facts schema 31 (30 is reserved); `Lines.NONE` is the behaviour before, so a
-   column started before this runs unlimited until its next Start; a corpus image under `src/test/resources/compat/`.
+   the draw liquid with its heat capacity and temperature; each as kg per mole of feed with its density, viscosity and
+   speed limit), built in `ColumnSolve.run` from the V3 result, `Internal.NONE` at a table without it. State: fluid
+   checkpoint state format 54 (53 is reserved); an old state is dropped and rebuilt.
+3. **The plant's lines.** `ColumnStarts` walks each loop and each boundary line with `AssemblyWalker` (`PortGraph.run`
+   from the column's nozzles, the pumps' and the exchangers' nozzles) and hands `startColumn` a `ColumnUnit.Lines`: per
+   loop and per port, its pipes' and held sides' device ids with the number of parallel ways at each, and each loop's
+   lift. Bores, lengths and passages are read from the registry at each cycle, so a resize acts at once. Facts: fluid
+   facts schema 31 (30 is reserved); `Lines.NONE` is the behaviour before, so a column started before this runs
+   unlimited until its next Start; a corpus image under `src/test/resources/compat/`.
 4. **The cycle.** `ColumnCycle.Rooms` gains `hydraulics` (a share per loop, with its text); `ColumnCycle.step` adds
    `HYDRAULICS` beside `FLOODING`. `ColumnOperation.cycle` computes the shares from `Internal`, `Lines`, the members'
    movers and the registry (pure arithmetic in a new `science/plant/column/LoopHydraulics`). `Condition.HYDRAULICS`;
    `ColumnStatus` words; `en_us.json`.
-5. **Outlet head** (O4 A). `ColumnUnit.Station` gains `lift`, m (facts schema 31 with package 3; 0 is the behaviour
-   before), set by `ColumnStarts` from the port's cell and its source nozzle (the walk of package 3 gives the source);
-   `PortPlan` gains `lift`; `PassiveStepSolver.ports` states the generator at the port's pressure less
-   `density x GRAVITY x lift`, the density the stated product's at the port's pressure (one evaluation, no iteration).
-   `Refusal.OUTLET_TOO_HIGH` in `ColumnStarts.build`. Tests: `RegulatingValveHoldTest` (a lift of 0 is as before,
-   bit for bit; a lift of 10 m lowers the generator by the hand number), `ColumnStartsTest` or the Start GameTest (the
-   refusal). `PassiveStepSolver` is the fluid step lane's hot file: one method, stated here.
+5. **Port head.** `ColumnUnit.Station` gains `lift`, m (schema 31 with package 3; 0 is the behaviour before), set by
+   `ColumnStarts` from the port's cell and its source nozzle; `PortPlan` gains `lift` (and, with O5 A, `drop`);
+   `PassiveStepSolver.ports` states the generator at the port's pressure less `density x GRAVITY x lift` (less the
+   drop), the density the stated product's at the port's pressure (one evaluation, no iteration).
+   `Refusal.OUTLET_TOO_HIGH` in `ColumnStarts.build`. `PassiveStepSolver` is the fluid step lane's hot file: one method.
 6. **The review world** is rebuilt with the fixed builder; its report shows no `HYDRAULICS`. A second plant with a
-   0.05 m overhead reads `LIMITED: hydraulics`.
+   0.05 m overhead reads `LIMITED: hydraulics, 11 %`.
 
-Tests: `ColumnCycleTest` (the share binds, is the lowest, the text), a new `LoopHydraulicsTest` (each law against hand
+Tests: `ColumnCycleTest` (the share binds, is the lowest, the text), a new `LoopHydraulicsTest` (each law against the
 numbers of section 2), `ColumnRunTest` (a started column with a narrow overhead is limited; `Lines.NONE` is as before,
-bit for bit), the facts round trip and corpus gate. Classes for each run come from `tools/merge-lane/affected.mjs select`.
+bit for bit), `RegulatingValveHoldTest` (a lift of 0 is as before, bit for bit; a lift of 10 m lowers the generator by
+the hand number), the Start GameTest (the refusal), the facts round trip and corpus gate. Classes for each run come from
+`tools/merge-lane/affected.mjs select`.
 
 ## 5. Risks and what moves
 
-- No reference moves for a plant with `Lines.NONE` or lines at their sized bores (shares of 1 add no condition).
-- `FluidFacts`, `FluidWorldAuthority` and `ColumnOperation` are hot files; batch `2026-11-16-solute-reaction-system`
-  holds facts schema 30 and plans to add a column unit's parts. The two batches must not overlap in those files:
-  this batch starts its packages 3 and 4 after that batch's column package lands, or takes them first by the owner's word.
-- A design with a tight overhead (vacuum columns) may bind at once under O1 A; the vacuum drop rule (5 %) may fit them
-  better. Checked in package 1 on the vacuum preset.
+- No reference moves for a plant with `Lines.NONE`, or with lines at their sized bores and ports at their nozzles'
+  height (shares of 1 add no condition; a lift of 0 changes no pressure).
+- `FluidFacts`, `FluidWorldAuthority`, `ColumnOperation` and `PassiveStepSolver` are hot files; batch
+  `2026-11-16-solute-reaction-system` holds facts schema 30 and plans to add a column unit's parts. Decided (O3): this
+  batch builds after that batch's column package lands, and reserves state format 54 and facts schema 31 then.
+- A vacuum design's overhead may bind at once under the 10 % budget; the vacuum drop rule (5 %) may fit it better.
+  Checked in package 2 on the vacuum preset.
 
 ## 6. Owner decisions
 
-- O1: the overhead's drop budget (A, B or C).
-- O2: the pumparound's return floor (A or B).
-- O4: the outlet ports' head (A or B).
-- O3: the order against the solute batch in the hot files, and the reservation of state format 54 and facts schema 31
-  on `main` (a documentation-only commit).
+Taken 2026-11-17: O1 A (the overhead's budget, 10 % of the top's absolute pressure), O2 A (the pumparound's return
+floor: the utility's inlet plus the approach), O4 A (an outlet's pressure less its product's column, the Start refusal),
+O3 (build after the solute batch's column package; the numbers reserved then).
+
+Open:
+- O5, the boundary lines (E1, E2). A (recommended): law 4 also takes the held line's drop at the port's flow, and
+  applies to inlets (the void stands at the stage's pressure plus the feed's column up to its nozzle and the line's
+  drop). B: outlets and height only, as O4 decided; a long held line stays free and a liquid feed is lifted for nothing.
+- O6, the receiver's size (E6). A (recommended): nothing; hold-up has no steady-state effect in this model. B: the
+  product buffers follow the receiver's volume.
+- O7, an exchanger side's internal bypass (E7). A (recommended): keep it; it is the simple control a side without lines
+  has by design. B: a bypass control needs real lines.
