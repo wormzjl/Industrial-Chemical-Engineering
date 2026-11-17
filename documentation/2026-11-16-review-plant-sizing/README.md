@@ -148,6 +148,23 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   298 K. They fell short of 638 K ("DUTY INSUFFICIENT: outlet 29.7 K below the set point"). An empty feed account opens the
   column's inlet valve to twice its rate (`ColumnOperation.inletPlan`, gain at most 2), and the heaters are sized for the
   cold start at design flow. The account took that crude to 0.60 of its aim and the column tripped CLOSURE as before.
+  Owner, 2026-11-17: "the pump should be paired with a control valve to regulate the flow". Build 6:
+  - **Rig:** a mass-flow control valve on P-101's discharge, set to 105 % of the design feed (167.4 kg/s; the built heaters
+    hold 183.8 MW against 144.8 MW for the cold start at that flow, a 26.9 % spare). The crude opens only once the burners
+    are powered as well as fueled.
+  - **The valve did not regulate.** At t=1426 the charge line carried 318.9 kg/s (twice the design feed: the column's inlet
+    plan at gain 2) with the charge valve VALVE_OPEN and the column's feed valve VALVE_REGULATING.
+    `ControlConstraints.standing` puts a series holding an inlet port first, so the port's valve keeps the row, and the charge
+    valve's dependent row stands open. "Lower target wins" did not apply across the two.
+  - **Heaters at twice the flow:** 62.5 MW each, outlets 527 and 531 K. Once the flow fell to 131 kg/s (t=2624) both held
+    638.6 K.
+  - **Column** (on the cold-feed thread's committed law):
+    - t=1426: RUNNING with PASSING (2557 kmol/h at 427 K, the feed to the bottoms).
+    - From t=2025: PRODUCT_FULL and refused enthalpy solves. First "pumparound cooling of 47.34 MW exceeds the 9.880 MW made
+      available by the feed", then NONCONVERGENCE on the tray 11 side draw.
+    - From t=4421: LIMITED, outlet 0 %, with the bottoms account full and taking nothing.
+    - The feed account went 0.27, 1.32, 2.32 of its aim, then stood at 2.13 with its valve closed.
+
   Options: a start-up circulation in the rig, a trip that clears with its
   condition (engine), or the world as it stands. The owner's direction for the engine: a cold feed goes to the bottom
   instead of holding, and a pumparound works only on what its stages hold. The column screen reads "Upset: inputs closed;

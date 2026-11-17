@@ -106,6 +106,9 @@ public final class ColumnOperationReviewWorld {
      */
     static final int REPORTS = 4, REPORT_TICKS = 600, PREHEAT_REPORTS = 12;
 
+    /** The charge valve's set, a share of the design feed's mass flow (owner, 2026-11-17). */
+    static final double CHARGE_SHARE = 1.05;
+
     @GameTest(template = "empty", timeoutTicks = Integer.MAX_VALUE, batch = "review-operation")
     public static void aCrudeColumnRuns(GameTestHelper helper) {
         if (ReviewBatch.skipped(helper, "review-operation")) return;
@@ -327,7 +330,7 @@ public final class ColumnOperationReviewWorld {
      */
     record SizedPlant(V3ColumnInput input, double diameter, EquipmentShape condenser, int condensers, EquipmentShape receiver, EquipmentShape refluxPump,
                       List<EquipmentShape> coolers, List<EquipmentShape> pumps, Map<String, Double> bores, Map<String, Double> lines,
-                      EquipmentShape chargePump, EquipmentShape exchanger, EquipmentShape heater, int heaters, double fuelBore) {
+                      EquipmentShape chargePump, EquipmentShape exchanger, EquipmentShape heater, int heaters, double fuelBore, double chargeFlow) {
     }
 
     /**
@@ -337,7 +340,7 @@ public final class ColumnOperationReviewWorld {
      * exchanger's shell to the residue's void, and the heaters' outlets are the tower's feed line.
      */
     record Preheat(EquipmentShape chargePump, BlockPos chargePumpAt, EquipmentShape exchanger, BlockPos exchangerAt, EquipmentShape heater, List<BlockPos> heatersAt,
-                   double crudeBore, double fuelBore) {
+                   double crudeBore, double fuelBore, double chargeFlow) {
         Preheat {
             heatersAt = List.copyOf(heatersAt);
         }
@@ -477,6 +480,14 @@ public final class ColumnOperationReviewWorld {
         var heater = com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.auto(new com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.Load(cold, null), null).size();
         if (heater == null) throw new IllegalStateException("No heater holds the cold start's " + cold + " MW");
         IChemE.LOGGER.info("review_operation sizing heater running={} cold_start_MW={} cold_start={}", running, String.format(Locale.ROOT, "%.1f", cold), heater);
+        // The charge valve (owner, 2026-11-17): 105 % of the design feed's mass flow. The column's feed valve asks up to twice its
+        // rate while its account is short of its aim (ColumnOperation.inletPlan), so this valve regulates and that one stands
+        // open; at 100 % the account would never fill. The built heaters must hold the cold start at that flow with 5 % spare.
+        double chargeFlow = CHARGE_SHARE * streamsRun.get(preheat(0)).mass();
+        double coldAtCharge = cold / DesignBasis.DEFAULT.designFlow() * CHARGE_SHARE, held = heater.held();
+        IChemE.LOGGER.info("review_operation sizing charge_valve kg_s={} cold_start_at_charge_MW={} heaters_held_MW={} spare_pct={}", String.format(Locale.ROOT, "%.2f", chargeFlow),
+                String.format(Locale.ROOT, "%.1f", coldAtCharge), String.format(Locale.ROOT, "%.1f", held), String.format(Locale.ROOT, "%.1f", 100 * (held / coldAtCharge - 1)));
+        if (held < 1.05 * coldAtCharge) throw new IllegalStateException("The heaters hold " + held + " MW, under 105 % of the cold start at the charge valve's flow, " + coldAtCharge + " MW");
         // Each of Auto's heaters in parallel fires its share; its fuel line is sized for that share of the cold start.
         double heaterDuty = cold * 1e6 / DesignBasis.DEFAULT.designFlow() / heater.count();
         IChemE.LOGGER.info("review_operation sizing column diameter_m={} trays={} flood_pct={} condenser_shells={} condenser_MW={} bores={}", columnSize.diameter(),
@@ -484,7 +495,7 @@ public final class ColumnOperationReviewWorld {
                 String.format(Locale.ROOT, "%.3f", run.reports().get(TOWER).readings().getOrDefault("condenser", Double.NaN) / 1e6), bores);
         double diameter = ColumnDesign.builtDiameter(columnSize.diameter());
         return new SizedPlant(withDiameter(input, diameter), diameter, condenser.shape(), condenser.shells(), receiver.shape(), refluxPump, coolers, pumps, bores, lines,
-                chargePump, exchanger.shape(), heater.shape(), heater.count(), fuel(heaterDuty));
+                chargePump, exchanger.shape(), heater.shape(), heater.count(), fuel(heaterDuty), chargeFlow);
     }
 
     /**
@@ -654,7 +665,7 @@ public final class ColumnOperationReviewWorld {
         var bores = new LinkedHashMap<>(s.bores());
         double crude = bores.remove(CRUDE), steam = bores.remove("steam1");
         bores.keySet().removeIf(k -> k.startsWith("steam"));
-        var preheat = new Preheat(s.chargePump(), chargeAt, exchanger, exchangerAt, s.heater(), heatersAt, crude, s.fuelBore());
+        var preheat = new Preheat(s.chargePump(), chargeAt, exchanger, exchangerAt, s.heater(), heatersAt, crude, s.fuelBore(), s.chargeFlow());
         IChemE.LOGGER.info("review_operation sizing layout condensers={} drum={} support={} reflux_pump={} pumps={} coolers={} charge_pump={} exchanger={} heater={} below={} above={}",
                 condensers, drumAt.toShortString(), support, refluxAt.toShortString(), pumps, coolers, chargeAt.toShortString(), exchangerAt.toShortString(), heatersAt,
                 layout.below().toShortString(), layout.above().toShortString());
@@ -680,6 +691,8 @@ public final class ColumnOperationReviewWorld {
         Vessel heater;
         /** The charge line's last cell before the tower's feed line ({@link #layPreheat}), where the start reads the crude's temperature. */
         BlockPos chargeEnd;
+        /** The charge pump's flow control valve ({@link #layPreheat}), or null. */
+        BlockPos chargeValve;
         /** The shutoff valves beyond the boundary valves, each with its axis ({@link Options#shutoffs}), and which line each is on. */
         final java.util.Map<BlockPos, Direction> shutoffs = new java.util.LinkedHashMap<>();
         final java.util.Map<String, BlockPos> lines = new java.util.LinkedHashMap<>();
@@ -866,7 +879,13 @@ public final class ColumnOperationReviewWorld {
         void layPreheat(Vessel chargePump, Vessel exchanger, BlockPos bottomsLine) {
             var from = AssemblyGameTests.Plant.front(chargePump, Role.DISCHARGE);
             for (int j = 0; j < coolers.size(); j++) {
-                laid(preheat(j), plant.route(from, AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_INLET)));
+                var path = laid(preheat(j), plant.route(from, AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_INLET)));
+                if (j == 0) {
+                    // The charge valve on the pump's discharge, its third pipe, pointing down the line (its law: openCrude).
+                    chargeValve = path.get(2);
+                    var step = path.get(3).subtract(chargeValve);
+                    plant.valves.put(chargeValve, Direction.fromDelta(step.getX(), step.getY(), step.getZ()));
+                }
                 from = AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_OUTLET);
             }
             int n = coolers.size();
@@ -1120,8 +1139,18 @@ public final class ColumnOperationReviewWorld {
             plant.world.edit(id, r.revision(), r.device().withGeometry(geometry).withGeneratorEnabled(on), spec);
         }
 
-        /** Opens the crude's supply (shut by {@link #finish} while the heaters light). */
+        /** Sets the charge valve's law (mass flow at {@link Preheat#chargeFlow}) and opens the crude's supply (shut by {@link #finish} while the heaters light). */
         void openCrude() {
+            if (chargeValve != null) {
+                long valve = id(chargeValve);
+                var old = plant.world.registrations().get(valve);
+                var d = old.device();
+                var law = new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW,
+                        options.preheat().chargeFlow(), null, 1);
+                plant.world.edit(valve, old.revision(), com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Device.builder(d.id(), d.position(), d.kind(), d.facing(), d.geometry(), law)
+                        .ports(d.ports()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).build(), old.spec());
+                IChemE.LOGGER.info("review_operation charge_valve at={} kg_s={}", chargeValve.toShortString(), String.format(Locale.ROOT, "%.2f", options.preheat().chargeFlow()));
+            }
             long id = id(feed);
             var r = plant.world.registrations().get(id);
             if (!r.device().generatorEnabled()) plant.world.edit(id, r.revision(), r.device().withGeneratorEnabled(true), r.spec());
@@ -1140,7 +1169,7 @@ public final class ColumnOperationReviewWorld {
 
         /** The start waits for the charge line within this many K of the feed temperature, at most this many ticks. */
         static final double HOT_BAND = 10;
-        static final int HOT_TICKS = 12000;
+        static final int HOT_TICKS = 200;
         private int warming;
 
         /** Whether the column may start: no heaters, the charge line hot, or {@link #HOT_TICKS} gone; logs every 600 ticks. */
@@ -1208,8 +1237,16 @@ public final class ColumnOperationReviewWorld {
                 var status = plant.world.view(id(f)).status();
                 if (!status.startsWith("FULL") && !status.startsWith("STEADY")) return false;
             }
-            // Not the burners' firing: an empty coil's island has nothing to solve, so its burners get no demand until the
-            // crude arrives (build 5c waited on it for ten minutes).
+            // And every heater's burners powered (builds 5b read NO POWER for 10 to 30 s after the crude opened). Not their firing:
+            // an empty coil's island has nothing to solve, so its burners get no demand until the crude arrives (build 5c waited
+            // on it for ten minutes).
+            for (var h : heaters)
+                for (long id : com.wormzjl.icheme.world.level.block.EquipmentStructure.sideIdentities(plant.level, h)) {
+                    long burners = plant.world.burners().burnersOf(id);
+                    if (burners == 0) continue;
+                    var b = plant.world.burners().view(burners);
+                    if (b == null || b.alarms().contains(com.wormzjl.icheme.runtime.fluid.EquipmentAlarm.NO_POWER)) return false;
+                }
             return true;
         }
 
@@ -1319,6 +1356,11 @@ public final class ColumnOperationReviewWorld {
                 var pump = pumps.getLast();
                 IChemE.LOGGER.info("review_operation t={} charge_pump status=\"{}\" fuel=\"{}\"", ticks, plant.world.view(id(AssemblyGameTests.Plant.front(pump, Role.DISCHARGE))).status(),
                         fuels.stream().map(f -> plant.world.view(id(f)).status()).toList());
+                if (chargeValve != null) {
+                    var v = plant.world.view(id(chargeValve));
+                    IChemE.LOGGER.info("review_operation t={} charge_valve kg_s={} set_kg_s={} status=\"{}\"", ticks, String.format(Locale.ROOT, "%.2f", v.massFlow()),
+                            String.format(Locale.ROOT, "%.2f", options.preheat().chargeFlow()), v.status());
+                }
             }
             if (view.solve() != null)
                 IChemE.LOGGER.info("review_operation t={} solve trigger={} warm={} age_s={}", ticks, view.solve().trigger(), view.solve().warm(),
