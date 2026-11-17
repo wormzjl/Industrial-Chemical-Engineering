@@ -156,6 +156,11 @@ the `Rig` class keep their sizes.
   regulating below a pump on its limit puts the pump on its law), S2 (a retry starts from the attempt's own start; no
   sealing exemption), F2 (the balance decides no pump mode); S3 withdrawn. `StartHoldTest` 4 of 4; selected classes 1781
   tests, 1 failure (the expected `SizingPageTest` in Chinese); holdGates 105 of 105; regression exact. Moved references: none.
+- 2026-11-17, column test world (owner: a world preset, plant started): [COLUMN_TEST_WORLD.md](COLUMN_TEST_WORLD.md). The
+  test mod's preset "IChemE column test" (superflat, creative, no daylight, weather or mob cycle) builds the review rig's
+  crude unit at spawn on the first load through the rig's own entry (`ColumnOperationReviewWorld.rig(level, base,
+  options)`; `Plant` takes a `ServerLevel`) and starts it in the rig's order on the server tick (`ColumnTestWorld`).
+  Run task `runReviewClient`; flag `icheme_fluid_test_column_test_world`. review-operation passes as before (1340 devices); the preset batch `review-column-test-world` passes (column past its first solve 707 online ticks after the build). Not seen in a client.
 
 ## Full crude unit, sized (2026-11-17)
 
