@@ -137,6 +137,9 @@ the `Rig` class keep their sizes.
   approved the fix (form B): `PumpSizing.built` builds a Size-all centrifugal pump at its bore's flow and the head its
   curve needs for the design point; Auto takes the smallest bore that holds the flow with the 20 % spare; the Build list
   reads rated flow, head and discharge. Crude sample P-101 0.30 to 0.35 m, PA 1 0.25 to 0.30 m, PA 2 0.30 to 0.35 m.
+  After the start-hold fixes (07ae5a351 merged) the rig's charge check waits 800 online ticks after the pump's first
+  flow: review-operation passed, 0.19711 against 0.19357 m3/s at share 0.585 (report 3); the drive saturates at top
+  speed while the tower's feed valve regulates or closes; one round-deadline hold of the crude island (reports 8 to 10).
 - 2026-11-17, start hold (diagnosis, no mod code): the crude island's hold at the column's start reproduced on a small
   line, [START_HOLD_REVIEW.md](START_HOLD_REVIEW.md). Not H1: reachable targets hold too. The pump's suction-limit row is
   flat outside a 16 kg/s window and its pass never lands in it (M3); every retry then starts with the pump on its suction

@@ -165,6 +165,9 @@ public final class ColumnOperationReviewWorld {
                     });
         }
         sequence.thenExecute(() -> {
+            if (failure[0] == null && rig.chargePump != null && !rig.chargeChecked)
+                failure[0] = "the charge pump's check was never reached: no report came " + Rig.CHARGE_TICKS + " online ticks after its first flow (first flow at "
+                        + (rig.chargeFlowing < 0 ? "none" : "t=" + rig.chargeFlowing) + ")";
             plant.release();
             if (failure[0] != null) helper.fail(failure[0]);
         }).thenSucceed();
@@ -716,8 +719,14 @@ public final class ColumnOperationReviewWorld {
         BlockPos chargeEnd;
         /** The charge pump ({@link Options#preheat}), or null; its drive regulates its flow ({@link #holdCharge}). */
         Vessel chargePump;
-        /** The charge pump's flow check at the first report ({@link #chargeCheck}), or null while it holds. */
+        /** The charge pump's flow check ({@link #chargeCheck}), or null while it holds. */
         String chargeFault;
+        /** The online tick of the first report at which the charge pump's mass flow is above zero, or -1 before it. */
+        long chargeFlowing = -1;
+        /** Whether {@link #chargeCheck} has made its check. */
+        boolean chargeChecked;
+        /** The online ticks after the charge pump's first flow before its check: at least 6 of its drive's decisions (about 100 ticks each). */
+        static final long CHARGE_TICKS = 800;
         /** The shutoff valves beyond the boundary valves, each with its axis ({@link Options#shutoffs}), and which line each is on. */
         final java.util.Map<BlockPos, Direction> shutoffs = new java.util.LinkedHashMap<>();
         final java.util.Map<String, BlockPos> lines = new java.util.LinkedHashMap<>();
@@ -1478,9 +1487,11 @@ public final class ColumnOperationReviewWorld {
 
         /**
          * The charge pump's flow against its set flow, both at suction (its live suction density), its drive's speed against its
-         * top and its status, logged at every report. At the first report (at least 800 online ticks, so at least 6 of the
-         * drive's decisions, after {@link #openCrude}) the flow lies within 2 % of the set flow and the drive below its top speed
-         * (a creative motor's set speed; a motor's {@link com.wormzjl.icheme.science.machine.Motor#MAXIMUM_RPM}); else {@link #chargeFault}.
+         * top and its status, logged at every report. The pump stands dead-headed until the column's start opens its feed valve,
+         * and its drive regulates only on a flow: the check waits for the first report at least {@link #CHARGE_TICKS} online
+         * ticks (at least 6 of the drive's decisions) after the first report that saw the pump's flow ({@link #chargeFlowing}).
+         * There, once, the flow lies within 2 % of the set flow and the drive below its top speed (a creative motor's set speed; a
+         * motor's {@link com.wormzjl.icheme.science.machine.Motor#MAXIMUM_RPM}); else {@link #chargeFault}.
          */
         void chargeCheck(long ticks, int n) {
             long pump = chargeId();
@@ -1501,7 +1512,11 @@ public final class ColumnOperationReviewWorld {
                     String.format(Locale.ROOT, "%.5f", set), String.format(Locale.ROOT, "%.5f", flow), String.format(Locale.ROOT, "%.2f", view.massFlow()),
                     String.format(Locale.ROOT, "%.1f", density), String.format(Locale.ROOT, "%.0f", speed), String.format(Locale.ROOT, "%.0f", top),
                     String.format(Locale.ROOT, "%.3f", plant.world.shafts().share(pump)), driver == null ? "-" : driver.settings().mode(), train == null ? "-" : train.status());
-            if (n == 1 && !(Math.abs(flow - set) <= .02 * set && speed < top * (1 - 1e-3)))
+            if (chargeFlowing < 0 && view.massFlow() > 0) chargeFlowing = ticks;
+            if (chargeChecked || chargeFlowing < 0 || ticks - chargeFlowing < CHARGE_TICKS) return;
+            chargeChecked = true;
+            IChemE.LOGGER.info("review_operation t={} charge_pump check report={} ticks_since_first_flow={} first_flow_t={}", ticks, n, ticks - chargeFlowing, chargeFlowing);
+            if (!(Math.abs(flow - set) <= .02 * set && speed < top * (1 - 1e-3)))
                 chargeFault = String.format(Locale.ROOT, "the charge pump's drive does not hold its flow: %.5f m3/s against %.5f, %.0f of %.0f rpm, %s", flow, set, speed, top,
                         train == null ? "no train" : train.status());
         }

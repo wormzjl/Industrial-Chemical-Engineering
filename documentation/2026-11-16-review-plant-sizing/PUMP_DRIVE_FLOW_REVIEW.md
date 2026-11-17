@@ -285,3 +285,46 @@ Tests: `affected.mjs select --since c0a5eff0e`, 383 filters, without LanguageFil
 - holdGates 49, 2 failures: the moved CrudeUnitSampleTest references, fixed, then CrudeUnitSampleTest 40 of 40.
 - columnGates 5 of 5. equipmentGates 76 of 76.
 - `compileFluidGameTestJava` passes. The fluid GameTest step and the review world were not run.
+
+## The rig's charge check after the start-hold fixes (07ae5a351 merged)
+
+Correction to package 1's check (main thread):
+- The pump stands dead-headed until the column's start, so a check at report 1 saw about one drive decision.
+- `chargeCheck` now remembers the first report that sees the charge pump's flow (`chargeFlowing`). It checks once, at
+  the first report at least `CHARGE_TICKS` = 800 online ticks later, and logs that it did.
+- The assertion is unchanged: within 2 %, speed below top.
+- A run that ends before that report fails: "the charge pump's check was never reached".
+
+One replay, fresh world, `tmp/pump-drive-flow/review-operation-run4.log`: **passed** ("All 4 required tests passed").
+- First flow at report 1 (t=1326). The check came at report 3 (t=2524, 1198 ticks later): 0.19711 m3/s against
+  0.19357 (+1.8 %), 1726 of 2950 rpm (share 0.585), RUNNING.
+- The reports ended at 13 (t=8514), on three solved reports in a row.
+
+| t | flow m3/s | share | FEED0 valve | column |
+|---|---|---|---|---|
+| 1326 | 0.24411 | 0.800 | OPEN | LIMITED FEED_SHORT |
+| 1925 | 0.19134 | 0.582 | OPEN | RUNNING, PASSING, refused |
+| 2524 | 0.19711 | 0.585 | OPEN | UPSET, CLOSURE |
+| 3123 | 0 | 0.987 | CLOSED | RUNNING, solved |
+| 3722 | 0.21453 | 0.999 | REGULATING | LIMITED PRODUCT_FULL |
+| 4321 | 0.20117 | 0.562 | OPEN | RUNNING, solved |
+| 4920 | 0.19249 | 0.617 | OPEN | LIMITED COOLING_SHORT, PUMPAROUND_SHORT |
+| 5519 to 6717 | 0.16317 (held) | 0.865 | REGULATING (island held) | LIMITED, then RUNNING |
+| 7316 | 0.19573 | 0.578 | OPEN | RUNNING, solved |
+| 7915 | 0.03052 | 1.000 | REGULATING | RUNNING, solved |
+| 8514 | 0.06653 | 1.000 | REGULATING | RUNNING, solved |
+
+- The drive holds the set flow while the tower's feed valve stands open.
+- When the feed valve regulates or closes (its account full, `inletPlan`), the flow is the valve's, and the drive runs
+  up to its top speed against it (t=3123, 7915, 8514). This is the expected series behaviour, not a hold: the downstream
+  valve wins and the speed loop saturates.
+- At the last report: column RUNNING on a solved table; feed 2557.2 kmol/h at 614.9 K (feed account 1.36 of its aim);
+  bottoms 810.5 kmol/h.
+- Heaters at the last report:
+  - Heater 2: radiant outlet 634.2 K at 20.5 MW, "DUTY INSUFFICIENT: outlet 3.9 K below the set point" (set point about
+    638.1 K).
+  - Heater 1: 643.5 K at 0 MW, on the low flow.
+- Holds: the crude island 1402 "HELD: round deadline" at committed tick 5364 (reports 8 to 10 read the held values),
+  and once more at 6877. Islands 1418 (5805) and 1412 (7284) once each. No other HELD.
+- NPSH: the sizer's margin over the world's suction limit is 2.56 m at 730 m3/h. The held flow (0.197 m3/s, 709 m3/h)
+  is under the design flow, so the margin is not less. No world NPSH reading.
