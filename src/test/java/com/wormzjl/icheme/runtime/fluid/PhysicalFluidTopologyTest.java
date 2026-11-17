@@ -661,7 +661,7 @@ class PhysicalFluidTopologyTest {
         assertEquals(0,drawn(List.of(pipe(1,0,0,PhysicalFluidTopology.ALL_FACES)),1,(cell,outward)->cell.equals(flange)&&outward==EAST),"a nozzle facing away");
         assertEquals(0,drawn(List.of(lane(1,0,0,2,1,ALONG_X)),1,(cell,outward)->cell.x()==1&&outward==WEST),"a rack lane");
         // A device across the face decides as before: the predicate is not asked there.
-        assertEquals(FACE_E,drawn(List.of(pipe(1,0,0,PhysicalFluidTopology.ALL_FACES),tank(2,1,0)),1,(cell,outward)->{throw new AssertionError("asked beside a device");}));
+        assertEquals(FACE_E,drawn(List.of(pipe(1,0,0,PhysicalFluidTopology.ALL_FACES),tank(2,1,0)),1,(cell,outward)->{if(cell.equals(flange))throw new AssertionError("asked across a device");return false;}));
         assertEquals(FACE_W,drawn(List.of(pipe(1,0,0,FACE_W),pipe(2,-1,0,PhysicalFluidTopology.ALL_FACES)),1,nozzle),"a pipe meets a pipe, and no nozzle through a face it has no joint on");
     }
 

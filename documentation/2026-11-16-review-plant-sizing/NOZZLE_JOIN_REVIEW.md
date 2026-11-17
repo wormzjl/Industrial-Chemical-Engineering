@@ -78,6 +78,20 @@ Main-thread review of `2abc30a5a`: `StructureNozzles` answered from the first st
 nozzle inside another structure's (bounding) box could be missed. It now asks every one; `origin(cell, outward)`
 replaces `origin(cell)` (only the tests call it). Gate: `PhysicalFluidTopologyTest.aNozzleInsideAnotherStructuresBoxIsFoundInEitherOrder`.
 
+## Test run (2026-11-17, dev client closed)
+
+- Selected classes (`affected.mjs select --since e25dae469`, 371 picks): `test` 1238 tests, 3 failed:
+  `SizingPageTest.theDoorFitsInEveryViewForEveryItemInChinese` and `LanguageFilesTest` (both until the translation commit;
+  `LanguageFilesTest` was in the selection) and `PhysicalFluidTopologyTest.aPipeBesideANozzleFacingItDrawsThatFace`, a
+  fault of the test (its predicate threw on every face, not only across the tank). Fixed; the class alone: 37 of 37.
+  `holdGates` 80 tests, `columnGates` 5 (from the cache), `equipmentGates` 34: none failed.
+- Fluid GameTests (`icheme_fluid_test`, 116 tests; the review rigs are in `icheme_review` and did not run): 114 passed,
+  2 failed, both new checks. `drawn-joints-nozzle`: the test's own bend search asked for air below the bend, which stands
+  on the column head; fixed, not run again. `assembly-complete` (`Plant.unjoined`): 7 nozzles at the ends of routed lines
+  not drawn as joined, on the exchanger, the drum, the pump and the column's REFLUX: at a route's last pipe the face is
+  not flanged; at its first the nozzle stays at its default. The column's VAPOUR_OUTLET (a route's first pipe) and its
+  straight boundary lines pass. These are fluid devices too: not the new rule's. Diagnosis open; see the open items.
+
 ## Hot-file lines
 
 | File | Lines (after the change) | What |

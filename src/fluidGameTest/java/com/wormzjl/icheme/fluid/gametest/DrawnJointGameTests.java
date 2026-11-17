@@ -134,7 +134,7 @@ public final class DrawnJointGameTests {
     private static void lines(AssemblyGameTests.Plant plant,Vessel column) {
         var top=AssemblyGameTests.Plant.front(column,Role.VAPOUR_OUTLET);
         Direction bend=null;
-        for(var d:Direction.Plane.HORIZONTAL)if(plant.level.getBlockState(top.relative(d)).isAir()&&plant.level.getBlockState(top.relative(d,2)).isAir()&&plant.level.getBlockState(top.relative(d).below()).isAir()){bend=d;break;}
+        for(var d:Direction.Plane.HORIZONTAL)if(plant.level.getBlockState(top.relative(d)).isAir()&&plant.level.getBlockState(top.relative(d,2)).isAir()){bend=d;break;}
         if(bend==null)throw new IllegalStateException("No room for the overhead line's bend at "+top.toShortString());
         plant.pipe(top);plant.pipe(top.relative(bend));plant.pipe(top.relative(bend,2));
         var feed=AssemblyGameTests.Plant.front(column,Role.FEED);var out=AssemblyGameTests.Plant.out(column,Role.FEED);
