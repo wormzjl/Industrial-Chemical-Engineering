@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.assembly.AssemblyStore;
@@ -49,7 +50,7 @@ public final class ColumnReviewWorld {
         var corner = helper.absolutePos(new BlockPos(48, 0, 48));
         level.getChunk(corner.getX() >> 4, corner.getZ() >> 4);
         var base = new BlockPos(corner.getX(), level.getHeight(Heightmap.Types.WORLD_SURFACE, corner.getX(), corner.getZ()), corner.getZ());
-        var plant = new AssemblyGameTests.Plant(helper, base, new BlockPos(-26, 0, -26), new BlockPos(22, 30, 26));
+        var plant = AssemblyGameTests.plant(helper, base, new BlockPos(-26, 0, -26), new BlockPos(22, 30, 26));
         String[] failure = {null};
         try {
             build(plant);
@@ -72,22 +73,22 @@ public final class ColumnReviewWorld {
      * kettle on its left, beside the vapour return, the side draw and the steam. Boundary lines first, straight out of
      * their nozzles; then the lines between units, each the shortest that touches no other line.
      */
-    private static void build(AssemblyGameTests.Plant plant) {
+    private static void build(PlantBuilder plant) {
         plant.hold();
         var shape = EquipmentShape.column(2, trays(), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(2));
         ColumnDesign.misfit(shape).ifPresent(reason -> {
             throw new IllegalStateException(reason);
         });
         var column = plant.column = plant.place(shape, 0, 0, 0);
-        var ejector = plant.place(AssemblyGameTests.Plant.unit(Kind.EJECTOR), -6, 0, -10);
-        var cooler = plant.place(AssemblyGameTests.Plant.unit(Kind.AIR_COOLER), -15, 0, -13);
+        var ejector = plant.place(PlantBuilder.unit(Kind.EJECTOR), -6, 0, -10);
+        var cooler = plant.place(PlantBuilder.unit(Kind.AIR_COOLER), -15, 0, -13);
         // The receiver stands high, as a reflux drum does over its pump: its boot drain's line has room under it.
         var drum = plant.drum = plant.place(EquipmentShape.drum(1.5, 4, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, 5,
                 EquipmentShape.defaultConnections(1.5, 4, EquipmentShape.Orientation.HORIZONTAL, 5, true), true), -16, 0, -1);
-        var refluxPump = plant.place(AssemblyGameTests.Plant.unit(Kind.PUMP), -8, 0, -3);
-        var paPump = plant.place(AssemblyGameTests.Plant.unit(Kind.PUMP), -8, 0, 12);
-        var paCooler = plant.place(AssemblyGameTests.Plant.unit(Kind.EXCHANGER), -15, 0, 12);
-        var kettle = plant.place(AssemblyGameTests.Plant.unit(Kind.KETTLE), 12, 0, 0);
+        var refluxPump = plant.place(PlantBuilder.unit(Kind.PUMP), -8, 0, -3);
+        var paPump = plant.place(PlantBuilder.unit(Kind.PUMP), -8, 0, 12);
+        var paCooler = plant.place(PlantBuilder.unit(Kind.EXCHANGER), -15, 0, 12);
+        var kettle = plant.place(PlantBuilder.unit(Kind.KETTLE), 12, 0, 0);
 
         // Boundary lines: the feed and steam valves point at the column, the products' away from it.
         plant.outside(column, Role.FEED, false, true);
@@ -98,18 +99,18 @@ public final class ColumnReviewWorld {
         plant.outside(drum, Role.BOOT_DRAIN, true, true);
 
         // The overhead: column, ejector, air cooler, receiver, reflux pump, the tee, the reflux back to the column.
-        plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(ejector, Role.SUCTION));
-        plant.route(AssemblyGameTests.Plant.front(ejector, Role.DISCHARGE), AssemblyGameTests.Plant.front(cooler, Role.PROCESS_INLET));
-        plant.route(AssemblyGameTests.Plant.front(cooler, Role.PROCESS_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
-        plant.route(AssemblyGameTests.Plant.front(drum, Role.LIQUID_OUTLET), AssemblyGameTests.Plant.front(refluxPump, Role.SUCTION));
-        plant.tee(plant.route(AssemblyGameTests.Plant.front(refluxPump, Role.DISCHARGE), AssemblyGameTests.Plant.front(column, Role.REFLUX)));
+        plant.route(PlantBuilder.front(column, Role.VAPOUR_OUTLET), PlantBuilder.front(ejector, Role.SUCTION));
+        plant.route(PlantBuilder.front(ejector, Role.DISCHARGE), PlantBuilder.front(cooler, Role.PROCESS_INLET));
+        plant.route(PlantBuilder.front(cooler, Role.PROCESS_OUTLET), PlantBuilder.front(drum, Role.SIDE));
+        plant.route(PlantBuilder.front(drum, Role.LIQUID_OUTLET), PlantBuilder.front(refluxPump, Role.SUCTION));
+        plant.tee(plant.route(PlantBuilder.front(refluxPump, Role.DISCHARGE), PlantBuilder.front(column, Role.REFLUX)));
         // The pumparound: drawn through its pump and its exchanger's shell, back two trays up.
-        plant.route(AssemblyGameTests.Plant.front(column, Role.PUMPAROUND_DRAW), AssemblyGameTests.Plant.front(paPump, Role.SUCTION));
-        plant.route(AssemblyGameTests.Plant.front(paPump, Role.DISCHARGE), AssemblyGameTests.Plant.front(paCooler, Role.SHELL_INLET));
-        plant.route(AssemblyGameTests.Plant.front(paCooler, Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(column, Role.RETURN));
+        plant.route(PlantBuilder.front(column, Role.PUMPAROUND_DRAW), PlantBuilder.front(paPump, Role.SUCTION));
+        plant.route(PlantBuilder.front(paPump, Role.DISCHARGE), PlantBuilder.front(paCooler, Role.SHELL_INLET));
+        plant.route(PlantBuilder.front(paCooler, Role.SHELL_OUTLET), PlantBuilder.front(column, Role.RETURN));
         // The reboiler: the bottoms into the kettle, its vapour back under the bottom tray.
-        plant.route(AssemblyGameTests.Plant.front(column, Role.BOTTOMS), AssemblyGameTests.Plant.front(kettle, Role.FEED));
-        plant.route(AssemblyGameTests.Plant.front(kettle, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(column, Role.VAPOUR_RETURN));
+        plant.route(PlantBuilder.front(column, Role.BOTTOMS), PlantBuilder.front(kettle, Role.FEED));
+        plant.route(PlantBuilder.front(kettle, Role.VAPOUR_OUTLET), PlantBuilder.front(column, Role.VAPOUR_RETURN));
         for (var valve : plant.valves.entrySet()) plant.install(valve.getKey(), valve.getValue());
         // The casings turn only with their shaft trains (W3): a creative motor drives each pump.
         plant.drive(refluxPump);
@@ -117,7 +118,7 @@ public final class ColumnReviewWorld {
     }
 
     /** Validates the plant complete, then leaves it for the reviewer: report back to not validated, spawn in front, noon. */
-    private static void finish(AssemblyGameTests.Plant plant, String[] failure) {
+    private static void finish(PlantBuilder plant, String[] failure) {
         var entry = AssemblyService.validate(plant.level, plant.controller());
         if (entry == null || entry.status() != AssemblyStore.Status.COMPLETE) {
             failure[0] = "not complete: " + plant.faults();

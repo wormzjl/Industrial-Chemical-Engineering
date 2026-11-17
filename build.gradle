@@ -98,13 +98,6 @@ neoForge {
             client()
         }
 
-        // The client with the test mod (batch 2026-11-16-review-plant-sizing, COLUMN_TEST_WORLD.md): its world preset
-        // "IChemE column test" builds and starts the review rig's crude unit at spawn. Same run/ folder as client.
-        reviewClient {
-            client()
-            sourceSet = sourceSets.fluidGameTest
-        }
-
         server {
             server()
             programArgument '--nogui'
@@ -204,7 +197,7 @@ neoForge {
         }
     }
     runs.configureEach {
-        loadedMods = name in ['fluidGameTestServer', 'fluidBenchmarkServer', 'columnGameTestServer', 'reviewWorldServer', 'reviewClient'] ? [mods.icheme, mods.icheme_fluid_test]
+        loadedMods = name in ['fluidGameTestServer', 'fluidBenchmarkServer', 'columnGameTestServer', 'reviewWorldServer'] ? [mods.icheme, mods.icheme_fluid_test]
                 : name == 'mcpClient' ? [mods.icheme, mods.icheme_mcp_compat] : [mods.icheme]
     }
 }

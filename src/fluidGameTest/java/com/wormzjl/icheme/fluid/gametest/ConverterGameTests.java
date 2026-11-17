@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.runtime.fluid.ConverterUnit;
 import com.wormzjl.icheme.runtime.fluid.Converters;
@@ -50,7 +51,7 @@ public final class ConverterGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 16000, batch = "converter-liquid")
     public static void aLiquidConverterConvertsBothWaysThroughItsForgePort(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(24, 30, 16));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(24, 30, 16));
         var level = plant.level;
         var world = plant.world;
         var before = ConversionRuntime.active();
@@ -153,7 +154,7 @@ public final class ConverterGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 16000, batch = "converter-gas")
     public static void aGasConverterRegistersClosedAndTakesItsValves(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(24, 30, 16));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(24, 30, 16));
         var level = plant.level;
         var world = plant.world;
         long[] id = {0};
@@ -227,7 +228,7 @@ public final class ConverterGameTests {
     }
 
     /** The water in a vessel's published view, kg, every phase. */
-    static double water(AssemblyGameTests.Plant plant, com.wormzjl.icheme.runtime.fluid.FluidView view) {
+    static double water(PlantBuilder plant, com.wormzjl.icheme.runtime.fluid.FluidView view) {
         var model = plant.world.model();int w = model.components().indexOf("Water");
         if (view.state() == null || w < 0) return 0;
         double moles = 0;

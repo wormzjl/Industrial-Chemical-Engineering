@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
@@ -35,8 +36,7 @@ final class TankCharge {
      * switch on its page: a generator is placed switched off (batch 2026-10-23-fluid-device-controls-display, 0f208c52).
      */
     static void run(FluidWorldAuthority world,long id,FluidDeviceSpec spec) {
-        var old=world.registrations().get(id);var d=old.device();
-        world.edit(id,old.revision(),PhysicalFluidTopology.Device.builder(d.id(),d.position(),d.kind(),d.facing(),d.geometry(),d.control()).ports(d.ports()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).build(),spec);
+        com.wormzjl.icheme.testworld.PlantBuilder.charge(world,id,spec);
     }
     /** The charge's generator and its pipe, for a test that removes what it placed on every exit (they go once charged). */
     java.util.List<BlockPos> blocks(){return java.util.List.of(pipe,generator);}

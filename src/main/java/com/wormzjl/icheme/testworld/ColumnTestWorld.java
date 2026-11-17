@@ -1,4 +1,4 @@
-package com.wormzjl.icheme.fluid.gametest;
+package com.wormzjl.icheme.testworld;
 
 import com.google.gson.JsonElement;
 import com.mojang.serialization.JsonOps;
@@ -6,6 +6,7 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.RegistryOps;
@@ -34,32 +35,37 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * The dev-only world preset "IChemE column test" (batch 2026-11-16-review-plant-sizing, COLUMN_TEST_WORLD.md): a superflat
- * creative world ({@code data/icheme_fluid_test/worldgen/world_preset/column_test.json}, listed in the Create World screen
- * through the {@code minecraft:normal} preset tag) in which the review rig's crude unit ({@link ColumnOperationReviewWorld}) is
- * built at spawn on the world's first load, by the rig's own code, and started in the rig's order. Loaded only with the test
- * mod ({@code runReviewClient}, the GameTest servers); the plain client never sees the preset.
+ * The world type "IChemE column test" (batch 2026-11-16-review-plant-sizing, COLUMN_TEST_WORLD.md; owner, 2026-11-17: a
+ * world type of the mod, for players): a superflat creative world ({@code data/icheme/worldgen/world_preset/column_test.json},
+ * listed in the Create World screen through the {@code minecraft:normal} preset tag) in which the crude unit test plant
+ * ({@link CrudeUnitPlant}) is built at spawn on the world's first load, by the review GameTests' own rig, and started in
+ * their order ({@code ColumnOperationReviewWorld.aCrudeColumnRuns}).
  *
  * <p>The start is a small state machine on the server tick that only reads published state (registrations, views, the
  * column's phase) and queues the rig's own engine events (device edits, the charge drive's {@code Configure}, the column's
  * start): it never solves or computes process state.
  */
-final class ColumnTestWorld {
+public final class ColumnTestWorld {
     private ColumnTestWorld() {}
 
     /** The preset's key. */
-    static final ResourceKey<WorldPreset> PRESET = ResourceKey.create(Registries.WORLD_PRESET, ResourceLocation.fromNamespaceAndPath("icheme_fluid_test", "column_test"));
-    /** The test mod's saved flag on the overworld ({@link Flag}): {@code data/icheme_fluid_test_column_test_world.dat}. */
-    static final String DATA = "icheme_fluid_test_column_test_world";
+    public static final ResourceKey<WorldPreset> PRESET = ResourceKey.create(Registries.WORLD_PRESET, ResourceLocation.fromNamespaceAndPath(com.wormzjl.icheme.IChemE.MOD_ID, "column_test"));
+    /** The saved flag's name on the overworld ({@link Flag}): {@code data/icheme_column_test_world.dat} (documentation/reference/FORMATS.md). */
+    public static final String DATA = "icheme_column_test_world";
+    /** The flag's format ({@code format} in its tag): fields {@code built}, {@code started}, {@code chunks}. */
+    public static final int FORMAT = 1;
     /** Online ticks each start step may wait for its condition before the start stops (5 minutes of play). */
     static final int PATIENCE = 6000;
     /** Blocks between the plant's box and the spawn, north of it. */
     static final int SPAWN_GAP = 4;
 
+    /** Whether this server found the last start cut short by the world's close: each player who joins is told. */
+    private static boolean closed;
+
     /** The start running in this server, or null. */
     private static @Nullable Start running;
 
-    static void register(IEventBus bus) {
+    public static void register(IEventBus bus) {
         bus.addListener(ColumnTestWorld::started);
         bus.addListener(ColumnTestWorld::tick);
         bus.addListener(ColumnTestWorld::login);
@@ -70,9 +76,9 @@ final class ColumnTestWorld {
      * Whether {@code generator} is this preset's overworld: a flat generator whose settings encode exactly as the preset's
      * (its layers, its biome, no lakes, no features and an empty structure list). The GameTest world's flat preset carries the
      * villages, a player's Classic Flat too; only a flat world rebuilt by hand from an empty-structure preset to these very
-     * layers could match, and {@link #started} builds only in a world at game time 0 with the test mod loaded.
+     * layers could match, and {@link #started} builds only in a world at game time 0.
      */
-    static boolean isPreset(MinecraftServer server, ChunkGenerator generator) {
+    public static boolean isPreset(MinecraftServer server, ChunkGenerator generator) {
         if (!(generator instanceof FlatLevelSource flat)) return false;
         var own = presetSettings(server);
         if (own == null) return false;
@@ -82,7 +88,7 @@ final class ColumnTestWorld {
     }
 
     /** The preset's overworld flat settings, or null where the preset is not loaded or its overworld is not flat. */
-    static @Nullable FlatLevelGeneratorSettings presetSettings(MinecraftServer server) {
+    public static @Nullable FlatLevelGeneratorSettings presetSettings(MinecraftServer server) {
         var preset = server.registryAccess().registry(Registries.WORLD_PRESET).flatMap(r -> r.getOptional(PRESET)).orElse(null);
         if (preset == null) return null;
         var stem = preset.overworld().orElse(null);
@@ -102,6 +108,7 @@ final class ColumnTestWorld {
         if (flag.chunks.length > 0) {
             // The world closed during the start: the rig's state was in memory, so the start does not resume.
             IChemE.LOGGER.info("column_test_world step=start not finished before the world closed; finish it by hand (heaters, charge drive, column)");
+            closed = true;
             release(level, flag);
         }
         if (flag.built) return;
@@ -112,7 +119,7 @@ final class ColumnTestWorld {
         setUp(server, level);
         flag.built = true;
         flag.setDirty();
-        ColumnOperationReviewWorld.Rig rig;
+        CrudeUnitPlant.Rig rig;
         try {
             rig = build(level, level.getSharedSpawnPos());
         } catch (RuntimeException e) {
@@ -143,20 +150,20 @@ final class ColumnTestWorld {
     }
 
     /**
-     * The review plant built by the rig's code ({@link ColumnOperationReviewWorld#review}, {@link ColumnOperationReviewWorld#rig(ServerLevel,
-     * BlockPos, ColumnOperationReviewWorld.Options)}, {@link ColumnOperationReviewWorld.Rig#build}) with its column's origin on the
+     * The review plant built by the rig's code ({@link CrudeUnitPlant#review}, {@link CrudeUnitPlant#rig(ServerLevel,
+     * BlockPos, CrudeUnitPlant.Options)}, {@link CrudeUnitPlant.Rig#build}) with its column's origin on the
      * ground at {@code at}'s x and z; its chunks are held loaded by the build (the rig's {@code hold}) until the start ends.
      */
-    static ColumnOperationReviewWorld.Rig build(ServerLevel level, BlockPos at) {
-        return build(level, at, ColumnOperationReviewWorld.review(MaterialRuntime.active()));
+    public static CrudeUnitPlant.Rig build(ServerLevel level, BlockPos at) {
+        return build(level, at, CrudeUnitPlant.review(MaterialRuntime.active()));
     }
 
     /** {@link #build(ServerLevel, BlockPos)} on sizes already made ({@code options}, the rig's {@code review}). */
-    static ColumnOperationReviewWorld.Rig build(ServerLevel level, BlockPos at, ColumnOperationReviewWorld.Options options) {
+    public static CrudeUnitPlant.Rig build(ServerLevel level, BlockPos at, CrudeUnitPlant.Options options) {
         level.getChunk(at.getX() >> 4, at.getZ() >> 4);
         int ground = level.getHeight(Heightmap.Types.WORLD_SURFACE, at.getX(), at.getZ());
         var base = new BlockPos(at.getX(), ground, at.getZ());
-        var rig = ColumnOperationReviewWorld.rig(level, base, options);
+        var rig = CrudeUnitPlant.rig(level, base, options);
         rig.build();
         IChemE.LOGGER.info("column_test_world built origin={} devices={} structures={} box={}..{}", base.toShortString(), rig.plant.devices.size(), rig.plant.structures.size(),
                 rig.plant.low.toShortString(), rig.plant.high.toShortString());
@@ -164,7 +171,7 @@ final class ColumnTestWorld {
     }
 
     /** The world spawn north of the plant's box, outside it, at the column's x, facing south at the column. */
-    static void spawn(ServerLevel level, ColumnOperationReviewWorld.Rig rig) {
+    static void spawn(ServerLevel level, CrudeUnitPlant.Rig rig) {
         var plant = rig.plant;
         var at = new BlockPos(plant.base.getX(), plant.base.getY(), plant.low.getZ() - SPAWN_GAP);
         level.setDefaultSpawnPos(at, 0);
@@ -178,7 +185,7 @@ final class ColumnTestWorld {
     }
 
     /** {@code start} driven by the server tick from the next tick on (the preset's own path; its GameTest's too). */
-    static void begin(Start start) {
+    public static void begin(Start start) {
         running = start;
     }
 
@@ -189,6 +196,7 @@ final class ColumnTestWorld {
 
     /** Every player joins a column test world in creative. */
     private static void login(PlayerEvent.PlayerLoggedInEvent event) {
+        if (closed && event.getEntity() instanceof ServerPlayer p) p.sendSystemMessage(Component.translatable("message.icheme.column_test.closed"));
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
         var server = player.getServer();
         if (server == null) return;
@@ -198,21 +206,22 @@ final class ColumnTestWorld {
 
     private static void stopping(ServerStoppingEvent event) {
         running = null;
+        closed = false;
     }
 
     /**
      * The rig's start in its GameTest's order ({@code ColumnOperationReviewWorld.aCrudeColumnRuns}), one step a tick at most:
      * the valves installed; 20 ticks; every nozzle joined; the charge pump's train compiled, then its set flow and drive held
-     * ({@link ColumnOperationReviewWorld.Rig#holdCharge}) and the heaters lit ({@link ColumnOperationReviewWorld.Rig#light});
-     * the heaters' fuel and power, then the charge drive started and the crude opened ({@link ColumnOperationReviewWorld.Rig#openCrude});
+     * ({@link CrudeUnitPlant.Rig#holdCharge}) and the heaters lit ({@link CrudeUnitPlant.Rig#light});
+     * the heaters' fuel and power, then the charge drive started and the crude opened ({@link CrudeUnitPlant.Rig#openCrude});
      * the charge line hot (or the rig's {@code HOT_TICKS}), then the plant validated complete and the column started
-     * ({@link ColumnOperationReviewWorld.Rig#start}); the column past its first solve. A step whose condition does not hold
+     * ({@link CrudeUnitPlant.Rig#start}); the column past its first solve. A step whose condition does not hold
      * within {@link #PATIENCE} ticks logs {@code column_test_world step=<name> not reached} and ends the start.
      */
-    static final class Start {
-        enum Step { VALVES, SETTLE, DRIVE, FUEL, WARM, FIRST_SOLVE, DONE, STOPPED }
+    public static final class Start {
+        public enum Step { VALVES, SETTLE, DRIVE, FUEL, WARM, FIRST_SOLVE, DONE, STOPPED }
 
-        final ColumnOperationReviewWorld.Rig rig;
+        final CrudeUnitPlant.Rig rig;
         private final Consumer<Boolean> end;
         private final boolean paced;
         private Step step = Step.VALVES;
@@ -220,22 +229,22 @@ final class ColumnTestWorld {
         private final String[] failure = {null};
 
         /** {@code end} is told, once, whether the column started and passed its first solve. */
-        Start(ColumnOperationReviewWorld.Rig rig, Consumer<Boolean> end) {
+        public Start(CrudeUnitPlant.Rig rig, Consumer<Boolean> end) {
             this(rig, end, false);
         }
 
         /**
-         * {@code paced}: each tick first waits for the solves running on workers ({@link ColumnOperationReviewWorld.Rig#paced}),
+         * {@code paced}: each tick first waits for the solves running on workers ({@link CrudeUnitPlant.Rig#paced}),
          * as the rig's GameTest does: a GameTest server ticks far ahead of the solves. A game runs at 20 ticks a second: unpaced.
          */
-        Start(ColumnOperationReviewWorld.Rig rig, Consumer<Boolean> end, boolean paced) {
+        public Start(CrudeUnitPlant.Rig rig, Consumer<Boolean> end, boolean paced) {
             this.rig = rig;
             this.end = end;
             this.paced = paced;
             IChemE.LOGGER.info("column_test_world step=valves waiting");
         }
 
-        Step state() {
+        public Step state() {
             return step;
         }
 
@@ -277,6 +286,7 @@ final class ColumnTestWorld {
                     case FIRST_SOLVE -> {
                         if (rig.past()) {
                             IChemE.LOGGER.info("column_test_world done t={} column={}", rig.plant.world.onlineTick(), rig.plant.column.origin().toShortString());
+                            tell(Component.translatable("message.icheme.column_test.started"));
                             finish(Step.DONE);
                             return true;
                         }
@@ -289,15 +299,22 @@ final class ColumnTestWorld {
             }
             if (failure[0] != null) {
                 IChemE.LOGGER.info("column_test_world step={} failed: {}", name(step), failure[0]);
+                tell(Component.translatable("message.icheme.column_test.stopped", name(step)));
                 finish(Step.STOPPED);
                 return true;
             }
             if (++waited > PATIENCE) {
                 IChemE.LOGGER.info("column_test_world step={} not reached", name(step));
+                tell(Component.translatable("message.icheme.column_test.stopped", name(step)));
                 finish(Step.STOPPED);
                 return true;
             }
             return false;
+        }
+
+        /** {@code text} to every player online, as the mod's other system messages. */
+        private void tell(Component text) {
+            for (var player : rig.plant.level.getServer().getPlayerList().getPlayers()) player.sendSystemMessage(text);
         }
 
         private void next(Step to) {
@@ -317,7 +334,8 @@ final class ColumnTestWorld {
     }
 
     /**
-     * The test mod's own flag on the overworld (new; not a saved format of the mod): whether the plant was built (never
+     * The column test world's flag on the overworld, a saved format of the mod ({@link #DATA}, documentation/reference/FORMATS.md;
+     * facts: the build happened once and is never repeated): whether the plant was built (never
      * again), whether its start ended with the column past its first solve, and the chunks the build holds loaded until the
      * start ends (released at the next server start if the world closed before).
      */
@@ -327,6 +345,13 @@ final class ColumnTestWorld {
 
         static Flag load(CompoundTag tag, HolderLookup.Provider registries) {
             var flag = new Flag();
+            int format = tag.getInt("format");
+            if (format > FORMAT) {
+                // A newer flag: the plant stands, so it is never built again; nothing else is read.
+                IChemE.LOGGER.info("column_test_world flag format={} newer than {}: read as built", format, FORMAT);
+                flag.built = true;
+                return flag;
+            }
             flag.built = tag.getBoolean("built");
             flag.started = tag.getBoolean("started");
             flag.chunks = tag.getLongArray("chunks");
@@ -335,6 +360,7 @@ final class ColumnTestWorld {
 
         @Override
         public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+            tag.putInt("format", FORMAT);
             tag.putBoolean("built", built);
             tag.putBoolean("started", started);
             tag.putLongArray("chunks", chunks);

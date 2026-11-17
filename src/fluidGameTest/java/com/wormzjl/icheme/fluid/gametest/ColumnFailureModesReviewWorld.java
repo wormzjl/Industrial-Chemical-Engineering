@@ -1,5 +1,11 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import static com.wormzjl.icheme.testworld.PlantBuilder.cableRoute;
+import static com.wormzjl.icheme.testworld.PlantBuilder.lay;
+import static com.wormzjl.icheme.testworld.PlantBuilder.place;
+import static com.wormzjl.icheme.testworld.PlantBuilder.port;
+import com.wormzjl.icheme.testworld.PlantBuilder;
+import com.wormzjl.icheme.testworld.CrudeUnitPlant;
 import com.mojang.authlib.GameProfile;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
@@ -81,7 +87,7 @@ import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
-import static com.wormzjl.icheme.fluid.gametest.ColumnOperationReviewWorld.extent;
+import static com.wormzjl.icheme.testworld.CrudeUnitPlant.extent;
 
 /**
  * The test world of batch 2026-11-10-column-failure-modes (stage 5, W8): a full-size crude column plant (plant A: the
@@ -217,7 +223,7 @@ public final class ColumnFailureModesReviewWorld {
 
     /** An exchanger of shell size {@code size}, m, at its default length and support. */
     static EquipmentShape exchanger(double size) {
-        return ColumnOperationReviewWorld.exchanger(size);
+        return CrudeUnitPlant.exchanger(size);
     }
 
     /**
@@ -226,8 +232,8 @@ public final class ColumnFailureModesReviewWorld {
      * stream under 100 m/s at the start's feed (twice the design's), motors on FE and a shutoff beyond every boundary valve;
      * the units placed round the column by their extents.
      */
-    static ColumnOperationReviewWorld.Options plantA(MaterialCatalog catalog) {
-        var design = ColumnOperationReviewWorld.scaled(crude(catalog), SCALE);
+    static CrudeUnitPlant.Options plantA(MaterialCatalog catalog) {
+        var design = CrudeUnitPlant.scaled(crude(catalog), SCALE);
         var air = airBank(design, catalog);
         var bank = air.bank();
         double shell = Math.min(2.5, Math.max(.5, Math.round(2.5 * Math.sqrt(SCALE) * 2) / 2.0));
@@ -235,7 +241,7 @@ public final class ColumnFailureModesReviewWorld {
         var cooler = exchanger(shell);
         var drumDiameter = Math.max(1.5, Math.round(3 * Math.sqrt(SCALE) * 2) / 2.0);
         double drumLength = Math.max(4, Math.round(8 * Math.sqrt(SCALE)));
-        var pump = AssemblyGameTests.Plant.unit(Kind.PUMP);
+        var pump = PlantBuilder.unit(Kind.PUMP);
         // The column's extent at its built diameter: trays from the design, as the rig builds it.
         var columnDesign = com.wormzjl.icheme.science.equipment.ColumnDesign.of(design, new ColumnComponents.Choices(ColumnComponents.Condenser.AIR_THEN_WATER,
                 ColumnComponents.Pump.STANDARD, java.util.Collections.nCopies(design.pumparounds().size(), ColumnComponents.Pump.STANDARD)));
@@ -270,25 +276,25 @@ public final class ColumnFailureModesReviewWorld {
         int west = Math.min(drumAt.getX() + r[0], coolers.isEmpty() ? 0 : coolers.getLast().getX() + c[0]) - 12;
         int south = (pumps.isEmpty() ? column[5] : pumps.getLast().getZ() + Math.max(c[5], p[5])) + 16;
         int top = Math.max(column[3], 30) + 8;
-        var layout = new ColumnOperationReviewWorld.Layout(banks, List.of(trimAt), drumAt, drumDiameter, drumLength, RECEIVER_SUPPORT, refluxAt, pumps, coolers, null,
+        var layout = new CrudeUnitPlant.Layout(banks, List.of(trimAt), drumAt, drumDiameter, drumLength, RECEIVER_SUPPORT, refluxAt, pumps, coolers, null,
                 new BlockPos(240, 0, -96), new BlockPos(west, 0, north - Math.max(depth, r[5] - r[4]) - 16), new BlockPos(column[1] + 56, top, south));
         // The bores at the start's feed, twice the design's: the review plant's 0.25 m feed line at 13 and 30 m/s and 0.15 m
         // steam line at 21 and 41 m/s grow with the feed over the bore squared.
         double feedBore = Math.min(PipeSizes.MAX_BORE, Math.max(.25, .25 * Math.sqrt(16 * SCALE) * 1.25));
         double steamBore = Math.min(PipeSizes.MAX_BORE, Math.max(.15, .15 * Math.sqrt(16 * SCALE) * 1.25));
-        return new ColumnOperationReviewWorld.Options(SCALE, ColumnFailureModesReviewWorld::crude, ColumnComponents.Condenser.AIR_THEN_WATER, bank, trim, cooler, null,
+        return new CrudeUnitPlant.Options(SCALE, ColumnFailureModesReviewWorld::crude, ColumnComponents.Condenser.AIR_THEN_WATER, bank, trim, cooler, null,
                 feedBore, steamBore, Math.min(PipeSizes.MAX_BORE, Math.max(.1, .5 * Math.sqrt(SCALE))), Math.min(PipeSizes.MAX_BORE, Math.max(.0625, .3 * Math.sqrt(SCALE))),
                 true, true, layout);
     }
 
     /** Plant B's options: {@link #reboiled} at {@link #B_SCALE} on the review plant's units, a kettle east of the column, motors and shutoffs. */
-    static ColumnOperationReviewWorld.Options plantB() {
-        var r = ColumnOperationReviewWorld.Layout.REVIEW;
-        var layout = new ColumnOperationReviewWorld.Layout(r.condenser(), List.of(), r.drum(), r.drumDiameter(), r.drumLength(), RECEIVER_SUPPORT, r.refluxPump(), List.of(),
+    static CrudeUnitPlant.Options plantB() {
+        var r = CrudeUnitPlant.Layout.REVIEW;
+        var layout = new CrudeUnitPlant.Layout(r.condenser(), List.of(), r.drum(), r.drumDiameter(), r.drumLength(), RECEIVER_SUPPORT, r.refluxPump(), List.of(),
                 List.of(), new BlockPos(12, 0, 0), new BlockPos(600, 0, -96), new BlockPos(-34, 0, -32), new BlockPos(32, 44, 36));
-        return new ColumnOperationReviewWorld.Options(B_SCALE, ColumnFailureModesReviewWorld::reboiled, ColumnComponents.Condenser.EXCHANGER,
-                exchanger(ColumnOperationReviewWorld.CONDENSER_SIZE), null, AssemblyGameTests.Plant.unit(Kind.EXCHANGER), AssemblyGameTests.Plant.unit(Kind.KETTLE),
-                ColumnOperationReviewWorld.FEED_BORE, ColumnOperationReviewWorld.STEAM_BORE, .25, 0, true, true, layout);
+        return new CrudeUnitPlant.Options(B_SCALE, ColumnFailureModesReviewWorld::reboiled, ColumnComponents.Condenser.EXCHANGER,
+                exchanger(CrudeUnitPlant.CONDENSER_SIZE), null, PlantBuilder.unit(Kind.EXCHANGER), PlantBuilder.unit(Kind.KETTLE),
+                CrudeUnitPlant.FEED_BORE, CrudeUnitPlant.STEAM_BORE, .25, 0, true, true, layout);
     }
 
     // ---------------------------------------------------------------------------------------------------------------- plant
@@ -296,7 +302,7 @@ public final class ColumnFailureModesReviewWorld {
     /** One plant's rig with its named parts. */
     static final class Built {
         final String label;
-        final ColumnOperationReviewWorld.Rig rig;
+        final CrudeUnitPlant.Rig rig;
         /** Named parts and their positions, logged for the manual test. */
         final Map<String, BlockPos> named = new LinkedHashMap<>();
         /** Laid cables by name: each cell's cable fact, to break and restore. */
@@ -306,12 +312,12 @@ public final class ColumnFailureModesReviewWorld {
         long columnHost;
         UUID level, flow;
 
-        Built(String label, ColumnOperationReviewWorld.Rig rig) {
+        Built(String label, CrudeUnitPlant.Rig rig) {
             this.label = label;
             this.rig = rig;
         }
 
-        AssemblyGameTests.Plant plant() {
+        PlantBuilder plant() {
             return rig.plant;
         }
 
@@ -383,7 +389,7 @@ public final class ColumnFailureModesReviewWorld {
         var rig = b.rig;
         var plant = rig.plant;
         var line = rig.feedLine;
-        var d = ColumnOperationReviewWorld.out(plant.column, Role.FEED, 0);
+        var d = CrudeUnitPlant.out(plant.column, Role.FEED, 0);
         double dd = Math.max(1.5, Math.round(3 * Math.sqrt(SCALE) * 2) / 2.0), dl = Math.max(4, Math.round(10 * Math.sqrt(SCALE)));
         var shape = EquipmentShape.drum(dd, dl, EquipmentShape.Orientation.HORIZONTAL, EquipmentShape.Heading.NORTH, 2,
                 EquipmentShape.defaultConnections(dd, dl, EquipmentShape.Orientation.HORIZONTAL, 2, false), false);
@@ -407,8 +413,8 @@ public final class ColumnFailureModesReviewWorld {
         // valve on a run whose flow toward the drum is along a positive axis (a flowmeter reads the pipe's signed flow, and a
         // loop on a reverse reading refuses), then the generator. An inlet facing a positive axis (the drum's is on top) turns
         // once beside it onto the first free negative axis: down (the flow then rises), north or west.
-        var in = AssemblyGameTests.Plant.front(drum, Role.SIDE);
-        var sq = AssemblyGameTests.Plant.out(drum, Role.SIDE);
+        var in = PlantBuilder.front(drum, Role.SIDE);
+        var sq = PlantBuilder.out(drum, Role.SIDE);
         List<BlockPos> run = null;
         Direction away = sq;
         BlockPos turn = in;
@@ -425,7 +431,7 @@ public final class ColumnFailureModesReviewWorld {
                     for (int k = 1; k <= length + 1; k++) cells.add(corner.relative(dir, k));
                     boolean clear = true;
                     for (int k = 0; k < cells.size() && clear; k++)
-                        clear = plant.free(cells.get(k), AssemblyGameTests.Plant.around(cells.get(k), k > 0 ? cells.get(k - 1) : in.relative(sq.getOpposite()), k + 1 < cells.size() ? cells.get(k + 1) : in));
+                        clear = plant.free(cells.get(k), PlantBuilder.around(cells.get(k), k > 0 ? cells.get(k - 1) : in.relative(sq.getOpposite()), k + 1 < cells.size() ? cells.get(k + 1) : in));
                     if (clear) {
                         run = cells;
                         away = dir;
@@ -445,15 +451,15 @@ public final class ColumnFailureModesReviewWorld {
         b.supplyMeter = turn.relative(away, 4);
         plant.valves.put(b.supplyValve, away.getOpposite());
         rig.feed = generator;
-        var path = plant.route(AssemblyGameTests.Plant.front(drum, Role.LIQUID_OUTLET), line, Set.of(line.relative(d.getOpposite()), line.relative(d), line.relative(d, 2)));
+        var path = plant.route(PlantBuilder.front(drum, Role.LIQUID_OUTLET), line, Set.of(line.relative(d.getOpposite()), line.relative(d), line.relative(d, 2)));
         // The vapour outlet onto a straight pipe of that line, from beside it.
-        plant.join(path, AssemblyGameTests.Plant.front(drum, Role.VAPOUR_OUTLET));
+        plant.join(path, PlantBuilder.front(drum, Role.VAPOUR_OUTLET));
         name(b, "FEED SURGE DRUM", drum);
         b.named.put("FEED SUPPLY", generator);
     }
 
     /** Whether {@code shape} at {@code origin} stands on air inside the plant's box, a block clear of every pipe and nozzle placed before. */
-    static boolean clear(AssemblyGameTests.Plant plant, EquipmentShape shape, BlockPos origin) {
+    static boolean clear(PlantBuilder plant, EquipmentShape shape, BlockPos origin) {
         var e = extent(shape);
         for (int x = e[0] - 1; x <= e[1] + 1; x++)
             for (int y = e[2]; y <= e[3] + 1; y++)
@@ -476,103 +482,16 @@ public final class ColumnFailureModesReviewWorld {
         }
     }
 
-    /** The data or power port of the structure whose origin is {@code origin}, or null. */
-    static @Nullable DataPort port(AssemblyGameTests.Plant plant, BlockPos origin, CableMedium medium) {
-        var level = plant.level;
-        for (var p : plant.world.controls().facts().ports().values())
-            if (p.kind().medium() == medium && level.getBlockEntity(p.owner()) instanceof EquipmentShellBlockEntity s && origin.equals(s.origin())) return p;
-        return null;
-    }
 
-    static @Nullable DataPort pipePort(AssemblyGameTests.Plant plant, BlockPos at) {
+    static @Nullable DataPort pipePort(PlantBuilder plant, BlockPos at) {
         return plant.level.getBlockEntity(at) instanceof FluidDeviceBlockEntity e ? e.instruments().dataPort() : null;
     }
 
-    /**
-     * A cable of {@code medium} through {@code ports} in order: each leg the shortest run of free cells inside the plant's box,
-     * a cable block in each cell with joints to its neighbours on the run and its socket's joint where a port's cell is, as
-     * the laying tool leaves a line. Returns each cell's cable fact, in order.
-     */
-    static List<DataBus.Cable> lay(AssemblyGameTests.Plant plant, List<DataPort> ports, CableMedium medium) {
-        var level = plant.level;
-        var path = new ArrayList<BlockPos>();
-        // No leg leaves a socket's cell through the socket's own face: that joint is the socket's, at its offset.
-        var beyond = new HashSet<BlockPos>();
-        for (var p : ports) beyond.add(p.cell().relative(p.face()));
-        for (int i = 0; i + 1 < ports.size(); i++) {
-            var taken = new HashSet<>(path);
-            taken.addAll(beyond);
-            // Nor through another port's cell, which its own legs reach.
-            for (var p : ports) taken.add(p.cell());
-            taken.remove(ports.get(i + 1).cell());
-            var leg = cableRoute(plant, ports.get(i).cell(), ports.get(i + 1).cell(), taken);
-            if (!path.isEmpty()) leg.removeFirst();
-            path.addAll(leg);
-        }
-        var joints = new LinkedHashMap<BlockPos, ConduitGeometry.Key>();
-        for (int i = 0; i < path.size(); i++) {
-            var cell = path.get(i);
-            var key = joints.getOrDefault(cell, new ConduitGeometry.Key(0, 0, medium));
-            for (int j : new int[]{i - 1, i + 1})
-                if (j >= 0 && j < path.size() && !path.get(j).equals(cell)) {
-                    var step = path.get(j).subtract(cell);
-                    key = key.connect(Direction.fromDelta(step.getX(), step.getY(), step.getZ()).ordinal(), 0, 0);
-                }
-            joints.put(cell, key);
-        }
-        var ends = new HashMap<BlockPos, Map<Direction, UUID>>();
-        for (var p : ports) {
-            joints.put(p.cell(), joints.get(p.cell()).connect(p.face().ordinal(), p.u(), p.v()));
-            ends.computeIfAbsent(p.cell(), c -> new EnumMap<>(Direction.class)).put(p.face(), p.id());
-        }
-        var block = medium == CableMedium.POWER ? ModBlocks.POWER_CABLE.get() : ModBlocks.DATA_CABLE.get();
-        var dimension = level.dimension().location().toString();
-        var out = new ArrayList<DataBus.Cable>();
-        for (var entry : joints.entrySet()) {
-            var cable = new DataBus.Cable(new DataBus.Site(dimension, entry.getKey(), 0), entry.getValue(), 0, ends.getOrDefault(entry.getKey(), Map.of()));
-            place(plant, cable, block);
-            out.add(cable);
-        }
-        return out;
-    }
 
-    /** A cable block holding {@code cable}. */
-    static void place(AssemblyGameTests.Plant plant, DataBus.Cable cable, Block block) {
-        var level = plant.level;
-        var at = cable.site().cell();
-        level.setBlock(at, block.defaultBlockState(), Block.UPDATE_ALL);
-        if (!(level.getBlockEntity(at) instanceof ConduitBlockEntity conduit)) throw new IllegalStateException("No cable at " + at.toShortString());
-        conduit.configure(cable);
-        plant.devices.add(at.immutable());
-    }
 
-    /** The shortest run of air cells from {@code from} to {@code to} inside the plant's box, past no pipe or structure and none of {@code taken}. */
-    static List<BlockPos> cableRoute(AssemblyGameTests.Plant plant, BlockPos from, BlockPos to, Set<BlockPos> taken) {
-        var previous = new HashMap<BlockPos, BlockPos>();
-        var queue = new ArrayDeque<BlockPos>();
-        previous.put(from, from);
-        queue.add(from);
-        while (!queue.isEmpty()) {
-            var cell = queue.removeFirst();
-            if (cell.equals(to)) {
-                var path = new ArrayList<BlockPos>();
-                for (var c = to; !c.equals(from); c = previous.get(c)) path.addFirst(c);
-                path.addFirst(from);
-                return path;
-            }
-            for (var d : Direction.values()) {
-                var next = cell.relative(d);
-                if (previous.containsKey(next) || !plant.inside(next) || next.getY() < plant.base.getY()) continue;
-                if (!next.equals(to) && (!plant.level.getBlockState(next).isAir() || taken.contains(next) || plant.reserved.contains(next))) continue;
-                previous.put(next, cell);
-                queue.addLast(next);
-            }
-        }
-        throw new IllegalStateException("No free cable path from " + from.toShortString() + " to " + to.toShortString());
-    }
 
     /** A control panel (a local controller, or a DCS console) at {@code at} facing {@code facing}. */
-    static ControlPanelBlockEntity panel(AssemblyGameTests.Plant plant, BlockPos at, Direction facing, boolean dcs) {
+    static ControlPanelBlockEntity panel(PlantBuilder plant, BlockPos at, Direction facing, boolean dcs) {
         var level = plant.level;
         var block = dcs ? ModBlocks.DCS.get() : ModBlocks.LOCAL_CONTROLLER.get();
         level.setBlock(at, block.defaultBlockState().setValue(ControlPanelBlock.FACING, facing), Block.UPDATE_ALL);
@@ -645,7 +564,7 @@ public final class ColumnFailureModesReviewWorld {
             ra.layout(true);
             surge(a);
             ra.finish();
-            var liquid = liquidSupply(catalog, ra.crude(catalog), ra.input.feedTemperatureKelvin(), ColumnOperationReviewWorld.SUPPLY);
+            var liquid = liquidSupply(catalog, ra.crude(catalog), ra.input.feedTemperatureKelvin(), CrudeUnitPlant.SUPPLY);
             ra.supply(ra.feed, ra.options.feedBore(), new FluidDeviceSpec(1, liquid[0], liquid[1], ra.crude(catalog)));
             surgeBores(a);
             var rb = ColumnOperationReviewWorld.rig(helper, plantB());

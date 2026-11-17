@@ -296,6 +296,8 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onFluidChunkLoaded);
         gameEventBus.addListener(IChemE::onPlayerLoggedIn);
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
+        // The world type "IChemE column test": builds and starts the crude unit test plant in a fresh world of its preset.
+        com.wormzjl.icheme.testworld.ColumnTestWorld.register(gameEventBus);
         gameEventBus.addListener(com.wormzjl.icheme.network.TutorialNetwork::earned);
         gameEventBus.addListener(IChemE::onLevelTickPost);
         // An explosion inside a flammable cube ignites it at the next ignition pass (pollution WP6a); the handler only queues.

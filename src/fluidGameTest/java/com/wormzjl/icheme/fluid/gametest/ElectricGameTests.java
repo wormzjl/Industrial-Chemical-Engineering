@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
@@ -42,7 +43,7 @@ public final class ElectricGameTests {
     }
 
     /** The FE port of {@code vessel}'s terminal box, from its top face. */
-    private static IEnergyStorage port(AssemblyGameTests.Plant plant, Vessel vessel) {
+    private static IEnergyStorage port(PlantBuilder plant, Vessel vessel) {
         var t = ShapeRasterizer.terminal(vessel.shape());
         if (t == null) throw new IllegalStateException("No terminal box on the " + vessel.shape().kind());
         var at = vessel.origin().offset(t.x(), t.y(), t.z());
@@ -53,7 +54,7 @@ public final class ElectricGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 20000, batch = "electric-motor")
     public static void aMotorDrivenPumpDrainsItsStoreStopsAndRestartsOnARefill(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
         var level = plant.level;
         var world = plant.world;
         String[] failure = {null};
@@ -63,11 +64,11 @@ public final class ElectricGameTests {
         var sequence = helper.startSequence();
         try {
             plant.hold();
-            var pump = plant.place(AssemblyGameTests.Plant.unit(EquipmentShape.Kind.PUMP), 0, 0, 0);
-            var suction = AssemblyGameTests.Plant.front(pump, Role.SUCTION);
-            var generator = suction.relative(AssemblyGameTests.Plant.out(pump, Role.SUCTION));
-            var discharge = AssemblyGameTests.Plant.front(pump, Role.DISCHARGE);
-            var tank = discharge.relative(AssemblyGameTests.Plant.out(pump, Role.DISCHARGE));
+            var pump = plant.place(PlantBuilder.unit(EquipmentShape.Kind.PUMP), 0, 0, 0);
+            var suction = PlantBuilder.front(pump, Role.SUCTION);
+            var generator = suction.relative(PlantBuilder.out(pump, Role.SUCTION));
+            var discharge = PlantBuilder.front(pump, Role.DISCHARGE);
+            var tank = discharge.relative(PlantBuilder.out(pump, Role.DISCHARGE));
             plant.pipe(suction);
             plant.pipe(discharge);
             level.setBlock(generator, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), Block.UPDATE_ALL);
@@ -133,7 +134,7 @@ public final class ElectricGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 6000, batch = "electric-cooler")
     public static void anAirCoolerWithoutPowerHoldsNaturalDraughtUntilItsPortIsFilled(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
         var level = plant.level;
         var world = plant.world;
         String[] failure = {null};
@@ -143,13 +144,13 @@ public final class ElectricGameTests {
         var sequence = helper.startSequence();
         try {
             plant.hold();
-            cooler[0] = plant.place(AssemblyGameTests.Plant.unit(EquipmentShape.Kind.AIR_COOLER), 0, 0, 0);
+            cooler[0] = plant.place(PlantBuilder.unit(EquipmentShape.Kind.AIR_COOLER), 0, 0, 0);
             // Hot water through the bundle: a supply at 2 bar beyond the inlet's pipe block, a void at the atmosphere
             // beyond the outlet's, so the island has its boundaries and runs.
-            var inlet = AssemblyGameTests.Plant.front(cooler[0], Role.PROCESS_INLET);
-            var supply = inlet.relative(AssemblyGameTests.Plant.out(cooler[0], Role.PROCESS_INLET));
-            var outlet = AssemblyGameTests.Plant.front(cooler[0], Role.PROCESS_OUTLET);
-            var sink = outlet.relative(AssemblyGameTests.Plant.out(cooler[0], Role.PROCESS_OUTLET));
+            var inlet = PlantBuilder.front(cooler[0], Role.PROCESS_INLET);
+            var supply = inlet.relative(PlantBuilder.out(cooler[0], Role.PROCESS_INLET));
+            var outlet = PlantBuilder.front(cooler[0], Role.PROCESS_OUTLET);
+            var sink = outlet.relative(PlantBuilder.out(cooler[0], Role.PROCESS_OUTLET));
             plant.pipe(inlet);
             plant.pipe(outlet);
             level.setBlock(supply, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), Block.UPDATE_ALL);
@@ -190,7 +191,7 @@ public final class ElectricGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 6000, batch = "electric-generator")
     public static void aGeneratorOnACreativeMotorFillsItsStoreAndGivesFE(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
         var level = plant.level;
         var world = plant.world;
         String[] failure = {null};
@@ -200,7 +201,7 @@ public final class ElectricGameTests {
         var sequence = helper.startSequence();
         try {
             plant.hold();
-            generator[0] = plant.place(AssemblyGameTests.Plant.unit(EquipmentShape.Kind.GENERATOR), 0, 0, 0);
+            generator[0] = plant.place(PlantBuilder.unit(EquipmentShape.Kind.GENERATOR), 0, 0, 0);
             shaft[0] = plant.drive(generator[0]);
         } catch (RuntimeException e) {
             failure[0] = "build: " + e;
@@ -233,7 +234,7 @@ public final class ElectricGameTests {
     }
 
     /** Removes the plant and its shaft parts, then passes or fails. */
-    private static void finish(GameTestHelper helper, AssemblyGameTests.Plant plant, net.minecraft.gametest.framework.GameTestSequence sequence, String[] failure) {
+    private static void finish(GameTestHelper helper, PlantBuilder plant, net.minecraft.gametest.framework.GameTestSequence sequence, String[] failure) {
         sequence.thenExecute(plant::remove).thenWaitUntil(() -> helper.assertTrue(plant.removed() && plant.world.shafts().units().stream()
                         .noneMatch(u -> plant.inside(new BlockPos(u.position().x(), u.position().y(), u.position().z()))), "Waiting for the plant and its shaft parts to leave"))
                 .thenExecute(() -> {

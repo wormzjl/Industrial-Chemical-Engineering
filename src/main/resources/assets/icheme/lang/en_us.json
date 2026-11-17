@@ -4846,5 +4846,9 @@
   "gui.icheme.equipment_constructor.material.stainless_steel.hint": "316L: wet acid gas, naphthenic acid and hot H2S. Corrosion allowance 1.5 mm, up to 815 °C.",
   "gui.icheme.equipment_constructor.material.nickel_alloy.hint": "Alloy 625: everything, at a price. Corrosion allowance 1.5 mm, up to 980 °C.",
   "gui.icheme.vessel.material": "Material: %1$s, corrosion allowance %2$s mm",
-  "gui.icheme.vessel.demister": "Demister: a mesh pad under the gas outlet"
+  "gui.icheme.vessel.demister": "Demister: a mesh pad under the gas outlet",
+  "generator.icheme.column_test": "IChemE column test",
+  "message.icheme.column_test.started": "Column test plant: started.",
+  "message.icheme.column_test.stopped": "Column test plant: the start stopped at %s. See the log.",
+  "message.icheme.column_test.closed": "Column test plant: the world closed during the start; finish it by hand. See the log."
 }

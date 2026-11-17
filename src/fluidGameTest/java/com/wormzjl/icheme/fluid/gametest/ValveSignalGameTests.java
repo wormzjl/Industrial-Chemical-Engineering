@@ -38,7 +38,7 @@ public final class ValveSignalGameTests {
 
     @GameTest(template = "empty", batch = "valve-signal", timeoutTicks = 900)
     public static void aValveRegulatesOnlyOnTheSensorThePlayerSelects(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper);
+        var plant = AssemblyGameTests.plant(helper);
         var level = plant.level;
         var world = plant.world;
         String[] failure = {null};

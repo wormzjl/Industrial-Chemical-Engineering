@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
@@ -75,7 +76,7 @@ public final class DrawnJointGameTests {
      */
     @GameTest(template="empty",batch="drawn-joints-nozzle",timeoutTicks=600)
     public static void aPipeOnAColumnNozzleDrawsItsJointInEitherOrder(GameTestHelper helper) {
-        var plant=new AssemblyGameTests.Plant(helper);
+        var plant=AssemblyGameTests.plant(helper);
         var level=plant.level;
         var components=new ColumnComponents(ColumnComponents.Condenser.EXCHANGER,ColumnComponents.Pump.STANDARD,List.of(),false,false);
         var shape=EquipmentShape.column(2,new ColumnTrays(8,4,List.of(),List.of(9),List.of(),components),EquipmentShape.Heading.NORTH,EquipmentShape.minimumSkirt(2));
@@ -95,10 +96,10 @@ public final class DrawnJointGameTests {
                 .thenExecute(()->{
                     if(failure[0]!=null)return;
                     // The top pipe removed: the nozzle is drawn at its default again.
-                    var top=AssemblyGameTests.Plant.front(columns[0],Role.VAPOUR_OUTLET);
+                    var top=PlantBuilder.front(columns[0],Role.VAPOUR_OUTLET);
                     level.removeBlock(top,false);plant.devices.remove(top);
                 })
-                .thenWaitUntil(()->helper.assertTrue(failure[0]!=null||AssemblyGameTests.Plant.nozzleCode(level,columns[0],AssemblyGameTests.Plant.port(columns[0],Role.VAPOUR_OUTLET))==0,
+                .thenWaitUntil(()->helper.assertTrue(failure[0]!=null||PlantBuilder.nozzleCode(level,columns[0],PlantBuilder.port(columns[0],Role.VAPOUR_OUTLET))==0,
                         "Waiting for the top nozzle's default size"))
                 .thenExecute(()->{
                     if(failure[0]!=null)return;
@@ -131,27 +132,27 @@ public final class DrawnJointGameTests {
      * Pipes on {@code column}'s top nozzle, the line bending at its first block, and on its feed nozzle, straight out: hand
      * placed, every face a joint, as a player places them.
      */
-    private static void lines(AssemblyGameTests.Plant plant,Vessel column) {
-        var top=AssemblyGameTests.Plant.front(column,Role.VAPOUR_OUTLET);
+    private static void lines(PlantBuilder plant,Vessel column) {
+        var top=PlantBuilder.front(column,Role.VAPOUR_OUTLET);
         Direction bend=null;
         for(var d:Direction.Plane.HORIZONTAL)if(plant.level.getBlockState(top.relative(d)).isAir()&&plant.level.getBlockState(top.relative(d,2)).isAir()){bend=d;break;}
         if(bend==null)throw new IllegalStateException("No room for the overhead line's bend at "+top.toShortString());
         plant.pipe(top);plant.pipe(top.relative(bend));plant.pipe(top.relative(bend,2));
-        var feed=AssemblyGameTests.Plant.front(column,Role.FEED);var out=AssemblyGameTests.Plant.out(column,Role.FEED);
+        var feed=PlantBuilder.front(column,Role.FEED);var out=PlantBuilder.out(column,Role.FEED);
         plant.pipe(feed);plant.pipe(feed.relative(out));
     }
 
     /** Whether the top or the feed pipe's block state is joined towards {@code column}'s nozzle. */
     private static boolean joinedTowards(net.minecraft.server.level.ServerLevel level,Vessel column) {
         for(var role:List.of(Role.VAPOUR_OUTLET,Role.FEED)) {
-            var p=AssemblyGameTests.Plant.port(column,role);var state=level.getBlockState(AssemblyGameTests.Plant.front(column,p));
+            var p=PlantBuilder.port(column,role);var state=level.getBlockState(PlantBuilder.front(column,p));
             if(state.getBlock() instanceof FluidDeviceBlock&&state.getValue(FluidDeviceBlock.connection(Direction.fromDelta(-p.dx(),-p.dy(),-p.dz()))))return true;
         }
         return false;
     }
 
     /** Null when the top and the feed pipes both meet {@code column} as the player sees it; else what is wrong. */
-    private static String joinedBoth(AssemblyGameTests.Plant plant,Vessel column) {
+    private static String joinedBoth(PlantBuilder plant,Vessel column) {
         if(column==null)return "no column";
         var top=plant.joined(column,Role.VAPOUR_OUTLET);
         return top!=null?top:plant.joined(column,Role.FEED);
