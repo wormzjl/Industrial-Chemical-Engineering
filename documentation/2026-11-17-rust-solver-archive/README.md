@@ -28,7 +28,11 @@ default path, so no result moves.
 - 2026-11-17: `b6a8a4993` (work in progress): the files move to the archive, the build, the lane tools, the reference
   documents and the code guide stop naming the library. `compileJava` and `compileTestJava` pass.
 - 2026-11-17: the archive's README, this folder and its index rows; the last live mentions in `tools/` and the code
-  guide's README. Tests: see the next line.
+  guide's README (`6bd2cdc83`). `node tools/agent-guard/guard.test.js`: ok, 38 blocked, 35 allowed.
+- 2026-11-17: the tests the archive can reach, `affected.mjs select --since 24e9867b7..HEAD` run as the lane's test step builds
+  them (`-PlaneTests`, `left-out.txt` honoured, `--max-workers=4`): `test` 36 classes, `holdGates` 5, `columnGates` 68,
+  `equipmentGates` 1; 706 tests, 0 failed, 0 skipped. No reference moved. Not run: the GameTest step (due on
+  `NativeColumnSolver`'s removal; the final lane's), the solver regression and the campaign (nothing they load changed).
 
 ## Open items
 
