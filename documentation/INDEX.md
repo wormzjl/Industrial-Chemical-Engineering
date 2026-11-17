@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-17-column-internal-hydraulics/](2026-11-17-column-internal-hydraulics/README.md) | A running column limited by its internal lines and member pumps | Planned 2026-11-17 |
 | [2026-11-16-agents-md-token-usage/](2026-11-16-agents-md-token-usage/README.md) | AGENTS.md cut to the core of each subject; the full rules in `reference/rules/` | Implemented 2026-11-16 |
 | [2026-11-16-final-lane-cost/](2026-11-16-final-lane-cost/README.md) | The final lane within 8 minutes: watch seeds, left-out tests, shared JVMs, steps by their last run; whole-suite runs blocked | Implemented 2026-11-16 |
 | [2026-11-16-review-plant-sizing/](2026-11-16-review-plant-sizing/README.md) | The crude column review world sized by the process simulator's Size all | In progress since 2026-11-16 |
