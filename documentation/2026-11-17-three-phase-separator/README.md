@@ -78,6 +78,14 @@ phase carry-over.
   alone); both sheets looked at. Run: the 77 classes `affected.mjs select --since` names for the commit, without
   `LanguageFilesTest` (500 tests, 0 failed). No payload changes: the screen does not set the meters yet (open items).
 - 2026-11-17: the owner: "delegate all implementation to opus". From here this session plans, briefs and reviews.
+- 2026-11-17: the Carry-over group's data (`bd16ff83c`, an Opus sub-thread), protocol `icheme-7`. `Separation.acts`
+  (which laws act on a vessel; `plan` uses the same rule), `FluidView.CarryOver` on `FluidView.Tank.carried` (a copy
+  of the inventory's slice input, null where no law acts), `TankOutlets.tank(model, graph, node, result)` from
+  `ViewBuilder`, `DeviceMeters.carried()` set by `FluidDeviceScreen`; `NetworkProtocol` and `FORMATS.md` at
+  `icheme-7`; three version asserts follow the number. Run: the classes `affected.mjs select` names, without
+  `LanguageFilesTest` and `UnitTextTest`: `test` 375 classes 2215 tests, `holdGates` 12 classes 92 tests,
+  `equipmentGates` 22 classes 180 tests, 0 failed; `columnGates` (`V3RefluxFreeWaterTest`) up to date, its stored
+  pass stands. No result moved. Both separator sheets rendered from the shipped builder and looked at.
 
 ## Documents
 
@@ -96,10 +104,9 @@ phase carry-over.
   (the `Separators` hook) and a component to `PassiveNetwork.Inventory`. That batch's plan is not edited from here; its
   desalter (WP6) takes its phase separation from this model and sets its own drop size.
 - Owner's call: whether a kettle and a still's pot take the gas law (plan section 5.1).
-- The Carry-over group's data: `FluidView.Tank` carries what the vessel's outlets carry and which laws act on it,
-  `TankOutlets.tank` fills it, `FluidDeviceScreen` sets the meters. The view crosses the wire as JSON, so the payload
-  changes: it needs a protocol number (`icheme-7`; batch `2026-11-16-solute-reaction-system` holds `icheme-6` on its
-  branch, not yet reserved on `main`) and a line in `FluidDeviceScreen`, `NetworkProtocol` and `FORMATS.md`, which
-  that batch also changes. Waits for the owner's word; an Opus thread builds it.
+- The Carry-over group's data is built (`icheme-7`, history). Left: the selector names `fluidSolverRegression`, the
+  GameTest step and the campaign step for that commit; none ran (they are the final lane's). `FluidDeviceScreen`,
+  `NetworkProtocol` and `FORMATS.md` have one-line edits that batch `2026-11-16-solute-reaction-system` (`icheme-6`)
+  also changes: the second batch to merge takes the next number.
 - Package 3 (the held receiver) joins the hydraulics batch's cycle package. The rest of package 4 after the sizer:
   the 330 other classes the selector names for it are not run (history: the drops).

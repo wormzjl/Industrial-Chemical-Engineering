@@ -174,6 +174,9 @@ the cycle does not set the input.
   carries the shares.
 - The desalter's drop size (4.1) waits for the solute batch's desalter kind: `Separation.plan` gives every vessel
   `Separation.DROPS`.
+- The page (protocol `icheme-7`): `FluidView.Tank.carried` copies the committed inventory's `carried` for each law
+  `Separation.acts` finds (the rule `plan` applies, one place); `DeviceMeters.carried()` sets the Carry-over group.
+  Not saved: after a load, or an island split or merge, a vessel reads 0 until the next dispatch.
 
 ## 6. Work packages
 
