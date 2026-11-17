@@ -104,7 +104,7 @@ public final class ColumnOperationReviewWorld {
      * fast as it can, far ahead of the solves a cycle and its islands wait for (plan section 9), and an island behind the
      * clock plans from the column's past: from the start on, the test holds the server to 20 ticks a second, as a game runs.
      */
-    static final int REPORTS = 4, REPORT_TICKS = 600, PREHEAT_REPORTS = 20;
+    static final int REPORTS = 4, REPORT_TICKS = 600, PREHEAT_REPORTS = 30, STEADY_REPORTS = 3;
 
     /** The charge valve's set, a share of the design feed's mass flow (owner, 2026-11-17). */
     static final double CHARGE_SHARE = 1.05;
@@ -141,12 +141,14 @@ public final class ColumnOperationReviewWorld {
                 .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.past(), "Waiting for the first solve"));
         // The crude unit fills its preheat train before the tower sees a feed: it reports for longer.
         int reports = rig.options.preheat() == null ? REPORTS : PREHEAT_REPORTS;
+        // The reports end early once the column has run on a solved table for STEADY_REPORTS reports in a row.
+        int[] steady = {0};
         for (int i = 1; i <= reports; i++) {
             int n = i;
             int[] ticks = {0};
-            sequence = sequence.thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && ++ticks[0] >= REPORT_TICKS, "Waiting for the column"))
+            sequence = sequence.thenWaitUntil(() -> helper.assertTrue(failure[0] != null || steady[0] >= STEADY_REPORTS || rig.paced() && ++ticks[0] >= REPORT_TICKS, "Waiting for the column"))
                     .thenExecute(() -> {
-                        if (failure[0] == null) rig.report(n);
+                        if (failure[0] == null && steady[0] < STEADY_REPORTS) steady[0] = rig.report(n) ? steady[0] + 1 : 0;
                     });
         }
         sequence.thenExecute(() -> {
@@ -1314,14 +1316,19 @@ public final class ColumnOperationReviewWorld {
             return view != null && view.phase() != OperationView.Phase.STARTING;
         }
 
-        /** The column's Operation view at report {@code n}: its phase, its streams and its duties. */
-        void report(int n) {
+        /**
+         * The column's Operation view at report {@code n}: its phase, its streams and its duties. Returns whether the column
+         * runs on a solved table: RUNNING, its last solve not refused, neither passing its feed nor off its table.
+         */
+        boolean report(int n) {
             long ticks = plant.world.onlineTick();
             var view = plant.world.columnView(plant.position(plant.column.origin()), id -> Double.NaN);
             if (view == null) {
                 IChemE.LOGGER.info("review_operation t={} view=none", ticks);
-                return;
+                return false;
             }
+            var named = view.conditions().stream().map(c -> c.condition().name()).toList();
+            boolean solved = view.phase() == OperationView.Phase.RUNNING && !view.refused() && !named.contains("PASSING") && !named.contains("OFF_TABLE");
             IChemE.LOGGER.info("review_operation t={} phase={} conditions={} alpha={} ruleA={} refused={} engine=\"{}\"", ticks, view.phase(), view.conditions().stream().map(c -> c.condition().name()).toList(),
                     String.format(Locale.ROOT, "%.3f", view.alpha()), view.ruleA(), view.refused(), view.engine());
             for (var at : List.of(feed, steam, water)) {
@@ -1375,6 +1382,8 @@ public final class ColumnOperationReviewWorld {
             if (view.solve() != null)
                 IChemE.LOGGER.info("review_operation t={} solve trigger={} warm={} age_s={}", ticks, view.solve().trigger(), view.solve().warm(),
                         String.format(Locale.ROOT, "%.0f", view.solve().age()));
+            IChemE.LOGGER.info("review_operation t={} report={} solved_table={}", ticks, n, solved);
+            return solved;
         }
 
         /**

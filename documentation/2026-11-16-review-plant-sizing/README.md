@@ -77,6 +77,10 @@ the `Rig` class keep their sizes.
   once per solve (M1). C1 (a balance step bounded at a one-way stop) moved every balance that crosses and recovers and
   held `JunctionSeedingGateTest`'s back-pressure valve case; its junction-keyed variant left balances unconverged.
   `FlowValveCapacityTest` (15) added; the selected classes pass but the expected `SizingPageTest` Chinese case.
+- 2026-11-17, same branch (sub-thread, owner: "Yes, run it"): build 8 of the review world on C3 and B. The charge valve
+  regulates at 167.39 kg/s from the first report, both heaters hold 634 to 635 K, and the column runs on a solved table
+  from t=26619 (three reports in a row). No island of the new plant held but for "round deadline" lines; the world
+  still runs the plants of builds 6 and 7. The rig's reports run to 900 s or end after three solved reports.
 
 ## Full crude unit, sized (2026-11-17)
 
@@ -207,6 +211,29 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
     19 to 72 kg/s from t=18511. Only one heater took duty (22 to 39 MW); the other read 0 to 0.4 MW at 638 K.
   - Column to t=20907: RUNNING with PASSING, PRODUCT_FULL and refused enthalpy solves; alpha 0.31 to 0.39. The bottoms
     account held 0.52 to 0.87 of its aim, and its island did not hold.
+  - Correction (valve-hold trace): the failing start was the fresh one, not the carried one (VALVE_HOLD_TRACE.md).
+  Build 8 (2026-11-17, on C3 `e75044d7c` and B `2919f7b83`; log `tmp/review-plant-fix/build-8.log`): reports every 30 s
+  up to 30 (900 s), ending after three in a row read RUNNING on a solved table (RUNNING, not refused, no PASSING or
+  OFF_TABLE). It ended at report 10, t=27817. The column started, as in every build, after `HOT_TICKS` (200) with the
+  charge line still reading "NO FLOW: dead-end pipe".
+  - **No start hold.** The charge valve read VALVE_REGULATING at 167.39 kg/s at every report but t=23624 (0 kg/s,
+    STANDING_OPEN, with the feed valve CLOSED while the column was UPSET); the feed valve otherwise STANDING_OPEN.
+  - **Heaters:** t=22426 DUTY INSUFFICIENT (20.8 and 54.8 K short) on the cold first charge; t=23025 both 637.4 K at 53.3
+    and 53.6 MW; one heater 0 MW at t=23624 and 24223 (no flow, then NO FUEL while its fuel line woke); from t=25421 both
+    take duty, 634.4 to 635.1 K, 25.1 to 32.1 MW each.
+  - **Column:** t=22426 RUNNING, PASSING, OFF_TABLE (feed 2557 kmol/h at 383.9 K); t=23025 and 23624 UPSET, CLOSURE ("the
+    condenser duty departs 79 %", then 144 %), the first refused; t=24223 RUNNING, OFF_TABLE (first without PASSING);
+    t=24822 LIMITED, COOLING_SHORT, condenser 82 %; t=25421 and 26020 RUNNING, OFF_TABLE; t=26619 to 27817 RUNNING on the
+    solved table. No PUMPAROUND_SHORT; pumparounds booked 0 at t=22426 to 23624 (passing, then upset), 82 % of solved at
+    t=24822, and as solved (13.09, 21.01, 13.24 MW) from t=24223 otherwise.
+  - **Steady (t=27817):** feed 2557.2 kmol/h at 634.0 K, steam 1190.6; offgas 184.5, sour water 1176.5, distillate 375.8,
+    draws 518.3, 476.5, 184.0, bottoms 832.1 kmol/h at 572.9 K (design 816 to 842). In 3747.8, out 3747.7 kmol/h. Feed
+    account 0.59 of its aim, bottoms 0.68; E-101's shell (bottoms) FULL, -28.9 MW, out at 438.6 K.
+  - **Holds:** island 4215 of the new plant "HELD: round deadline" once (committed tick 22838); no view of the rig read
+    HELD at any report. At the end, islands 4214 and 4225 to 4229 read "round deadline" as the plant was released. The
+    world is the one builds 6 and 7 ran in: their plants still run (26 islands loaded, the solver on one worker), and
+    build 6's bottoms island 1408 still holds ("Substep refinement exhausted: Singular Newton Jacobian"), with build 6's
+    column (unit 1388) logging OVERDRAWN on its bottoms. The holds of island 1408 in build 7's log were this leftover.
 
   Options: a start-up circulation in the rig, a trip that clears with its
   condition (engine), or the world as it stands. The owner's direction for the engine: a cold feed goes to the bottom
@@ -217,7 +244,10 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   - long unsupported aerial runs;
   - E-101 stands on tall legs so its shell outlet's boundary line clears the ground;
   - the GameTest pass beacons (4 green beams) and structure blocks stay in the world.
-- Valve hold (VALVE_HOLD_TRACE.md, section 9), not done: the review world not rebuilt on C3 and B; the solver
+- The review world keeps the plants of earlier builds running (build 8 loaded 26 islands from builds 6 and 7, one of
+  them held). A clean world per build is not set up; until then a build's solve times and "round deadline" lines share
+  the solver with the old plants.
+- Valve hold (VALVE_HOLD_TRACE.md, section 9), not done: the review world rebuilt on C3 and B (build 8, above); the solver
   regression not run; `openStarved` may be redundant beside B (its test passes without it), owner to decide; the
   viscosity guard `MixtureViscosity.own` line 216 seen reached under C1 with a bundle prepared at another temperature,
   caller not named, not reproduced on the final code.
