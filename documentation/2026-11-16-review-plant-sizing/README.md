@@ -126,6 +126,11 @@ the `Rig` class keep their sizes.
   beside the column. The rig step dropped (the charge pump's built-in valve, `PUMP_VALVE_PLAN.md`). Selected classes
   (test, holdGates, columnGates, equipmentGates): 1457 tests, 1 failure, the expected `SizingPageTest` in Chinese; fluid
   GameTests 117 of 117.
+- 2026-11-17, start hold (diagnosis, no mod code): the crude island's hold at the column's start reproduced on a small
+  line, [START_HOLD_REVIEW.md](START_HOLD_REVIEW.md). Not H1: reachable targets hold too. The pump's suction-limit row is
+  flat outside a 16 kg/s window and its pass never lands in it (M3); every retry then starts with the pump on its suction
+  limit before a shut valve, a singular set (M4); the fresh start takes an unconverged balance. The world's P-101 has
+  NPSH3 12.5 m (2950 rpm), not the sizer's 3.30 m. Options S1 to S5 for the owner. Probe `tools/valve-hold/`.
 
 ## Full crude unit, sized (2026-11-17)
 
