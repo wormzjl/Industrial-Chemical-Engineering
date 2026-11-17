@@ -153,9 +153,9 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
     hold 183.8 MW against 144.8 MW for the cold start at that flow, a 26.9 % spare). The crude opens only once the burners
     are powered as well as fueled.
   - **The valve did not regulate.** At t=1426 the charge line carried 318.9 kg/s (twice the design feed: the column's inlet
-    plan at gain 2) with the charge valve VALVE_OPEN and the column's feed valve VALVE_REGULATING.
-    `ControlConstraints.standing` puts a series holding an inlet port first, so the port's valve keeps the row, and the charge
-    valve's dependent row stands open. "Lower target wins" did not apply across the two.
+    plan at gain 2) with the charge valve VALVE_OPEN and the column's feed valve VALVE_REGULATING. Correction (build 7): the
+    rig set the valve's law with no sensor, and a control valve without one is a bare line (`ControlValve.bare`) that
+    regulates nothing and stays out of `ControlConstraints.standing`. The ranking was not the cause.
   - **Heaters at twice the flow:** 62.5 MW each, outlets 527 and 531 K. Once the flow fell to 131 kg/s (t=2624) both held
     638.6 K.
   - **Column** (on the cold-feed thread's committed law):
@@ -164,6 +164,28 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
       available by the feed", then NONCONVERGENCE on the tray 11 side draw.
     - From t=4421: LIMITED, outlet 0 %, with the bottoms account full and taking nothing.
     - The feed account went 0.27, 1.32, 2.32 of its aim, then stood at 2.13 with its valve closed.
+    - Bottoms stop: the residue island (column bottoms port, E-101 shell, residue void) held from committed tick 3630 to the
+      end ("Newton line search stalled at residual 23.51", later a singular Jacobian). A held island passes nothing, so
+      the bottoms account filled to 1.00 and the column read LIMITED, outlet 0 %. Before the hold the drain was already below
+      the pass: the account went from 0.26 to 0.97 of its aim in 30 s at 2557 kmol/h, against 816 to 842 kmol/h of design
+      bottoms (build 1).
+  Build 7 (2026-11-17): the rig fits a flowmeter on the charge line and wires the charge valve to it; the report runs
+  600 s after the start (20 reports).
+  - **Start hold:** the crude island (generator, P-101, charge valve, coolers' tubes, both heaters, the feed port) held at
+    the column's start, from committed tick 9296 to about t=13500 ("Singular Newton Jacobian"). The column read FEED_SHORT,
+    0 %. Reproduced in small (`tmp/review-plant-fix/src/FlowValvesInSeriesTest.java`): generator, a pump on its curve, a
+    flow valve at 5 kg/s, a parallel pair and a column-sensor valve into a void. When the inlet's plan goes from 3 to
+    10 kg/s, the line holds ("Newton line search stalled at residual 14.93", active-set pass 1). It holds with or without
+    a cross link in the pair. It solves with no pair, with no pump, and from a fresh solver on the same graph (5 kg/s,
+    the charge valve regulating), so the stall comes from the start carried from the committed interval. Not fixed: solver
+    work.
+  - **"Lower target wins" holds:** at t=13719 the charge valve regulated at 167.39 kg/s with the feed valve STANDING_OPEN.
+    The heaters fired 63.0 and 63.2 MW, outlets 609 and 618 K, still on a cold heater inlet.
+  - The hold's interval came in at once. The feed account went to 4.19 of its aim at 377 K, and the column read PASSING.
+    The feed valve then closed (t=14318 to 17912) and regulated below 167.4 kg/s, with the charge valve standing open:
+    19 to 72 kg/s from t=18511. Only one heater took duty (22 to 39 MW); the other read 0 to 0.4 MW at 638 K.
+  - Column to t=20907: RUNNING with PASSING, PRODUCT_FULL and refused enthalpy solves; alpha 0.31 to 0.39. The bottoms
+    account held 0.52 to 0.87 of its aim, and its island did not hold.
 
   Options: a start-up circulation in the rig, a trip that clears with its
   condition (engine), or the world as it stands. The owner's direction for the engine: a cold feed goes to the bottom

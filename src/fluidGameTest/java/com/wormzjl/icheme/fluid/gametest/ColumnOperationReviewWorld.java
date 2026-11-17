@@ -104,7 +104,7 @@ public final class ColumnOperationReviewWorld {
      * fast as it can, far ahead of the solves a cycle and its islands wait for (plan section 9), and an island behind the
      * clock plans from the column's past: from the start on, the test holds the server to 20 ticks a second, as a game runs.
      */
-    static final int REPORTS = 4, REPORT_TICKS = 600, PREHEAT_REPORTS = 12;
+    static final int REPORTS = 4, REPORT_TICKS = 600, PREHEAT_REPORTS = 20;
 
     /** The charge valve's set, a share of the design feed's mass flow (owner, 2026-11-17). */
     static final double CHARGE_SHARE = 1.05;
@@ -693,6 +693,8 @@ public final class ColumnOperationReviewWorld {
         BlockPos chargeEnd;
         /** The charge pump's flow control valve ({@link #layPreheat}), or null. */
         BlockPos chargeValve;
+        /** The charge line's cells a flowmeter may sit on, in order of preference: the valve's sensor ({@link #openCrude}). */
+        final List<BlockPos> chargeMeters = new ArrayList<>();
         /** The shutoff valves beyond the boundary valves, each with its axis ({@link Options#shutoffs}), and which line each is on. */
         final java.util.Map<BlockPos, Direction> shutoffs = new java.util.LinkedHashMap<>();
         final java.util.Map<String, BlockPos> lines = new java.util.LinkedHashMap<>();
@@ -885,6 +887,7 @@ public final class ColumnOperationReviewWorld {
                     chargeValve = path.get(2);
                     var step = path.get(3).subtract(chargeValve);
                     plant.valves.put(chargeValve, Direction.fromDelta(step.getX(), step.getY(), step.getZ()));
+                    for (int k : new int[]{4, 5, 1, 6}) if (k < path.size()) chargeMeters.add(path.get(k));
                 }
                 from = AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_OUTLET);
             }
@@ -1145,11 +1148,18 @@ public final class ColumnOperationReviewWorld {
                 long valve = id(chargeValve);
                 var old = plant.world.registrations().get(valve);
                 var d = old.device();
+                // A flow valve regulates only with a sensor: without one it is a bare line (ControlValve.bare) and stands open.
+                java.util.UUID sensor = null;var why = new ArrayList<String>();
+                for (var at : chargeMeters) {
+                    try {sensor = LevelLoopGameTests.fit(plant, at, com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW, com.wormzjl.icheme.registry.ModItems.FLOWMETER.get());break;}
+                    catch (IllegalStateException refused) {why.add(refused.getMessage());}
+                }
+                if (sensor == null) throw new IllegalStateException("No flowmeter fits on the charge line: " + why);
                 var law = new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW,
-                        options.preheat().chargeFlow(), null, 1);
+                        options.preheat().chargeFlow(), sensor, 1);
                 plant.world.edit(valve, old.revision(), com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Device.builder(d.id(), d.position(), d.kind(), d.facing(), d.geometry(), law)
                         .ports(d.ports()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).build(), old.spec());
-                IChemE.LOGGER.info("review_operation charge_valve at={} kg_s={}", chargeValve.toShortString(), String.format(Locale.ROOT, "%.2f", options.preheat().chargeFlow()));
+                IChemE.LOGGER.info("review_operation charge_valve at={} kg_s={} sensor={} refused={}", chargeValve.toShortString(), String.format(Locale.ROOT, "%.2f", options.preheat().chargeFlow()), sensor, why);
             }
             long id = id(feed);
             var r = plant.world.registrations().get(id);
