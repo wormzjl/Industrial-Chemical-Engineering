@@ -32,6 +32,45 @@ the `Rig` class keep their sizes.
   least of its sized bore and its nozzles' largest, with a log line) and throws where a line refuses its bore. Compiled
   (`compileFluidGameTestJava`); the world is not rebuilt and nothing was run.
 
+- 2026-11-17, same branch (sub-thread "review plant fix"): the review world at full scale (`SIZED_SCALE = 1`; the other
+  rigs keep 1/16) and, on the owner's words "make it a full case including preheating crude with PA and furnace", a crude
+  unit around the column. The crude runs from storage through the charge pump P-101, the three pumparound coolers (their
+  cold side is the crude, no tower water), the residue exchanger E-101 (bottoms on the shell) and two cabin heaters H-101 in
+  parallel into the tower's feed. Owner choices: preheat by the pumparounds and a bottoms exchanger; the heater sized for the
+  cold start ("Bigger furnace": HeaterSizing Auto on 151.7 MW gives 2 cabins, 10 m x 47 m). The router gains a bend cost
+  (`Plant.bendCost`, 8 here; 0 keeps the shortest path for every other rig), on the owner's "keep the pipe straight when
+  possible". The rig fixes:
+  - the receiver stands high enough for its boot drain;
+  - the blueprint takes the placed exchangers' types;
+  - the condenser's tower water is sized from its rating (0.6 m);
+  - an exchanger stands as high as its lowest boundary line needs;
+  - the column starts only once every heater's fuel line holds gas.
+
+  On the owner's "the command blocks don't work": they were the GameTest framework's start controls (`test runclosest` and a
+  button beside each test's structure block). The dev client has no `/test` command, and where one ran it would rebuild the
+  test over the plant. `ReviewBatch.skipped`, the first call of every review test, now removes them
+  (`AssemblyGameTests.clearStartControls`); a region scan of the rebuilt world finds no command block or button.
+
+  Build 3 (`runReviewWorldServer -PreviewBatch=review-operation`): complete, 21 slots, 1336 devices, STARTED at
+  2557.2 kmol/h, heaters at 638 K by t=1524. The column then trips UPSET on CLOSURE at its first solve and stays tripped.
+  Copied to `run/saves/column-operation-full-2026-11-17` (worktree) after `nbt.js review`. Shots
+  `tmp/review-plant-fix/shots/21` to `29`. Tests: `compileFluidGameTestJava`, `testClasses`, and the 5 classes
+  `affected.mjs select` named (all new on this branch with no load set; 4 ran and passed, `V3RefluxFreeWaterTest` up to date).
+
+## Full crude unit, sized (2026-11-17)
+
+| Item | Sized |
+|---|---|
+| Column | 7.5 m, 40 trays, flood 73.4 % |
+| Condenser | 2.0 m x 6, CROSSFLOW, 408 % over need; tower water 654.8 kg/s at 0.6 m |
+| Receiver | 4 m x 10 with boot, support 6 |
+| PA 1 / 2 / 3 coolers (crude side) | 1.25 m x 5 / 1.25 m x 5 / 1.0 m x 4, green |
+| PA 1 / 2 / 3 pumps, reflux pump | 0.25 / 0.30 / 0.25 m, 0.20 m (PUMP_RATED 65 %) |
+| P-101 charge pump | 0.30 m, 729.5 m³/h, 70.7 m head, 16 bar out |
+| E-101 residue exchanger | 1.5 m x 9, 1519 m², residue out at 200 °C |
+| H-101 | running duty 66.3 MW (1 cabin 12 m x 40 would hold it); cold start 151.7 MW, so 2 cabins 10 m x 47 |
+| Bores | crude 0.4; crude 1 to 2 0.3; crude 3 to 5 0.35; charge 0.6; bottoms 0.45; residue 0.25; fuel 0.25 per heater (methane, 3 bar) |
+
 ## Sized units against the old fixed ones
 
 | Item | Fixed (before) | Sized | Rows off green |
@@ -56,7 +95,9 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
 ## Code areas
 
 `src/fluidGameTest/java/com/wormzjl/icheme/fluid/gametest/ColumnOperationReviewWorld.java` (`sized`, `review`, `extent`,
-`Options`, `Rig.layout`, `Rig.finish`), `ColumnFailureModesReviewWorld.java` (calls `extent`).
+`Options`, `Rig.layout`, `Rig.finish`; 2026-11-17: `sizing`, `Preheat`, `Rig.layPreheat`, `Rig.fire`, `Rig.fueled`),
+`ColumnFailureModesReviewWorld.java` (calls `extent`), `AssemblyGameTests.java` (`Plant.bendCost`, `Plant.straightRoute`,
+`clearStartControls`), `ReviewBatch.java` (`skipped` clears the start controls).
 
 ## Open items
 
@@ -71,4 +112,16 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   at the top and side nozzles in game (the "not connected" reading is inferred from the code, not seen).
 - Owner decision open: where no pump size lands in the 70 to 120 % window, Auto keeps the nearest, so pumparounds 1 and 3
   run 0.05 m pumps at 170 % and 143 % of rated flow. The next size up would read about 42 % and 36 %.
+- Full crude unit, start-up trip (with the owner, 2026-11-17). Nothing flows before the column starts, so its first feed
+  is the crude standing in the charge line, at about 300 K. `ColumnCycle` then finds a heating condenser
+  (`condenser > 0`), trips CLOSURE, and the trip latches: alpha stays 0 and no feed is taken. The feed account fills to
+  180 % of its aim and the inlet valve closes. Options: a start-up circulation in the rig, a trip that clears with its
+  condition (engine), or the world as it stands. The owner's direction for the engine: a cold feed goes to the bottom
+  instead of holding, and a pumparound works only on what its stages hold. The column screen reads "Upset: inputs closed;
+  last solve failed", which does not name the cold feed.
+- Layout defects seen in the full-scale shots, not fixed:
+  - the condenser stands at grade below a receiver on 6-block saddles, so the condensate runs uphill;
+  - long unsupported aerial runs;
+  - E-101 stands on tall legs so its shell outlet's boundary line clears the ground;
+  - the GameTest pass beacons (4 green beams) and structure blocks stay in the world.
 - No merge preparation (owner).
