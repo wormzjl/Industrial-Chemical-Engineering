@@ -19,6 +19,7 @@ the review plant, the proposed laws, the work packages and the owner's decisions
 - 2026-11-17: the owner asked the same of the exchanger structure and for the fence's other exploits. The exchanger structure holds nothing (its sides have friction and their nozzles' heights in the network); the exchangers a column holds join its loops. Plan 2.6, 2.7 (E1 to E12), options O5 to O7.
 - 2026-11-17: the owner answered O6 with a three-phase separator model: a drum gives clean oil and water only when properly sized, else oil in the water and water in the oil. `SEPARATOR_PLAN.md`: the ideal settler on the solute batch's settling speed (its plan 8.1 leaves the carried water out), Souders and Brown for the gas, the held receiver in the cycle, the sizer's rows; options S1 to S4. No code.
 - 2026-11-17: the owner: the gas law works with a vertical drum as well, and the desalter is based on this model, different by its higher coalescence. Separator plan: law 3 for standing and lying vessels with a table (a standing 1.0 m drum on the whole overhead draws 26 % bulk, 1.5 m is clean); section 4.1, the desalter as this separator with its own drop size; S4 changed (the separator before the solute batch's WP6), S5 added (the salt against the water). No code.
+- 2026-11-17: the owner: salt has nothing to do with phase carry-over. Separator plan: option S5 and every reading of the solute batch's salt law removed; the desalter takes only its phase separation from this model.
 
 ## Documents
 
@@ -28,7 +29,7 @@ the review plant, the proposed laws, the work packages and the owner's decisions
 ## Open items
 
 - Owner decisions O5 (the boundary lines' drop, and the inlets), O7 (an exchanger side's internal bypass); O6 is answered by the separator plan.
-- Separator plan: options S1 (the liquids' form), S2 (the amount carried), S3 (the gas), S4 (the order: before the solute batch's WP6), S5 (the desalter's salt against its water).
-- The solute batch's plan (8.1, D9, section 10) is to rest on the separator plan's `Separation`; that batch's branch is not edited from here.
+- Separator plan: options S1 (the liquids' form), S2 (the amount carried), S3 (the gas), S4 (the order: before the solute batch's WP6).
+- The solute batch's desalter (its WP6) takes its phase separation from the separator plan; its salt law is its own. That batch's branch is not edited from here.
 - The build waits for batch `2026-11-16-solute-reaction-system`'s column package (O3); state format 54 and facts schema 31 are reserved then.
 - Work package 1b: whether a held member's rating is read against the design pressure (E11).

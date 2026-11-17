@@ -18,17 +18,19 @@ and oil when properly sized, otherwise you will find some oil in water and some 
   (`DRUM_GAS_*`, K 0.107 m/s halved, 1.25 times for a lying drum), 5 min of hold half full (`DRUM_HOLD`), 5 min in the boot
   (`DRUM_BOOT_HOLD`). Advice only.
 - A running column holds its receiver. The off-gas, the distillate and the sour water are split by the table, clean.
-- Batch `2026-11-16-solute-reaction-system` (in progress) gives every vessel a settling law for its salt tag (its plan,
-  8.1): `v_s = g d² Δρ / (18 μ (1 + 0.15 Re^0.687))`, `d` 0.1 mm in any vessel but a desalter with its field on,
-  `N = v_s A / Q`, evaluated at the cadence and carried to the step as a plan, so the solver is not coupled. It says:
-  "Not modelled: water carried over in the oil (the phase draw takes clean oil)". This plan is that part.
+- Batch `2026-11-16-solute-reaction-system` (in progress) plans an electric desalter (its WP6) whose plan says: "Not
+  modelled: water carried over in the oil (the phase draw takes clean oil)". This plan is that part. Its salt law is
+  another matter: salt has nothing to do with phase carry-over (owner, 2026-11-17), and this plan neither reads nor
+  changes it.
 
 ## 3. Physics
 
-A liquid enters as drops in the other liquid. A drop leaves its layer if it crosses it before the layer's liquid leaves:
-an ideal settler passes every drop of speed `v_s` where `N = v_s A / Q` is 1 or more (`A` the layer's plan area, `Q` the
-layer's own outflow), and the share `1 − N` of them stays where `N` is under 1. Gas leaves clean while its speed through
-the vapour space stays under Souders and Brown's `K sqrt((ρ_l − ρ_g) / ρ_g)`.
+A liquid enters as drops in the other liquid. A drop settles at `v_s = g d² Δρ / (18 μ (1 + 0.15 Re^0.687))`, Stokes
+with Schiller and Naumann's drag correction, `μ` the viscosity of the liquid it crosses. A drop leaves its layer if it
+crosses it before the layer's liquid leaves: an ideal settler passes every drop of speed `v_s` where `N = v_s A / Q`
+is 1 or more (`A` the layer's plan area, `Q` the layer's own outflow), and the share `1 − N` of them stays where `N`
+is under 1. Gas leaves clean while its speed through the vapour space stays under Souders and Brown's
+`K sqrt((ρ_l − ρ_g) / ρ_g)`.
 
 The review plant's receiver (the probe's streams: gas 0.034 m3/s at 5.2 kg/m3; oil 15.1 m3/h, 666 kg/m3, 0.30 mPa s;
 water 1.35 m3/h, 984 kg/m3, 0.47 mPa s; drops of 0.1 mm settle at 5.0 mm/s in the oil and rise at 3.3 mm/s in the water):
@@ -60,8 +62,9 @@ of it needs 150 m2 to leave dry. That is the desalter's case, which the solute b
 
 ## 4. Laws
 
-Evaluated per vessel at the cadence from its committed state and what entered over the last slice, carried to the step
-as a plan (the solute batch's `TagPlan` pattern): the step's rows keep their form and the solver is not coupled.
+Evaluated per vessel at dispatch from its committed state and what entered over the last slice, carried to the step as
+a slice input (as `PortPlan` and an exchanger side's read are): the step's rows keep their form and the solver is not
+coupled.
 
 1. **Water out of oil.** `N_w = v_s(oil) A_oil / Q_oil`. The oil outlet draws its oil and, per volume of oil,
    `r = max(0, 1 − N_w) x min(1, water in / oil in)` of water (the volumes that entered over the last slice).
@@ -90,33 +93,28 @@ as a plan (the solute batch's `TagPlan` pattern): the step's rows keep their for
 
 ### 4.1 The desalter (owner, 2026-11-17: "based on this, a bit different because it has higher coalescence rate")
 
-The desalter is this separator with one parameter changed: the drop size a vessel coalesces to. `Separation` takes the
-drop size from the vessel: 0.1 mm in a drum, 1.3 mm in a desalter with its field on (the solute plan's values, 8.1 and
-section 10), 0.1 mm in a desalter without power. Nothing else of the desalter's phases is its own: laws 1 and 2 on its oil
-and water outlets, law 3 on its gas (its status `GASSING`).
+The desalter's phase separation is this separator with one parameter changed: the drop size a vessel coalesces to.
+`Separation` takes the drop size from the vessel: 0.1 mm in a drum, 1.3 mm in a desalter with its field on, 0.1 mm in a
+desalter without power. Laws 1 and 2 act on its oil and water outlets, law 3 on its gas.
 
-On the solute plan's desalter (54 m2, 0.184 m3/s; its own `N`, which is this plan's):
+On a desalter of 54 m2 at 0.184 m3/s of oil (the solute plan's example and its viscosities):
 
-| Crude, temperature | `N` | Water in the oil, this model | "Water settled", solute plan 8.1 (stirred) |
-|---|---|---|---|
-| Medium, 60 C | 3.9 | none | 79 % |
-| Medium, 120 C | 9.1 | none | 90 % |
-| Heavy, 120 C | 1.3 | none | 56 % |
-| Medium, 120 C, no field | 0.11 | 89 % of it stays | 10 % |
+| Crude, temperature | `N` | Water in the oil |
+|---|---|---|
+| Medium, 60 C | 3.9 | none |
+| Medium, 120 C | 9.1 | none |
+| Heavy, 120 C | 1.3 | none |
+| Medium, 120 C, no field | 0.11 | 89 % of it stays |
 
-So with the field on, this desalter gives dry oil at every listed temperature; temperature shows only where `N` falls
-under 1 (a heavier crude, a colder one, a desalter of a quarter the area). The solute plan's salt law (8.1) is another
-quantity, the salt on the oil, and it is that batch's to state. Option S5 says how the two meet.
-
-For the solute batch (its branch, not edited from here): its plan's 8.1, D9 and section 10 rest on this plan's
-`Separation` (the settling speed, `N`, the drop size by vessel); its "Not modelled: water carried over in the oil" ends
-with this plan; its Sizing row `N` of 9 or more follows S5.
+With the field on this desalter gives dry oil; a heavier or colder crude, or a desalter of a quarter the area, brings
+`N` under 1 and water into the oil. The salt is not part of this: the solute batch's salt law stands as that batch
+wrote it.
 
 ## 5. Owner options
 
 - S1, the liquids' form. A (recommended, the owner's sentence): the ideal settler, clean at `N` of 1 or more.
-  B: the salt law's stirred form for the phases too: one form, but no drum is ever clean (8 % of the water stays in
-  the review plant's sized receiver).
+  B: a mixed layer, `N / (1 + N)` settled: smoother, but no drum is ever clean (8 % of the water stays in the review
+  plant's sized receiver).
 - S2, how much is carried under `N` of 1. A (recommended): the share `1 − N` of the other liquid, at most volume for
   volume (laws 1 and 2). B: the same, capped at 10 % by volume: milder, one more constant.
 - S3, the gas. A (recommended): law 3. B: no gas law in this batch.
@@ -124,11 +122,6 @@ with this plan; its Sizing row `N` of 9 or more follows S5.
   (WP6), which is built on it. A (recommended): its own batch after the solute batch's WP2 (which holds
   `IslandCoordinator` and the fluid laws lane) and before its WP6; law 6 joins the hydraulics batch's cycle package.
   B: now, beside the solute batch's stage A, with the hot files shared by the owner's word.
-- S5, the desalter's salt against its water. A (recommended): the salt law keeps its form (8.1: the coalesced share `E`
-  and the stirred `N / (1 + N)`), so wash water and temperature act on the salt as that plan's table shows, while the
-  water follows this plan (dry oil at `N` of 1 or more). The two share `v_s`, `N` and the drop size. B: the salt follows
-  the water exactly, `E x min(1, N)`: one form, but with the field on the salt removed no longer moves with
-  temperature above `N` of 1 (the 54 m2 desalter: 92 % at 5 % wash from 60 to 150 C).
 
 ## 6. Work packages (under S4 A)
 
