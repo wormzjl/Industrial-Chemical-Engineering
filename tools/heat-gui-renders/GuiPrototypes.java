@@ -98,6 +98,7 @@ public final class GuiPrototypes {
         out.addAll(createCoupling());
         out.addAll(controlPanels());
         out.addAll(firedHeater());
+        out.addAll(separator());
         out.addAll(flareStack());
         out.addAll(batchStill());
         out.addAll(fluidConverter());
@@ -1385,6 +1386,40 @@ public final class GuiPrototypes {
         int n = phases.length, tw = (box.w() - 3 * (n - 1)) / n;
         for (int i = 0; i < n; i++) d.skin.button(d.c, new Rect(box.x() + i * (tw + 3), box.y(), tw, 16), phases[i], i == phase ? Skin.Press.CURRENT : Skin.Press.REST, false);
         d.table(new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20), new int[]{box.w() - 120, 60, 60}, table);
+    }
+
+    /**
+     * A drum's carry-over readings (batch 2026-11-17-three-phase-separator, package 4), two options: A, three meters at
+     * the end of the Readings group; B, a group of their own under it. The drum is small for its water: its boot's water
+     * leaves with oil in it.
+     */
+    static List<Prototype> separator() {
+        var out = new ArrayList<Prototype>();
+        var base = List.of(meter("temperature", "40.0", "°C"), meter("pressure", "2.50", "bar"), new DeviceColumn.Meter("net_flow", "0.0", "kg/h", TEXTS.get("net_flow.hint")));
+        var carried = List.of(new DeviceColumn.Meter("carried_water", "0.0", "%", TEXTS.get("carried_water.hint")),
+                new DeviceColumn.Meter("carried_oil", "57.0", "%", TEXTS.get("carried_oil.hint")), new DeviceColumn.Meter("carried_liquid", "0.0", "%", TEXTS.get("carried_liquid.hint")));
+        for (boolean own : new boolean[]{false, true}) {
+            var readings = new ArrayList<>(base);
+            if (!own) readings.addAll(carried);
+            var input = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false,
+                    new DeviceColumn.Level(.5, "885.0", "1770.0", false), null, List.of(), phases("volume", 44, 6, 50, 0), readings, null, null);
+            var rows = new ArrayList<>(DeviceColumn.rows(input, TEXTS));
+            if (own) {
+                var group = new ArrayList<Column.Row>();
+                for (var m : carried) group.add(new Column.Reading("carried:" + m.key(), TEXTS.get(m.key()), m.value(), m.unit(), m.hint()));
+                rows.add(new Column.Group(TEXTS.get("device_group.carry_over"), TEXTS.get("carry_over.hint"), group));
+            }
+            out.add(devicePage(own ? "separator-carry-over-b-own-group" : "separator-carry-over-a-in-readings", WINDOW[0], WINDOW[1], rows, (d, k) -> {
+                d.title("Lying drum");
+                d.name("V-101", false);
+                d.tabs(0, "Overview", "Outlets", "Datasheet");
+                d.status("RUNNING", Palette.ACCENT);
+                var box = device(d, input, rows, Map.of());
+                contents(d, box, 0, List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"N-pentane", "62.1", "6.76"}, new String[]{"N-hexane", "37.9", "4.12"}));
+                d.footer(2, "Close", "Mole", "°C", "bar", "/h");
+            }));
+        }
+        return out;
     }
 
     static DeviceColumn.Meter meter(String key, String value, String unit) {

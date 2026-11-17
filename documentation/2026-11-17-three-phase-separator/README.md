@@ -1,6 +1,6 @@
 # Three-phase separator (2026-11-17)
 
-**Status:** In progress since 2026-11-17 (packages 1 and 2 of 4 built), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
+**Status:** In progress since 2026-11-17 (packages 1 and 2 built and verified; package 4 half built, one owner decision open), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
 fluid step, runtime, plant, flowsheet, client.
 
 A drum of the network gives clean gas, oil and water at any size and flow. The owner (2026-11-17): a drum gives well
@@ -27,6 +27,16 @@ phase carry-over.
   classes and 18 gate classes the change can reach (`affected.mjs select`), and the hold-fuzz campaign.
 - 2026-11-17: the owner's question on a reflux with water: the column solver takes no free water in its reflux (plan
   section 5). Law 6's simplification stands; a free water reflux input is its own batch.
+- 2026-11-17: package 2 verified by a sub-thread on `24e9867b7` (no source changed). The selector's classes: 2145 tests
+  (test 318 classes, hold gates, equipment gates), 1 failure, a wall-deadline hold of `BlanketDrainWorldTest` under machine
+  load that passed its one replay alone with the baseline's lines; chain-100 exact, deviation 0; the 27 watch seeds,
+  `refused=0`, no new hold (seed 241 moved E6 to F under load and returned to E6 alone). No reference moved.
+- 2026-11-17: package 4, the sizer (`7bc29657d`). `Separation.numbers`; `DrumSizing.Load`
+  carries the liquids' densities and viscosities; rows `DRUM_SETTLE_WATER` and `DRUM_SETTLE_OIL` (SHOULD, at least 1) read a
+  booted drum at design flow, half full of oil over a full boot; the gas rows read `Separation.GAS_K`. `DrumSettlingTest`
+  (4). Of the 50 flowsheet and sizing classes the selector names, 510 tests ran and 1 failed: a moved result (open items).
+- 2026-11-17: the drum page's readings, prototype only: `GuiPrototypes.separator`, two sheets (A, three meters at the end
+  of Readings; B, a Carry-over group of their own), and their English lines. Not built: the owner picks.
 
 ## Documents
 
@@ -34,14 +44,23 @@ phase carry-over.
 
 ## Open items
 
-- The affected tests are not run: 318 of 523 test classes, 9 hold gates, 9 equipment gates and the solver regression.
-  A world whose drums are small for their flows now carries, so a reference there may move. The hold-fuzz campaign on
-  a world with an undersized drum (200 seeds, refused 0) is not run either. Both wait for the owner's approval of a
-  sub-thread.
+- The plan's hold-fuzz campaign on a world with an undersized drum is not run: the harness has no such world. The watch
+  seeds ran instead (history).
 - Batch `2026-11-16-solute-reaction-system` holds the runtime lane: this batch added one line to `FluidWorldAuthority`
   (the `Separators` hook) and a component to `PassiveNetwork.Inventory`. That batch's plan is not edited from here; its
   desalter (WP6) takes its phase separation from this model and sets its own drop size.
 - Owner's calls: whether a kettle and a still's pot take the gas law (plan section 5.1); a free water reflux input for
   the column solver (plan section 5).
-- Package 3 (the held receiver) joins the hydraulics batch's cycle package. Package 4 (the sizer's rows, the drum
-  page's readings) is not built.
+- **A moved result, the owner's decision.** `CrudeUnitSampleTest$ColumnSizingSampleTest.theReceiversBootSetsIt`: Auto's
+  receiver for the sample crude unit moves from a 4 m by 10 m booted drum (142 m3) to 5 m by 13 m (288 m3), because a
+  settling row is not met at 4 by 10. The cause is the drop size, not the code: a 0.1 mm water drop falls 5 mm/s, so it
+  needs 400 s through the 2 m of oil in a half-full 4 m drum, and the 5 minute hold gives 300 s. Every drum of 3 m or
+  more sized on the hold alone fails the row. Options: (A) keep 0.1 mm, Auto grows large receivers and this reference
+  moves; (B) the design drops of separator practice, 0.5 mm of water in oil and 0.2 mm of oil in water (Arnold and
+  Stewart, from memory, not checked against the book): about 40 and 9.5 mm/s, a drum sized on its hold is clean, and
+  section 3's small-drum examples carry far less (the 0.5 m drum's boot reads about 1.25, clean); (C) keep 0.1 mm and
+  rank the rows so they light the lamp without driving Auto's size. The failing test stands on the branch until then.
+- The drum page's readings: option A or B of the prototype; then `FluidView.Tank` carries `carried` to the client (a wire
+  payload change in the runtime lane, which batch `2026-11-16-solute-reaction-system` holds).
+- Package 3 (the held receiver) joins the hydraulics batch's cycle package. The rest of package 4 after the sizer:
+  the 330 other classes the selector names for it are not run.
