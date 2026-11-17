@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [rust-column-archive/](rust-column-archive/README.md) | The archived Rust column library (band LU through JNI), its Java side and build blocks, and how to restore them | `2026-11-17-rust-solver-archive` | Archived 2026-11-17 |
 | [fouling-corrosion/](fouling-corrosion/README.md) | Fit of the crude cuts' corrosion sub-record (sulfur, acid number) to the four assays | `2026-11-16-fouling-corrosion` | In progress since 2026-11-16 |
 | [code-guide/](code-guide/README.md) | Code map: files and lines per package, the layer import matrix, the guide README's module counts (`--readme`, `--check`) | `2026-11-13-codebase-review` | In use since 2026-11-13 |
 | [column-hydraulics/](column-hydraulics/README.md) | The review plant's internal streams in numbers: flows, speeds and drops by bore, pump loads | `2026-11-17-column-internal-hydraulics` | In use since 2026-11-17 |

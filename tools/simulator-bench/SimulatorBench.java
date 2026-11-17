@@ -879,9 +879,7 @@ public final class SimulatorBench {
         var model = MaterialRuntime.with(CATALOG, NETWORK, () -> FluidThermodynamics.forNetwork(CATALOG, NETWORK));
         FLUIDS = new StreamProps.Fluids(model, CATALOG.requirePackage(NETWORK), id -> CATALOG.name(id).english(), "Crude oil, methane, nitrogen");
         fresh(crudeUnit());
-        var version = Class.forName("com.wormzjl.icheme.science.column.v3.NativeColumnSolver").getDeclaredMethod("version");
-        version.setAccessible(true);
-        say("phase %s, JDK %s, %d cores, Xmx %.0f MB, warm %.0f s, measure %.0f s; catalog and thermo %.0f ms; column library %s", phase, System.getProperty("java.version"),
+        say("phase %s, JDK %s, %d cores, Xmx %.0f MB, warm %.0f s, measure %.0f s; catalog and thermo %.0f ms", phase, System.getProperty("java.version"),
                 Runtime.getRuntime().availableProcessors(), Runtime.getRuntime().maxMemory() / 1048576.0, WARM, MEASURE, ms(System.nanoTime() - w), version.invoke(null));
         String[] p = phase.split(":", 2);
         switch (p[0]) {
