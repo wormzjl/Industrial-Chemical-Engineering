@@ -204,8 +204,9 @@ class FluidCheckpointCodecTest {
         // and a seventh mask byte on each of the eight sparse compositions; the list grows them, not the devices. Fluid facts
         // schema 27 (the same batch, W2): a spec's ambient flag (1 byte) on each of the five specs and one more field count.
         // Schema 29 (batch 2026-11-16-fouling-corrosion, WP2): a spec's material of construction by name, 29 bytes for the
-        // five carbon steel devices (2,085 at 52 entries).
-        assertTrue(perDevice<2_090,"the facts and events of five devices: "+bytes.length+" bytes with the basis, "+perDevice+" without the basis and the two full compositions, "+count+" entries");
+        // five carbon steel devices (2,085 at 52 entries). Schema 30 (batch 2026-11-17-three-phase-separator): a vessel
+        // geometry's demister flag (1 byte) on each spec, 2,091 at 52 entries.
+        assertTrue(perDevice<2_095,"the facts and events of five devices: "+bytes.length+" bytes with the basis, "+perDevice+" without the basis and the two full compositions, "+count+" entries");
         assertTrue(assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length+1),0,key->key.on(model))).getMessage().contains("trailing bytes"));
         assertThrows(IllegalArgumentException.class,()->FluidCheckpointCodec.decodeTopology(Arrays.copyOf(bytes,bytes.length/2),0,key->key.on(model)));
     }

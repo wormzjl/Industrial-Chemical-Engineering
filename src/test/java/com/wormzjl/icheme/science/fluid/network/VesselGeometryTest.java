@@ -43,4 +43,15 @@ class VesselGeometryTest {
         assertThrows(IllegalArgumentException.class,()->new VesselGeometry(VesselGeometry.Form.SPHERE,1,2,2,0,0,0));
         assertThrows(IllegalArgumentException.class,()->VesselGeometry.prism(Double.NaN,1));
     }
+    @Test void onlyADrumHasADemister(){
+        assertThrows(IllegalArgumentException.class,()->VesselGeometry.prism(3,2).withDemister(true));
+        assertThrows(IllegalArgumentException.class,()->VesselGeometry.round(VesselGeometry.Form.CYLINDER,2,3,0,0).withDemister(true));
+        assertThrows(IllegalArgumentException.class,()->VesselGeometry.round(VesselGeometry.Form.SPHERE,2,0,0,0).withDemister(true));
+        var standing=VesselGeometry.round(VesselGeometry.Form.VERTICAL_DRUM,2,4,0,0);
+        assertFalse(standing.demister());
+        var padded=standing.withDemister(true);
+        assertTrue(padded.demister());assertNotEquals(standing,padded);
+        assertEquals(standing.capacity(),padded.capacity());assertEquals(standing.height(),padded.height());
+        assertTrue(VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7).withDemister(true).demister());
+    }
 }

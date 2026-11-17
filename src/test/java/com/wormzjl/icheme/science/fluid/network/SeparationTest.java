@@ -103,6 +103,27 @@ class SeparationTest {
         }
     }
 
+    @Test void aDemisterDoublesTheGasLimitAndTheGasSpaceFactorStillApplies() {
+        assertEquals(2,Separation.DEMISTER);
+        var bare=VesselGeometry.round(VesselGeometry.Form.VERTICAL_DRUM,1,4,0,0);var padded=bare.withDemister(true);
+        var none=new Separation.Layer(0,0,0,0,0);
+        double full=Separation.gasLimit(false,OIL,5.12),speed=1.5*full,flow=speed*Math.PI/4;
+        // Half full (2.25 m of gas space): between the bare and the padded limit, the bare drum carries and the padded one does not.
+        var half=new Separation.Layer(bare.capacity()/2,OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
+        assertEquals(1-full/speed,Separation.of(bare,Separation.DROPS,half,none,false,flow,5.12).liquidInGas(),1e-12);
+        assertEquals(0,Separation.of(padded,Separation.DROPS,half,none,false,flow,5.12).liquidInGas());
+        assertEquals(2*full,Separation.gasLimit(true,true,OIL,5.12)/1.25,1e-12);
+        // 0.3 m under the top both limits take the gas space factor.
+        double factor=Separation.gasSpaceFactor(.3),level=bare.height()-.3;
+        assertEquals(full*factor,Separation.gasLimit(bare,level,OIL,5.12),1e-12);
+        assertEquals(2*full*factor,Separation.gasLimit(padded,level,OIL,5.12),1e-12);
+        var high=new Separation.Layer(bare.volumeAt(level),OIL,OIL_VISCOSITY,OIL_FLOW,OIL_FLOW);
+        assertEquals(1-2*full*factor/speed,Separation.of(padded,Separation.DROPS,high,none,false,flow,5.12).liquidInGas(),1e-6);
+        // A lying drum's pad doubles its limit too.
+        var lying=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,1,3,0,0);
+        assertEquals(2*Separation.gasLimit(true,OIL,5.12),Separation.gasLimit(lying.withDemister(true),.5,OIL,5.12),1e-12);
+    }
+
     /** A lying drum with a boot, half full of oil, its boot full of water, at {@code scale} times the review plant's flows. */
     private static Separation.Carried receiver(double diameter,double length,double bootDiameter,double bootLength,double scale) {
         var drum=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,diameter,length,bootDiameter,bootLength);

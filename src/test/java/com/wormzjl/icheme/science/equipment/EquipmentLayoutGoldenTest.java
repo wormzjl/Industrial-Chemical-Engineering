@@ -95,7 +95,8 @@ class EquipmentLayoutGoldenTest {
     static String line(EquipmentShape shape) {
         var layout = ShapeRasterizer.layout(shape);
         // Shape fields 13: a carbon steel shape prints as it did before the material (which places no cell).
-        var printed = shape.toString().replace(", material=CARBON_STEEL]", "]").replace(", baseSpeed=0.0]","]");
+        // Shape fields 14: a shape without a demister prints as it did before the field (a pad places no cell).
+        var printed = shape.toString().replace(", demister=false]", "]").replace(", material=CARBON_STEEL]", "]").replace(", baseSpeed=0.0]","]");
         // Shape fields 11: a shape with the default still options prints as it did before they existed.
         if (shape.still().equals(BatchStillOptions.DEFAULT)) printed = printed.replace(", still=" + BatchStillOptions.DEFAULT + "]", "]");
         if (shape.exchangerType() == ExchangerType.STANDARD) printed = printed.replace(", exchangerType=STANDARD]", "]").replaceAll(", exchangers=Exchangers\\[condenser=STANDARD, trim=STANDARD, coolers=\\[[A-Z, ]*\\]\\]", "");

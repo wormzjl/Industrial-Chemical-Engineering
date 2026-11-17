@@ -48,6 +48,13 @@ public final class Separation {
      * (0.24 / 0.35). Assumed: under 5 ft of vessel the factor is extrapolated; the table stops there.
      */
     public static final double GAS_SPACE_EXPONENT=.56;
+    /**
+     * A demister's K over a bare vessel's (owner, 2026-11-17: "add an optional demister"): a mesh pad catches the fine
+     * drops, so the limit is GPSA's padded 0.107 m/s, twice {@link #GAS_K}. Above the limit the pad floods and
+     * {@link #entrained} applies unchanged; the gas space factor still applies (API 12J's table is for vessels with a pad).
+     * No pressure drop and no fouling (owner's defaults).
+     */
+    public static final double DEMISTER=2;
     private static final int PASSES=5;
 
     private Separation(){}
@@ -135,16 +142,22 @@ public final class Separation {
      * lying drum; positive infinity where the gas is no lighter than the liquid (nothing to carry). A standing vessel's
      * value with a gas space of at least {@link #GAS_SPACE}. */
     public static double gasLimit(boolean lying,double liquidDensity,double gasDensity) {
-        return limit(lying,1,liquidDensity,gasDensity);
+        return gasLimit(lying,false,liquidDensity,gasDensity);
+    }
+    /** {@link #gasLimit(boolean, double, double)} of a drum with a demister ({@link #DEMISTER} times it) or without one. */
+    public static double gasLimit(boolean lying,boolean demister,double liquidDensity,double gasDensity) {
+        return limit(lying,demister?DEMISTER:1,liquidDensity,gasDensity);
     }
     /**
      * The gas limit of a vessel of {@code geometry} with its liquid surface at {@code level}, m/s: {@link #gasLimit(boolean,
      * double, double)} times, in a standing vessel, {@link #gasSpaceFactor} of the gas space from the surface to the top.
      * A lying drum's drops fall across the gas: its limit does not read the level. 0 for a standing vessel full of liquid.
+     * A drum with a demister takes {@link #DEMISTER} times the limit.
      */
     public static double gasLimit(VesselGeometry geometry,double level,double liquidDensity,double gasDensity) {
         if(Double.isNaN(level))throw new IllegalArgumentException("Invalid level");
-        return limit(geometry.lying(),geometry.lying()?1:gasSpaceFactor(Math.max(0,geometry.height()-level)),liquidDensity,gasDensity);
+        double factor=geometry.lying()?1:gasSpaceFactor(Math.max(0,geometry.height()-level));
+        return limit(geometry.lying(),geometry.demister()?DEMISTER*factor:factor,liquidDensity,gasDensity);
     }
     /** The one formula of the gas limit: {@code factor} times the full-height limit. */
     private static double limit(boolean lying,double factor,double liquidDensity,double gasDensity) {

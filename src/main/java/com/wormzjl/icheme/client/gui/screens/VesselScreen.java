@@ -113,6 +113,7 @@ public final class VesselScreen extends Screen {
         }
         // The material of construction (shape fields 13) where it matters: a structure that registers a fluid device, or a column (WP8).
         if (shape.hasMaterial()) notes.add(DialogColumns.material(shape.material(), VesselScreen::tr));
+        if (shape.demister()) notes.add(DialogColumns.demister(VesselScreen::tr));
         notes.add(text(KEY + "cells", layout.shell().size(), layout.interior().size()));
         var cell = layout.controller();
         notes.add(text(KEY + "controller", vessel.origin().offset(cell.x(), cell.y(), cell.z()).toShortString()));

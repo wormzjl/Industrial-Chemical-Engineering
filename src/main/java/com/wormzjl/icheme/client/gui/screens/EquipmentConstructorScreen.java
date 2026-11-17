@@ -131,6 +131,8 @@ public final class EquipmentConstructorScreen extends Screen {
     private com.wormzjl.icheme.science.equipment.TowerBank towerBank;
     /** Whether a lying drum has a boot, the player's choice kept for the other forms ({@link #hasBoot}). */
     private boolean boot;
+    /** Whether a drum has a demister (shape fields 14): the player's choice, kept for the other forms; only a drum builds it. */
+    private boolean demister;
     /** The bottom outlet's quarter turns from the front, the player's choice kept for the other forms ({@link #outlet()}). */
     private int outlet;
     private int channel = Paint.BODY;
@@ -214,6 +216,7 @@ public final class EquipmentConstructorScreen extends Screen {
         still=design.still();
         material = design.material();
         boot = design.boot();
+        demister = design.demister();
         outlet = design.outlet();
         support = Math.max(design.support(), minimumSupport());
         forward = design.placement().forward();
@@ -240,7 +243,7 @@ public final class EquipmentConstructorScreen extends Screen {
     /** The draft; always valid, because every stepper is clamped to the bounds of its parameter. */
     public Design design() {
         return new Design(diameter, tangentLength, form, support, new VesselPlacement(forward, right, up), trays, List.copyOf(connections), paint, bank, hasBoot(), outlet(),
-                column, List.copyOf(turns), towerBank, name, duty,exchangerType,still,material);
+                column, List.copyOf(turns), towerBank, name, duty,exchangerType,still,material,demister);
     }
 
     private static Skin skin() {
@@ -350,7 +353,7 @@ public final class EquipmentConstructorScreen extends Screen {
     private ConstructorColumn.Connections connectionInput(){
         var c=connections.isEmpty()?null:connection();int[] stations=stations();
         return new ConstructorColumn.Connections(connections.size(),selected,c!=null?c.side():0,words(),c!=null?number(c.station()+.5):"",form.orientation().horizontal(),c!=null?c.offset():0,
-                c!=null&&c.offset()!=0?toward(c.across(),Integer.signum(c.offset())):null,connections.size()<EquipmentShape.MAX_CONNECTIONS&&stations[0]<=stations[1],EquipmentShape.bootFor(diameter,tangentLength)!=null,hasBoot(),new ConstructorColumn.Outlet(outlets(),outlet(),words()));
+                c!=null&&c.offset()!=0?toward(c.across(),Integer.signum(c.offset())):null,connections.size()<EquipmentShape.MAX_CONNECTIONS&&stations[0]<=stations[1],EquipmentShape.bootFor(diameter,tangentLength)!=null,hasBoot(),new ConstructorColumn.Outlet(outlets(),outlet(),words()),demister);
     }
     private ConstructorColumn.Nozzles nozzleInput(){
         var sides=sideNozzles();nozzle=clamp(nozzle,0,Math.max(0,sides.size()-1));ConstructorColumn.Nozzle shown=null;
@@ -521,6 +524,10 @@ public final class EquipmentConstructorScreen extends Screen {
             }
             case "boot" -> {
                 boot = at.equals("on");
+                refresh();
+            }
+            case "demister" -> {
+                demister = at.equals("on");
                 refresh();
             }
             case "face" -> {

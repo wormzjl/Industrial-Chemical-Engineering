@@ -682,6 +682,10 @@
   "gui.icheme.equipment_constructor.boot.on": "With boot",
   "gui.icheme.equipment_constructor.boot.off": "No boot",
   "gui.icheme.equipment_constructor.boot.none": "Too short",
+  "gui.icheme.equipment_constructor.demister": "Demister",
+  "gui.icheme.equipment_constructor.demister.hint": "A mesh pad under the gas outlet. It catches fine drops, so the drum takes twice the gas speed before liquid leaves with the gas.",
+  "gui.icheme.equipment_constructor.demister.off": "Off",
+  "gui.icheme.equipment_constructor.demister.on": "On",
   "gui.icheme.equipment_constructor.outlet": "Bottom outlet",
   "gui.icheme.equipment_constructor.outlet.hint": "The side the bottom outlet's line leaves the skirt on, as you look from the constructor: front, left, back or right. Its port in the skirt turns with it, the slots keep to the other three sides and the anchor chairs stand between them. A trickle-bed reactor's effluent turns only where its other parts leave room: to the left its quench line gives way to the front, and to the back or the right, whichever the ladder from the ground leaves free. Click a side to turn it",
   "gui.icheme.equipment_constructor.saddles": "Saddles",
@@ -2661,6 +2665,8 @@
   "gui.icheme.flowsheet.sizing.exhaust": "Exhaust",
   "gui.icheme.flowsheet.sizing.boot": "Boot",
   "gui.icheme.flowsheet.sizing.boot_hint": "A boot under a lying drum holds a second liquid.",
+  "gui.icheme.flowsheet.sizing.demister": "Demister",
+  "gui.icheme.flowsheet.sizing.demister_hint": "A mesh pad under the gas outlet doubles the gas speed the drum takes. Auto never proposes one.",
   "gui.icheme.flowsheet.sizing.height": "Height",
   "gui.icheme.flowsheet.sizing.bore": "Bore",
   "gui.icheme.flowsheet.sizing.trays": "Trays",
@@ -4827,5 +4833,6 @@
   "gui.icheme.equipment_constructor.material.chrome_steel.hint": "9Cr-1Mo: hot sulfur oil and heater tubes. Corrosion allowance 3 mm, up to 650 °C.",
   "gui.icheme.equipment_constructor.material.stainless_steel.hint": "316L: wet acid gas, naphthenic acid and hot H2S. Corrosion allowance 1.5 mm, up to 815 °C.",
   "gui.icheme.equipment_constructor.material.nickel_alloy.hint": "Alloy 625: everything, at a price. Corrosion allowance 1.5 mm, up to 980 °C.",
-  "gui.icheme.vessel.material": "Material: %1$s, corrosion allowance %2$s mm"
+  "gui.icheme.vessel.material": "Material: %1$s, corrosion allowance %2$s mm",
+  "gui.icheme.vessel.demister": "Demister: a mesh pad under the gas outlet"
 }

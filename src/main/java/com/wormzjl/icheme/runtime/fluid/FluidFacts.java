@@ -92,9 +92,11 @@ final class FluidFacts {
      *  its wall loss (mm), fouling deposit (m²K/W) and {@code wrecked}, an entry only for a device away from new and clean
      *  (absent: every wall new and clean, none wrecked). A control valve's trim health is in the schema-12 health list.
      *  WP8 of the same batch, under the same unreleased schema: a column unit's tray fouling (0 to 1), wall loss (mm) and
-     *  material of construction by name, after its members (absent: a clean, new carbon steel column). */
-    static final int SCHEMA=29;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 29. */
+     *  material of construction by name, after its members (absent: a clean, new carbon steel column).
+     *  30 (batch 2026-11-17-three-phase-separator): a vessel geometry's {@code demister} after its boot length (absent:
+     *  none). */
+    static final int SCHEMA=30;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 30. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -403,8 +405,8 @@ final class FluidFacts {
         var type=f.name(com.wormzjl.icheme.science.equipment.ExchangerType.class,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
         return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit,(int)fans,type));
     }
-    private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength());}
-    private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Record f){var form=f.name(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.class,null);double capacity=f.f64(0),height=f.f64(0),d=f.f64(0),l=f.f64(0),bd=f.f64(0),bl=f.f64(0);return valid(f,"vessel geometry",()->new com.wormzjl.icheme.science.fluid.network.VesselGeometry(form,capacity,height,d,l,bd,bl));}
+    private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength()).bool(g.demister());}
+    private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Record f){var form=f.name(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.class,null);double capacity=f.f64(0),height=f.f64(0),d=f.f64(0),l=f.f64(0),bd=f.f64(0),bl=f.f64(0);boolean demister=f.bool(false);return valid(f,"vessel geometry",()->new com.wormzjl.icheme.science.fluid.network.VesselGeometry(form,capacity,height,d,l,bd,bl,demister));}
     private static void control(Fields f,FlowControl control) {
         switch(control) {
             case FlowControl.Passive ignored->f.text("passive").f64(0).f64(0).bool(false).f64(0);

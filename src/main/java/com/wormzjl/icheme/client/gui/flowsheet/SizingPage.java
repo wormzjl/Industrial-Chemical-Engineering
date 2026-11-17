@@ -421,7 +421,8 @@ public final class SizingPage {
             case DrumSizing.Size d -> {
                 group.add(Door.entry(KEY + "size/diameter", x.text("sizing.diameter"), "m"));
                 group.add(Door.entry(KEY + "size/length", x.text("sizing.length"), "m"));
-                group.add(new Column.Buttons(List.of(new Column.Button(KEY + "size/boot", x.text("sizing.boot"), edits && held.mode() == SizingFacts.Mode.FIXED, x.text("sizing.boot_hint"), d.boot()))));
+                group.add(new Column.Buttons(List.of(new Column.Button(KEY + "size/boot", x.text("sizing.boot"), edits && held.mode() == SizingFacts.Mode.FIXED, x.text("sizing.boot_hint"), d.boot()),
+                        new Column.Button(KEY + "size/demister", x.text("sizing.demister"), edits && held.mode() == SizingFacts.Mode.FIXED, x.text("sizing.demister_hint"), d.demister()))));
             }
             case TankSizing.Size t -> {
                 group.add(new Column.Setting(KEY + "size/count", x.text("sizing.count"), Integer.toString(t.count()), "", hint, edits));
@@ -769,8 +770,8 @@ public final class SizingPage {
                 default -> null;
             };
             case DrumSizing.Size d -> switch (field) {
-                case "diameter" -> new DrumSizing.Size(d.type(), value, d.length(), d.boot());
-                case "length" -> new DrumSizing.Size(d.type(), d.diameter(), whole, d.boot());
+                case "diameter" -> new DrumSizing.Size(d.type(), value, d.length(), d.boot(), d.demister());
+                case "length" -> new DrumSizing.Size(d.type(), d.diameter(), whole, d.boot(), d.demister());
                 default -> null;
             };
             case TankSizing.Size t -> switch (field) {
@@ -894,7 +895,8 @@ public final class SizingPage {
             if(held.mode()!=SizingFacts.Mode.FIXED)return;
             var type = UnitType.valueOf(key.substring(5));
             if(type!=SizingFacts.UnitFacts.typeOf(size))x.editor().sizing(facts.with(id,held.typed(type).with(initial(type))),null);
-        } else if (key.equals("size/boot") && size instanceof DrumSizing.Size d) keep(x, id, new DrumSizing.Size(d.type(), d.diameter(), d.length(), !d.boot()), null);
+        } else if (key.equals("size/boot") && size instanceof DrumSizing.Size d) keep(x, id, new DrumSizing.Size(d.type(), d.diameter(), d.length(), !d.boot(), d.demister()), null);
+        else if (key.equals("size/demister") && size instanceof DrumSizing.Size d) keep(x, id, d.withDemister(!d.demister()), null);
         else if (key.startsWith("size/") && (key.endsWith("-") || key.endsWith("+")) && size != null) {
             if (held.mode() != SizingFacts.Mode.FIXED) return;
             String field = key.substring(5, key.length() - 1);

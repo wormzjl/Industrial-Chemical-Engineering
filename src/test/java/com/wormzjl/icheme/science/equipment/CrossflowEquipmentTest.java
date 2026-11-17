@@ -293,6 +293,8 @@ class CrossflowEquipmentTest {
                                             + "]");
                 // An image before shape fields 13 reads carbon steel, which its text does not show.
                 if (!expected.contains("material=")) expected = expected.substring(0, expected.length() - 1) + ", material=CARBON_STEEL]";
+                // An image before shape fields 14 reads no demister.
+                if (!expected.contains("demister=")) expected = expected.substring(0, expected.length() - 1) + ", demister=false]";
                 assertEquals(expected, read.toString(), file.toString());
             }
     }

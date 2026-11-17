@@ -44,6 +44,28 @@ class DrumSettlingTest {
         assertEquals(Limit.DRUM_GAS_LYING.value() * Math.sqrt(695 / 5.), lying.high());
     }
 
+    @Test void aDemisterLetsANarrowerDrumPassAndAutoNeverProposesOne() {
+        // 1.5 m by 5 m standing (gas space 2.875 m at half full: factor 1): at 1.5 times its bare limit it fails, with a pad it passes.
+        double full = Separation.gasLimit(false, 700, 5), gas = 1.5 * full * Math.PI * 1.5 * 1.5 / 4;
+        var load = new DrumSizing.Load(gas, 0, 0, 5, 700, 5);
+        var bare = new DrumSizing.Size(UnitType.STANDING_DRUM, 1.5, 5, false);
+        var padded = bare.withDemister(true);
+        assertFalse(DrumSizing.rate(load, bare).reading(Limit.DRUM_GAS_STANDING).met());
+        var reading = DrumSizing.rate(load, padded).reading(Limit.DRUM_GAS_STANDING);
+        assertTrue(reading.met());
+        assertEquals(2 * full, reading.high(), 1e-12);
+        assertTrue(padded.shape().demister() && !bare.shape().demister());
+        // A lying drum's pad doubles its limit too.
+        var lying = new DrumSizing.Size(UnitType.LYING_DRUM, 1.5, 5, false);
+        assertEquals(2 * DrumSizing.rate(load, lying).reading(Limit.DRUM_GAS_LYING).high(), DrumSizing.rate(load, lying.withDemister(true)).reading(Limit.DRUM_GAS_LYING).high(), 1e-12);
+        // Auto picks a larger bare drum, never a pad.
+        for (var type : new UnitType[]{UnitType.STANDING_DRUM, UnitType.LYING_DRUM, null}) {
+            var choice = DrumSizing.auto(load, type);
+            assertFalse(choice.size().demister(), String.valueOf(type));
+        }
+        assertFalse(DrumSizing.auto(receiver(1), null).size().demister());
+    }
+
     @Test void aSizedReceiverSettlesBothLiquids() {
         var size = new DrumSizing.Size(UnitType.LYING_DRUM, 2, 5, true);
         var rating = DrumSizing.rate(receiver(1), size);

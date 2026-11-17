@@ -42,11 +42,23 @@ public final class DrumSizing {
      * @param diameter m
      * @param length   tangent to tangent, m
      * @param boot     whether a lying drum has one
+     * @param demister whether it has a mesh pad under its gas outlet (batch 2026-11-17-three-phase-separator): Auto never
+     *                 proposes one; a Fixed size the player chose with one is rated with it
      */
-    public record Size(UnitType type, double diameter, int length, boolean boot) implements UnitSize {
+    public record Size(UnitType type, double diameter, int length, boolean boot, boolean demister) implements UnitSize {
+        /** A drum without a demister. */
+        public Size(UnitType type, double diameter, int length, boolean boot) {
+            this(type, diameter, length, boot, false);
+        }
+
         public Size {
             if (type != UnitType.STANDING_DRUM && type != UnitType.LYING_DRUM) throw new IllegalArgumentException("Not a drum: " + type);
             if (!(diameter > 0) || !Double.isFinite(diameter) || length < 1) throw new IllegalArgumentException("Invalid drum size");
+        }
+
+        /** This size with a demister or without one. */
+        public Size withDemister(boolean value) {
+            return new Size(type, diameter, length, boot, value);
         }
 
         private boolean lying() {
@@ -59,7 +71,7 @@ public final class DrumSizing {
 
         private EquipmentShape withBoot(boolean with) {
             int support = with ? EquipmentShape.minimumBootSupport(diameter, length) : EquipmentShape.defaultSupport(diameter, orientation());
-            return EquipmentShape.drum(diameter, length, orientation(), EquipmentShape.Heading.NORTH, support, List.of(), with);
+            return EquipmentShape.drum(diameter, length, orientation(), EquipmentShape.Heading.NORTH, support, List.of(), with).withDemister(demister);
         }
 
         @Override public EquipmentShape shape() {
@@ -145,11 +157,11 @@ public final class DrumSizing {
         double slender = size.length() / size.diameter();
         readings.add(size.lying() ? Limit.DRUM_SLENDERNESS_LYING.read(slender) : Limit.DRUM_SLENDERNESS_STANDING.read(slender));
         if (load.gas() > 0 && load.heavy() > 0) {
-            // The world's law (Separation) at design flow, half full: a standing drum's limit falls with its gas space.
+            // The world's law (Separation) at design flow, half full: a standing drum's limit falls with its gas space; a pad doubles it.
             double section = Math.PI * size.diameter() * size.diameter() / (size.lying() ? 8 : 4);
             var row = size.lying() ? Limit.DRUM_GAS_LYING : Limit.DRUM_GAS_STANDING;
             var geometry = shape == null ? null : shape.fluidGeometry();
-            double limit = geometry == null ? Separation.gasLimit(size.lying(), load.heavy(), load.light())
+            double limit = geometry == null ? Separation.gasLimit(size.lying(), size.demister(), load.heavy(), load.light())
                     : Separation.gasLimit(geometry, geometry.heightAt(geometry.capacity() / 2), load.heavy(), load.light());
             readings.add(row.against(load.gas() / section, limit));
         }

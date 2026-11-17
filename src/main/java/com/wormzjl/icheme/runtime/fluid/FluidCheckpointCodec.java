@@ -121,10 +121,12 @@ import java.util.function.Function;
  * the same batch: a heat side's films (tag 1) and an air cooler's process films (tag 3) are followed by the deposit they
  * hold, and each law ends with the unit's UA as last planned (a flag, then the UA and the clean UA, W/K), so a certified
  * island's heat page still reads it after a load.</p>
+ * <p>53 (batch 2026-11-17-three-phase-separator): a node's vessel geometry carries its {@code demister} after its boot
+ * length.</p>
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=52;
+    public static final int VERSION=53;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -415,7 +417,7 @@ public final class FluidCheckpointCodec {
         if(!sameTopology){w.truncate(flag);w.u8(3);topology(w,other);state(w,other);return;}
         var state=new Writer();state.append(w,stateStart,end);w.truncate(flag);w.u8(2);w.append(state,0,state.size());
     }
-    private static void geometry(Writer w,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){w.text(g.form().name());w.f64(g.capacity());w.f64(g.height());w.f64(g.diameter());w.f64(g.length());w.f64(g.bootDiameter());w.f64(g.bootLength());}
+    private static void geometry(Writer w,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){w.text(g.form().name());w.f64(g.capacity());w.f64(g.height());w.f64(g.diameter());w.f64(g.length());w.f64(g.bootDiameter());w.f64(g.bootLength());w.bool(g.demister());}
     /** A kettle's pool (format 28, W7): absent, or its facts and slice inputs. */
     private static void transfer(Writer w,com.wormzjl.icheme.science.fluid.network.TowerTransfer.Result t){
         w.f64(t.outletTemperature());w.sparse(t.losses());w.f64(t.dutyWatt());w.f64(t.energyWatt());w.f64(t.dryAirFlow());w.f64(t.fanPowerWatt());w.f64(t.speed());w.f64(t.airTemperature());w.f64(t.airHumidity());
@@ -452,7 +454,7 @@ public final class FluidCheckpointCodec {
         try{return new com.wormzjl.icheme.science.fluid.network.Pool(id,partner,area,bottom,bundle,wall,giveBack,active,head);}
         catch(IllegalArgumentException e){throw r.invalid("invalid pool: "+e.getMessage());}
     }
-    private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Reader r){return new com.wormzjl.icheme.science.fluid.network.VesselGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64());}
+    private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Reader r){return new com.wormzjl.icheme.science.fluid.network.VesselGeometry(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.valueOf(r.text()),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.f64(),r.bool());}
     private static void topology(Writer w,PassiveNetwork graph) {
         w.varint(graph.reservoirs().size());
         for(var n:graph.reservoirs()){w.i64(n.id());w.f64(n.elevation());w.u8(n.kind().ordinal());w.f64(n.inventory().volume());w.f64(n.inventory().levelHeight());w.bool(n.inventory().open());geometry(w,n.inventory().geometry());pool(w,n.inventory().pool());tower(w,n.inventory().tower());w.f64(n.inventory().blanket());}
