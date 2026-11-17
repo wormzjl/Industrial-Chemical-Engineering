@@ -50,6 +50,13 @@ drive regulates flow; otherwise the output's status says DRIVE NOT REGULATING (a
 `ControlLaw` decides the set flow as it decides a flow valve's target (flow loop, level loop), bounded by 0 and the
 law's flow at the drive's top speed.
 
+**The drive trims the valve (built 2026-11-17, LOAD_HOLD_REVIEW.md "Built").** Where a flow valve regulates in the
+pump's series, the valve holds the flow and the drive lowers its speed until the valve keeps 5 % of the pump's rise
+(`SpeedControl.VALVE_TRIM_MARGIN`); the set flow is an upper limit, not a second target, and with no regulating
+series valve the drive holds it as above. This replaces "the loop acts only while the pump's drive regulates flow"
+where they conflict: a loop's set flow on a pump behind a regulating valve bounds the flow from above; the valve's
+target decides it.
+
 **DCS.** The pump output is listed as a valve output is: set flow, measured flow, the drive's speed share and status.
 
 **Pump page.** `Controls.from` shows `setFlow` (0 = none, shown as no set flow), never the rated flow. The row says

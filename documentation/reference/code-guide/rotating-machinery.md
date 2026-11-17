@@ -126,6 +126,14 @@ The relief rise is `MAXIMUM_DISCHARGE` less the suction (`reliefRise`). The ejec
 - A motor and the creative motor hold their set speed (a share of design, or rpm for the creative motor), or regulate
   the train's first machine's flow (`REGULATE_FLOW`, exponent 1) or discharge pressure (`REGULATE_PRESSURE`, exponent 2)
   through `SpeedControl.regulate`; over the power limit they slow by `powerLimited` (`CURRENT LIMITED`, `POWER LIMITED`).
+- **The trim** (owner D4, "Drive trims the valve"). A `REGULATE_FLOW` drive whose pump has a flow valve (mass or volume
+  flow, any sensor) regulating in its series (`ControlConstraints.inSeries`), with the measured flow at or below the set
+  flow, asks for the speed whose curve gives, at the measured flow, the pump's booked rise less the valve's drop
+  (`PipeObservation.valveDrop`, Pa) with `SpeedControl.VALVE_TRIM_MARGIN` (5 %) of the rise left on the valve
+  (`ShaftTrains.Duty.trimSpeed`, `seriesValveDrop`). The request goes in as `requestedRpm` with the flow secant skipped
+  for that decision (`Measure.measured` NaN; `previousMeasured` stays the flow); at most `LARGEST_STEP` down, never up,
+  a move inside `SPEED_DEADBAND` held. The set flow is then an upper limit: with no regulating series valve the secant
+  holds it as before.
 - A steam turbine's internal admission governor follows the requested speed and the shaft demand, limiting admitted work
   so its speed never passes its set speed; it has no overspeed trip. Delivered steam bounds its work (`STEAM LIMITED`);
   with none the train stands.

@@ -1183,6 +1183,7 @@
   "gui.icheme.assembly.operation.status.starting": "Starting: the first solve",
   "gui.icheme.assembly.operation.status.running": "Running",
   "gui.icheme.assembly.operation.status.limited": "Limited: %s, %s %% of the feed",
+  "gui.icheme.assembly.operation.status.limited_member": "Limited: %s (%s), %s %% of the feed",
   "gui.icheme.assembly.operation.status.upset": "Upset: inputs closed",
   "gui.icheme.assembly.operation.status.rule_a": "%s, every input cut",
   "gui.icheme.assembly.operation.status.resolving": "%s; solving: %s",

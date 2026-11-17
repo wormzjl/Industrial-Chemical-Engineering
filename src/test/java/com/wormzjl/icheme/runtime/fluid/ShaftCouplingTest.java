@@ -532,4 +532,115 @@ class ShaftCouplingTest {
         branched.add(new PassiveNetwork.Pipe(106, 3, 5, FAT, new FlowControl.Passive()));
         assertEquals(0, ShaftTrains.upstreamValve(new PassiveNetwork(nodes, branched), 5));
     }
+
+    // ---- The drive trims the valve (owner decision D4 of the pump-valve work; LOAD_HOLD_REVIEW.md, "Built") ----
+
+    /** One booked slice of the trim rig: the pump's speed share, its rise and the valve's drop (Pa), the flow (kg/s), the valve's mode. */
+    private record Booked(double speed, double rise, double drop, double flow, FlowControl.Mode valve, String status) {}
+
+    /** The flow-regulating motor and its pump of {@link #aRegulatingMotorRunsItsPumpAtTheSetFlow}, a junction, a mass flow valve
+     * at {@code litres} L/s of water (raised to {@code raisedLitres} halfway, where above 0), and a void 31.92 m above the
+     * supply (friction about nothing): each cadence's slice. */
+    private List<Booked> trimRig(double setFlow, double litres, double raisedLitres, int cadences) {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(3);
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                11e3, 2950, 2, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,
+                new ShaftUnit.Settings(true, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, 0, 0, 0), trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+                0, 2950, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, trip, null));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        rig.coordinator.shafts(trains);
+        trains.host(new ShaftTrains.Host() {
+            public void edit(long device, FlowControl.ControlValve control) {
+            }
+
+            public UUID speedSensor(long turbine) {
+                return null;
+            }
+
+            public void resize(PhysicalFluidTopology.Position shaft, int pixels) {
+            }
+
+            public Set<Long> linked(long motor) {
+                return Set.of(1L);
+            }
+        });
+        var supply = water(101325);
+        double rho = supply.mass() / supply.volume();
+        var sink = water(101325 + rho * 9.80665 * 31.92);
+        var valve = new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW, 200000, litres * 1e-3 * rho, .01, new UUID(7, 7), 0);
+        var line = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, supply, PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2, 0, sink, PassiveNetwork.NodeKind.VOID), new PassiveNetwork.Reservoir(3, 0, water(101325 + rho * 9.80665 * 40), PassiveNetwork.NodeKind.JUNCTION)),
+                List.of(new PassiveNetwork.Pipe(10, 0, 2, FAT, new FlowControl.Machine(PUMP, 0, true, setFlow, 0)), new PassiveNetwork.Pipe(11, 2, 1, FAT, valve)));
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        var out = new ArrayList<Booked>();
+        for (int c = 0; c < cadences; c++) {
+            if (c == cadences / 2 && raisedLitres > 0) {
+                double raised = raisedLitres * 1e-3 * rho;
+                rig.coordinator.controls(g -> {
+                    var pipes = new ArrayList<PassiveNetwork.Pipe>();
+                    for (var p : g.pipes()) pipes.add(p.control() instanceof FlowControl.ControlValve v ? p.withControl(v.withMassTarget(raised)) : p);
+                    return new PassiveNetwork(g.reservoirs(), pipes, g.scheduledTransfers());
+                });
+                rig.coordinator.controlsMoved(List.of(1L));
+            }
+            rig.run(5);
+            var s = rig.coordinator.observe(1);
+            var r = s.lastResult().orElseThrow();
+            double drop = Double.NaN;
+            for (var o : r.observations()) if (o.pipe() == 11) drop = o.valveDrop();
+            out.add(new Booked(((FlowControl.Machine) r.graph().pipes().get(0).control()).speed(), r.endpointHeads()[0], drop, r.endpointFlows()[1], r.endpointModes().get(1), s.status()));
+        }
+        return out;
+    }
+
+    private static String trace(List<Booked> booked) {
+        var t = new StringBuilder();
+        for (var b : booked) t.append(String.format(Locale.ROOT, "%n  s %.4f rise %.0f Pa drop %.0f Pa (%.4f) flow %.4f kg/s %s", b.speed, b.rise, b.drop, b.drop / b.rise, b.flow, b.valve));
+        return t.toString();
+    }
+
+    /**
+     * A flow valve holds 8.81 L/s below the drive's set flow (15 L/s): the drive lowers its speed until the valve keeps 5 % of
+     * the pump's rise. Throttled at full speed the rise is 52.04 m and the valve's drop 20.12 m (6.47 kW of shaft); trimmed,
+     * 0.830 of rated in one step, a rise of 33.60 m, a drop of 1.68 m (4.17 kW). Then the valve's target is raised to 12 L/s,
+     * above what the trimmed speed passes: the valve opens, the flow secant raises the speed, and the drive settles at the
+     * margin again.
+     */
+    @Test
+    void aRegulatingDriveTrimsItsSpeedToTheValveInItsSeries() {
+        var booked = trimRig(.015, 8.81, 12, 60);
+        String text = trace(booked);
+        System.out.println("trim:" + text);
+        int trimStart = -1;
+        for (int i = 0; i < 30; i++) if (booked.get(i).valve == FlowControl.Mode.VALVE_REGULATING) { trimStart = i; break; }
+        assertTrue(trimStart >= 0, "the valve regulates once the drive has started:" + text);
+        assertTrue(booked.get(trimStart).drop / booked.get(trimStart).rise > .1, "throttled before the trim:" + text);
+        assertEquals(.830, booked.get(trimStart + 1).speed, .005, "trimmed in one decision:" + text);
+        for (int i = trimStart + 1; i < 30; i++) assertTrue(booked.get(i).speed <= booked.get(i - 1).speed + 1e-12, "the speed never rises while the valve holds the flow:" + text);
+        var settled = booked.get(29);
+        assertTrue(trimStart + 20 > 29 || Math.abs(booked.get(trimStart + 20).speed - settled.speed) <= 1e-3, "settled within 20 decisions:" + text);
+        assertEquals(.05, settled.drop / settled.rise, 1e-3, "the valve keeps 5 % of the rise:" + text);
+        assertEquals(.830, settled.speed, .005, "the trimmed speed:" + text);
+        var raised = booked.getLast();
+        assertTrue(raised.speed > settled.speed, "the raised target lifts the speed:" + text);
+        assertEquals(FlowControl.Mode.VALVE_REGULATING, raised.valve, text);
+        assertEquals(.05, raised.drop / raised.rise, 1e-3, "settled again at the margin:" + text);
+        for (var b : booked) assertFalse(b.status.startsWith("HELD"), b.status);
+    }
+
+    /** The drive's set flow (6 L/s) below the valve's target (15 L/s): the drive holds its set flow, the valve stands open. */
+    @Test
+    void aDriveSetBelowTheValvesTargetHoldsItsSetFlow() {
+        var booked = trimRig(.006, 15, 0, 30);
+        String text = trace(booked);
+        var last = booked.getLast();
+        var supply = water(101325);
+        assertEquals(.006 * supply.mass() / supply.volume(), last.flow, .05 * .006 * supply.mass() / supply.volume(), "the set flow:" + text);
+        assertNotEquals(FlowControl.Mode.VALVE_REGULATING, last.valve, "the valve stands open:" + text);
+    }
 }

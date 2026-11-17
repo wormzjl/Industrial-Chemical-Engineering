@@ -295,10 +295,14 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         public record Identity(long id,int first,int second,List<PipeResistance.Geometry> sections,FlowControl control,
                                int blockedDirections,FilterSettings filter,PhasePort firstPort,PhasePort secondPort,int forbiddenDirections,double actuatorArea,
                                Record heat) {
-            /** The same line as {@code other}: whatever a flow valve's set point, and whichever way a column works a boundary valve (its plan against the valve's own control). */
+            /** The same line as {@code other}: whatever a flow valve's set point, a shaft train's plan on a mover (a machine's speed, a
+             * frame's displacement, a governor valve's target, a failed pump's switch: {@link ShaftPlan#planned}), and whichever way a
+             * column works a boundary valve (its plan against the valve's own control). A job then starts from the committed interval
+             * across a drive's speed step (LOAD_HOLD_REVIEW.md, option A); a certificate still ends on the train's wake. */
             boolean sameLine(Identity other) {
                 var a=line();var b=other.line();
                 if(a.equals(b))return true;
+                if(ShaftPlan.planned(a.control(),b.control())&&a.controlled(b.control()).equals(b))return true;
                 return a.control() instanceof FlowControl.Valve x&&b.control() instanceof FlowControl.Valve y&&x.targetPressure()==y.targetPressure()
                         &&(worked(x)||worked(y))&&a.controlled(y).equals(b);
             }

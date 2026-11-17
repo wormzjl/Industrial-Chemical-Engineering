@@ -142,11 +142,17 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         private final com.wormzjl.icheme.science.machine.MachineLaw law;
         private final com.wormzjl.icheme.science.machine.PositiveDisplacement frame;
         private final double head, density, suction, kappa;
+        /** The machine's speed share in the booked slice, and the drop of the flow valve that regulated in its series there, Pa
+         * (NaN for none, or where the measured flow stood above the set flow). */
+        private final double speed, valveDrop;
         private double flowSpeed, pressureSpeed;
         private boolean flowSolved, pressureSolved;
 
         private Duty(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.MachineLaw law,
-                     com.wormzjl.icheme.science.machine.PositiveDisplacement frame, double head, double density, double suction, double kappa) {
+                     com.wormzjl.icheme.science.machine.PositiveDisplacement frame, double head, double density, double suction, double kappa,
+                     double speed, double valveDrop) {
+            this.speed = speed;
+            this.valveDrop = valveDrop;
             this.flow = flow;
             this.pressure = pressure;
             this.setFlow = setFlow;
@@ -159,12 +165,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             this.kappa = kappa;
         }
 
-        static Duty machine(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.MachineLaw law, double head, double density, double suction, double kappa) {
-            return new Duty(flow, pressure, setFlow, setPressure, law, null, head, density, suction, kappa);
+        static Duty machine(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.MachineLaw law, double head, double density, double suction, double kappa,
+                            double speed, double valveDrop) {
+            return new Duty(flow, pressure, setFlow, setPressure, law, null, head, density, suction, kappa, speed, valveDrop);
         }
 
         static Duty frame(double flow, double pressure, double setFlow, double setPressure, com.wormzjl.icheme.science.machine.PositiveDisplacement law, double head, double suction) {
-            return new Duty(flow, pressure, setFlow, setPressure, null, law, head, Double.NaN, suction, Double.NaN);
+            return new Duty(flow, pressure, setFlow, setPressure, null, law, head, Double.NaN, suction, Double.NaN, Double.NaN, Double.NaN);
         }
 
         double flow() { return flow; }
@@ -180,6 +187,19 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 flowSolved = true;
             }
             return flowSpeed;
+        }
+
+        /**
+         * The trim (owner decision D4 of the pump-valve work, "Drive trims the valve"): while a flow valve in the pump's series
+         * regulated and the measured flow stood at or below the set flow, the speed share whose curve gives, at the measured
+         * flow, the booked rise less the valve's drop with {@link com.wormzjl.icheme.science.machine.SpeedControl#VALVE_TRIM_MARGIN}
+         * of it left on the valve: {@code rise(Q, s) (1 - margin) = rise_now - drop}, both in Pa. Never above the booked speed
+         * (a valve already under the margin asks for none). NaN where no such valve regulated: the flow secant decides.
+         */
+        double trimSpeed() {
+            if (law == null || !(valveDrop >= 0) || !(speed > 0)) return Double.NaN;
+            double rise = (head - valveDrop) / (1 - com.wormzjl.icheme.science.machine.SpeedControl.VALVE_TRIM_MARGIN);
+            return com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, flow, rise, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, speed);
         }
 
         /** The speed share that holds the set discharge pressure at the booked flow; NaN without a set pressure. */
@@ -770,7 +790,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     double kappa = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model, m, suction);
                     double wet = com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.wetShare(model, solved, e, result.advancedSeconds());
                     run.power(unit, com.wormzjl.icheme.science.fluid.network.InlineMovers.shaftPower(m, average[e], heads[e], density, suction.pressure(), kappa, wet));
-                    run.duty(unit,Duty.machine(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),m.law(),heads[e],density,suction.pressure(),kappa));
+                    run.duty(unit,Duty.machine(q,solved.reservoirs().get(pipe.second()).state().pressure(),m.setFlow(),m.setPressure(),m.law(),heads[e],density,suction.pressure(),kappa,
+                            m.speed(),m.setFlow()>0&&q<=m.setFlow()?seriesValveDrop(result,e):Double.NaN));
                     if (first(run, unit)) {
                         run.measured = q;
                         run.target = m.setFlow() > 0 ? m.setFlow() : m.setPressure() > 0 ? m.setPressure() : Double.NaN;
@@ -833,6 +854,24 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
     }
 
     /** Whether {@code unit} is its train's first driven member: the one a regulating driver reads (reading A31). */
+    /**
+     * The drop of a flow valve (mass or volume flow, any sensor) that regulated in the booked slice and carries one flow with
+     * connection {@code mover} by the junction balances ({@link com.wormzjl.icheme.science.fluid.network.ControlConstraints#inSeries}),
+     * Pa: the valve's own read at the slice's end ({@code PipeObservation.valveDrop}, its node side against its line side). NaN
+     * for none.
+     */
+    static double seriesValveDrop(PassiveIntervalSolver.Result result, int mover) {
+        var graph = result.graph();
+        for (int v = 0; v < graph.pipes().size(); v++) {
+            if (!(graph.pipes().get(v).control() instanceof FlowControl.ControlValve valve) || valve.pressureControl()
+                    || result.endpointModes().get(v) != FlowControl.Mode.VALVE_REGULATING
+                    || !com.wormzjl.icheme.science.fluid.network.ControlConstraints.inSeries(graph, mover, v)) continue;
+            long id = graph.pipes().get(v).id();
+            for (var o : result.observations()) if (o.pipe() == id && Double.isFinite(o.valveDrop())) return o.valveDrop();
+        }
+        return Double.NaN;
+    }
+
     private static boolean first(Run run, long unit) {
         return !run.train.driven().isEmpty() && run.train.driven().getFirst().id() == unit;
     }
@@ -879,7 +918,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double sent = turbine ? run.admission : valve == null ? 0 : governorTargets.getOrDefault(valve, 0.0);
         boolean steamShort = (turbine || valve != null) && sent > 0 && run.steamFlow < .99 * sent;
         boolean idleSupply = turbine && run.admission == 0 && run.drop > 0;
-        String automatic=null;double requestedRpm=Double.NaN;
+        String automatic=null;double requestedRpm=Double.NaN;boolean trimmed=false;
         if(d.kind()==ShaftNetwork.Kind.MOTOR&&d.settings().mode()!=ShaftTrain.Mode.SPEED) {
             var linked=host.linked(d.id());
             var candidates=train.driven().stream().map(m->topology.shaft(m.id())).filter(Objects::nonNull).filter(u->u.fluid()>0&&linked.contains(u.fluid())).toList();
@@ -889,14 +928,24 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 run.measured=sample==null?Double.NaN:flow?sample.flow():sample.pressure();
                 run.target=sample==null?Double.NaN:flow?sample.setFlow():sample.setPressure();
                 if(!(run.target>0))automatic="NO DUTY TARGET";
-                else if(sample!=null){double share=flow?sample.flowSpeed():sample.pressureSpeed();var member=train.driven().stream().filter(m->m.id()==candidates.getFirst().id()).findFirst().orElseThrow();requestedRpm=share*candidates.getFirst().designSpeed()/member.ratio();}
+                else if(sample!=null){double share=flow?sample.flowSpeed():sample.pressureSpeed();var member=train.driven().stream().filter(m->m.id()==candidates.getFirst().id()).findFirst().orElseThrow();
+                    // The trim (owner D4): a flow valve in the pump's series holds the flow, so the drive lowers its speed until the
+                    // valve keeps only the margin, at most one step per decision, never up, a move inside the deadband held; this
+                    // decision's request is that speed, without the flow secant (its measure stays the flow, for when the valve opens).
+                    double trim=flow?sample.trimSpeed():Double.NaN;
+                    if(Double.isFinite(trim)) {
+                        double current=state.speed()*member.ratio()/candidates.getFirst().designSpeed();
+                        double next=Math.max(trim,current-com.wormzjl.icheme.science.machine.SpeedControl.LARGEST_STEP);
+                        share=next>=current||current-next<=ShaftTrain.SPEED_DEADBAND?current:next;trimmed=true;
+                    }
+                    requestedRpm=share*candidates.getFirst().designSpeed()/member.ratio();}
             }
         }
         // A prime mover's supply is the net shaft power its last fired fuel gave; fuel arriving holds an unloaded set at speed.
         boolean prime = d.kind().primeMover() && primeMovers != null;
         if (prime) run.available = primeMovers.available(d.id());
         var measure = prime ? new ShaftTrain.Measure(demand, run.available, false, Double.NaN, Double.NaN, state.previousSpeed(), state.previousMeasured(), primeMovers.firing(d.id()))
-                : new ShaftTrain.Measure(demand, run.available, steamShort, run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
+                : new ShaftTrain.Measure(demand, run.available, steamShort, trimmed ? Double.NaN : run.measured, run.target, state.previousSpeed(), state.previousMeasured(), run.available > 0 || idleSupply);
         // N7: the train's gearboxes limit the driver's power to their ratings (a gearbox rated 0, from an older save, limits nothing).
         double gear = ShaftNetwork.gearLimit(train, id -> {var u = topology.shaft(id); return u == null ? 0 : u.ratedPower();}, run::power);
         measure = measure.withGearLimit(gear);

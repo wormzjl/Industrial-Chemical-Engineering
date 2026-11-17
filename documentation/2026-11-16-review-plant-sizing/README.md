@@ -156,6 +156,17 @@ the `Rig` class keep their sizes.
   regulating below a pump on its limit puts the pump on its law), S2 (a retry starts from the attempt's own start; no
   sealing exemption), F2 (the balance decides no pump mode); S3 withdrawn. `StartHoldTest` 4 of 4; selected classes 1781
   tests, 1 failure (the expected `SizingPageTest` in Chinese); holdGates 105 of 105; regression exact. Moved references: none.
+- 2026-11-17, load hold (diagnosis, no mod code; owner: "Yes, start it"): [LOAD_HOLD_REVIEW.md](LOAD_HOLD_REVIEW.md).
+  Island 1402's "round deadline" holds came from P-101's regulating drive: each planned speed change fails `sameLines`,
+  so the job loses the committed start and runs the balance start (20 against 4015 residual evaluations for a 0.1 % step;
+  speed 0.686 at 9961, 1.0 at 13400). Option A proposed (speed out of `Identity.line()`); B and C noted. Probe
+  `tools/load-hold/`. "Limited: outlet" can name its product from the binding condition's index.
+- 2026-11-17, load hold built (owner: "you need to fix the control system", "Yes, build both"): LOAD_HOLD_REVIEW.md,
+  "Built". A (a shaft train's plan leaves a connection the same line: the 9961 job at speed x1.001 costs 20 residual
+  evaluations, was 4015), the drive's trim law (a regulating series flow valve keeps 5 % of the pump's rise: 0.8304 in one
+  decision on the brief's pump; 0.558 on paper at 9961), the outlet text ("Limited: outlet (Product 3), ..."). Selected
+  classes 2378 tests, 1 failure (the expected `SizingPageTest` in Chinese); holdGates 94 of 94; equipmentGates 76 of 76;
+  regression exact. Moved reference: rule A's status line names its steam inlet.
 - 2026-11-17, column test world (owner: a world preset, plant started): [COLUMN_TEST_WORLD.md](COLUMN_TEST_WORLD.md). The
   test mod's preset "IChemE column test" (superflat, creative, no daylight, weather or mob cycle) builds the review rig's
   crude unit at spawn on the first load through the rig's own entry (`ColumnOperationReviewWorld.rig(level, base,
