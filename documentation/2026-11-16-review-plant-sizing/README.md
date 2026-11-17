@@ -161,6 +161,12 @@ the `Rig` class keep their sizes.
   so the job loses the committed start and runs the balance start (20 against 4015 residual evaluations for a 0.1 % step;
   speed 0.686 at 9961, 1.0 at 13400). Option A proposed (speed out of `Identity.line()`); B and C noted. Probe
   `tools/load-hold/`. "Limited: outlet" can name its product from the binding condition's index.
+- 2026-11-17, load hold built (owner: "you need to fix the control system", "Yes, build both"): LOAD_HOLD_REVIEW.md,
+  "Built". A (a shaft train's plan leaves a connection the same line: the 9961 job at speed x1.001 costs 20 residual
+  evaluations, was 4015), the drive's trim law (a regulating series flow valve keeps 5 % of the pump's rise: 0.8304 in one
+  decision on the brief's pump; 0.558 on paper at 9961), the outlet text ("Limited: outlet (Product 3), ..."). Selected
+  classes 2378 tests, 1 failure (the expected `SizingPageTest` in Chinese); holdGates 94 of 94; equipmentGates 76 of 76;
+  regression exact. Moved reference: rule A's status line names its steam inlet.
 
 ## Full crude unit, sized (2026-11-17)
 

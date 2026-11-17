@@ -122,3 +122,77 @@ conditions are recomputed each cycle and not stored in the fluid checkpoint.
 The client's wall times (not recorded, by the rules); the drive's mode read from the save (inferred from the pump's
 set flow 0.19357 m³/s and the drive-flow build on this branch); the drive's speed between 9961 and 13400; any island
 besides 1402.
+
+## Built (2026-11-17)
+
+Owner: "you need to fix the control system"; "Yes, build both" (option A and the drive's trim law), with the outlet text.
+Branch `claude/start-hold-7f00cb` after the merge of `claude/column-testing-sizing-26b5b9` (`e2ebe75e8`, merge `f3839a262`).
+
+| Commit | What it does |
+|---|---|
+| `a333e7b55` A | `PassiveNetwork.Pipe.Identity.sameLine` (298-305): beside a flow valve's set point and a column's boundary plan, a shaft train's plan on a mover leaves the line the same, by the existing predicate `ShaftPlan.planned` (a machine's speed through `Machine.sameButSpeed`, a frame's displacement, a governor valve's target, a failed pump's switch). `replayStart`'s `sameLines` now holds across a drive's speed step, and the job continues from the committed interval. `LoadHoldTest`. |
+| `58d4d5f34` trim | The drive trims the valve (owner D4 of the pump-valve work). `ShaftTrains.booked` gives a machine's duty its booked speed share and the drop of a flow valve (mass or volume flow, any sensor, not pressure-controlled) that regulated in the slice and is in the pump's series (`ControlConstraints.inSeries`, now public), while the measured flow stands at or below the set flow (`seriesValveDrop`: the valve's `PipeObservation.valveDrop`, Pa, its node side against its line side, at the slice's end). `Duty.trimSpeed`: `SpeedControl.requiredSpeed(law, Q_measured, (rise - drop)/(1 - VALVE_TRIM_MARGIN), ...)` capped at the booked speed, the rise being the pump connection's own `endpointHeads` (ρ g H, Pa). At the decision a finite trim sets the request (`requestedRpm`, the path `driver.atSpeed` takes), at most `LARGEST_STEP` down, never up, a move inside `SPEED_DEADBAND` held, and the flow secant is skipped for that decision (`Measure.measured` NaN, which `ShaftTrain.regulated` 219 already reads as "the set speed"; `run.measured` and the saved `previousMeasured` stay the flow). No other place decides the speed; `ShaftTrain` and `SpeedControl.regulate` are unchanged but the constant `SpeedControl.VALVE_TRIM_MARGIN = 0.05`. |
+| `04bc5bb7b` outlet | `OperationColumn.status` (216-223): a binding condition with a member index reads `status.limited_member`, "Limited: outlet (Product 3), 45 % of the feed", the member named by `member()` as in the conditions table. New key in `en_us.json` only. The width gate of `OperationColumnTest` sweeps every limit with a two-digit member and rule A's note; every line fits at every width. |
+
+**Readers of `sameLine` / `sameLines`** and what they now treat as the same line across a planned speed: the interval
+start (`PassiveIntervalSolver.replayStart` 474: the committed interval carries); the carried point and the backward Euler
+warm flags (`PassiveStepSolver` 282, 422, 1762); the opening memory and the one-way closure seeding (`OneWayClosures`
+209); a replaced island carrying its junction states and interval (`TopologyChange` 111, `PassiveNetwork.withJunctionStates`
+118). Each is a warm start only. A certificate and a STEADY replay do not read `sameLines`: a speed change past the
+train's deadband wakes the driven island (`ShaftTrains.decide` → `IslandCoordinator.shaftsMoved` → `toWake`), and
+`ExchangerCoupling` ends its certificate there. Candidates are still checked by the full control (`IslandCoordinator.sameControl`,
+which already excused `ShaftPlan.planned`); workspace keys read the full identity.
+
+**Measured, option A** (counters; flows and pressures of `LoadHoldTest` equal to the fresh solve's within 1e-6 relative
+and 1 Pa):
+
+| Job, 5.6 s slice, from the committed interval | before | after |
+|---|---|---|
+| 9961 state, pump speed x1.001 | 4015 residual evaluations | 20 |
+| 9961 state, x1.01 | 8158, 5 rejected substeps | 21 |
+| 9961 state, x1.2 | (x1.05: 10872, 13 rejected) | 165 |
+| final save (speed 1.0), x1.001 | 6431 | 1224 (17 passes, 1 rejected: a speed above the drive's top, which no real drive reaches) |
+| final save, x1.01 / x1.2 | 5450 / not run | 119 / 75 |
+| `LoadHoldTest` (StartHoldTest's line, 1 s), x1.001 / x1.01 / x1.2 | fresh path: 100 / 100 / 111 | 4 / 6 / 10 |
+
+`LoadHoldTest` uses StartHoldTest's charge line, not the saved 9961 state: a saved checkpoint loads exactly only under
+its own state format, which the solute batch's merge renumbers, so a test on it would stop loading. The 9961 numbers
+come from `tools/load-hold/` on the copied save.
+
+**Measured, the trim** (`ShaftCouplingTest`, the brief's pump `CentrifugalPump(0.01 m³/s, 50 m, 0.7)` at 2950 rpm, a
+void 31.92 m above the supply, a valve holding 8.81 L/s (8.784 kg/s), set flow 15 L/s): start-up to 0.885 with the valve
+throttling 70.7 kPa (0.185 of the rise); the next decision 0.8304, rise 328.8 kPa (33.60 m), drop 16.44 kPa (1.68 m),
+drop/rise 0.0500; held for every later decision. Target raised to 12 L/s: the valve opens (9.79 kg/s), the secant
+raises the speed to 0.935, the valve regulates, the trim settles at 0.888 with drop/rise 0.0500. Set flow 6 L/s below a
+15 L/s target: the drive holds its set flow, the valve open. No hold in either.
+
+**On paper at 9961** (the first live result of island 1402 from the 9961 state, the speed held at 0.686): flow 154.63
+kg/s = 0.17881 m³/s, under the set flow 0.19357; P-101's rise 642.3 kPa (75.7 m); the column valve's drop 270.1 kPa,
+0.42 of the rise. The trim asks for 0.558, a step of −0.128, inside one decision; the drive then holds. From the final
+save's state (speed 1.0, the valve dropping 1094.8 kPa, 0.74 of the rise) it asks for 0.564: three decisions of at most
+0.2. The probe world has no shafts, so the law runs in `ShaftCouplingTest`, not on the saved island.
+
+**Not built, reported: `REGULATE_PRESSURE`.** A pressure-regulating drive meets the same conflict behind a valve that
+holds the same pressure lower than the drive's set pressure (a back-pressure or pressure-source control valve on its
+discharge): the drive measures a pressure under its set point at every decision and climbs to its top while the valve
+throttles. The flow trim does not cover it.
+
+**Tests** (`affected.mjs select --since f3839a262` after `testClasses`; one run of the picks through
+`record.init.gradle`, `--max-workers=4`; LanguageFilesTest and UnitTextTest left out): test 401 classes, 2378 tests,
+1 failure, the expected `SizingPageTest.theDoorFitsInEveryViewForEveryItemInChinese`; holdGates 94 of 94;
+equipmentGates 76 of 76; columnGates up to date. `OperationColumnTest` 10 of 10 and `ShaftCouplingTest` 12 of 12 run
+whole (their left-out methods included). `fluidSolverRegression` (due: `PassiveNetwork` changed): chain-100 exact, max deviation 0 in moles, temperature, phase fraction and flow.
+
+**Moved references.** `OperationColumnTest.theStatusReadsTheBindingCondition`: rule A's line "Limited: steam, 30 % of
+the feed, every input cut" now reads "Limited: steam (Steam 1), 30 % of the feed, every input cut" (the binding steam
+inlet has index 0). No flow or pressure moved. Pass counts in tests with a speed change were not compared; they are
+expected to fall where a speed step used to start from the balance (`ShaftCouplingTest`, the drive-flow and
+rotating-machinery tests).
+
+**Line ranges in files the solute batch also edits** (`claude/solute-reaction-system-01ef6c`): `ShaftTrains` 145-147,
+152-155, 168-170, 174, 192-204 (the `Duty` fields, constructor, `machine`, `frame`, `trimSpeed`), 793-794 (the booking),
+857-874 (`seriesValveDrop`), 921, 931-941 (the decision), 948 (the measure); `PassiveNetwork` 298-305 (`sameLine`);
+`en_us.json` one key after `status.limited`.
+
+**Not verified:** the review world (the main thread runs it); fluid GameTests and the campaign, which `affected.mjs`
+marks due (`ShaftTrains` changed) and which belong to the final lane.

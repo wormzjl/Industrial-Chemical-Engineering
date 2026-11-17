@@ -151,6 +151,7 @@ Several gates run on placed worlds in `runtime/fluid` (see [verification.md](ver
 ## Traps
 
 - **`PassiveNetwork` is not passive**, and **`Reservoir` means any node**; see [fluid-interval.md](fluid-interval.md).
+- **A carried start needs the same lines.** `replayStart` keeps the committed interval only where `sameLines` holds; a change it does not excuse (anything but a flow valve's set point, a column's boundary plan and a shaft train's plan, `PassiveNetwork.Pipe.Identity.sameLine`) starts the job from the balance, which on a large island costs hundreds of times more and can pass the wall budget.
 - **The edge unknown is the law flow, not the flow carried.** A line deep in saturation has `q_law` far above `q`. `replayStart` loads the transported flows as both the carried point's `flows` and its `lawFlows`, so a saturated line restarts at `q_law = q`, about 8 % under its carried flow; the Newton reaches the same root.
 - **A rate solve (`solveRate`, dt = 1) is not a step.** It holds junction compositions at their buffers and books their accumulation as `HeldJunctions`; phase-port capacities are infinite. A cold structure's first step starts from a rate solve's point (`coldRateSeed`), and a rate solve without a carried point is itself balance-started (`needsBalance` does not test `rateOnly`).
 - **Two passes with the same modes are not the same pass.** A pass states its static columns from its own seed (`StepEquations.columnEnds`); a new per-pass choice that changes a row's value without a structural entry belongs in `PassKey` too.

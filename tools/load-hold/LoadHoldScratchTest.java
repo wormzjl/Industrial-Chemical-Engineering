@@ -112,6 +112,16 @@ class LoadHoldScratchTest {
             for(int i=heldBefore;i<w.held.size();i++)out("  HELD "+w.held.get(i));
         }
         for(var s:w.coordinator.snapshots())out("  end "+summary(s));
+        // The trim law on paper: the pump's rise and the series valve's drop in the island's last live result (the drive's speed held: no shafts here).
+        w.coordinator.snapshots().stream().filter(x->x.id()==ISLAND).findFirst().flatMap(IslandCoordinator.Snapshot::lastResult).ifPresent(r->{
+            var g=r.graph();int pe=-1;for(int e=0;e<g.pipes().size();e++)if(g.pipes().get(e).control() instanceof FlowControl.Machine)pe=e;
+            var m=(FlowControl.Machine)g.pipes().get(pe).control();var suction=g.reservoirs().get(g.pipes().get(pe).first()).state();double rho=suction.mass()/suction.volume();
+            double q=r.endpointFlows()[pe]/rho,rise=r.endpointHeads()[pe],drop=ShaftTrains.seriesValveDrop(r,pe);
+            var tmodel=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel().withTime(time);
+            double kappa=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(tmodel,m,suction);
+            double trim=com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),q,(rise-drop)/(1-com.wormzjl.icheme.science.machine.SpeedControl.VALVE_TRIM_MARGIN),rho,suction.pressure(),kappa,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,m.speed());
+            out(String.format(Locale.ROOT,"    trim, live: speed %.4f, flow %.4f kg/s = %.5f m3/s (set %.5f), suction %.1f kPa, density %.2f, rise %.1f kPa (%.2f m), valve drop %.1f kPa (%.3f of the rise), trimmed speed %.4f (a step of %.4f)",
+                    m.speed(),r.endpointFlows()[pe],q,m.setFlow(),suction.pressure()/1e3,rho,rise/1e3,rise/(rho*9.80665),drop/1e3,drop/rise,trim,trim-m.speed()));});
 
         if(first.isEmpty()){out("no job of island "+ISLAND);return;}
         var c=first.getFirst();
