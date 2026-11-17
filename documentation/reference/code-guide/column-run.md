@@ -271,6 +271,10 @@ stopped unit with no stations when its set points are applied. A DCS sends the s
 
 Hand reviews, not gates: `ColumnOperationReviewWorld.aCrudeColumnRuns` and
 `ColumnFailureModesReviewWorld.theFailureModesPlantRunsItsCases` (`runReviewWorldServer`, namespace `icheme_review`).
+The crude review plant takes its sizes from the process simulator: `ColumnOperationReviewWorld.sized` runs Size all on a
+one-column sheet of the same column (tower water on the free cooler ports) and `review` builds its diameter, units and
+boundary bores, placed by their extents; it logs `review_operation sizing` lines. The column tests, the tutorial unit and
+the failure-modes plants keep the fixed units of `Options.REVIEW` or their own.
 Off-line tools: `tools/column-operation/`, `tools/valve-hold-probes/`, `tools/column-failure-modes/`.
 
 ## Traps
