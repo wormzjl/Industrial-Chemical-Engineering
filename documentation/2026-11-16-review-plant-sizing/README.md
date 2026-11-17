@@ -62,6 +62,14 @@ the `Rig` class keep their sizes.
   so the mode never becomes open and the island holds (no pump or second valve needed). M2, located only: with a pump
   on its curve and a parallel pair, the pass that regulates again from the open line stalls at a residual of 14.93.
   The carried start fails on M1 and the fresh start on M2; one of the two solved every case tried. No mod code, no fix.
+- 2026-11-17, same branch (sub-thread of the main thread): M2 traced, [VALVE_HOLD_TRACE.md](VALVE_HOLD_TRACE.md), with
+  `tools/valve-hold/trace.patch` (temporary instrumentation, not applied). The regulating pass starts from a balance that
+  did not converge. From the open line's pressures, the balance's Newton crosses below the void's 200 kPa, where the
+  one-way inlet passes nothing. Its one-junction sweep cannot lift the pair's junctions together, so they end at 1 kPa.
+  The pass loop uses those law flows anyway. The inlet then starts 8.5 times beyond its reverse cap, the Jacobian is
+  singular (cond 2.9e9), and every trial leaves the property box. The 14.932 is the pump's rated 19.932 kg/s start
+  against the 5 kg/s line. M1 is a different stall: it has no root, and the pump's discharge walks to 1 Pa. Options A to
+  C4 go to the owner. No mod code.
 
 ## Full crude unit, sized (2026-11-17)
 
