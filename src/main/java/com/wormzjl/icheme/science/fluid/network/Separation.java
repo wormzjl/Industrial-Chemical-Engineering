@@ -345,9 +345,9 @@ public final class Separation {
      * Richardson and Zaki's exponent {@code n} of the swarm factor {@code (1 − φ)^n}, by their steps on the single
      * drop's Reynolds number {@code Re = ρ v d / μ} (Trans. Inst. Chem. Eng. 32 (1954) 35, reprinted
      * doi:10.1016/S0263-8762(97)80006-8): 4.65 under Re 0.2, {@code 4.35 Re^-0.03} to Re 1, {@code 4.45 Re^-0.1} to
-     * Re 500, 2.39 above. The steps are the paper's own ({@code n} jumps by 0.1 at Re 1); 4.65, 4.45 and 2.39 were
-     * confirmed against the paper, the factor 4.35 is from memory and not confirmed (plan section 10: at most 2 % in
-     * speed at a fraction of 0.3).
+     * Re 500, 2.39 above. The steps are the paper's own ({@code n} jumps by 0.1 at Re 1); 4.65 and 2.39 were confirmed
+     * against the paper, 4.45 agrees with them (2.39 at Re 500), and the factor 4.35 is from memory and not confirmed
+     * (plan section 10: at most 2 % in speed at a fraction of 0.3).
      *
      * @param speed     the single drop's settling speed, m/s
      * @param drop      its diameter, m
