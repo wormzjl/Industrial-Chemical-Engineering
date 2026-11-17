@@ -112,6 +112,9 @@ the `Rig` class keep their sizes.
   The rig's charge valve is removed; the charge pump holds 0.19344 m3/s by its drive (REGULATE_FLOW). The review-operation
   GameTest fails the new check: the 10 bar crude supply pushes 2x design through the open line, so the tower's feed
   valve sets the flow (318.85 kg/s) at any pump speed. Options to the owner (supply at tank pressure recommended).
+  Then (main thread: option A) the supply at 1.5 bar: Size all gives P-101 171 m and a 400 kW motor (NPSH 11.03 m, 2.56 m
+  over the world's limit), but the placed P-101 keeps the default 100 m curve (its shape has no duty); the crude island
+  holds at the column's start. Options: the rig builds P-101 with the sizer's duty, or the sizer's shape carries it.
 
 ## Full crude unit, sized (2026-11-17)
 
