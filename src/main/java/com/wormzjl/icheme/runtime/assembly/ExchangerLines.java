@@ -72,7 +72,8 @@ final class ExchangerLines {
                     long valve = valve(level, world, report, ExchangerBlueprint.operated(heat.side(), asked));
                     // A control valve regulates by its sensor: a bare one stands open, whatever its target.
                     var found = valve == 0 ? null : world.registrations().get(valve);
-                    boolean metered = found != null && found.device().control() instanceof FlowControl.ControlValve law && !law.bare();
+                    boolean metered = found != null && found.device().control() instanceof FlowControl.ControlValve law && !law.bare()
+                            && com.wormzjl.icheme.runtime.control.ValveSignal.linked(world, valve, law);
                     yield valve == 0 ? new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, 1, 0, slots)
                             : new FluidWorldAuthority.Lines(metered ? FluidWorldAuthority.Lines.Status.COMPLETE : FluidWorldAuthority.Lines.Status.UNMETERED, 0, valve, slots);
                 }

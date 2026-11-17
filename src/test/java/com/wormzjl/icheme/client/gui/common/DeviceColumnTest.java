@@ -553,4 +553,76 @@ class DeviceColumnTest {
             assertTrue(Column.place(both, 10, 74, FluidGuiLayout.side(width) - 10, M, Column.Metrics.COMPACT).bounds().h() <= view, "both valves fit the design view at " + width);
         assertEquals(Set.of(), texts.missing);
     }
+    /** A valve's sensors as its screen lists them: none, or three linked, the {@code selected}th marked (-1: none). */
+    private static List<DeviceColumn.SensorChoice> sensors(int count, int selected) {
+        var all = List.of(new DeviceColumn.SensorChoice("FT-0012 / FLOW", "Sensor block: 104, 64, -31", false, "sensor:12"),
+                new DeviceColumn.SensorChoice("PT-0007 / PRESSURE", "Sensor block: 98, 66, -31\nEquipment: #0042", false, "sensor:7"),
+                new DeviceColumn.SensorChoice("FT-0015 / FLOW", "Sensor block: 112, 64, -28", false, "sensor:15"));
+        var out = new ArrayList<DeviceColumn.SensorChoice>();
+        for (int i = 0; i < count; i++) {
+            var c = all.get(i);
+            out.add(new DeviceColumn.SensorChoice(c.label(), c.hint(), i == selected, c.key()));
+        }
+        return out;
+    }
+
+    /** A control valve's page led by its Sensor group, as FluidDeviceScreen builds it: {@code valve} the set point the selection shows. */
+    private static DeviceColumn.Input sensorValve(boolean edit, List<DeviceColumn.SensorChoice> choices, DeviceColumn.Valve valve, int readings, HeatControlColumn.Texts t) {
+        return new DeviceColumn.Input(Kind.VALVE, edit, false, true, "kPa", "°C", "/min", valve, new DeviceColumn.Opening(choices.stream().anyMatch(DeviceColumn.SensorChoice::selected) ? .42 : 1, ""),
+                false, null, null, DeviceColumn.sensors(choices, edit, t), phases("volume", false), meters(readings));
+    }
+
+    /**
+     * The control valve's Sensor group (batch 2026-11-16-review-plant-sizing, owner's pick A): "No sensor linked" alone where
+     * none is; else None and each linked sensor as a mark, the selected one marked, None while none is. An editor's choices
+     * act, a reader's do not. It leads the valve's column, before its set point; it fits the door at every width, its words
+     * whole and its boxes in line; the readings move no widget under it; and a flow valve's page with three sensors still fits
+     * the design view.
+     */
+    @Test
+    void aControlValveLeadsWithItsSensorGroup() {
+        var texts = new HeatControlColumnTest.Recording();
+        record State(String name, int count, int selected, DeviceColumn.Valve valve) {}
+        var states = List.of(new State("no sensor linked", 0, -1, DeviceColumn.Valve.UNCONFIGURED), new State("none selected", 3, -1, DeviceColumn.Valve.UNCONFIGURED),
+                new State("flowmeter selected", 3, 0, DeviceColumn.Valve.MASS_FLOW), new State("probe selected", 3, 1, DeviceColumn.Valve.PRESSURE));
+        for (var st : states)
+            for (boolean edit : new boolean[]{true, false}) {
+                String what = st.name() + (edit ? "" : " reader");
+                var in = sensorValve(edit, sensors(st.count(), st.selected()), st.valve(), 6, texts);
+                var group = (Column.Group) DeviceColumn.rows(in, texts).getFirst();
+                assertEquals("Sensor", group.title(), what + ": the Sensor group leads");
+                if (st.count() == 0) {
+                    assertEquals(1, group.rows().size(), what);
+                    assertEquals("No sensor linked", ((Column.Paragraph) group.rows().getFirst()).text(), what);
+                } else {
+                    var choices = group.rows().stream().map(r -> (Column.Choice) r).toList();
+                    assertEquals(List.of("None", "FT-0012 / FLOW", "PT-0007 / PRESSURE", "FT-0015 / FLOW"), choices.stream().map(Column.Choice::title).toList(), what);
+                    assertEquals(st.selected() + 1, java.util.stream.IntStream.range(0, choices.size()).filter(k -> choices.get(k).selected()).boxed().toList().getFirst(), what + ": one mark, on the selection");
+                    assertEquals(1, choices.stream().filter(Column.Choice::selected).count(), what);
+                    assertEquals(edit ? List.of("sensor:none", "sensor:12", "sensor:7", "sensor:15") : java.util.Arrays.asList(null, null, null, null), choices.stream().map(Column.Choice::action).toList(), what + ": an editor's choices act, a reader's do not");
+                    assertEquals("Sensor block: 104, 64, -31", choices.get(1).hint(), what + ": where it is, on hover");
+                }
+                for (int width = 300; width <= 790; width += 7) {
+                    var column = place(in, texts, width);
+                    for (var p : column.rows()) {
+                        for (var t : p.texts()) assertTrue(M.width(t) <= p.rect().w(), what + " a text cut at " + width + ": " + t);
+                        for (var slot : p.slots().values()) assertTrue(slot.inside(p.rect()) && slot.w() >= 40, what + " a box at " + width + ": " + slot);
+                        if (p.row() instanceof Column.Group g) assertEquals(1, p.texts().size(), what + " a plate in one line at " + width + ": " + g.title());
+                    }
+                    assertInLine(column, what + " at " + width);
+                }
+                for (int width : new int[]{300, 464, 790})
+                    assertEquals(widgets(place(sensorValve(edit, sensors(st.count(), st.selected()), st.valve(), 2, texts), texts, width)),
+                            widgets(place(sensorValve(edit, sensors(st.count(), st.selected()), st.valve(), 14, texts), texts, width)), what + ": the readings move no widget at " + width);
+            }
+        int view = FluidGuiLayout.doorView(FluidGuiLayout.HEIGHT);
+        // The whole page scrolls at the design height with three sensors (377 px at 464); its widgets, the Sensor group and the
+        // Set point, stand inside the view without scrolling.
+        for (int width : new int[]{464, 790}) {
+            var column = place(sensorValve(true, sensors(3, 0), DeviceColumn.Valve.MASS_FLOW, 4, texts), texts, width);
+            var setPoint = column.rows().stream().filter(p -> p.row() instanceof Column.Group g && g.title().equals("Set point")).findFirst().orElseThrow();
+            assertTrue(setPoint.rect().bottom() - 74 <= view, "a flow valve's Sensor group and Set point with three sensors at " + width + ": " + (setPoint.rect().bottom() - 74) + " px in a " + view + " px view");
+        }
+        assertEquals(Set.of(), texts.missing);
+    }
 }

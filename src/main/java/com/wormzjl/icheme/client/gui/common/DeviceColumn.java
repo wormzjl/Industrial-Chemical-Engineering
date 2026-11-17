@@ -86,6 +86,30 @@ public final class DeviceColumn {
         return phase == 1 && aqueousWater ? "water" : Integer.toString(phase);
     }
 
+    /** A sensor a control valve's Sensor group lists: its label ("FT-0012 / FLOW"), its hover (where it is), whether it is selected, its action key. */
+    public record SensorChoice(String label, @Nullable String hint, boolean selected, String key) {
+    }
+
+    /** The Sensor group's action keys: {@code sensor:none} clears the selection, {@code sensor:<instance>} selects that sensor. */
+    public static final String SENSOR_KEY = "sensor:", SENSOR_NONE = "sensor:none";
+
+    /**
+     * A control valve's Sensor group (batch 2026-11-16-review-plant-sizing, owner's pick A of VALVE_SENSOR_REVIEW.md: "The
+     * control valve needs to select sensor first in order to function"): None, then each sensor physically linked to the
+     * valve, a mark on the selected one; "No sensor linked" where none is. An editor's choices act, a reader's do not. The
+     * screen leads the valve's column with it, before its set points.
+     */
+    public static List<Column.Row> sensors(List<SensorChoice> choices, boolean canEdit, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        if (choices.isEmpty()) rows.add(new Column.Paragraph(t.get("sensor_unlinked"), Palette.WARN, t.get("sensor_unlinked.hint")));
+        else {
+            boolean none = choices.stream().noneMatch(SensorChoice::selected);
+            rows.add(new Column.Choice(t.get("sensor_none"), t.get("sensor_none.hint"), none, canEdit ? SENSOR_NONE : null));
+            for (var c : choices) rows.add(new Column.Choice(c.label(), c.hint(), c.selected(), canEdit ? c.key() : null));
+        }
+        return List.of(new Column.Group(t.get("device_group.sensor"), t.get("device_group.sensor.hint"), rows));
+    }
+
     /** A valve's opening (0 to 1) and its controller's words. */
     public record Opening(double share, String controller) {
     }
