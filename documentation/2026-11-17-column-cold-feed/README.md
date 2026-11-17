@@ -47,6 +47,28 @@ pumparounds work only as far as their trays hold liquid.
   thousand cycles of a cold and hot feed), `ColumnRunTest` 49/49 of the selected methods (new: a 300 K feed on a 340 K
   table passes for 3000 ticks with the bottoms at 300 K within 1 K and every mole and joule in the bottoms, exact; at
   340 K it runs). No other reference moved.
+- 2026-11-17: package 2 built (commit `6f6dbe148`): the pumparound's duty follows its cooler. The cycle books each
+  pumparound's set-point duty (L2: the duty asked is the set point, decision D2) up to its cooler's room; the plan's
+  package text read "table per feed", which cannot climb back once a table is relaxed (the booked duty never exceeds the
+  table's), so the set point is asked, which equals the table's at every design point. `PUMPAROUND_SHORT` is a NOTICE
+  ("pumparound N's cooler takes X % of its duty, the condenser the rest"), the trip compares the condenser with the
+  solved duty plus what the pumparounds left, `DriftBands.PUMPAROUND` = 0.05 (`Trigger.PUMPAROUND`, after the steam
+  ratio), `ColumnOperation.relaxed` solves at `at + 0.5 (booked - at)` (capped by the set point, at least 1e-6 of it;
+  a duty inside the band keeps the duty the table was solved at, so a design point solves as before), and no
+  PUMPAROUND solve is asked where the relaxed duties are the table's own. `ColumnSolve.Job` carries the duties;
+  `SplitTable.Reference.pumparounds` keeps them beside the set points (a refused state's: the duties it booked). A
+  pumparound cooler's hold is of its set-point duty, so a relaxed table keeps its cooler's hold. State format 53: the
+  reference record gains the duties; a state without them is read as solved at its set points (exactly what it was),
+  not dropped as the plan said (the saves rule: a new field defaults to the behaviour before it). Tests:
+  `ColumnCycleTest` 20/20, `ColumnSolveTest` 4/4 selected (new: at half the duties the draw trays go from 417, 494, 556
+  to 452, 524, 587 K and the condenser from -56351 to -78571 J/mol of feed, closure exact), `ColumnRunTest` 50/50
+  selected (new: a cooler on a narrow water line taking 49 % of its duty: solves at 370, 282, 239, 218, 207, 202 J/mol
+  of feed, settled 2.7 % from the 196 it takes after six solves, the feed kept). Moved references (the PUMPAROUND_SHORT
+  cases): `eachUtilitysRoomBoundsItsOwnDuty` room for 0.4 of the duty: before alpha 0.4, PUMPAROUND_SHORT binding; now
+  alpha 1, 0.4 of the duty booked, a notice; with the reboiler at 0.6 and the condenser at 0.7: before the
+  pumparound's 0.4 bound, now the reboiler's 0.6. `aShortPumparoundCoolerLimitsTheColumn` (renamed
+  `aShortPumparoundCoolerKeepsTheFeed`): before no feed after the water's loss, LIMITED: pumparound; now 25 mol in
+  50 s (the set 0.5 mol/s), RUNNING with the notice at 0 %, COOLING LIMITED. No design-point reference moved.
 
 ## Documents
 
