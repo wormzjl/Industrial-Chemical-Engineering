@@ -59,7 +59,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | `IChemEClient` | Registers the menu screens, the guide's reload listener, key and HUD layer; clears client caches on logout | 71 |
 | `TourAnchors`, `DeviceTour`, `ScreenTours`, `AssemblyTour` | Where the help tours' stops stand on each screen's doors ([tutorial.md](tutorial.md)) | 60, 112, 129, 49 |
 
-The dev-client bridge mod is [`src/mcpCompat`](../../../src/mcpCompat/java/com/wormzjl/icheme/mcpcompat/) (not shipped): `McpCompatibilityMod`, and the mixins `ScreenInputMixin` (the bridge's click, type and paste to the focused widget), `HotkeyMixin` (Ctrl+A in the focused `EditBox`), `WindowHandleMixin` (the window's own GLFW handle), `BackgroundCursorMixin` (no cursor grab while the window is in the background), `UseItemMixin`, `MinecraftInputInvoker`; its `neoforge.mods.toml` requires `mcpmod` `[0.4.18,0.5.0)`.
+The dev-client bridge mod is [`src/mcpCompat`](../../../src/mcpCompat/java/com/wormzjl/icheme/mcpcompat/) (not shipped): `McpCompatibilityMod`, and the mixins `ScreenInputMixin` (the bridge's click, type and paste to the focused widget), `HotkeyMixin` (Ctrl+A in the focused `EditBox`), `WindowHandleMixin` (the window's own GLFW handle), `BackgroundCursorMixin` (no cursor grab while the window is in the background), `UseItemMixin`, `MinecraftInputInvoker`; its `neoforge.mods.toml` requires `mcpmod` `[0.4.28,0.5.0)` (the mixin targets kept their v0.4.18 signatures).
 
 ## Main flow
 
@@ -116,7 +116,7 @@ All in `test` (`src/test/java/com/wormzjl/icheme/client/`); run with `--tests`:
 
 The look is judged on renders of `tools/heat-gui-renders/` (`GuiPrototypes`, `HeatDiagramRender`; `-Dcount` prints each page's draw calls), as the `gui-creation` skill says. `ComponentSearch` and `ProcessUi.textKeyPressed` have no test.
 
-**Dev-client checks.** AGENTS.md, "GUI and in-game checks": only on the owner's request, through the `runMcpClient` lane ([verification.md](verification.md)) with the pinned bridge jar from `tools/minecraft-mcp-bridge/` copied into `run/mcp-client-mods/` (`prepareMcpControlMod` checks its SHA-256 and removes other bridge jars); `-PmcpClientWidth`/`-PmcpClientHeight` size the window without desktop input. The `minecraft-mcp` skill is not in this tree's `.claude/skills/`.
+**Dev-client checks.** AGENTS.md, "GUI and in-game checks": only on the owner's request, through the `runMcpClient` lane ([verification.md](verification.md)) with the pinned bridge jar from `tools/minecraft-mcp-bridge/` copied into `run/mcp-client-mods/` (`prepareMcpControlMod` checks its SHA-256 and removes other bridge jars); `-PmcpClientWidth`/`-PmcpClientHeight` size the window without desktop input. The `mcpClient` run sets `mcp.background_input=true`, `mcp.remote_control=true` (bridge 0.4.27+ refuses a remote `enter_control_mode` without it) and `mcp.screenshot.dir` to the worktree's `tmp/` (0.4.28 writes `screenshot_to_file` only there). The procedure is the `minecraft-mcp` skill ([SKILL.md](../../../.claude/skills/minecraft-mcp/SKILL.md)).
 
 ## Traps
 
@@ -127,4 +127,4 @@ The look is judged on renders of `tools/heat-gui-renders/` (`GuiPrototypes`, `He
 - `GuiCanvas.release` must run before anything draws past the canvas (as `SkinField` does before the game draws its focused text), or held texts land under it.
 - Translations: only `lang/en_us.json` changes during a batch; the other four files follow in the translation commit (AGENTS.md, `translation-commit` skill). A missing key shows the raw key; the builders' `everyText…HasItsEnglishLine` gates catch it for builder texts, nothing for a screen's own `tr` calls. Status words the server builds (`LIMITED`, `LOW LIMIT`, `DUTY INSUFFICIENT`), data-range notices and hold reasons arrive as English text with no lang key.
 
-**Snapshot:** `d6f721b94`, 2026-11-15.
+**Snapshot:** `c10ca9128`, 2026-11-17.

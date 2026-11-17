@@ -15,6 +15,12 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.34.4] - 2026-11-17
+
+### Changed
+
+- Minecraft MCP bridge and skill (`2026-09-24-minecraft-mcp-skill`; on `claude/mcp-skill-status-632852`): the `runMcpClient` lane pins the official bridge v0.4.28 (`c10ca9128`), sets `mcp.remote_control=true` and a `tmp/` screenshot folder for its new consent gate and screenshot jail, and the compat range is `[0.4.28,0.5.0)`. The lost `minecraft-mcp` skill is rebuilt for v0.4.28 (`a60f846e9`) and checked in game (`1968d5887`): launch, control mode, world creation, chat commands, `use_item`, text entry, screenshots, save and quit; no desktop-input helpers. AGENTS.md and `rules/in-game-checks.md` name the skill. No game change.
+
 ## [0.34.3] - 2026-11-16
 
 ### Added

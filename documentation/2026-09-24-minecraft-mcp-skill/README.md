@@ -36,7 +36,7 @@ nothing in the world (`pause_game`); block screens open from `tp @s x.5 -58 z.5 
 
 ## Status
 
-Rebuilt 2026-11-17 for bridge v0.4.28 on `claude/mcp-skill-status-632852`; not merged. The 2026-09-24
+Implemented 2026-11-17 (0.34.4): rebuilt for bridge v0.4.28 on `claude/mcp-skill-status-632852` and merged to `main`. The 2026-09-24
 skill was lost: its branch was deleted and its commits are gone from the object store. The rebuild
 starts from the copies kept in `tools/p6-pilot-acceptance/mcp/` (driver, two references) and the
 2026-10 lanes' gotchas. It drops `robot.ps1` and the `java.awt.Robot` helpers (desktop input is
@@ -81,7 +81,7 @@ Nothing open.
 
 Purpose: Tracked agent skill `.claude/skills/minecraft-mcp/` distilling all dev-client bridge experience; transcript mining of about 15 agents (four opus reports) into a pitfalls catalogue and screen map
 
-Status: In progress since 2026-09-24 (rebuilt for v0.4.28 2026-11-17, not on `main`). Index: [../INDEX.md](../INDEX.md).
+Status: Implemented 2026-11-17 (0.34.4). Index: [../INDEX.md](../INDEX.md).
 
 ### Documents
 
@@ -95,6 +95,7 @@ Status: In progress since 2026-09-24 (rebuilt for v0.4.28 2026-11-17, not on `ma
 
 - In progress since 2026-09-24 on `claude/minecraft-mcp-skill-c3f0f0` (skill written, mining consolidated; eval runs skipped; `runMcpClient` typing lane unconfirmed)
 - 2026-11-17: skill lost with its branch; rebuilt for bridge v0.4.28 on `claude/mcp-skill-status-632852` (jar updated, lane consent and screenshot folder set, robot helpers dropped); in-game check open
+- 2026-11-17: merged to `main` as 0.34.4 (owner: patch bump; no final lane: no test class loads `src/mcpCompat` or the `mcpClient` run settings; code guide `client-kit.md` updated; tooling cleanup: nothing created outside `tmp/`)
 - 2026-11-17: owner's in-game check on v0.4.28 passed; text-field clearing recipe and the `new-world.sh` path fix added to the skill
 
 ### Notes
