@@ -382,7 +382,7 @@ final class V3ContinuationLadder {
                 input.feedComponentMolarFlowsMolPerSecond(), input.feedTemperatureKelvin(), input.stageCount(),
                 input.feedStageNumber(), input.topPressurePascal(), input.stagePressureDropPascal(),
                 input.specifications(), List.of(), input.steamFeeds(), input.pumparounds(),
-                input.columnDiameterMetres());
+                input.columnDiameterMetres(), input.refluxFreeWaterMolPerSecond());
     }
 
     /** Stage heat is never present in a cold seed; it is introduced only by continuation from an accepted state. */
@@ -392,7 +392,7 @@ final class V3ContinuationLadder {
                 input.feedComponentMolarFlowsMolPerSecond(), input.feedTemperatureKelvin(), input.stageCount(),
                 input.feedStageNumber(), input.topPressurePascal(), input.stagePressureDropPascal(),
                 input.specifications(), input.sideDraws(), input.steamFeeds(), List.of(),
-                input.columnDiameterMetres());
+                input.columnDiameterMetres(), input.refluxFreeWaterMolPerSecond());
     }
 
     /** Supplies a dry boilup surrogate only for continuation seeds; publication always returns to authored duty. */
@@ -442,7 +442,8 @@ final class V3ContinuationLadder {
         return new V3ColumnInput(input.schemaVersion(), input.packageId(), input.assayId(), input.componentBasis(),
                 input.feedComponentMolarFlowsMolPerSecond(), input.feedTemperatureKelvin(), input.stageCount(),
                 input.feedStageNumber(), topPressurePascal, input.stagePressureDropPascal(), input.specifications(),
-                input.sideDraws(), input.steamFeeds(), input.pumparounds(), input.columnDiameterMetres());
+                input.sideDraws(), input.steamFeeds(), input.pumparounds(), input.columnDiameterMetres(),
+                input.refluxFreeWaterMolPerSecond());
     }
 
     private static List<Double> continuationPressureSteps(

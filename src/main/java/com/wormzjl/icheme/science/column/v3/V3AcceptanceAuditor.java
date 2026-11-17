@@ -126,6 +126,7 @@ final class V3AcceptanceAuditor {
         if (problem.hasSteamFeeds()) advisoryEvidence = withSteamContinuationAdvisory(advisoryEvidence, state);
         if (problem.hasPumparounds()) advisoryEvidence = withCooledTrayAdvisory(advisoryEvidence, state);
         advisoryEvidence = withWetTrayAdvisory(advisoryEvidence, state);
+        if (returnsRefluxFreeWater(problem)) advisoryEvidence = withRefluxFreeWaterAdvisory(advisoryEvidence, state);
         advisoryEvidence = withCheckWarnings(advisoryEvidence, checks);
         return new V3AcceptanceAudit(checks, advisoryEvidence);
     }
@@ -160,6 +161,8 @@ final class V3AcceptanceAuditor {
         for (double duty : stageHeat) stageHeatTotal += duty;
         double freeWater = V3ColumnDutyLedger.freeWaterEnergyWatts(problem, state);
         double condenser = liquidEnergy[0] + vaporEnergy[0] + freeWater - vaporEnergy[1];
+        // Free water returned with the reflux leaves the drum for tray one: an internal stream, in the duty only.
+        if (returnsRefluxFreeWater(problem)) condenser += independentRefluxFreeWaterWatts(problem, state);
         // Water carried over from tray one leaves the trays as liquid and reaches the drum beside the vapour.
         if (carriedOver != 0.0) condenser -= carriedOver;
         double reflux = refluxRatio() / (1.0 + refluxRatio());
@@ -232,6 +235,8 @@ final class V3AcceptanceAuditor {
             vaporIn += carried * V3WaterProperties.liquidMolarEnthalpy(state.temperatureKelvin(1), problem.nodePressurePascal(1));
         }
         double expected = liquidOut + vaporOut + waterVaporOut + freeWaterOut - vaporIn;
+        // Free water returned with the reflux leaves the drum as liquid at its outlet temperature.
+        if (returnsRefluxFreeWater(problem)) expected += independentRefluxFreeWaterWatts(problem, state);
         double largest = 0.0;
         for (double term : new double[] {liquidOut, vaporOut, waterVaporOut, freeWaterOut, vaporIn, publishedCondenserWatts}) {
             largest = Math.max(largest, Math.abs(term));
@@ -387,6 +392,8 @@ final class V3AcceptanceAuditor {
             }
             expected[node] = cumulative;
         }
+        // Free water returned with the reflux is fed to tray one as liquid.
+        if (returnsRefluxFreeWater(problem)) expected[1] += problem.input().refluxFreeWaterMolPerSecond();
         double maximum = 0.0;
         for (int node = 1; node <= topology.reboilerNode(); node++) {
             maximum = Math.max(maximum, relativeDifference(expected[node], problem.waterVaporFlowMolPerSecond(node)));
@@ -395,7 +402,8 @@ final class V3AcceptanceAuditor {
         IndependentWaterSplit split = independentCondenserWaterSplit(state);
         double waterSlip = split.vaporFlowMolPerSecond();
         double freeWater = split.freeWaterFlowMolPerSecond();
-        maximum = Math.max(maximum, relativeDifference(waterAtCondenser, waterSlip + freeWater));
+        maximum = Math.max(maximum, relativeDifference(waterAtCondenser, returnsRefluxFreeWater(problem)
+                ? waterSlip + freeWater + split.refluxFreeWaterMolPerSecond() : waterSlip + freeWater));
         return maximum <= 1.0e-12
                 ? V3AcceptanceAudit.Check.pass(V3AuditFamily.WATER_PROFILE, maximum, 1.0e-12,
                         "known free-water profile and overhead split recomputed from authored steam feeds")
@@ -523,7 +531,7 @@ final class V3AcceptanceAuditor {
      */
     private V3AcceptanceAudit.Check waterBalance(V3DryMeshState state) {
         V3ColumnTopology topology = problem.topology();
-        double totalSteam = authoredWaterAtCondenser();
+        double totalSteam = authoredSteam(problem);
         if (!(totalSteam > 0.0)) {
             return V3AcceptanceAudit.Check.pass(V3AuditFamily.WATER_BALANCE, 0.0, 1.0e-8, "no authored steam to balance");
         }
@@ -532,14 +540,17 @@ final class V3AcceptanceAuditor {
             double vaporIn = node < topology.reboilerNode() ? problem.waterVaporFlow(state, node + 1) : 0.0;
             double freeWaterIn = node >= 2 ? problem.fallingFreeWaterMolPerSecond(state, node - 1) : 0.0;
             double in = vaporIn + freeWaterIn + problem.nodeSteamFeedMolPerSecond(node);
+            // Tray one also receives the free water returned with the reflux, as liquid.
+            if (node == 1 && returnsRefluxFreeWater(problem)) in += problem.input().refluxFreeWaterMolPerSecond();
             double out = problem.waterVaporFlow(state, node) + problem.freeWaterFlowMolPerSecond(state, node);
             maximum = Math.max(maximum, Math.abs(in - out) / totalSteam);
         }
         V3ColumnProblem.WaterCondenserSplit split = problem.waterCondenserSplit(state);
         double carried = problem.carriedOverWaterMolPerSecond(state);
-        if (carried != 0.0) {
+        if (carried != 0.0 || returnsRefluxFreeWater(problem)) {
             double drumIn = problem.waterVaporFlow(state, 1) + carried;
             double drumOut = split.vaporFlowMolPerSecond() + split.freeWaterFlowMolPerSecond();
+            if (returnsRefluxFreeWater(problem)) drumOut += split.refluxFreeWaterMolPerSecond();
             maximum = Math.max(maximum, Math.abs(drumIn - drumOut) / totalSteam);
         }
         double bottomsFreeWater = problem.freeWaterFlowMolPerSecond(state, topology.reboilerNode());
@@ -550,6 +561,10 @@ final class V3AcceptanceAuditor {
                 totalSteam * 3.6, split.vaporFlowMolPerSecond() * 3.6, split.freeWaterFlowMolPerSecond() * 3.6,
                 bottomsFreeWater * 3.6);
         if (carried != 0.0) detail += String.format(Locale.ROOT, "; carried over from tray 2 %.6g kmol/h", carried * 3.6);
+        if (returnsRefluxFreeWater(problem)) {
+            detail += String.format(Locale.ROOT, "; returned with the reflux %.6g kmol/h",
+                    split.refluxFreeWaterMolPerSecond() * 3.6);
+        }
         return Double.isFinite(maximum) && maximum <= 1.0e-8
                 ? V3AcceptanceAudit.Check.pass(V3AuditFamily.WATER_BALANCE, maximum, 1.0e-8, detail)
                 : V3AcceptanceAudit.Check.fail(V3AuditFamily.WATER_BALANCE,
@@ -608,6 +623,16 @@ final class V3AcceptanceAuditor {
                 "warning: " + hydraulics.carryOverWarning(1, carried, reported, flood));
     }
 
+    /** Advisory only: the free water the drum returns with the reflux, beside the water it decants as product. */
+    private List<String> withRefluxFreeWaterAdvisory(List<String> advisoryEvidence, V3DryMeshState state) {
+        if (advisoryEvidence.size() >= 16) return advisoryEvidence;
+        V3ColumnProblem.WaterCondenserSplit split = problem.waterCondenserSplit(state);
+        List<String> evidence = new ArrayList<>(advisoryEvidence);
+        evidence.add(String.format(Locale.ROOT, "free water returned with the reflux: %.1f kmol/h; decanted product: %.1f kmol/h",
+                split.refluxFreeWaterMolPerSecond() * 3.6, split.freeWaterFlowMolPerSecond() * 3.6));
+        return List.copyOf(evidence);
+    }
+
     /** Advisory only: which trays carry a free-water phase and how much water they circulate. */
     private List<String> withWetTrayAdvisory(List<String> advisoryEvidence, V3DryMeshState state) {
         if (!problem.hasWetTrays() || advisoryEvidence.size() >= 16) return advisoryEvidence;
@@ -623,7 +648,10 @@ final class V3AcceptanceAuditor {
         double fraction = total > 0.0 ? freeWater / total : 0.0;
         if (freeWater > 0.0 && Double.isFinite(freeWater)) {
             return V3AcceptanceAudit.Check.pass(V3AuditFamily.FREE_WATER_SPLIT, fraction, 0.0,
-                    "saturated condenser drum decants a positive free-water boot");
+                    returnsRefluxFreeWater(problem) ? String.format(Locale.ROOT,
+                            "saturated condenser drum decants a positive free-water boot: %.6g kmol/h product, %.6g kmol/h"
+                                    + " returned with the reflux", freeWater * 3.6, split.refluxFreeWaterMolPerSecond() * 3.6)
+                            : "saturated condenser drum decants a positive free-water boot");
         }
         if (Double.isFinite(freeWater) && Double.isFinite(split.vaporFlowMolPerSecond())
                 && split.vaporFlowMolPerSecond() >= total) {
@@ -854,7 +882,10 @@ final class V3AcceptanceAuditor {
                 double vaporWater = problem.topology().condenserPhaseBranch() == V3CondenserPhaseBranch.TWO_PHASE
                         ? Math.min(arrivingWater, independentWaterSlipCoefficient(problem)
                                 * hydrocarbonVaporTotal(state, condenser)) : 0.0;
-                yield new IndependentWaterSplit(vaporWater, arrivingWater - vaporWater);
+                double returned = problem.input().refluxFreeWaterMolPerSecond();
+                yield returnsRefluxFreeWater(problem)
+                        ? new IndependentWaterSplit(vaporWater, arrivingWater - vaporWater - returned, returned)
+                        : new IndependentWaterSplit(vaporWater, arrivingWater - vaporWater);
             }
         };
     }
@@ -1045,8 +1076,28 @@ final class V3AcceptanceAuditor {
         return authoredWaterAtCondenser(problem);
     }
 
+    /**
+     * The water that reaches the drum, from the authored input: the steam, and the free water returned with the
+     * reflux, which comes back up through tray one.
+     */
     private static double authoredWaterAtCondenser(V3ColumnProblem problem) {
+        double steam = authoredSteam(problem);
+        return returnsRefluxFreeWater(problem) ? steam + problem.input().refluxFreeWaterMolPerSecond() : steam;
+    }
+
+    private static double authoredSteam(V3ColumnProblem problem) {
         return problem.input().steamFeeds().stream().mapToDouble(V3SteamFeedSpec::molarFlowMolPerSecond).sum();
+    }
+
+    private static boolean returnsRefluxFreeWater(V3ColumnProblem problem) {
+        return problem.input().refluxFreeWaterMolPerSecond() > 0.0;
+    }
+
+    /** The returned free water's enthalpy rate from the input and the drum's state, without the problem's helper. */
+    private static double independentRefluxFreeWaterWatts(V3ColumnProblem problem, V3DryMeshState state) {
+        int condenser = problem.topology().condenserNode();
+        return problem.input().refluxFreeWaterMolPerSecond() * V3WaterProperties.liquidMolarEnthalpy(
+                state.temperatureKelvin(condenser), problem.nodePressurePascal(condenser));
     }
 
     private static double hydrocarbonVaporTotal(V3DryMeshState state, int node) {
@@ -1067,7 +1118,12 @@ final class V3AcceptanceAuditor {
         return Math.abs(left - right) / Math.max(1.0, Math.max(Math.abs(left), Math.abs(right)));
     }
 
-    private record IndependentWaterSplit(double vaporFlowMolPerSecond, double freeWaterFlowMolPerSecond) {}
+    private record IndependentWaterSplit(
+            double vaporFlowMolPerSecond, double freeWaterFlowMolPerSecond, double refluxFreeWaterMolPerSecond) {
+        IndependentWaterSplit(double vaporFlowMolPerSecond, double freeWaterFlowMolPerSecond) {
+            this(vaporFlowMolPerSecond, freeWaterFlowMolPerSecond, 0.0);
+        }
+    }
 
     private record IndependentCondenserFlash(
             V3FeedPhase phase, double vaporFraction, double[] liquidComposition, double[] vaporComposition, boolean converged) {

@@ -16,6 +16,12 @@ import java.util.Objects;
  * mode this contract has always had: every tray interval drops {@code stagePressureDropPascal}. A positive
  * diameter asks for sieve-tray hydraulics ({@link V3TrayHydraulics}), where the authored drop becomes the
  * nominal guess the first solve runs on and the published profile is marched from that solve's own traffic.</p>
+ *
+ * <p>{@code refluxFreeWaterMolPerSecond} is free water the drum sends back with the reflux, as liquid at the drum's
+ * temperature, onto tray one (trial of batch 2026-11-17-three-phase-separator, {@code REFLUX_WATER_REVIEW.md}). Zero, the
+ * default of every shorter constructor, is the column as it was: the drum decants every mole that is not vapour slip.
+ * A positive value needs steam and a drum that decants (the {@code FREE_WATER} regime). It is an input of the solve
+ * only: no wire or saved format carries it.</p>
  */
 public record V3ColumnInput(
         int schemaVersion,
@@ -32,7 +38,8 @@ public record V3ColumnInput(
         List<V3SideDrawSpec> sideDraws,
         List<V3SteamFeedSpec> steamFeeds,
         List<V3PumparoundSpec> pumparounds,
-        double columnDiameterMetres) {
+        double columnDiameterMetres,
+        double refluxFreeWaterMolPerSecond) {
     public static final int SCHEMA_VERSION = 1;
     /** Internal interior-tray count. Public total tray count is stageCount + 2. */
     public static final int MIN_STAGE_COUNT = 0;
@@ -57,6 +64,18 @@ public record V3ColumnInput(
                 specifications, sideDraws, List.of(), List.of(), PRESCRIBED_DROP_DIAMETER);
     }
 
+    /** Every input but the free water returned with the reflux, which is zero. */
+    public V3ColumnInput(
+            int schemaVersion, String packageId, String assayId, V3ComponentBasis componentBasis,
+            double[] feedComponentMolarFlowsMolPerSecond, double feedTemperatureKelvin, int stageCount,
+            int feedStageNumber, double topPressurePascal, double stagePressureDropPascal,
+            List<V3ColumnSpecification> specifications, List<V3SideDrawSpec> sideDraws,
+            List<V3SteamFeedSpec> steamFeeds, List<V3PumparoundSpec> pumparounds, double columnDiameterMetres) {
+        this(schemaVersion, packageId, assayId, componentBasis, feedComponentMolarFlowsMolPerSecond,
+                feedTemperatureKelvin, stageCount, feedStageNumber, topPressurePascal, stagePressureDropPascal,
+                specifications, sideDraws, steamFeeds, pumparounds, columnDiameterMetres, 0.0);
+    }
+
     public V3ColumnInput {
         packageId = requireIdentifier(packageId, "packageId");
         assayId = requireIdentifier(assayId, "assayId");
@@ -77,6 +96,28 @@ public record V3ColumnInput(
         sideDraws = canonicalSideDraws(sideDraws);
         steamFeeds = canonicalSteamFeeds(steamFeeds);
         pumparounds = canonicalPumparounds(pumparounds);
+        if (!Double.isFinite(refluxFreeWaterMolPerSecond) || refluxFreeWaterMolPerSecond < 0.0) {
+            throw new IllegalArgumentException("V3 free water returned with the reflux must be finite and nonnegative");
+        }
+        if (refluxFreeWaterMolPerSecond != 0.0 && steamFeeds.isEmpty()) {
+            throw new IllegalArgumentException("V3 free water returned with the reflux needs steam feeds");
+        }
+        // One zero: a -0.0 would read as zero everywhere but in the bits the record compares.
+        if (refluxFreeWaterMolPerSecond == 0.0) refluxFreeWaterMolPerSecond = 0.0;
+    }
+
+    /** Whether the drum returns free water with the reflux. */
+    public boolean returnsRefluxFreeWater() {
+        return refluxFreeWaterMolPerSecond > 0.0;
+    }
+
+    /** The same request with {@code molPerSecond} of free water returned with the reflux. */
+    public V3ColumnInput withRefluxFreeWater(double molPerSecond) {
+        return Double.doubleToLongBits(molPerSecond) == Double.doubleToLongBits(refluxFreeWaterMolPerSecond) ? this
+                : new V3ColumnInput(schemaVersion, packageId, assayId, componentBasis,
+                        feedComponentMolarFlowsMolPerSecond, feedTemperatureKelvin, stageCount, feedStageNumber,
+                        topPressurePascal, stagePressureDropPascal, specifications, sideDraws, steamFeeds,
+                        pumparounds, columnDiameterMetres, molPerSecond);
     }
 
     @Override
@@ -95,7 +136,7 @@ public record V3ColumnInput(
                 : new V3ColumnInput(schemaVersion, packageId, assayId, componentBasis,
                         feedComponentMolarFlowsMolPerSecond, feedTemperatureKelvin, stageCount, feedStageNumber,
                         topPressurePascal, stagePressureDropPascal, specifications, sideDraws, steamFeeds,
-                        pumparounds, diameterMetres);
+                        pumparounds, diameterMetres, refluxFreeWaterMolPerSecond);
     }
 
     @Override
@@ -108,6 +149,7 @@ public record V3ColumnInput(
                 && Double.doubleToLongBits(topPressurePascal) == Double.doubleToLongBits(input.topPressurePascal)
                 && Double.doubleToLongBits(stagePressureDropPascal) == Double.doubleToLongBits(input.stagePressureDropPascal)
                 && Double.doubleToLongBits(columnDiameterMetres) == Double.doubleToLongBits(input.columnDiameterMetres)
+                && Double.doubleToLongBits(refluxFreeWaterMolPerSecond) == Double.doubleToLongBits(input.refluxFreeWaterMolPerSecond)
                 && packageId.equals(input.packageId)
                 && assayId.equals(input.assayId)
                 && componentBasis.equals(input.componentBasis)
@@ -123,7 +165,9 @@ public record V3ColumnInput(
         int result = Objects.hash(schemaVersion, packageId, assayId, componentBasis, feedTemperatureKelvin, stageCount,
                 feedStageNumber, topPressurePascal, stagePressureDropPascal, specifications, sideDraws, steamFeeds,
                 pumparounds, columnDiameterMetres);
-        return 31 * result + Arrays.hashCode(feedComponentMolarFlowsMolPerSecond);
+        result = 31 * result + Arrays.hashCode(feedComponentMolarFlowsMolPerSecond);
+        // Zero adds nothing, so every input without returned water keeps the hash it had.
+        return refluxFreeWaterMolPerSecond == 0.0 ? result : 31 * result + Double.hashCode(refluxFreeWaterMolPerSecond);
     }
 
     @Override
@@ -131,7 +175,8 @@ public record V3ColumnInput(
         return "V3ColumnInput[packageId=" + packageId + ", assayId=" + assayId + ", componentCount="
                 + componentBasis.componentCount() + ", stageCount=" + stageCount + ", feedStageNumber="
                 + feedStageNumber + ", sideDraws=" + sideDraws + ", steamFeeds=" + steamFeeds
-                + ", pumparounds=" + pumparounds + "]";
+                + ", pumparounds=" + pumparounds
+                + (refluxFreeWaterMolPerSecond == 0.0 ? "" : ", refluxFreeWater=" + refluxFreeWaterMolPerSecond) + "]";
     }
 
     private static double[] copyAndValidateFeed(double[] feed, int componentCount) {

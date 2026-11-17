@@ -18,6 +18,7 @@ public final class V3ColumnProblem {
     private final WaterCondenserRegime waterCondenserRegime;
     private final double waterVaporSlipCoefficient;
     private final double freeWaterFlowScaleMolPerSecond;
+    private final double refluxFreeWaterMolPerSecond;
     private final V3WetTraySet wetTraySet;
     private final V3DegreeOfFreedomLedger degreeOfFreedomLedger;
     private final V3TruncationSupport truncationSupport;
@@ -48,6 +49,15 @@ public final class V3ColumnProblem {
         this.nodeHeatDutyWatts = V3PumparoundSpec.nodeDutyWatts(input, topology);
         this.waterVaporFlowMolPerSecond = V3SteamFeedSpec.upwardVaporProfile(nodeSteamFeedMolPerSecond, topology);
         this.waterCondenserRegime = waterCondenserRegime(input, topology, this.nodePressuresPascal);
+        // Free water the drum returns with the reflux is a liquid water feed to tray one: it joins the water fed at
+        // or below tray one and no other node's ({@link #trayWaterVaporFlow}). Only a drum that decants has any.
+        this.refluxFreeWaterMolPerSecond = input.refluxFreeWaterMolPerSecond();
+        if (input.returnsRefluxFreeWater()) {
+            if (waterCondenserRegime != WaterCondenserRegime.FREE_WATER) {
+                throw new IllegalArgumentException("V3 free water returned with the reflux needs a drum that decants free water");
+            }
+            this.waterVaporFlowMolPerSecond[1] += refluxFreeWaterMolPerSecond;
+        }
         this.waterVaporSlipCoefficient = condenserSlipCoefficient(topology, waterCondenserRegime, input,
                 this.nodePressuresPascal);
         double steam = 0.0;
@@ -141,7 +151,10 @@ public final class V3ColumnProblem {
         return nodeHeatDutyWatts[node];
     }
 
-    /** Authored upward steam profile of a node: every mole fed at or below it. Free water is added by state. */
+    /**
+     * Authored upward water profile of a node: every mole fed at or below it, the steam and, on tray one, the free
+     * water returned with the reflux. Free water is added by state.
+     */
     public double waterVaporFlowMolPerSecond(int node) {
         return waterVaporFlowMolPerSecond[node];
     }
@@ -234,7 +247,8 @@ public final class V3ColumnProblem {
      * {@code W_n = (steam fed at or below n) + F_(n-1) - F_R}, and the sump is never wet ({@link V3WetTraySet}), so
      * {@code F_R} is zero and only the tray directly above contributes. A carry-over tray one changes two terms:
      * its free water leaves upward, so {@code W_1 = (all steam) - F_1}, and none of it reaches tray two, so
-     * {@code W_2} is the authored profile alone. {@link V3WetTraySet}, {@link V3FreeWaterContinuation} and the
+     * {@code W_2} is the authored profile alone. Free water returned with the reflux enters tray one as liquid and
+     * is part of the profile there, so {@code W_1 = (all steam) + R_w - F_1}. {@link V3WetTraySet}, {@link V3FreeWaterContinuation} and the
      * residual rows all read the water through here, with their own trial flows.</p>
      *
      * @throws IllegalArgumentException when tray one would carry over all the steam that reaches it: the vapour
@@ -249,6 +263,29 @@ public final class V3ColumnProblem {
             return water;
         }
         return waterVaporFlowMolPerSecond[node] + (node == 2 && carriesTopTrayWaterOver() ? 0.0 : freeWaterAboveMolPerSecond);
+    }
+
+    /** Whether the drum returns free water with the reflux onto tray one. */
+    boolean returnsRefluxFreeWater() {
+        return refluxFreeWaterMolPerSecond > 0.0;
+    }
+
+    /** Free water the drum returns with the reflux, liquid at the drum's temperature; zero unless it returns any. */
+    double refluxFreeWaterMolPerSecond() {
+        return refluxFreeWaterMolPerSecond;
+    }
+
+    /**
+     * Enthalpy rate of the returned free water: liquid water at the drum's temperature and pressure, the same
+     * term the decanted water leaves the drum with. Tray one's energy row receives it and the condenser duty books it
+     * as leaving the drum, so the stream is internal and the column's boundary is unchanged. The drum's temperature
+     * is not an unknown, so the term has no derivative.
+     */
+    double refluxFreeWaterEnthalpyWatts(V3DryMeshState state) {
+        if (!returnsRefluxFreeWater()) return 0.0;
+        int condenser = topology.condenserNode();
+        return refluxFreeWaterMolPerSecond * V3WaterProperties.liquidMolarEnthalpy(
+                state.temperatureKelvin(condenser), nodePressuresPascal[condenser]);
     }
 
     public double waterVaporSlipCoefficient() {
@@ -277,6 +314,11 @@ public final class V3ColumnProblem {
      * on a carry-over tray one, as the entrained liquid {@code F_1} besides. The drum decants the two together, so
      * the regime and the slip coefficient are still resolved once from the authored total, and this split is
      * exactly what it was before wet trays existed.</p>
+     *
+     * <p>Free water returned with the reflux arrives with the rest ({@code W_1 + F_1 = steam + R_w}) and leaves
+     * again as {@link WaterCondenserSplit#refluxFreeWaterMolPerSecond}: the decanted product is what is left, so
+     * the column's net water product does not change. A product below zero (the drum returning more than it
+     * decants) is not a state; {@code FREE_WATER_SPLIT} refuses it.</p>
      */
     WaterCondenserSplit waterCondenserSplit(V3DryMeshState state) {
         state = Objects.requireNonNull(state, "state");
@@ -288,7 +330,10 @@ public final class V3ColumnProblem {
             case FREE_WATER -> {
                 double vaporWater = topology.condenserPhaseBranch() == V3CondenserPhaseBranch.TWO_PHASE
                         ? Math.min(arrivingWater, waterVaporSlipCoefficient * hydrocarbonVaporTotal(state, condenser)) : 0.0;
-                yield new WaterCondenserSplit(vaporWater, arrivingWater - vaporWater);
+                yield returnsRefluxFreeWater()
+                        ? new WaterCondenserSplit(vaporWater, arrivingWater - vaporWater - refluxFreeWaterMolPerSecond,
+                                refluxFreeWaterMolPerSecond)
+                        : new WaterCondenserSplit(vaporWater, arrivingWater - vaporWater);
             }
         };
     }
@@ -301,8 +346,16 @@ public final class V3ColumnProblem {
         return total;
     }
 
-    /** Candidate-derived molecular-vapor/free-water allocation at the condenser. */
-    record WaterCondenserSplit(double vaporFlowMolPerSecond, double freeWaterFlowMolPerSecond) {}
+    /**
+     * Candidate-derived allocation of the water arriving at the condenser: the molecular vapour, the decanted
+     * free-water product, and the free water returned with the reflux.
+     */
+    record WaterCondenserSplit(
+            double vaporFlowMolPerSecond, double freeWaterFlowMolPerSecond, double refluxFreeWaterMolPerSecond) {
+        WaterCondenserSplit(double vaporFlowMolPerSecond, double freeWaterFlowMolPerSecond) {
+            this(vaporFlowMolPerSecond, freeWaterFlowMolPerSecond, 0.0);
+        }
+    }
 
     /** Free-water outcome at the condenser, independent of the hydrocarbon condenser phase branch. */
     enum WaterCondenserRegime {

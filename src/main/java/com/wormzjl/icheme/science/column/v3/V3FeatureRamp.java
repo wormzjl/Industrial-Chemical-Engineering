@@ -231,7 +231,11 @@ final class V3FeatureRamp {
             V3ColumnInput rampInput = new V3ColumnInput(input.schemaVersion(), input.packageId(), input.assayId(),
                     input.componentBasis(), input.feedComponentMolarFlowsMolPerSecond(), input.feedTemperatureKelvin(),
                     input.stageCount(), input.feedStageNumber(), input.topPressurePascal(), input.stagePressureDropPascal(),
-                    withReboilerDuty(input, reboilerDuty), draws, steam, heat, input.columnDiameterMetres());
+                    withReboilerDuty(input, reboilerDuty), draws, steam, heat, input.columnDiameterMetres(),
+                    // The water the drum returns ramps with the steam it is part of.
+                    steam.isEmpty() || !input.returnsRefluxFreeWater() ? 0.0
+                            : rampStep.steamFraction() == 1.0 ? input.refluxFreeWaterMolPerSecond()
+                            : rampStep.steamFraction() * input.refluxFreeWaterMolPerSecond());
             V3CondenserPhaseBranch branch = previous.prepared().problem().topology().condenserPhaseBranch();
             V3ColumnProblem problem = V3ColumnProblemResolver.resolve(rampInput, branch);
             rampAttempts.recordAttempt(branch);

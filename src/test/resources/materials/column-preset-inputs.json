@@ -106,7 +106,8 @@
           "split": "UNIFORM"
         }
       ],
-      "columnDiameterMetres": 8
+      "columnDiameterMetres": 8,
+      "refluxFreeWaterMolPerSecond": 0.0
     }
   },
   {
@@ -216,7 +217,8 @@
           "split": "UNIFORM"
         }
       ],
-      "columnDiameterMetres": 8
+      "columnDiameterMetres": 8,
+      "refluxFreeWaterMolPerSecond": 0.0
     }
   },
   {
@@ -326,7 +328,8 @@
           "split": "UNIFORM"
         }
       ],
-      "columnDiameterMetres": 8
+      "columnDiameterMetres": 8,
+      "refluxFreeWaterMolPerSecond": 0.0
     }
   },
   {
@@ -436,7 +439,8 @@
           "split": "UNIFORM"
         }
       ],
-      "columnDiameterMetres": 8
+      "columnDiameterMetres": 8,
+      "refluxFreeWaterMolPerSecond": 0.0
     }
   }
 ]

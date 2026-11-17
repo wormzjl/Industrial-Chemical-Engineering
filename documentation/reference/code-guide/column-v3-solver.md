@@ -123,6 +123,10 @@ One rung, inside `V3AttemptLoop.solveSingleProblem` ([column-v3.md](column-v3.md
   drawn with it.
 - **Condenser.** The hydrocarbon branch and the water regime (`NONE`, `FREE_WATER`, `ALL_VAPOR`) are separate; one warm
   correction per rung (`V3AttemptLoop.correctCondenserPhase`).
+- **Returned water.** `V3ColumnInput#refluxFreeWaterMolPerSecond` (`R_w`, default 0, no wire or saved field) is free water
+  a decanting drum returns with the reflux: a liquid water feed to tray one at the drum's enthalpy. It joins the
+  authored profile at tray one only (`W_1 = steam + R_w - F_1`); `WaterCondenserSplit` returns it and decants the rest;
+  the condenser duty books it leaving the drum. Every term sits behind `R_w > 0`. The audit recomputes it from the input.
 - **The PR session** evaluates inside `NumericalBox`. Outside a caloric fit's ends it continues H with the edge Cp,
   keeping value and slope; an accepted extrapolation adds a notice. `V3PengRobinsonSession.kernelFor` builds the shared
   kernel from the package's derived pairs (`DerivedPairs.derive`), so the column and the network solve one equation of

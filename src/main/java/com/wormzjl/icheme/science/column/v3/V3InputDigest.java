@@ -79,6 +79,10 @@ public record V3InputDigest(String hexadecimalSha256) {
                 put(digest, "steam-rate-bits", canonicalBits(steam.molarFlowMolPerSecond()));
                 put(digest, "steam-temperature-bits", canonicalBits(steam.temperatureKelvin()));
             }
+            // Only a column that returns water with its reflux adds it, so every other digest keeps its bytes.
+            if (input.returnsRefluxFreeWater()) {
+                put(digest, "reflux-free-water-bits", canonicalBits(input.refluxFreeWaterMolPerSecond()));
+            }
         }
         // Empty-list placement is intentional: heat-free digests retain their historical byte stream.
         if (!input.pumparounds().isEmpty()) {

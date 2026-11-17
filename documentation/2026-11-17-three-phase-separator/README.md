@@ -27,10 +27,25 @@ phase carry-over.
   classes and 18 gate classes the change can reach (`affected.mjs select`), and the hold-fuzz campaign.
 - 2026-11-17: the owner's question on a reflux with water: the column solver takes no free water in its reflux (plan
   section 5). Law 6's simplification stands; a free water reflux input is its own batch.
+- 2026-11-17: the trial (owner: "try the reflux with water"), on branch `claude/rust-archive-reflux-water-762f04`:
+  [REFLUX_WATER_REVIEW.md](REFLUX_WATER_REVIEW.md). `V3ColumnInput#refluxFreeWaterMolPerSecond` (`R_w`, default 0) is a
+  liquid water feed to tray one; the drum returns it from the water that arrives and decants the rest. It converges at
+  0, 8 % and 26 % of the decanted water on the medium crude wet column and the review plant, and the audit passes.
+  Finding: with the reboiler duty fixed the condenser duty does not rise (within 0.03 %); the distillate falls 0.5 to
+  2.3 %. `V3RefluxFreeWaterTest` (5 tests), `tools/column-hydraulics/RefluxWaterProbe.java`. Open: the owner's choice
+  between E31 carry-over and falling water for the returned water (review section 4, options A and B). Tests:
+  `affected.mjs select --since c6f60e2aa..HEAD`, run as the lane's test step builds it (`-PlaneTests`,
+  `left-out.txt` honoured, `--max-workers=4`): `test` 153 classes (994 tests), `holdGates` 6 (59), `columnGates` 69
+  (381), `equipmentGates` 7 (64). One failure, `MaterialPresetsTest.allFourInputsRemainTheQualificationInputs`: it
+  compares the record's fields, through Gson, with the captured fixture `materials/column-preset-inputs.json`, which
+  lacked the new component. The fixture gains `"refluxFreeWaterMolPerSecond": 0.0` on its four inputs (no value
+  moves; only this test reads it), and the class then passes (6 tests). No production code serialises the record.
+  No other reference moved: every column gate that loads the changed classes passes as recorded.
 
 ## Documents
 
 - [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md)
+- [REFLUX_WATER_REVIEW.md](REFLUX_WATER_REVIEW.md): the trial of a reflux that returns free water to tray one
 
 ## Open items
 
