@@ -60,8 +60,8 @@ as a plan (the solute batch's `TagPlan` pattern): the step's rows keep their for
 6. **A column's held receiver.** The same three numbers from the receiver's shape and the table's overhead streams.
    The carried water moves from the sour water product to the distillate, the carried oil the other way, the liquid
    the gas carries to the off-gas. Simplification, to approve: the reflux's share of the carried water returns to the
-   top tray and comes back overhead; its heat (55 kW of 1938 kW at the 0.5 m drum's worst case of section 3 scaled to a
-   quarter of the water) is left out, and the table is not re-solved.
+   top tray and comes back overhead; the heat to boil it again (55 kW of the condenser's 1938 kW where 8 % of the
+   water is carried, 180 kW at 26 %) is left out, and the table is not re-solved.
 7. **The simulator.** `DrumSizing.rate` gains the two `N` rows (Must: 1; Auto sizes for 1.2, the 20 % spare) beside
    the hold rows, so "properly sized" on the sheet is "clean" in the world. A drum's page shows `N` and what its
    outlets carry.
