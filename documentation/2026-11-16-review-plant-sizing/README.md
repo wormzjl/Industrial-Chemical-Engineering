@@ -126,6 +126,17 @@ the `Rig` class keep their sizes.
   beside the column. The rig step dropped (the charge pump's built-in valve, `PUMP_VALVE_PLAN.md`). Selected classes
   (test, holdGates, columnGates, equipmentGates): 1457 tests, 1 failure, the expected `SizingPageTest` in Chinese; fluid
   GameTests 117 of 117.
+- 2026-11-17, branch `claude/pump-drive-flow` (sub-thread; packages 0 and 1): [PUMP_DRIVE_FLOW_REVIEW.md](PUMP_DRIVE_FLOW_REVIEW.md).
+  The rig's charge valve is removed; the charge pump holds 0.19344 m3/s by its drive (REGULATE_FLOW). The review-operation
+  GameTest fails the new check: the 10 bar crude supply pushes 2x design through the open line, so the tower's feed
+  valve sets the flow (318.85 kg/s) at any pump speed. Options to the owner (supply at tank pressure recommended).
+  Then (main thread: option A) the supply at 1.5 bar: Size all gives P-101 171 m and a 400 kW motor (NPSH 11.03 m, 2.56 m
+  over the world's limit), but the placed P-101 keeps the default 100 m curve (its shape has no duty); the crude island
+  holds at the column's start. Options: the rig builds P-101 with the sizer's duty, or the sizer's shape carries it.
+  Then R (stand-in) showed the island holds on the right curve too (finding 3, to its own diagnosis), and the owner
+  approved the fix (form B): `PumpSizing.built` builds a Size-all centrifugal pump at its bore's flow and the head its
+  curve needs for the design point; Auto takes the smallest bore that holds the flow with the 20 % spare; the Build list
+  reads rated flow, head and discharge. Crude sample P-101 0.30 to 0.35 m, PA 1 0.25 to 0.30 m, PA 2 0.30 to 0.35 m.
 
 ## Full crude unit, sized (2026-11-17)
 

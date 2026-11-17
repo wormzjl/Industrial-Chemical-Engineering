@@ -292,6 +292,23 @@ public final class SizingPage {
         return lamp == Lamp.RED ? Palette.RED : lamp == Lamp.YELLOW ? Palette.WARN : Palette.ACCENT;
     }
 
+    /**
+     * What the player builds, in a few words (the Build list): a centrifugal pump built with its duty reads the rated flow and
+     * head to enter in the constructor, then its discharge ({@link PumpSizing#built(PumpSizing.Size, PumpSizing.Duty)}); any
+     * other size, or a pump with no duty, reads as {@link #sizeText}.
+     */
+    public static String buildText(SheetContext x, @Nullable UnitSize size, com.wormzjl.icheme.science.flowsheet.sizing.Rating rating) {
+        if (size instanceof PumpSizing.Size p) {
+            var built = PumpSizing.built(p, PumpSizing.Duty.of(rating));
+            if (built != null && !built.equals(p.shape())) {
+                var u = x.units();
+                return x.text("sizing.size.pump_duty", number(u.time().display(built.duty().flow() / 3600)), u.time().unit("m³"), number(built.duty().head()),
+                        SheetUnits.number(2, p.discharge()));
+            }
+        }
+        return sizeText(x, size);
+    }
+
     /** A size in a few words: sheet 24's Size column. */
     public static String sizeText(SheetContext x, @Nullable UnitSize size) {
         String text = switch (size) {

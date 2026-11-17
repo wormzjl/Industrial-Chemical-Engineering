@@ -106,7 +106,7 @@ public final class ColumnOperationReviewWorld {
      */
     static final int REPORTS = 4, REPORT_TICKS = 600, PREHEAT_REPORTS = 30, STEADY_REPORTS = 3;
 
-    /** The charge valve's set, a share of the design feed's mass flow (owner, 2026-11-17). */
+    /** The charge pump's set flow, a share of the design feed's volume flow at suction (owner, 2026-11-17; PUMP_DRIVE_FLOW_PLAN.md). */
     static final double CHARGE_SHARE = 1.05;
 
     @GameTest(template = "empty", timeoutTicks = Integer.MAX_VALUE, batch = "review-operation")
@@ -131,6 +131,12 @@ public final class ColumnOperationReviewWorld {
                         var unjoined = plant.unjoined();
                         if (unjoined != null) failure[0] = "unjoined nozzles: " + unjoined;
                     }
+                })
+                // The charge pump's drive holds its flow (PUMP_DRIVE_FLOW_PLAN.md): once its train has compiled, the pump's set
+                // flow, the drive stopped in REGULATE_FLOW (the motor on FE wired to the pump by a data cable), then the heaters.
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.chargeDriven(), "Waiting for the charge pump's drive"))
+                .thenExecute(() -> {
+                    if (failure[0] == null) rig.holdCharge(failure);
                     if (failure[0] == null) rig.light(failure);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.fueled(), "Waiting for the heaters' fuel"))
@@ -155,6 +161,7 @@ public final class ColumnOperationReviewWorld {
             sequence = sequence.thenWaitUntil(() -> helper.assertTrue(failure[0] != null || steady[0] >= STEADY_REPORTS || rig.paced() && ++ticks[0] >= REPORT_TICKS, "Waiting for the column"))
                     .thenExecute(() -> {
                         if (failure[0] == null && steady[0] < STEADY_REPORTS) steady[0] = rig.report(n) ? steady[0] + 1 : 0;
+                        if (failure[0] == null && rig.chargeFault != null) failure[0] = rig.chargeFault;
                     });
         }
         sequence.thenExecute(() -> {
@@ -338,17 +345,17 @@ public final class ColumnOperationReviewWorld {
      */
     record SizedPlant(V3ColumnInput input, double diameter, EquipmentShape condenser, int condensers, EquipmentShape receiver, EquipmentShape refluxPump,
                       List<EquipmentShape> coolers, List<EquipmentShape> pumps, Map<String, Double> bores, Map<String, Double> lines,
-                      EquipmentShape chargePump, EquipmentShape exchanger, EquipmentShape heater, int heaters, double fuelBore, double chargeFlow) {
+                      EquipmentShape chargePump, EquipmentShape exchanger, EquipmentShape heater, int heaters, double fuelBore, double chargeSetFlow) {
     }
 
     /**
      * The crude unit ahead of the tower (owner, 2026-11-17): the charge pump, the residue exchanger and the fired heaters (in
      * parallel), each shape and where each stands (offsets from the column's origin); the crude's supply bore, m, and each
-     * heater's fuel line's. The pumparound coolers' cold sides carry the crude (no cooling water), the bottoms runs through the
-     * exchanger's shell to the residue's void, and the heaters' outlets are the tower's feed line.
+     * heater's fuel line's; the charge pump's set flow at suction, m3/s. The pumparound coolers' cold sides carry the crude (no
+     * cooling water), the bottoms runs through the exchanger's shell to the residue's void, and the heaters' outlets are the tower's feed line.
      */
     record Preheat(EquipmentShape chargePump, BlockPos chargePumpAt, EquipmentShape exchanger, BlockPos exchangerAt, EquipmentShape heater, List<BlockPos> heatersAt,
-                   double crudeBore, double fuelBore, double chargeFlow) {
+                   double crudeBore, double fuelBore, double chargeSetFlow) {
         Preheat {
             heatersAt = List.copyOf(heatersAt);
         }
@@ -439,7 +446,7 @@ public final class ColumnOperationReviewWorld {
         var receiver = (DrumSizing.Size) require(sized, SheetSizing.member(TOWER, "receiver")).size();
         if (receiver.type() != UnitType.LYING_DRUM || !receiver.boot())
             throw new IllegalStateException("The sized receiver is " + receiver + ": the rig builds a lying drum with a boot");
-        var refluxPump = pump(require(sized, SheetSizing.member(TOWER, "reflux pump")).size());
+        var refluxPump = pump(require(sized, SheetSizing.member(TOWER, "reflux pump")));
         var coolers = new ArrayList<EquipmentShape>();
         var pumps = new ArrayList<EquipmentShape>();
         for (var pumparound : door.pumparounds()) {
@@ -447,7 +454,7 @@ public final class ColumnOperationReviewWorld {
             if (cooler.shells() != 1)
                 throw new IllegalStateException("Pumparound " + pumparound.id() + "'s cooler is sized at " + cooler.shells() + " shells: the rig places one cooler shell a pumparound");
             coolers.add(cooler.shape());
-            pumps.add(pump(require(sized, SheetSizing.member(TOWER, SheetSizing.PumparoundMember.name(pumparound.id(), "pump"))).size()));
+            pumps.add(pump(require(sized, SheetSizing.member(TOWER, SheetSizing.PumparoundMember.name(pumparound.id(), "pump")))));
         }
         // The column's own lines by the rig's names. The condenser's outlet to the receiver has no line of its own on the sheet:
         // the rig lays it at the overhead's bore. The reflux pump's discharge and the reflux are one laid line: the larger.
@@ -475,8 +482,8 @@ public final class ColumnOperationReviewWorld {
         lines.put(BOTTOMS, bores.remove(BOTTOMS));
         for (var unit : List.of(CHARGE_PUMP, RESIDUE_EXCHANGER, HEATER))
             IChemE.LOGGER.info("review_operation sizing readings unit=\"{}\" {} rating={}", unit, all.run().reports().containsKey(unit) ? all.run().reports().get(unit).readings() : all.run().reports().keySet(),
-                    require(sized, unit).rating().readings().stream().map(r -> r.limit().name() + "=" + String.format(Locale.ROOT, "%.4g", r.value())).toList());
-        var chargePump = pump(require(sized, CHARGE_PUMP).size());
+                    require(sized, unit).rating().readings().stream().map(r -> r.limit().name() + "=" + String.format(Locale.ROOT, "%.4g[%.4g,%.4g]", r.value(), r.low(), r.high())).toList());
+        var chargePump = pump(require(sized, CHARGE_PUMP));
         var exchanger = (ExchangerSizing.Size) require(sized, RESIDUE_EXCHANGER).size();
         if (exchanger.shells() != 1) throw new IllegalStateException("The residue exchanger is sized at " + exchanger.shells() + " shells: the rig places one");
         if (!(require(sized, HEATER).size() instanceof com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.Size running))
@@ -488,14 +495,18 @@ public final class ColumnOperationReviewWorld {
         var heater = com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.auto(new com.wormzjl.icheme.science.flowsheet.sizing.HeaterSizing.Load(cold, null), null).size();
         if (heater == null) throw new IllegalStateException("No heater holds the cold start's " + cold + " MW");
         IChemE.LOGGER.info("review_operation sizing heater running={} cold_start_MW={} cold_start={}", running, String.format(Locale.ROOT, "%.1f", cold), heater);
-        // The charge valve (owner, 2026-11-17): 105 % of the design feed's mass flow. The column's feed valve asks up to twice its
-        // rate while its account is short of its aim (ColumnOperation.inletPlan), so this valve regulates and that one stands
+        // The charge pump's set flow (owner, 2026-11-17; PUMP_DRIVE_FLOW_PLAN.md): 105 % of the design feed's volume flow at the
+        // pump's suction (the crude stream's state), its drive regulating the flow. The column's feed valve asks up to twice its
+        // rate while its account is short of its aim (ColumnOperation.inletPlan), so the pump holds the flow and that valve stands
         // open; at 100 % the account would never fill. The built heaters must hold the cold start at that flow with 5 % spare.
-        double chargeFlow = CHARGE_SHARE * streamsRun.get(preheat(0)).mass();
+        double chargeMass = CHARGE_SHARE * streamsRun.get(preheat(0)).mass();
+        var suction = java.util.Objects.requireNonNull(streamsRun.get(CRUDE).state(), "the crude's suction state");
+        double suctionDensity = suction.mass() / suction.volume(), chargeSetFlow = chargeMass / suctionDensity;
         double coldAtCharge = cold / DesignBasis.DEFAULT.designFlow() * CHARGE_SHARE, held = heater.held();
-        IChemE.LOGGER.info("review_operation sizing charge_valve kg_s={} cold_start_at_charge_MW={} heaters_held_MW={} spare_pct={}", String.format(Locale.ROOT, "%.2f", chargeFlow),
+        IChemE.LOGGER.info("review_operation sizing charge_pump set_m3_s={} kg_s={} suction_kg_m3={} cold_start_at_charge_MW={} heaters_held_MW={} spare_pct={}",
+                String.format(Locale.ROOT, "%.5f", chargeSetFlow), String.format(Locale.ROOT, "%.2f", chargeMass), String.format(Locale.ROOT, "%.1f", suctionDensity),
                 String.format(Locale.ROOT, "%.1f", coldAtCharge), String.format(Locale.ROOT, "%.1f", held), String.format(Locale.ROOT, "%.1f", 100 * (held / coldAtCharge - 1)));
-        if (held < 1.05 * coldAtCharge) throw new IllegalStateException("The heaters hold " + held + " MW, under 105 % of the cold start at the charge valve's flow, " + coldAtCharge + " MW");
+        if (held < 1.05 * coldAtCharge) throw new IllegalStateException("The heaters hold " + held + " MW, under 105 % of the cold start at the charge pump's flow, " + coldAtCharge + " MW");
         // Each of Auto's heaters in parallel fires its share; its fuel line is sized for that share of the cold start.
         double heaterDuty = cold * 1e6 / DesignBasis.DEFAULT.designFlow() / heater.count();
         IChemE.LOGGER.info("review_operation sizing column diameter_m={} trays={} flood_pct={} condenser_shells={} condenser_MW={} bores={}", columnSize.diameter(),
@@ -503,7 +514,7 @@ public final class ColumnOperationReviewWorld {
                 String.format(Locale.ROOT, "%.3f", run.reports().get(TOWER).readings().getOrDefault("condenser", Double.NaN) / 1e6), bores);
         double diameter = ColumnDesign.builtDiameter(columnSize.diameter());
         return new SizedPlant(withDiameter(input, diameter), diameter, condenser.shape(), condenser.shells(), receiver.shape(), refluxPump, coolers, pumps, bores, lines,
-                chargePump, exchanger.shape(), heater.shape(), heater.count(), fuel(heaterDuty), chargeFlow);
+                chargePump, exchanger.shape(), heater.shape(), heater.count(), fuel(heaterDuty), chargeSetFlow);
     }
 
     /**
@@ -525,11 +536,11 @@ public final class ColumnOperationReviewWorld {
     /** The crude unit's sheet names (owner, 2026-11-17): its feed, units and the streams between them. */
     static final String CRUDE = "crude", CHARGE_PUMP = "P-101", RESIDUE_EXCHANGER = "E-101", HEATER = "H-101", CHARGE = "charge", BOTTOMS = "bottoms", RESIDUE = "residue";
     /**
-     * The crude from storage, K and Pa: 25 °C, at 10 bar so it reaches the charge pump liquid; the charge pump's outlet, Pa
+     * The crude from storage, K and Pa: 25 °C, at a storage tank's 1.5 bar, so the charge pump makes the line's head and its drive holds the flow (PUMP_DRIVE_FLOW_REVIEW.md); the charge pump's outlet, Pa
      * (16 bar: the coolers' and the exchanger's tube drops, the heater's coils, 7.6 bar, and the feed valve above the tower's
      * 2.5 bar); the residue's outlet from the residue exchanger, K (200 °C, as the sheet example's E-101).
      */
-    static final double CRUDE_TEMPERATURE = 298.15, CRUDE_SUPPLY = 10e5, CHARGE_PRESSURE = 16e5, RESIDUE_TEMPERATURE = 473.15;
+    static final double CRUDE_TEMPERATURE = 298.15, CRUDE_SUPPLY = 1.5e5, CHARGE_PRESSURE = 16e5, RESIDUE_TEMPERATURE = 473.15;
     /** The heater's fuel gas supply, Pa: methane at 3 bar. */
     static final double FUEL_SUPPLY = 3e5;
 
@@ -583,10 +594,14 @@ public final class ColumnOperationReviewWorld {
         return unit;
     }
 
-    /** A sized pump's shape: the rig drives a centrifugal casing. */
-    private static EquipmentShape pump(UnitSize size) {
-        if (!(size instanceof PumpSizing.Size pump)) throw new IllegalStateException("The sized pump is " + size + ": the rig builds a centrifugal pump");
-        return pump.shape();
+    /** A sized pump's shape: the rig drives a centrifugal casing, built at its sized duty ({@link PumpSizing#built(SheetSizing.SizedUnit)}). */
+    private static EquipmentShape pump(SheetSizing.SizedUnit unit) {
+        if (!(unit.size() instanceof PumpSizing.Size pump)) throw new IllegalStateException("The sized pump is " + unit.size() + ": the rig builds a centrifugal pump");
+        var shape = PumpSizing.built(unit);
+        if (shape == null) throw new IllegalStateException("The constructor refuses the sized pump " + pump + " at " + PumpSizing.Duty.of(unit.rating()));
+        IChemE.LOGGER.info("review_operation sizing pump_duty discharge_m={} rated_m3_h={} head_m={} poles={}", shape.diameter(),
+                String.format(Locale.ROOT, "%.1f", shape.duty().flow()), String.format(Locale.ROOT, "%.2f", shape.duty().head()), shape.duty().poles());
+        return shape;
     }
 
     /** A sized line's bore, m: its runs as one line of the same area, up to the next 0.05 m, at most the largest bore. */
@@ -673,7 +688,7 @@ public final class ColumnOperationReviewWorld {
         var bores = new LinkedHashMap<>(s.bores());
         double crude = bores.remove(CRUDE), steam = bores.remove("steam1");
         bores.keySet().removeIf(k -> k.startsWith("steam"));
-        var preheat = new Preheat(s.chargePump(), chargeAt, exchanger, exchangerAt, s.heater(), heatersAt, crude, s.fuelBore(), s.chargeFlow());
+        var preheat = new Preheat(s.chargePump(), chargeAt, exchanger, exchangerAt, s.heater(), heatersAt, crude, s.fuelBore(), s.chargeSetFlow());
         IChemE.LOGGER.info("review_operation sizing layout condensers={} drum={} support={} reflux_pump={} pumps={} coolers={} charge_pump={} exchanger={} heater={} below={} above={}",
                 condensers, drumAt.toShortString(), support, refluxAt.toShortString(), pumps, coolers, chargeAt.toShortString(), exchangerAt.toShortString(), heatersAt,
                 layout.below().toShortString(), layout.above().toShortString());
@@ -699,10 +714,10 @@ public final class ColumnOperationReviewWorld {
         Vessel heater;
         /** The charge line's last cell before the tower's feed line ({@link #layPreheat}), where the start reads the crude's temperature. */
         BlockPos chargeEnd;
-        /** The charge pump's flow control valve ({@link #layPreheat}), or null. */
-        BlockPos chargeValve;
-        /** The charge line's cells a flowmeter may sit on, in order of preference: the valve's sensor ({@link #openCrude}). */
-        final List<BlockPos> chargeMeters = new ArrayList<>();
+        /** The charge pump ({@link Options#preheat}), or null; its drive regulates its flow ({@link #holdCharge}). */
+        Vessel chargePump;
+        /** The charge pump's flow check at the first report ({@link #chargeCheck}), or null while it holds. */
+        String chargeFault;
         /** The shutoff valves beyond the boundary valves, each with its axis ({@link Options#shutoffs}), and which line each is on. */
         final java.util.Map<BlockPos, Direction> shutoffs = new java.util.LinkedHashMap<>();
         final java.util.Map<String, BlockPos> lines = new java.util.LinkedHashMap<>();
@@ -788,6 +803,7 @@ public final class ColumnOperationReviewWorld {
             Vessel chargePump = null, exchanger = null;
             if (preheat != null) {
                 chargePump = plant.place(preheat.chargePump(), preheat.chargePumpAt().getX(), 0, preheat.chargePumpAt().getZ());
+                this.chargePump = chargePump;
                 exchanger = plant.place(preheat.exchanger(), preheat.exchangerAt().getX(), 0, preheat.exchangerAt().getZ());
                 for (var at : preheat.heatersAt()) heaters.add(plant.place(preheat.heater(), at.getX(), 0, at.getZ()));
                 heater = heaters.getFirst();
@@ -889,14 +905,7 @@ public final class ColumnOperationReviewWorld {
         void layPreheat(Vessel chargePump, Vessel exchanger, BlockPos bottomsLine) {
             var from = AssemblyGameTests.Plant.front(chargePump, Role.DISCHARGE);
             for (int j = 0; j < coolers.size(); j++) {
-                var path = laid(preheat(j), plant.route(from, AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_INLET)));
-                if (j == 0) {
-                    // The charge valve on the pump's discharge, its third pipe, pointing down the line (its law: openCrude).
-                    chargeValve = path.get(2);
-                    var step = path.get(3).subtract(chargeValve);
-                    plant.valves.put(chargeValve, Direction.fromDelta(step.getX(), step.getY(), step.getZ()));
-                    for (int k : new int[]{4, 5, 1, 6}) if (k < path.size()) chargeMeters.add(path.get(k));
-                }
+                laid(preheat(j), plant.route(from, AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_INLET)));
                 from = AssemblyGameTests.Plant.front(coolers.get(j), Role.TUBE_OUTLET);
             }
             int n = coolers.size();
@@ -1150,24 +1159,68 @@ public final class ColumnOperationReviewWorld {
             plant.world.edit(id, r.revision(), r.device().withGeometry(geometry).withGeneratorEnabled(on), spec);
         }
 
-        /** Sets the charge valve's law (mass flow at {@link Preheat#chargeFlow}) and opens the crude's supply (shut by {@link #finish} while the heaters light). */
-        void openCrude() {
-            if (chargeValve != null) {
-                long valve = id(chargeValve);
-                var old = plant.world.registrations().get(valve);
-                var d = old.device();
-                // A flow valve regulates only with a sensor: without one it is a bare line (ControlValve.bare) and stands open.
-                java.util.UUID sensor = null;var why = new ArrayList<String>();
-                for (var at : chargeMeters) {
-                    try {sensor = LevelLoopGameTests.fit(plant, at, com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW, com.wormzjl.icheme.registry.ModItems.FLOWMETER.get());break;}
-                    catch (IllegalStateException refused) {why.add(refused.getMessage());}
+        /** The charge pump's fluid identity. */
+        long chargeId() {
+            var cell = ShapeRasterizer.fluidCell(chargePump.shape());
+            var at = chargePump.origin().offset(cell.x(), cell.y(), cell.z());
+            if (!(plant.level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell))
+                throw new IllegalStateException("No charge pump cell at " + at.toShortString());
+            return shell.fluidIdentity();
+        }
+
+        /** Whether the charge pump's train has compiled with its driver (always true without a charge pump). */
+        boolean chargeDriven() {
+            return chargePump == null || plant.world.shafts().driverOf(chargeId()) != null;
+        }
+
+        /**
+         * The charge pump's flow held by its drive (PUMP_DRIVE_FLOW_PLAN.md): its set flow, {@link Preheat#chargeSetFlow} at
+         * suction, through the edit a player's Apply on its page queues; its drive stopped in REGULATE_FLOW until {@link
+         * #openCrude}. A motor on FE reads the pump's duty over a data cable from its port to the pump's (else NO DATA LINK); a
+         * creative motor regulates its own first machine with no link (ShaftTrains, the first machine's measure).
+         */
+        void holdCharge(String[] failure) {
+            if (chargePump == null) return;
+            long pump = chargeId();
+            var old = plant.world.registrations().get(pump);
+            var d = old.device();
+            if (!(d.control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Machine m)) {
+                failure[0] = "the charge pump's control is " + d.control();
+                return;
+            }
+            double set = options.preheat().chargeSetFlow();
+            plant.world.edit(pump, old.revision(), d.withControl(new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(m.law(), m.speed(), m.enabled(), set, m.setPressure())), old.spec());
+            var driver = plant.world.shafts().driverOf(pump);
+            if (options.motors()) {
+                var motor = motors.get(pumps.indexOf(chargePump));
+                var from = ColumnFailureModesReviewWorld.port(plant, motor.origin(), com.wormzjl.icheme.science.equipment.CableMedium.DATA);
+                var to = ColumnFailureModesReviewWorld.port(plant, chargePump.origin(), com.wormzjl.icheme.science.equipment.CableMedium.DATA);
+                if (from == null || to == null) {
+                    failure[0] = "no data port on the charge pump's " + (from == null ? "motor" : "casing");
+                    return;
                 }
-                if (sensor == null) throw new IllegalStateException("No flowmeter fits on the charge line: " + why);
-                var law = new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.MASS_FLOW,
-                        options.preheat().chargeFlow(), sensor, 1);
-                plant.world.edit(valve, old.revision(), com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Device.builder(d.id(), d.position(), d.kind(), d.facing(), d.geometry(), law)
-                        .ports(d.ports()).cutoff(d.cutoff()).inlineFilter(d.inlineFilter()).build(), old.spec());
-                IChemE.LOGGER.info("review_operation charge_valve at={} kg_s={} sensor={} refused={}", chargeValve.toShortString(), String.format(Locale.ROOT, "%.2f", options.preheat().chargeFlow()), sensor, why);
+                ColumnFailureModesReviewWorld.lay(plant, List.of(from, to), com.wormzjl.icheme.science.equipment.CableMedium.DATA);
+            }
+            var s = driver.settings();
+            plant.world.shafts().queue(new com.wormzjl.icheme.runtime.fluid.ShaftTrains.Configure(driver.id(),
+                    new com.wormzjl.icheme.runtime.fluid.ShaftUnit.Settings(false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, s.setPoint(), s.powerLimit(), s.ratio())));
+            IChemE.LOGGER.info("review_operation charge_pump hold pump={} driver={} kind={} set_m3_s={} rated_m3_s={} rated_head_m={} shutoff_head_m={} design_speed_rpm={} wired={}", pump, driver.id(), driver.kind(),
+                    String.format(Locale.ROOT, "%.5f", set), String.format(Locale.ROOT, "%.5f", m.law().ratedFlow()), String.format(Locale.ROOT, "%.2f", m.law().ratedHead()),
+                    m.law() instanceof com.wormzjl.icheme.science.machine.CentrifugalPump c ? String.format(Locale.ROOT, "%.2f", c.head(0, 1)) : "-",
+                    plant.world.shafts().unitOfDevice(pump) == null ? "-" : plant.world.shafts().unitOfDevice(pump).designSpeed(), options.motors());
+        }
+
+        /**
+         * Starts the charge pump's drive (REGULATE_FLOW, {@link #holdCharge}) and opens the crude's supply (shut by {@link
+         * #finish} while the heaters light: the supply's 10 bar would push the crude through a standing pump).
+         */
+        void openCrude() {
+            if (chargePump != null) {
+                var driver = plant.world.shafts().driverOf(chargeId());
+                var s = driver.settings();
+                plant.world.shafts().queue(new com.wormzjl.icheme.runtime.fluid.ShaftTrains.Configure(driver.id(),
+                        new com.wormzjl.icheme.runtime.fluid.ShaftUnit.Settings(true, s.mode(), s.setPoint(), s.powerLimit(), s.ratio())));
+                IChemE.LOGGER.info("review_operation charge_pump start driver={} mode={}", driver.id(), s.mode());
             }
             long id = id(feed);
             var r = plant.world.registrations().get(id);
@@ -1379,11 +1432,7 @@ public final class ColumnOperationReviewWorld {
                 var pump = pumps.getLast();
                 IChemE.LOGGER.info("review_operation t={} charge_pump status=\"{}\" fuel=\"{}\"", ticks, plant.world.view(id(AssemblyGameTests.Plant.front(pump, Role.DISCHARGE))).status(),
                         fuels.stream().map(f -> plant.world.view(id(f)).status()).toList());
-                if (chargeValve != null) {
-                    var v = plant.world.view(id(chargeValve));
-                    IChemE.LOGGER.info("review_operation t={} charge_valve kg_s={} set_kg_s={} status=\"{}\"", ticks, String.format(Locale.ROOT, "%.2f", v.massFlow()),
-                            String.format(Locale.ROOT, "%.2f", options.preheat().chargeFlow()), v.status());
-                }
+                if (chargePump != null) chargeCheck(ticks, n);
             }
             if (view.solve() != null)
                 IChemE.LOGGER.info("review_operation t={} solve trigger={} warm={} age_s={}", ticks, view.solve().trigger(), view.solve().warm(),
@@ -1425,6 +1474,36 @@ public final class ColumnOperationReviewWorld {
             plant.devices.add(at);
             ends.put(name, at);
             return at;
+        }
+
+        /**
+         * The charge pump's flow against its set flow, both at suction (its live suction density), its drive's speed against its
+         * top and its status, logged at every report. At the first report (at least 800 online ticks, so at least 6 of the
+         * drive's decisions, after {@link #openCrude}) the flow lies within 2 % of the set flow and the drive below its top speed
+         * (a creative motor's set speed; a motor's {@link com.wormzjl.icheme.science.machine.Motor#MAXIMUM_RPM}); else {@link #chargeFault}.
+         */
+        void chargeCheck(long ticks, int n) {
+            long pump = chargeId();
+            var view = plant.world.view(pump);
+            var state = view.state();
+            double density = state != null && state.volume() > 0 ? state.mass() / state.volume() : Double.NaN;
+            double flow = view.massFlow() / density, set = options.preheat().chargeSetFlow();
+            var driver = plant.world.shafts().driverOf(pump);
+            var train = driver == null ? null : plant.world.shafts().view(driver.id());
+            double speed = train == null ? Double.NaN : train.driverSpeed();
+            double top = driver == null ? Double.NaN : driver.kind() == com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR ? com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM
+                    : driver.settings().setPoint() > 0 ? driver.settings().setPoint() : com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED;
+            var discharge = plant.world.view(id(AssemblyGameTests.Plant.front(chargePump, Role.DISCHARGE)));
+            IChemE.LOGGER.info("review_operation t={} charge_pump suction_kPa={} discharge_kPa={} rise_kPa={}", ticks, state == null ? "-" : String.format(Locale.ROOT, "%.1f", state.pressure() / 1000),
+                    discharge.state() == null ? "-" : String.format(Locale.ROOT, "%.1f", discharge.state().pressure() / 1000),
+                    view.devicePressureChange() == null ? "-" : String.format(Locale.ROOT, "%.1f", view.devicePressureChange() / 1000));
+            IChemE.LOGGER.info("review_operation t={} charge_pump set_m3_s={} flow_m3_s={} kg_s={} suction_kg_m3={} speed_rpm={} top_rpm={} speed_share={} mode={} status=\"{}\"", ticks,
+                    String.format(Locale.ROOT, "%.5f", set), String.format(Locale.ROOT, "%.5f", flow), String.format(Locale.ROOT, "%.2f", view.massFlow()),
+                    String.format(Locale.ROOT, "%.1f", density), String.format(Locale.ROOT, "%.0f", speed), String.format(Locale.ROOT, "%.0f", top),
+                    String.format(Locale.ROOT, "%.3f", plant.world.shafts().share(pump)), driver == null ? "-" : driver.settings().mode(), train == null ? "-" : train.status());
+            if (n == 1 && !(Math.abs(flow - set) <= .02 * set && speed < top * (1 - 1e-3)))
+                chargeFault = String.format(Locale.ROOT, "the charge pump's drive does not hold its flow: %.5f m3/s against %.5f, %.0f of %.0f rpm, %s", flow, set, speed, top,
+                        train == null ? "no train" : train.status());
         }
 
         long id(BlockPos at) {

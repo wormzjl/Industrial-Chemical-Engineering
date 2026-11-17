@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.flowsheet.sizing;
 
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
@@ -248,6 +249,32 @@ public final class PumpSizing {
         return small && (high || light) ? UnitType.PLUNGER : UnitType.CENTRIFUGAL_PUMP;
     }
 
+    /**
+     * {@code size}'s shape as it is built for {@code duty} (owner, 2026-11-17: a sized pump is built with its duty): the pump
+     * design rated at its bore's flow ({@link UnitRatings#pumpFlow}), at the rated head for which its own curve ({@link
+     * CentrifugalPump}, the law the world builds from it) gives the design head at the design flow, at the poles the pump design
+     * gives the bore. The bore-only shape where there is no duty, or where that design point is outside the pump design's
+     * ranges (the PUMP_HEAD and PUMP_FLOW rows say why). Null where the constructor refuses the bore itself.
+     */
+    public static @Nullable EquipmentShape built(Size size, @Nullable Duty duty) {
+        var shape = UnitSize.built(size);
+        if (shape == null || duty == null || !(duty.flow() > 0) || !(duty.head() > 0)) return shape;
+        double rated = UnitRatings.pumpFlow(size.discharge()) / 3600, design = duty.flow() / 3600;
+        var unit = new CentrifugalPump(rated, 1, CentrifugalPump.bestEfficiency(rated), 1);
+        double share = unit.head(design, 1);
+        if (!(share > 0)) return shape;
+        try {
+            return shape.withDuty(MachineDuty.pump(UnitRatings.pumpFlow(size.discharge()), duty.head() / share, shape.duty().poles()));
+        } catch (IllegalArgumentException outside) {
+            return shape;
+        }
+    }
+
+    /** {@code unit}'s built shape ({@link #built(Size, Duty)}) at the duty its rating carries; null for another size or a refused one. */
+    public static @Nullable EquipmentShape built(SheetSizing.SizedUnit unit) {
+        return unit.size() instanceof Size size ? built(size, Duty.of(unit.rating())) : null;
+    }
+
     private static Rating limits(Load load, Size size) {
         var readings = UnitSize.readings(UnitSize.built(size));
         readings.add(Limit.PUMP_FLOW.read(load.flow()));
@@ -274,10 +301,11 @@ public final class PumpSizing {
         return new FlowControl.Pump(volumeFlow, 1).npsh().required(volumeFlow);
     }
 
-    /** The smallest discharge that meets every limit. No flow, no size. */
+    /** The smallest discharge that meets every limit, those whose rated flow holds the design flow with {@link Limit#AUTO_SPARE} first. No flow, no size. */
     public static Selection.Choice<Size> auto(Load load) {
         if (!load.flows()) return Selection.Choice.none();
-        return Selection.smallest(SIZES, size -> rate(load, size));
+        // The smallest bore whose flow holds the design flow with Limit.AUTO_SPARE first, as a plunger pump's (owner, 2026-11-17).
+        return Selection.smallest(Selection.spareFirst(SIZES, size -> UnitRatings.pumpFlow(size.discharge()), Selection.spared(load.flow())), size -> rate(load, size));
     }
 
     /** The smallest plunger pump that meets every limit, those whose displacement holds the flow with its spare first (S8). No flow, no size. */
