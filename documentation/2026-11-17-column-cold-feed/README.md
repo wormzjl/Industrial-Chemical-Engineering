@@ -38,6 +38,15 @@ pumparounds work only as far as their trays hold liquid.
   its assertion now asks for 0 within 1e-6 of the cycles' duty. The rig's table prices its product 1000 J/mol under the
   feed (about 306 K for its nitrogen) while naming 330 K: the rig's product now leaves at about 306 K. A table V3 solves
   prices each product at its own temperature, so a real column's products stay at the table's temperatures.
+- 2026-11-17: package 1 built (commit `69726bddb`): the pass. `ColumnCycle.step` takes `refused`; a trip passes where
+  the condenser would heat or the state stands refused, else holds; `Condition.PASSING` (a notice; alarm UPSET), the
+  status line `PASSING: <text>; the feed leaves as bottoms` (phase RUNNING), the English line. A passing cycle's solve
+  is asked of the state it was given (feed and steam at its ratio), the closure's where no band was left: a pass took no
+  steam, and its own state would ask a steam solve. The air fans stand while passing. Tests: `ColumnCycleTest` 19/19
+  (the heating-trip case now passes the feed: before, it tripped and took nothing; new: the bounds, a refused state, a
+  thousand cycles of a cold and hot feed), `ColumnRunTest` 49/49 of the selected methods (new: a 300 K feed on a 340 K
+  table passes for 3000 ticks with the bottoms at 300 K within 1 K and every mole and joule in the bottoms, exact; at
+  340 K it runs). No other reference moved.
 
 ## Documents
 
