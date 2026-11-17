@@ -97,7 +97,8 @@ phase carry-over.
 - The plan's hold-fuzz campaign on a world with an undersized drum is not run: the harness has no such world. The watch
   seeds ran instead (history).
 - Option D of `REFLUX_WATER_REVIEW.md` (a top-temperature margin above the water dew point as a sizing or operating
-  advisory): proposed, not taken.
+  advisory): kept for later (owner, 2026-11-17: "Keep for later"). To build once top-tray water has a consequence in
+  the game; the margin of about 14 K is not checked against a source.
 - The returned water's production form: the cycle's input, the ratio form, the mode with Water on the basis, the
   sizing and editor rebuilds that drop it, tray one's liquid load (`REFLUX_WATER_REVIEW.md`, section 5).
 - Batch `2026-11-16-solute-reaction-system` holds the runtime lane: this batch added one line to `FluidWorldAuthority`
