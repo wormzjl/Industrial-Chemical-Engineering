@@ -125,6 +125,12 @@ public final class ColumnOperationReviewWorld {
                 .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || plant.valvesInstalled(), "Waiting for the valves"))
                 .thenIdle(20)
                 .thenExecute(() -> {
+                    // Every nozzle a line starts or ends at is met as the player sees it: the pipe's block joined towards
+                    // it, its face flanged, the nozzle at the pipe's size (NOZZLE_JOIN_REVIEW.md), not only a block there.
+                    if (failure[0] == null) {
+                        var unjoined = plant.unjoined();
+                        if (unjoined != null) failure[0] = "unjoined nozzles: " + unjoined;
+                    }
                     if (failure[0] == null) rig.light(failure);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.fueled(), "Waiting for the heaters' fuel"))

@@ -638,4 +638,75 @@ class PhysicalFluidTopologyTest {
         assertEquals(FACE_E,drawn(devices,1),"a generator switched off");
         assertEquals(FACE_W|FACE_E,drawn(devices,2),"a closed valve");
     }
+
+    // ---------------- a pipe meets a structure's nozzle (batch 2026-11-16-review-plant-sizing, NOZZLE_JOIN_REVIEW.md) ----------------
+    private static int drawn(List<PhysicalFluidTopology.Device> devices,long id,java.util.function.BiPredicate<PhysicalFluidTopology.Position,PhysicalFluidTopology.Direction> nozzle) {
+        var at=new HashMap<PhysicalFluidTopology.Position,PhysicalFluidTopology.Device>();for(var d:devices)for(var cell:d.cells())at.put(cell,d);
+        return PhysicalFluidTopology.builtFaces(at::get,devices.stream().filter(d->d.id()==id).findFirst().orElseThrow(),nozzle);
+    }
+
+    /**
+     * A column has no registration: a pipe beside its nozzle's flange cell, the nozzle facing it, draws that face, as the
+     * pipe draws a joint to a device. Not where no nozzle faces it, not through a face it has no joint on, and never for
+     * a rack lane; a device across the face keeps deciding.
+     */
+    @Test void aPipeBesideANozzleFacingItDrawsThatFace() {
+        var flange=new PhysicalFluidTopology.Position("minecraft:overworld",1,0,0);
+        java.util.function.BiPredicate<PhysicalFluidTopology.Position,PhysicalFluidTopology.Direction> nozzle=(cell,outward)->cell.equals(flange)&&outward==WEST;
+        assertEquals(FACE_E,drawn(List.of(pipe(1,0,0,PhysicalFluidTopology.ALL_FACES)),1,nozzle),"a hand-placed pipe in front of the nozzle");
+        assertEquals(FACE_E,drawn(List.of(pipe(1,0,0,FACE_E|FACE_N)),1,nozzle),"a laid pipe that bends at the nozzle");
+        assertEquals(0,drawn(List.of(pipe(1,0,0,PhysicalFluidTopology.ALL_FACES)),1,(cell,outward)->false),"no nozzle there");
+        assertEquals(0,drawn(List.of(pipe(1,0,0,PhysicalFluidTopology.ALL_FACES)),1),"the two-argument form meets no nozzle");
+        assertEquals(0,drawn(List.of(pipe(1,0,0,FACE_N|1<<SOUTH.ordinal()|FACE_W)),1,nozzle),"a laid pipe with no joint towards the nozzle");
+        assertEquals(0,drawn(List.of(pipe(1,0,0,PhysicalFluidTopology.ALL_FACES)),1,(cell,outward)->cell.equals(flange)&&outward==EAST),"a nozzle facing away");
+        assertEquals(0,drawn(List.of(lane(1,0,0,2,1,ALONG_X)),1,(cell,outward)->cell.x()==1&&outward==WEST),"a rack lane");
+        // A device across the face decides as before: the predicate is not asked there.
+        assertEquals(FACE_E,drawn(List.of(pipe(1,0,0,PhysicalFluidTopology.ALL_FACES),tank(2,1,0)),1,(cell,outward)->{throw new AssertionError("asked beside a device");}));
+        assertEquals(FACE_W,drawn(List.of(pipe(1,0,0,FACE_W),pipe(2,-1,0,PhysicalFluidTopology.ALL_FACES)),1,nozzle),"a pipe meets a pipe, and no nozzle through a face it has no joint on");
+    }
+
+    /**
+     * {@link com.wormzjl.icheme.science.equipment.NozzlePorts#at} finds every port of a column at its flange cell and step,
+     * and none at the opposite step; the fluid world's nozzle index ({@link StructureNozzles}) answers the same for a
+     * recorded column, and nothing for a structure that is a fluid device or once the column's record is removed.
+     */
+    @Test void everyColumnNozzleIsFoundAtItsCellAndStep() {
+        var components=new com.wormzjl.icheme.science.equipment.ColumnComponents(com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.EXCHANGER,
+                com.wormzjl.icheme.science.equipment.ColumnComponents.Pump.STANDARD,List.of(),false,false);
+        var trays=new com.wormzjl.icheme.science.equipment.ColumnTrays(8,4,List.of(),List.of(9),List.of(),components);
+        var column=com.wormzjl.icheme.science.equipment.EquipmentShape.column(2,trays,com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.NORTH,com.wormzjl.icheme.science.equipment.EquipmentShape.minimumSkirt(2));
+        assertFalse(column.fluidDevice());
+        var ports=com.wormzjl.icheme.science.equipment.ShapeRasterizer.ports(column);
+        assertFalse(ports.isEmpty());
+        var origin=new PhysicalFluidTopology.Position("minecraft:overworld",100,64,-40);
+        var index=new StructureNozzles();var record=WorldTopologyLedger.Structure.of(column,com.wormzjl.icheme.science.equipment.Paint.DEFAULT);
+        index.index(origin,record,true);
+        for(var p:ports) {
+            var c=p.cell();
+            assertSame(p,com.wormzjl.icheme.science.equipment.NozzlePorts.at(column,c.x(),c.y(),c.z(),p.dx(),p.dy(),p.dz()),"port "+p.nozzle());
+            assertNull(com.wormzjl.icheme.science.equipment.NozzlePorts.at(column,c.x(),c.y(),c.z(),-p.dx(),-p.dy(),-p.dz()),"port "+p.nozzle()+" backwards");
+            var front=com.wormzjl.icheme.science.equipment.NozzlePorts.front(p);
+            assertEquals(new com.wormzjl.icheme.science.equipment.ShapeRasterizer.Cell(c.x()+p.dx(),c.y()+p.dy(),c.z()+p.dz()),front);
+            var flange=new PhysicalFluidTopology.Position(origin.dimension(),origin.x()+c.x(),origin.y()+c.y(),origin.z()+c.z());
+            var outward=PhysicalFluidTopology.Direction.valueOf(net.minecraft.core.Direction.fromDelta(p.dx(),p.dy(),p.dz()).name());
+            assertTrue(index.faces(flange,outward),"the index finds port "+p.nozzle());
+            assertFalse(index.faces(flange,PhysicalFluidTopology.opposite(outward)),"port "+p.nozzle()+" backwards in the index");
+            assertFalse(index.faces(flange.withLane(2),outward),"a rack lane's place");
+            assertEquals(origin,index.origin(flange));
+        }
+        var first=ports.getFirst().cell();
+        var flange=new PhysicalFluidTopology.Position(origin.dimension(),origin.x()+first.x(),origin.y()+first.y(),origin.z()+first.z());
+        var outward=PhysicalFluidTopology.Direction.valueOf(net.minecraft.core.Direction.fromDelta(ports.getFirst().dx(),ports.getFirst().dy(),ports.getFirst().dz()).name());
+        assertFalse(index.faces(new PhysicalFluidTopology.Position("minecraft:the_nether",flange.x(),flange.y(),flange.z()),outward),"another dimension");
+        index.index(origin,record,false);
+        assertFalse(index.faces(flange,outward),"a removed record");assertNull(index.origin(flange));
+        // A drum is a fluid device: its registration's ports decide, so the index keeps none of its nozzles.
+        var drum=com.wormzjl.icheme.science.equipment.EquipmentShape.drum(1.5,4,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.HORIZONTAL,com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.NORTH,2,
+                com.wormzjl.icheme.science.equipment.EquipmentShape.defaultConnections(1.5,4,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.HORIZONTAL,2,true),true);
+        assertTrue(drum.fluidDevice());
+        index.index(origin,WorldTopologyLedger.Structure.of(drum,com.wormzjl.icheme.science.equipment.Paint.DEFAULT),true);
+        for(var p:com.wormzjl.icheme.science.equipment.ShapeRasterizer.ports(drum))
+            assertFalse(index.faces(new PhysicalFluidTopology.Position(origin.dimension(),origin.x()+p.cell().x(),origin.y()+p.cell().y(),origin.z()+p.cell().z()),
+                    PhysicalFluidTopology.Direction.valueOf(net.minecraft.core.Direction.fromDelta(p.dx(),p.dy(),p.dz()).name())),"a drum's nozzle");
+    }
 }

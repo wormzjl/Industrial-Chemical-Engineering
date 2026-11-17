@@ -2,6 +2,7 @@ package com.wormzjl.icheme.runtime.assembly;
 
 import com.wormzjl.icheme.science.assembly.PortGraph;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.NozzlePorts;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -160,7 +161,8 @@ public final class AssemblyWalker implements PortGraph {
 
     /**
      * The run from {@code from} towards {@code travel}: its first block is the next one. From a nozzle ({@code nozzle})
-     * only a pipe that meets the nozzle continues it; otherwise the port is unconnected.
+     * only a pipe that meets the nozzle continues it: a pipe with a joint towards it in front of its flange face, the rule
+     * of {@link NozzlePorts} that a pipe's drawing keeps too; otherwise the port is unconnected.
      */
     private Run walk(BlockPos from, Direction travel, boolean nozzle) {
         var elements = new ArrayList<Element>();
@@ -230,18 +232,15 @@ public final class AssemblyWalker implements PortGraph {
     /** The port of {@code shell} whose flange face is the cell {@code at} facing {@code outward}, or null. */
     private @Nullable Port port(Shell shell, BlockPos at, Direction outward) {
         var origin = shell.origin();
-        int x = at.getX() - origin.getX(), y = at.getY() - origin.getY(), z = at.getZ() - origin.getZ();
-        for (var p : ShapeRasterizer.ports(shell.shape())) {
-            if (p.cell().x() != x || p.cell().y() != y || p.cell().z() != z || p.dx() != outward.getStepX() || p.dy() != outward.getStepY()
-                    || p.dz() != outward.getStepZ()) continue;
-            var nozzles = shell.shape().nozzles();
-            var role = nozzles.get(p.nozzle()).role();
-            int ordinal = 0;
-            for (int k = 0; k < p.nozzle(); k++) if (nozzles.get(k).role() == role) ordinal++;
-            codes.put(at.asLong(), nozzleCode(shell.shape().kind(), p.nozzle()));
-            return new Port(unit(shell), role, ordinal);
-        }
-        return null;
+        var p = NozzlePorts.at(shell.shape(), at.getX() - origin.getX(), at.getY() - origin.getY(), at.getZ() - origin.getZ(), outward.getStepX(),
+                outward.getStepY(), outward.getStepZ());
+        if (p == null) return null;
+        var nozzles = shell.shape().nozzles();
+        var role = nozzles.get(p.nozzle()).role();
+        int ordinal = 0;
+        for (int k = 0; k < p.nozzle(); k++) if (nozzles.get(k).role() == role) ordinal++;
+        codes.put(at.asLong(), nozzleCode(shell.shape().kind(), p.nozzle()));
+        return new Port(unit(shell), role, ordinal);
     }
 
     /** A fitting's arrow along the run: +1 when its outlet faces the way the run goes. */

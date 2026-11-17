@@ -19,13 +19,14 @@ final class Placement {
     /**
      * The faces the device registered at {@code position} draws joined (batch 2026-11-09-drawn-connections): its
      * as-built joins on the projected registry ({@link PhysicalFluidTopology#builtFaces}), so accepted input shows at once
-     * and a block draws what the network joins. -1 where no device without ports stands. Reads no block and loads no
+     * and a block draws what the network joins; a pipe also meets the nozzles of the recorded structures that are no
+     * fluid device ({@link StructureNozzles}). -1 where no device without ports stands. Reads no block and loads no
      * chunk: a neighbour in a chunk that is not loaded is known by its registration.
      */
     int drawnFaces(PhysicalFluidTopology.Position position){
         var record=authority.topology.latestAt(position);
         if(record==null||!record.device().position().equals(position)||!record.device().ports().isEmpty())return -1;
-        return PhysicalFluidTopology.builtFaces(this::latestDevice,record.device());
+        return PhysicalFluidTopology.builtFaces(this::latestDevice,record.device(),authority.nozzles::faces);
     }
     /**
      * The faces a block of {@code kind} placed at {@code position} facing {@code facing} will draw joined once registered:
@@ -33,7 +34,7 @@ final class Placement {
      */
     int placedFaces(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing){
         var placed=PhysicalFluidTopology.Device.builder(Long.MAX_VALUE,position,kind,facing,new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive()).generatorEnabled(kind!=TopologyCompiler.Kind.GENERATOR).build();
-        return PhysicalFluidTopology.builtFaces(p->p.equals(position)?placed:latestDevice(p),placed);
+        return PhysicalFluidTopology.builtFaces(p->p.equals(position)?placed:latestDevice(p),placed,authority.nozzles::faces);
     }
     private PhysicalFluidTopology.Device latestDevice(PhysicalFluidTopology.Position position){var record=authority.topology.latestAt(position);return record==null?null:record.device();}
     /**
