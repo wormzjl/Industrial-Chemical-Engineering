@@ -20,16 +20,15 @@ the review plant, the proposed laws, the work packages and the owner's decisions
 - 2026-11-17: the owner answered O6 with a three-phase separator model: a drum gives clean oil and water only when properly sized, else oil in the water and water in the oil. `SEPARATOR_PLAN.md`: the ideal settler on the solute batch's settling speed (its plan 8.1 leaves the carried water out), Souders and Brown for the gas, the held receiver in the cycle, the sizer's rows; options S1 to S4. No code.
 - 2026-11-17: the owner: the gas law works with a vertical drum as well, and the desalter is based on this model, different by its higher coalescence. Separator plan: law 3 for standing and lying vessels with a table (a standing 1.0 m drum on the whole overhead draws 26 % bulk, 1.5 m is clean); section 4.1, the desalter as this separator with its own drop size; S4 changed (the separator before the solute batch's WP6), S5 added (the salt against the water). No code.
 - 2026-11-17: the owner: salt has nothing to do with phase carry-over. Separator plan: option S5 and every reading of the solute batch's salt law removed; the desalter takes only its phase separation from this model.
+- 2026-11-17: the owner took every open option: O5 A (law 4 takes the held line's drop and applies to inlets), O7 A (the internal bypass stays). The separator plan moved to its own batch, `2026-11-17-three-phase-separator` (its S4 A).
 
 ## Documents
 
 - [COLUMN_HYDRAULICS_PLAN.md](COLUMN_HYDRAULICS_PLAN.md)
-- [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md)
 
 ## Open items
 
-- Owner decisions O5 (the boundary lines' drop, and the inlets), O7 (an exchanger side's internal bypass); O6 is answered by the separator plan.
-- Separator plan: options S1 (the liquids' form), S2 (the amount carried), S3 (the gas), S4 (the order: before the solute batch's WP6).
-- The solute batch's desalter (its WP6) takes its phase separation from the separator plan; its salt law is its own. That batch's branch is not edited from here.
-- The build waits for batch `2026-11-16-solute-reaction-system`'s column package (O3); state format 54 and facts schema 31 are reserved then.
+- No owner decision is open. The build waits for batch `2026-11-16-solute-reaction-system`'s column package (WP7); state
+  format 54 and facts schema 31 are reserved on `main` then.
 - Work package 1b: whether a held member's rating is read against the design pressure (E11).
+- Package 4 also carries the separator batch's law for the held receiver.

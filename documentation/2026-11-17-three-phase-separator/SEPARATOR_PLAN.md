@@ -2,7 +2,7 @@
 
 Class: PHYSICS (owner's option, with numbers). Lanes: fluid laws (`PhaseDraw`), fluid step (`PassiveStepSolver`'s port
 streams), runtime (the slice plan), plant (the column's held receiver), flowsheet (the sizer's rows), client (status
-words). Nothing is coded. It answers option O6 of [COLUMN_HYDRAULICS_PLAN.md](COLUMN_HYDRAULICS_PLAN.md).
+words). Nothing is coded. It answers option O6 of [COLUMN_HYDRAULICS_PLAN.md](../2026-11-17-column-internal-hydraulics/COLUMN_HYDRAULICS_PLAN.md).
 
 ## 1. The request
 
@@ -110,20 +110,20 @@ With the field on this desalter gives dry oil; a heavier or colder crude, or a d
 `N` under 1 and water into the oil. The salt is not part of this: the solute batch's salt law stands as that batch
 wrote it.
 
-## 5. Owner options
+## 5. Owner decisions (all taken 2026-11-17)
 
-- S1, the liquids' form. A (recommended, the owner's sentence): the ideal settler, clean at `N` of 1 or more.
-  B: a mixed layer, `N / (1 + N)` settled: smoother, but no drum is ever clean (8 % of the water stays in the review
-  plant's sized receiver).
-- S2, how much is carried under `N` of 1. A (recommended): the share `1 − N` of the other liquid, at most volume for
-  volume (laws 1 and 2). B: the same, capped at 10 % by volume: milder, one more constant.
-- S3, the gas. A (recommended): law 3. B: no gas law in this batch.
-- S4, order (changed by the owner's word on the desalter). The separator comes before the solute batch's desalter
-  (WP6), which is built on it. A (recommended): its own batch after the solute batch's WP2 (which holds
-  `IslandCoordinator` and the fluid laws lane) and before its WP6; law 6 joins the hydraulics batch's cycle package.
-  B: now, beside the solute batch's stage A, with the hot files shared by the owner's word.
+- S1 A: the ideal settler, clean at `N` of 1 or more.
+- S2 A: under `N` of 1 the share `1 − N` of the other liquid is carried, at most volume for volume (laws 1 and 2).
+- S3 A: the gas law (law 3), for standing and lying vessels.
+- S4 A: its own batch, after the solute batch's WP2 (which holds `IslandCoordinator` and the fluid laws lane) and
+  before its desalter (WP6), which takes its phase separation from this model. Law 6 joins the hydraulics batch's
+  cycle package.
+- Salt has nothing to do with phase carry-over: the solute batch's salt law is not read or changed.
 
-## 6. Work packages (under S4 A)
+Open: law 6's simplification (the carried water's return with the reflux is not re-solved and its heat is left out)
+is confirmed with the owner when that package starts.
+
+## 6. Work packages
 
 1. `science/fluid/network/Separation`: `settling(d, Δρ, μ, ρ)`, `passes(N)`, `gasLimit(standing)`; the drop size a
    vessel gives (`dropSize`: 0.1 mm; the desalter's kind sets its own); the areas from `VesselGeometry` (a standing

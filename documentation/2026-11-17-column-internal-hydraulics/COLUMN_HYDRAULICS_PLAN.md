@@ -107,13 +107,13 @@ side's drop and height into its loop.
 
 | # | What | State | Answer |
 |---|---|---|---|
-| E1 | A boundary line of any length or height carries with no drop, no lift and no heat loss (2.5) | open | law 4, with option O5 |
-| E2 | A liquid feed lifted to its nozzle for nothing (2.5) | open | law 4, option O5 |
+| E1 | A boundary line of any length or height carries with no drop, no lift and no heat loss (2.5) | open | law 4 |
+| E2 | A liquid feed lifted to its nozzle for nothing (2.5) | open | law 4 |
 | E3 | Internal lines and member pumps of any size (2.1 to 2.3) | open | laws 1 to 3 |
 | E4 | Held exchangers' drop and height (2.6) | open | laws 1 to 3 |
 | E5 | A small pump books little power: a pump books its rated shaft power times the cycle's share, whatever it would have to move | open | closed by laws 2 and 3: a pump moves at most its rated flow |
-| E6 | A receiver of any size: the product buffers are 24 cycles of make (`BUFFER_CYCLES`), not the drum's volume, and the check takes any lying drum with a boot | open | [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md) |
-| E7 | An exchanger side with no lines regulates by its internal bypass: no tee, valve or flowmeter, no drop | by design (heat-units.md) | the owner's call, option O7 |
+| E6 | A receiver of any size: the product buffers are 24 cycles of make (`BUFFER_CYCLES`), not the drum's volume, and the check takes any lying drum with a boot | open | batch `2026-11-17-three-phase-separator` |
+| E7 | An exchanger side with no lines regulates by its internal bypass: no tee, valve or flowmeter, no drop | by design (heat-units.md) | kept (O7 A) |
 | E8 | A held device's wall: `Integrity.idle` says a held device is not idle, so it wears | closed | none |
 | E9 | The condenser's, coolers' and reboiler's surface: each duty passes through its utility side's room | closed | none (`COOLING_SHORT`, `PUMPAROUND_SHORT`, `HEATING_SHORT`) |
 | E10 | The column's diameter and trays: flooding by the design's own trays | closed | none (`FLOODING`) |
@@ -136,11 +136,13 @@ sides' passages, by the world's own laws.
    and lift pass the head. The fall follows from the duty. Share = the least of 1 and (the draw temperature less the
    return floor) over the fall at the set feed; the floor is the cooler's utility inlet temperature plus the approach
    the cooler side already uses.
-4. **Boundary ports** (decided for outlets' height, O4 A; option O5 for the rest). Each slice an outlet's pressure is
-   the design pressure less the product's own column up to the port, the lift from its source (the column's nozzle for
-   a draw and the bottoms; the receiver's nozzles for the off-gas, the sour water and the distillate, whose reflux pump
-   adds nothing). A port under its source gains the column. Start refuses (`Refusal.OUTLET_TOO_HIGH`, naming the outlet
-   and both heights) where the lift passes `P_design / (density x g)`.
+4. **Boundary ports** (decided, O4 A and O5 A). Each slice an outlet's pressure is the design pressure less the
+   product's own column up to the port and less the held line's drop at the port's flow. The lift is from its source:
+   the column's nozzle for a draw and the bottoms; the receiver's nozzles for the off-gas, the sour water and the
+   distillate, whose reflux pump adds nothing. A port under its source gains the column. An inlet's void stands at
+   the stage's pressure plus the feed's column up to its nozzle and the held line's drop: the feed must arrive with
+   that. Start refuses (`Refusal.OUTLET_TOO_HIGH`, naming the outlet and both heights) where the lift passes
+   `P_design / (density x g)`.
 5. Not modelled: suction boiling and NPSH, two-phase flow in the condenser's outlet, heat lost by held pipes.
 
 ## 4. Work packages
@@ -162,9 +164,9 @@ sides' passages, by the world's own laws.
    movers and the registry (pure arithmetic in a new `science/plant/column/LoopHydraulics`). `Condition.HYDRAULICS`;
    `ColumnStatus` words; `en_us.json`.
 5. **Port head.** `ColumnUnit.Station` gains `lift`, m (schema 31 with package 3; 0 is the behaviour before), set by
-   `ColumnStarts` from the port's cell and its source nozzle; `PortPlan` gains `lift` (and, with O5 A, `drop`);
-   `PassiveStepSolver.ports` states the generator at the port's pressure less `density x GRAVITY x lift` (less the
-   drop), the density the stated product's at the port's pressure (one evaluation, no iteration).
+   `ColumnStarts` from the port's cell and its source nozzle; `PortPlan` gains `lift` and `drop`;
+   `PassiveStepSolver.ports` states the generator at the port's pressure less `density x GRAVITY x lift` and the drop (an inlet's void at the
+   stage's pressure plus both), the density the stated product's at the port's pressure (one evaluation, no iteration).
    `Refusal.OUTLET_TOO_HIGH` in `ColumnStarts.build`. `PassiveStepSolver` is the fluid step lane's hot file: one method.
 6. **The review world** is rebuilt with the fixed builder; its report shows no `HYDRAULICS`. A second plant with a
    0.05 m overhead reads `LIMITED: hydraulics, 11 %`.
@@ -187,14 +189,13 @@ the hand number), the Start GameTest (the refusal), the facts round trip and cor
 
 ## 6. Owner decisions
 
-Taken 2026-11-17: O1 A (the overhead's budget, 10 % of the top's absolute pressure), O2 A (the pumparound's return
-floor: the utility's inlet plus the approach), O4 A (an outlet's pressure less its product's column, the Start refusal),
-O3 (build after the solute batch's column package; the numbers reserved then).
-
-Open:
-- O5, the boundary lines (E1, E2). A (recommended): law 4 also takes the held line's drop at the port's flow, and
-  applies to inlets (the void stands at the stage's pressure plus the feed's column up to its nozzle and the line's
-  drop). B: outlets and height only, as O4 decided; a long held line stays free and a liquid feed is lifted for nothing.
-- O6, the receiver's size (E6): answered by the owner with a three-phase separator model, [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md).
-- O7, an exchanger side's internal bypass (E7). A (recommended): keep it; it is the simple control a side without lines
-  has by design. B: a bypass control needs real lines.
+All taken 2026-11-17:
+- O1 A: the overhead's budget is 10 % of the top's absolute pressure.
+- O2 A: the pumparound's return floor is the utility's inlet temperature plus the approach.
+- O3: this batch builds after the solute batch's column package (WP7); state format 54 and facts schema 31 are
+  reserved then.
+- O4 A and O5 A: law 4, for outlets and inlets, with the held line's height and drop.
+- O6: answered with a three-phase separator model, batch `2026-11-17-three-phase-separator`
+  ([SEPARATOR_PLAN.md](../2026-11-17-three-phase-separator/SEPARATOR_PLAN.md)); its law for a column's held receiver
+  joins this batch's package 4.
+- O7 A: an exchanger side's internal bypass stays.
