@@ -384,7 +384,18 @@ public final class PassiveStepSolver {
         try{return solveRate(new PassiveNetwork(ports,graph.pipes()),checkpoint);}
         catch(SparseNewton.Nonconvergence|IllegalArgumentException failed){return null;}
     }
+    /**
+     * A solve that fails hands the next solve the point it started from (option S2 of START_HOLD_REVIEW.md, batch
+     * 2026-11-16-review-plant-sizing): its passes write {@link #carry} as they converge, and a retry at a shorter interval
+     * that read the failed attempt's would start from a mode set no accepted point holds (a pump left on its suction limit
+     * by the failed attempt before a valve the committed interval holds closed: no root at any step size).
+     */
     private Result solve(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {
+        var entry=carry;
+        try{return solvePasses(inputGraph,dt,checkpoint,rateOnly,acceptedEndpointModes);}
+        catch(RuntimeException failed){carry=entry;throw failed;}
+    }
+    private Result solvePasses(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {
         // A junction minted by its constructor and not yet sized to its connections is sized here (no-op otherwise).
         inputGraph=PassiveNetwork.sizeJunctionHoldups(inputGraph,model);
         this.rateOnly=rateOnly;
@@ -660,6 +671,8 @@ public final class PassiveStepSolver {
             // mode, so the reversible correction comes first.
             if(deviceChange>=0) {
                 modes.set(deviceChange,deviceNext);changed=true;
+                // Option E1 (START_HOLD_REVIEW.md): a flow valve regulating below a pump on its suction limit puts the pump on its law.
+                if(deviceNext==FlowControl.Mode.VALVE_REGULATING){var dp=graph.pipes().get(deviceChange);int law=DeviceModes.lawBelowSuctionLimit(graph,modes,deviceChange,deviceNext,flows,equations.drawn(deviceChange,0,equations.cachedTransport[dp.first()],flows[deviceChange]).density());if(law>=0)modes.set(law,FlowControl.Mode.MOVER_LAW);}
                 // A flow valve that closes can seal a mover's side (owner decision D58).
                 if(flowValve(graph.pipes().get(deviceChange)))relieveSealedPockets(graph,modes,boundaryClosed);
             }
@@ -1795,6 +1808,9 @@ public final class PassiveStepSolver {
      * {@link #sealedWithout} for a mover's side (owner decision D58, A4): with {@code relief} 1 the pocket must let flow
      * out (a mover's discharge), with -1 it must let flow in (its suction), and a connection whose one-way rules
      * ({@link #boundaryAllowed}) forbid that direction counts as closed. With 0 every open connection counts, either way.
+     * A closed connection seals in its current mode, a closed flow valve with a target too: the mover stands closed until a
+     * pass opens the valve, and reopens on its rise ({@link DeviceModes#nextMode}); a pump on its suction limit before a shut
+     * valve leaves its discharge's pressure in no row (START_HOLD_REVIEW.md, option S2).
      */
     static boolean sealedWithout(PassiveNetwork graph,int[][] nodeEdges,List<FlowControl.Mode> modes,boolean[] boundaryClosed,int node,int edge,int relief) {
         if(!graph.reservoirs().get(node).junction())return false;
@@ -1803,8 +1819,6 @@ public final class PassiveStepSolver {
             int at=queue.remove();
             for(int e:nodeEdges[at]) {
                 if(e==edge)continue;var mode=modes.get(e);var p=graph.pipes().get(e);
-                // A closed flow valve with a target opens to the head on it (nextMode): it seals no discharge.
-                if(relief>0&&mode==FlowControl.Mode.CLOSED&&!boundaryClosed[e]&&p.first()==at&&flowValve(p)&&p.control() instanceof FlowControl.Valve valve&&valve.targetMassFlow(1)>0)return false;
                 if(closedEdge(mode,boundaryClosed[e]))continue;
                 int other=p.first()==at?p.second():p.first();
                 if(relief!=0&&other!=at) {

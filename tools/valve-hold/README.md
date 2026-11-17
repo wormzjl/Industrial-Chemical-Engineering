@@ -51,3 +51,13 @@ point, the Jacobian's singular values and near-null vectors, the direction and t
 
 `VALVE_HOLD_REVIEW.md`, section 3. The file holds the last cases run (A and A2 by `both`); the earlier cases are in
 the review's tables.
+
+## The start hold, 2026-11-17
+
+`StartHoldScratchTest.java` builds the review world's crude charge line in small (Tia Juana crude at 300 K, P-101's law,
+a run sized to pass 2 x design on 7.5 bar, the column-sensor flow valve, a void), dead-heads the pump behind the shut valve
+for 800 ticks, gives the valve its target and prints the world's slices and direct carried and fresh solves for cases a to f.
+`StartHoldTraceScratchTest.java` needs `trace.patch` and `StartHoldScratchTest.java` beside it, and dumps cases a carried, a
+fresh, b carried and e carried under `tmp/start-hold/trace/`. Run each as the scratch above (copy into
+`src/test/java/com/wormzjl/icheme/runtime/fluid/`, one run with `--tests` and `--max-workers=4`, remove the copies). The
+patch applies unchanged to `c0a5eff0e`. Results in `START_HOLD_REVIEW.md`.

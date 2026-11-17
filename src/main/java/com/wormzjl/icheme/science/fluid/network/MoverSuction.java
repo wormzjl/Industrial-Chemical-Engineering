@@ -11,7 +11,6 @@ import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
 import java.util.*;
-import java.util.function.IntFunction;
 
 /**
  * What a step solve reads of its movers' suctions, once per solve on the step's start states: each liquid pump's floor
@@ -32,40 +31,30 @@ final class MoverSuction {
     private final FluidThermodynamics model;
     MoverSuction(PassiveStepSolver solver,FluidThermodynamics model){this.solver=solver;this.model=model;}
     /**
-     * Owner decisions D59 (4), D14 and D17: how far the suction end of connection {@code edge} stands above the pressure its
+     * Owner decisions D59 (4) and D14: how far the suction end of connection {@code edge} stands above the pressure its
      * suction limit holds it at ({@link #suctionLimit}), read on {@code states} at suction volume flow {@code volumeFlow}
      * (m3/s) (Pa), so the mode test and the limit's row read one value; positive infinity where the connection is not a
      * liquid pump or its suction has no vapour pressure to stand at.
      */
     double cavitationMargin(StepEquations equations,int edge,List<FluidThermodynamics.State> states,double volumeFlow) {
         var pipe=equations.graph.pipes().get(edge);int a=pipe.first();
-        double limit=suctionLimit(equations,edge,states::get,volumeFlow);
+        double limit=suctionLimit(equations,edge,volumeFlow);
         return limit<Double.POSITIVE_INFINITY?PortStreams.endPressure(model,equations.graph.reservoirs().get(a),pipe.firstPort(),states.get(a))-limit:Double.POSITIVE_INFINITY;
     }
     /**
-     * Owner decision D17 (bundled random 896): the pressure the suction end of pump connection {@code edge} stands at on its
-     * suction limit, on the node states {@code states} and its suction volume flow {@code volumeFlow} (m3/s; the trial point
-     * in the Newton's row): the lesser of its floor and what its supplier gives at no flow ({@link #suctionSupply}, the supplier
-     * its suction walk ends at, {@link StepEquations#suctionSuppliers}). A suction limit never stands above its supplier: where
-     * the supplier falls to its bubble point within the step (896's tee, flashing to pass its main stream), the suction
-     * stands at the supplier less its static column, the suction line carries nothing and the pump delivers nothing,
-     * continuously and with no mode change. Held at the floor alone, the suction stood above a tee that had to flash below
-     * it, the line had to reverse and no point balanced the tee (D14_HOLDS_REVIEW.md). The floor where the pump has no
-     * suction walk (it draws straight from its first node) or no floor.
-     *
-     * <p>The floor (owner decision D20 Q11 A, plan section 3.6) is the floor of the liquid it draws ({@link #vapourPressure})
-     * plus its breakdown NPSH at its flow, {@code 0.85 ρ_l g NPSH3(Q, s)} ({@link #breakdown}): the suction pressure at which
-     * its head breaks down, so it delivers what its suction can feed there; the floor rises with the flow while the suction
-     * line's pressure falls with it, so they cross once, and the bubble floor is its {@code NPSH3 = 0} end. The row reads it on
-     * its own flow column: the block sweep re-assembles the actuator row for the edge's flow, which the sparsity declares
-     * ({@link StepEquations#buildSparsity}). Where the pump has no floor (infinite) the NPSH adds none.
+     * The pressure the suction end of pump connection {@code edge} stands at on its suction limit, at its suction volume flow
+     * {@code volumeFlow} (m3/s; the trial point in the Newton's row): {@link ReleasePressure#limit} of the floor of the liquid it
+     * draws ({@link #vapourPressure}) with its breakdown NPSH at that flow, {@code 0.85 ρ_l g NPSH3(Q, s)} ({@link #breakdown};
+     * owner decision D20 Q11 A, plan section 3.6), and the clean zone's edge ({@link #zoneEdge}). The floor rises with the flow
+     * while the suction line's pressure falls with it, so they cross once; the bubble floor is its {@code NPSH3 = 0} end. A
+     * supplier that cannot hold the suction at the limit even at no flow (D17, bundled random 896's flashing tee) is the row's
+     * zero-flow branch ({@link StepEquations}, option D of START_HOLD_REVIEW.md), not a lesser-of with the supplier here: that
+     * clip made the row flat above the supplier, and the mode test reads this same value ({@link #cavitationMargin}). The
+     * row reads it on its own flow column, which the sparsity declares ({@link StepEquations#buildSparsity}). Positive infinity
+     * where the pump has no floor.
      */
-    double suctionLimit(StepEquations equations,int edge,IntFunction<FluidThermodynamics.State> states,double volumeFlow) {
-        var pipe=equations.graph.pipes().get(edge);
-        double floor=suctionLimitPressure(equations.graph,edge,breakdown(equations.graph,edge,volumeFlow));int supplier=equations.suctionSuppliers[edge];
-        if(!(floor<Double.POSITIVE_INFINITY)||supplier<0)return floor;
-        var s=states.apply(supplier);int link=equations.suctionLinks[edge];
-        return Math.min(floor,suctionSupply(equations.graph,edge,supplier,link,PortStreams.endPressure(model,equations.graph.reservoirs().get(supplier),equations.graph.pipes().get(link).portAt(supplier),s),s));
+    double suctionLimit(StepEquations equations,int edge,double volumeFlow) {
+        return suctionLimitPressure(equations.graph,edge,breakdown(equations.graph,edge,volumeFlow));
     }
     /**
      * Owner decisions D15 and D17: the pressure the supplier {@code supplier} of pump connection {@code edge} gives at the
@@ -134,8 +123,8 @@ final class MoverSuction {
      * 17: removed, cold random 181 stalled in a line search at tick 1086 and bundled iterations rose 5.1 %). The lock reads
      * the suction limit ({@link #suctionLimitPressure})
      * without the breakdown NPSH (plan section 3.6: it is the NPSHA ≤ 0 end): a supplier whose head at no flow lies between
-     * zero and the breakdown NPSH at shutoff leaves the pump on its suction limit, where D17's lesser-of takes its delivery
-     * to zero continuously ({@link #suctionLimit}). Written into {@code locked}, the solve's {@code vapourLocked}
+     * zero and the breakdown NPSH at shutoff leaves the pump on its suction limit, where its row's zero-flow branch takes its
+     * delivery to zero continuously ({@link #suctionLimit}, D17). Written into {@code locked}, the solve's {@code vapourLocked}
      * ({@link SolveConstants}), whose zone edges and floors the lock reads.
      */
     void vapourLocks(PassiveNetwork graph,List<FluidThermodynamics.State> states,boolean[] locked) {
