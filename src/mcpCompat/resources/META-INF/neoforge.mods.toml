@@ -6,7 +6,7 @@ license="MIT"
 modId="icheme_mcp_compat"
 version="1.0.0"
 displayName="IChemE MCP Test Compatibility"
-description="Test-client input dispatch compatibility for Minecraft MCP 0.4.x (dependency range [0.4.18,0.5.0))."
+description="Test-client input dispatch compatibility for Minecraft MCP 0.4.x (dependency range [0.4.28,0.5.0))."
 
 [[mixins]]
 config="icheme_mcp_compat.mixins.json"
@@ -14,5 +14,5 @@ config="icheme_mcp_compat.mixins.json"
 [[dependencies.icheme_mcp_compat]]
 modId="mcpmod"
 type="required"
-versionRange="[0.4.18,0.5.0)"
+versionRange="[0.4.28,0.5.0)"
 side="CLIENT"
