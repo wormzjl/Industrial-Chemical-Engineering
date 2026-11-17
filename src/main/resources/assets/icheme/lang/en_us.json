@@ -2912,6 +2912,8 @@
   "gui.icheme.flowsheet.limit.drum_gas_standing": "Gas speed, standing",
   "gui.icheme.flowsheet.limit.drum_gas_lying": "Gas speed, lying",
   "gui.icheme.flowsheet.limit.drum_boot_hold": "Boot hold",
+  "gui.icheme.flowsheet.limit.drum_settle_water": "Water settling out of the oil",
+  "gui.icheme.flowsheet.limit.drum_settle_oil": "Oil settling out of the water",
   "gui.icheme.flowsheet.limit.tank_volume": "Volume",
   "gui.icheme.flowsheet.limit.tank_diameter": "Diameter",
   "gui.icheme.flowsheet.limit.tank_shell": "Shell height",

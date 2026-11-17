@@ -107,6 +107,23 @@ public final class Separation {
     }
 
     /**
+     * The settling numbers of a vessel's two liquid layers: the oil layer's (water drops leaving the oil) and the water
+     * layer's (oil drops leaving the water), each on its plan area at its mid-height, the upper one's inside the body,
+     * above a boot. Positive infinity for both where the vessel does not hold both liquids, and for a layer nothing
+     * leaves. The sizer reads the same numbers at design flow ({@code DrumSizing}).
+     */
+    public static double[] numbers(VesselGeometry geometry,double drop,Layer oil,Layer water) {
+        if(!oil.held()||!water.held())return new double[]{Double.POSITIVE_INFINITY,Double.POSITIVE_INFINITY};
+        boolean heavyWater=water.density()>=oil.density();
+        Layer lower=heavyWater?water:oil,upper=heavyWater?oil:water;
+        double split=geometry.heightAt(lower.volume()),top=geometry.heightAt(lower.volume()+upper.volume());
+        double lowerArea=geometry.planArea((-geometry.bootDepth()+split)/2),upperArea=geometry.planArea((Math.max(split,0)+Math.max(top,0))/2);
+        double difference=water.density()-oil.density();
+        return new double[]{number(settling(drop,difference,oil.viscosity(),oil.density()),heavyWater?upperArea:lowerArea,oil.outflow()),
+                number(settling(drop,difference,water.viscosity(),water.density()),heavyWater?lowerArea:upperArea,water.outflow())};
+    }
+
+    /**
      * What a vessel of {@code geometry} carries for a slice.
      *
      * @param drop       the drop its liquids settle as, m ({@link #DROP}; a desalter's own)
@@ -123,13 +140,9 @@ public final class Separation {
         double split=geometry.heightAt(lower.volume()),top=geometry.heightAt(lower.volume()+upper.volume());
         double waterInOil=0,oilInWater=0;
         if(twoOutlets&&oil.held()&&water.held()) {
-            // Each layer's plan area at its mid-height; the upper one's inside the body, above a boot.
-            double lowerArea=geometry.planArea((-geometry.bootDepth()+split)/2),upperArea=geometry.planArea((Math.max(split,0)+Math.max(top,0))/2);
-            double difference=water.density()-oil.density();
-            double inOil=number(settling(drop,difference,oil.viscosity(),oil.density()),heavyWater?upperArea:lowerArea,oil.outflow());
-            double inWater=number(settling(drop,difference,water.viscosity(),water.density()),heavyWater?lowerArea:upperArea,water.outflow());
-            waterInOil=carried(inOil,water.inflow(),oil.inflow());
-            oilInWater=carried(inWater,oil.inflow(),water.inflow());
+            double[] numbers=numbers(geometry,drop,oil,water);
+            waterInOil=carried(numbers[0],water.inflow(),oil.inflow());
+            oilInWater=carried(numbers[1],oil.inflow(),water.inflow());
         }
         double liquidInGas=0;
         if(gasOutflow>0&&gasDensity>0&&(oil.held()||water.held())) {

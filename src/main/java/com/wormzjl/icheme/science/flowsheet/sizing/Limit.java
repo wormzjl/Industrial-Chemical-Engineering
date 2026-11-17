@@ -27,6 +27,7 @@ import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Axis;
 import com.wormzjl.icheme.science.flowsheet.sizing.Bound.Sense;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.HeatCurve;
+import com.wormzjl.icheme.science.fluid.network.Separation;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.machine.Motor;
 import com.wormzjl.icheme.science.machine.SteamEjector;
@@ -201,9 +202,13 @@ public enum Limit {
     DRUM_SLENDERNESS_LYING(SHOULD, within(2.5, 5), "", "[BLOG]", QUIET),
     DRUM_SLENDERNESS_STANDING(SHOULD, least(2), "", "[TOW]", QUIET),
     /** K of the gas speed's law, √((ρL − ρV)/ρV) times this: half the padded value, as the world's drum has no pad. */
-    DRUM_GAS_STANDING(SHOULD, most(.107 / 2), "m/s", "[GPSA]"),
-    DRUM_GAS_LYING(SHOULD, most(1.25 * .107 / 2), "m/s", "[GPSA], [FLU]"),
+    DRUM_GAS_STANDING(SHOULD, most(Separation.GAS_K), "m/s", "[GPSA]"),
+    DRUM_GAS_LYING(SHOULD, most(Separation.LYING * Separation.GAS_K), "m/s", "[GPSA], [FLU]"),
     DRUM_BOOT_HOLD(SHOULD, least(5), "min", "[REDBAG]"),
+    /** The oil layer's settling number, settling speed x plan area / oil flow: under 1 the oil leaves with water in it. */
+    DRUM_SETTLE_WATER(SHOULD, least(1), "", "World: `Separation`"),
+    /** The boot's settling number, on the water flow: under 1 the water leaves with oil in it. */
+    DRUM_SETTLE_OIL(SHOULD, least(1), "", "World: `Separation`"),
 
     // ---- Tanks and spheres ----
     TANK_VOLUME(MUST, most(EquipmentShape.MAX_VOLUME), "m³", "World", QUIET),

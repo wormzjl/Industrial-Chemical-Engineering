@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
+import com.wormzjl.icheme.science.fluid.network.Separation;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import org.jetbrains.annotations.Nullable;
 
@@ -75,8 +76,17 @@ public final class DrumSizing {
      * @param light  the gas's density, kg/m³
      * @param heavy  the liquid's it settles from, kg/m³
      * @param hold   the drum's entry, min
+     * @param oilDensity     kg/m³; 0 where the load does not say how its liquids settle
+     * @param waterDensity   kg/m³
+     * @param oilViscosity   Pa s
+     * @param waterViscosity Pa s
      */
-    public record Load(double gas, double oil, double water, double light, double heavy, double hold) {
+    public record Load(double gas, double oil, double water, double light, double heavy, double hold, double oilDensity, double waterDensity, double oilViscosity, double waterViscosity) {
+        /** A load that does not say how its liquids settle: no settling rows. */
+        public Load(double gas, double oil, double water, double light, double heavy, double hold) {
+            this(gas, oil, water, light, heavy, hold, 0, 0, 0, 0);
+        }
+
         /** A drum with no flow: no size, no lamp. */
         public static final Load NONE = new Load(0, 0, 0, 0, 0, 0);
 
@@ -89,7 +99,13 @@ public final class DrumSizing {
             var boot = water.empty() ? null : LineSizing.Carried.of(water, flow, thermo, scratch);
             var liquid = bottom != null ? bottom : boot;
             return new Load(top == null ? 0 : top.volume(), bottom == null ? 0 : bottom.volume(), boot == null ? 0 : boot.volume(), top == null ? 0 : top.density(), liquid == null ? 0 : liquid.density(),
-                    hold == null ? Limit.DRUM_HOLD.value() : hold);
+                    hold == null ? Limit.DRUM_HOLD.value() : hold,
+                    bottom == null ? 0 : bottom.density(), boot == null ? 0 : boot.density(), bottom == null ? 0 : bottom.viscosity(), boot == null ? 0 : boot.viscosity());
+        }
+
+        /** Whether the load says how its two liquids settle. */
+        private boolean settles() {
+            return twoLiquids() && oilDensity > 0 && waterDensity > 0 && oilViscosity > 0 && waterViscosity > 0 && oilDensity != waterDensity;
         }
 
         boolean flows() {
@@ -137,6 +153,15 @@ public final class DrumSizing {
             double held = boot ? size.withBoot(false).volume() : shape.volume(), settled = boot ? load.oil() : load.oil() + load.water();
             if (settled > 0) readings.add(Limit.DRUM_HOLD.against(held / 2 / settled / 60, load.hold()));
             if (boot && load.water() > 0) readings.add(Limit.DRUM_BOOT_HOLD.read((shape.volume() - held) / load.water() / 60));
+            var geometry = shape.fluidGeometry();
+            if (boot && geometry.boot() && load.settles()) {
+                // The world's law (Separation) at design flow: the body half full of oil over a boot full of water.
+                var oil = new Separation.Layer(geometry.volumeAt(size.diameter() / 2) - geometry.bootCapacity(), load.oilDensity(), load.oilViscosity(), load.oil(), load.oil());
+                var water = new Separation.Layer(geometry.bootCapacity(), load.waterDensity(), load.waterViscosity(), load.water(), load.water());
+                double[] numbers = Separation.numbers(geometry, Separation.DROP, oil, water);
+                if (Double.isFinite(numbers[0])) readings.add(Limit.DRUM_SETTLE_WATER.read(numbers[0]));
+                if (Double.isFinite(numbers[1])) readings.add(Limit.DRUM_SETTLE_OIL.read(numbers[1]));
+            }
         }
         return new Rating(readings);
     }
