@@ -143,6 +143,10 @@ class FlowControlTest {
         // Once there, the generator keeps its state (its graph certifies).
         var there=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,byEnthalpy,PassiveNetwork.NodeKind.GENERATOR),nodes.get(1),nodes.get(2)),graph.pipes());
         assertSame(byEnthalpy,solver.ports(there,Map.of(1L,new PortPlan(1,2,.01,380,x,com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY,h)),()->{}).reservoirs().get(0).state());
+        // An enthalpy no PH equilibrium reaches (1 GJ/mol): the planned temperature stands, a rejected trial and never a hold;
+        // the column books the difference to its account in the condenser's totals.
+        var unreached=solver.ports(graph,Map.of(1L,new PortPlan(1,2,.01,380,x,com.wormzjl.icheme.science.fluid.state.SolidInventory.EMPTY,1e9)),()->{}).reservoirs().get(0).state();
+        assertEquals(today.temperature(),unreached.temperature());assertEquals(today.enthalpy(),unreached.enthalpy());
     }
     /** Pressure valves on one node are outside "Lower target wins": they hold their accepted openings. */
     @Test void pressureValvesOnOneNodeHoldTheirAcceptedOpenings(){
