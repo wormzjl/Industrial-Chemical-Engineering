@@ -108,6 +108,10 @@ the `Rig` class keep their sizes.
   or a drive mode. [PUMP_DRIVE_FLOW_PLAN.md](PUMP_DRIVE_FLOW_PLAN.md): the rig's charge pump on its drive, the set
   flow as a loop output and on the DCS, the pump page's unasked set flow fixed, a sized pump built regulating. The
   stopped valve work stays on `claude/pump-valve-c779f2`, not merged. Plan only, nothing built.
+- 2026-11-17, branch `claude/pump-drive-flow` (sub-thread; packages 0 and 1): [PUMP_DRIVE_FLOW_REVIEW.md](PUMP_DRIVE_FLOW_REVIEW.md).
+  The rig's charge valve is removed; the charge pump holds 0.19344 m3/s by its drive (REGULATE_FLOW). The review-operation
+  GameTest fails the new check: the 10 bar crude supply pushes 2x design through the open line, so the tower's feed
+  valve sets the flow (318.85 kg/s) at any pump speed. Options to the owner (supply at tank pressure recommended).
 
 ## Full crude unit, sized (2026-11-17)
 
