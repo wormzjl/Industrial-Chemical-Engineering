@@ -125,7 +125,21 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   owner's "light the furnace before running any feed": the burners are lit and fueled, then the crude supply opens into the
   empty train. The train filled at once and stood still against the tower's shut feed valve. The heaters read 297.7 K at
   0 kW for 12000 ticks, because with no flow through a coil its burners ask for no fuel. The column then started on the
-  298 K charge and tripped the same way. The rig keeps this order (`Rig.openCrude`, `Rig.warmed`). Options: a start-up circulation in the rig, a trip that clears with its
+  298 K charge and tripped the same way. The rig keeps this order (`Rig.openCrude`, `Rig.warmed`).
+
+  Owner, 2026-11-17: "if it is set to a temperature it should output at given temperature unless duty is not satisfied";
+  chosen law, "a lit coil heats its standing contents". Part 1 is built (`ec3d5eee5`, `FiredHeaters.booked`): a lit coil
+  whose still contents (under 1e-6 kg/s) stand below the set point keeps its design duty's fuel burning
+  (`FiredHeaterFuelTest.stillTubesBelowTheSetPointKeepTheBurnersLit`, 6.3 MW fired, 0 kW into the still coil; 23 affected
+  classes pass). In builds 5b and 5c:
+  - each heater fires 115 MW on its still coils, but the coils stay at 297.7 K, because a still coil takes no heat (the
+    coil law is beta times mass flow times the enthalpy rise);
+  - the crude fills the whole train in under 20 ticks when its supply opens: the burners then still read NO POWER
+    (their store not yet filled) and get no demand while the coils are empty (an empty island is not solved), so the line
+    fills cold.
+
+  Part 2, heat into still contents, is a solver change: a heat term on a reservoir at no flow, in the residual, the Jacobian
+  and the reconstruction. Until then, a lit heater with still cold tubes burns its duty's fuel and heats nothing. Options: a start-up circulation in the rig, a trip that clears with its
   condition (engine), or the world as it stands. The owner's direction for the engine: a cold feed goes to the bottom
   instead of holding, and a pumparound works only on what its stages hold. The column screen reads "Upset: inputs closed;
   last solve failed", which does not name the cold feed.

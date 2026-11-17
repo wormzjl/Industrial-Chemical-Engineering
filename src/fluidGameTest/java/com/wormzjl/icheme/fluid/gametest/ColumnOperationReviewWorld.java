@@ -1147,13 +1147,18 @@ public final class ColumnOperationReviewWorld {
         boolean warmed() {
             if (chargeEnd == null) return true;
             boolean hot = hot();
-            if (hot || ++warming % 600 == 0 || warming >= HOT_TICKS) {
+            if (hot || ++warming % 600 == 0 || warming <= 200 && warming % 20 == 0 || warming >= HOT_TICKS) {
                 var outlets = new ArrayList<String>();
                 for (var h : heaters) {
                     var ids = com.wormzjl.icheme.world.level.block.EquipmentStructure.sideIdentities(plant.level, h);
                     for (long id : ids) {
                         var heat = plant.world.view(id).heat();
                         outlets.add(heat == null ? "-" : String.format(Locale.ROOT, "%.1f/%.0fkW", heat.outletTemperature(), heat.heatWatt() / 1000));
+                        long burners = plant.world.burners().burnersOf(id);
+                        if (burners != 0) {
+                            var b = plant.world.burners().view(burners);
+                            outlets.add(b == null ? "burners -" : String.format(Locale.ROOT, "burners demand=%.0fkW fired=%.0fkW fuel=%.3fkg/s %s", b.demand() / 1000, b.fired() / 1000, b.fuelFlow(), b.alarms()));
+                        }
                     }
                 }
                 IChemE.LOGGER.info("review_operation warming ticks={} hot={} charge_K={} charge=\"{}\" heaters={} crude=\"{}\"", warming, hot,
@@ -1203,6 +1208,8 @@ public final class ColumnOperationReviewWorld {
                 var status = plant.world.view(id(f)).status();
                 if (!status.startsWith("FULL") && !status.startsWith("STEADY")) return false;
             }
+            // Not the burners' firing: an empty coil's island has nothing to solve, so its burners get no demand until the
+            // crude arrives (build 5c waited on it for ten minutes).
             return true;
         }
 
