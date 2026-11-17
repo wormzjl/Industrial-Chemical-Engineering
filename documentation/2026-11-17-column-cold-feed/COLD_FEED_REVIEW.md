@@ -116,3 +116,45 @@ No saved fact changes. The sheet's column block shares `ColumnSolve.calculate`, 
 Three packages, each for an Opus thread: T0 with its tests (standard); T1 with the table's share, the bands and the
 engine side (hard: solver calls and engine state); the notices, alarms and tab texts (standard). T2 is one more hard
 package. A detailed plan comes before any brief.
+
+## 9. The pumparound's duty from its flow and temperatures (owner, 2026-11-17)
+
+The owner: "the PA duty comes from it flowrate and temperature, if we keep the design pumping rate, and simulate
+temperature impact then we should be able to model the actual exchanged heat during startup". This replaces T1's
+share ladder for the pumparounds: the duty is no longer a set point, it is what the cooler exchanges.
+
+**The law.** Each pumparound circulates at its design rate F (the pump's). The hot side enters the cooler at the draw
+tray's temperature and leaves at T_draw − Q / (F cp); the cooler exchanges Q against its cold side as any exchanger
+does, so Q ≤ F cp (T_draw − T_cold,in − approach). The cycle books the Q exchanged, and where it leaves the table's
+duty by a band (as a short steam does under rule B) a solve is asked at the exchanged duties. A cold tray gives a
+small Q; a hot tray over a cold crude gives a large one, which cools the tray: the loop is stable.
+
+**Measured** (pumparound duties alone at a share, the draws at the design, cold solves):
+
+| Feed, K | Pumparounds x | Outcome | Draw trays, K | Condenser, MW | Bottoms, mol/s |
+|---|---|---|---|---|---|
+| 638 | 1 (design) | ok | 428, 505, 556 | 33.8 | 227 |
+| 638 | 0.75 | ok | 453, 519, 575 | 43.2 | 195 |
+| 638 | 0.5 | ok | 466, 536, 583 | 53.5 | 171 |
+| 638 | 0.25 | ok | 480, 551, 601 | 64.3 | 145 |
+| 638 | 0.01 | ok | 498, 565, 608 | 75.7 | 117 |
+| 600 | 0.75 to 0.01 | ok, all four | 419 to 476 (first draw) | 29.4 to 61.5 | 236 to 152 |
+| 575 | 0.75 to 0.01 | ok, all four | 398 to 465 (first draw) | 20.9 to 54.1 | 266 to 170 |
+
+- V3 solves every duty from 1 % to 100 % of the design at a warm feed, with the draws kept. The draw trays warm by up
+  to 70 K as the pumparounds are cut, and the condenser takes the heat they leave (33.8 to 75.7 MW at 638 K).
+- At the design, a 60 K fall gives F cp of 218, 350 and 221 kW/K (13.1, 21.0 and 13.2 MW). With the first pumparound
+  cut and a 300 K crude on the cold side, the heat it could give is 218 kW/K x (498 − 300 − 10) K = 41 MW, three times
+  its design duty: at start the limit is the cooler's surface, not the flow, and the duty rises fast once the column
+  is hot.
+- The condenser must take up to 2.2 times its design duty while the pumparounds are cold; where it cannot, the column
+  is limited by its condenser (`COOLING_SHORT`), which is what a real unit sees.
+
+**What it changes in the proposal.** T0 stays (a feed no table fits passes to the bottoms). T1 becomes: the
+pumparound duties follow the coolers (a band and a solve, no ladder); the draws keep a share rule for a feed under
+about 575 K, where the design's draws exceed the trays' liquid. The table gains each pumparound's F cp (the draw
+liquid's heat capacity from the solve, the pump's design rate). `PUMPAROUND_SHORT` no longer cuts the feed.
+
+**Not read yet:** how the held cooler's side computes its transfer (`ExchangerRelay`, `Read.column`): today it gives
+the owed heat up to a ceiling at the draw temperature less the approach, with no hot-side flow. Whether the finite
+hot side goes there, or the loop becomes a real stream of the island, is for the plan.

@@ -16,6 +16,10 @@ pumparounds work only as far as their trays hold liquid.
   (the tray solver run directly at feeds from 638 K to 300 K, three sweeps). Result: feasible as a pass to the bottoms
   with no solve (T0) and a turndown solve at a share of the draws and pumparounds (T1), which V3 solves from 460 K up;
   a flash table below that (T2) can wait. No mod code, no test run.
+- 2026-11-17: the owner: "the PA duty comes from it flowrate and temperature, if we keep the design pumping rate, and
+  simulate temperature impact then we should be able to model the actual exchanged heat during startup". The probe run
+  with the pumparound duties alone cut (`-DdrawShare=1`): V3 solves every duty from 1 % to 100 % at feeds of 575 to
+  638 K with the draws kept. The review's section 9: the duty follows the cooler, a band and a solve, no ladder.
 
 ## Documents
 

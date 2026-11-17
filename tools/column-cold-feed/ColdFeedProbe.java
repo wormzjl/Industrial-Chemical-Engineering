@@ -20,7 +20,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * The network's default column solved directly by the V3 calculator at falling feed temperatures (batch
  * 2026-11-17-column-cold-feed, {@code COLD_FEED_REVIEW.md}): what the tray solver does with a feed that makes little or no
  * vapour. Three forms of each case: the design as it is (draws, pumparounds and reboiler at their design ratios); the draws
- * and pumparounds at a share of the design ({@code -Dshare}, default 0.01); neither draws nor pumparounds (the lists empty).
+ * and pumparounds at a share of the design ({@code -Dshare}, default 0.01; {@code -DdrawShare} gives the draws their own
+ * share, so the pumparound duties alone can be cut); neither draws nor pumparounds (the lists empty).
  * Each solve is cold. Prints the outcome, the products with their temperatures, the condenser duty and the solver's
  * counters; no time.
  */
@@ -44,12 +45,17 @@ public final class ColdFeedProbe {
                 design.steamFeeds().stream().map(s -> String.format(Locale.ROOT, "%.0f", s.temperatureKelvin())).toList(), design.stageCount(),
                 design.feedStageNumber(), design.specifications());
         double share = Double.parseDouble(System.getProperty("share", "0.01"));
+        double drawShare = Double.parseDouble(System.getProperty("drawShare", Double.toString(share)));
         String only = System.getProperty("temperatures", "638.15,600,550,500,450,400,350,300");
         for (String text : only.split(",")) {
             double t = Double.parseDouble(text.trim());
-            solve("design ", at(design, t, 1, false));
-            solve(String.format(Locale.ROOT, "x%.3f ", share), at(design, t, share, false));
-            solve("bare   ", at(design, t, 0, true));
+            if (drawShare != share) {
+                solve(String.format(Locale.ROOT, "pa x%.3f draws x%.3f ", share, drawShare), at(design, t, share, drawShare, false));
+                continue;
+            }
+            solve("design ", at(design, t, 1, 1, false));
+            solve(String.format(Locale.ROOT, "x%.3f ", share), at(design, t, share, share, false));
+            solve("bare   ", at(design, t, 0, 0, true));
         }
     }
 
@@ -83,9 +89,9 @@ public final class ColdFeedProbe {
         if (Boolean.getBoolean("advisories")) System.out.println("      " + result.acceptanceAudit().advisoryEvidence());
     }
 
-    /** The design at feed temperature {@code t}, its draws and pumparound duties at {@code share} of the design, or without them. */
-    private static V3ColumnInput at(V3ColumnInput in, double t, double share, boolean bare) {
-        List<V3SideDrawSpec> draws = bare ? List.of() : in.sideDraws().stream().map(d -> new V3SideDrawSpec(d.trayNumber(), d.molarFlowMolPerSecond() * share)).toList();
+    /** The design at feed temperature {@code t}, its pumparound duties at {@code share} and its draws at {@code drawShare} of the design, or without them. */
+    private static V3ColumnInput at(V3ColumnInput in, double t, double share, double drawShare, boolean bare) {
+        List<V3SideDrawSpec> draws = bare ? List.of() : in.sideDraws().stream().map(d -> new V3SideDrawSpec(d.trayNumber(), d.molarFlowMolPerSecond() * drawShare)).toList();
         List<V3PumparoundSpec> pumparounds = bare ? List.of()
                 : in.pumparounds().stream().map(p -> new V3PumparoundSpec(p.returnTray(), p.drawTray(), p.dutyWatts() * share, p.split())).toList();
         List<V3ColumnSpecification> specifications = in.specifications();

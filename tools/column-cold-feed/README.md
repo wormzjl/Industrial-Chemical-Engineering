@@ -13,7 +13,8 @@ java -Dfile.encoding=UTF-8 -cp "<class path>" tools/column-cold-feed/ColdFeedPro
 ```
 
 `-Dtemperatures=638.15,600,...` sets the feed temperatures (K), `-Dshare=0.25` the share of the design's draws and
-pumparound duties of the middle form, `-Devents=true` prints a failure's events, `-Dadvisories=true` a success's.
+pumparound duties of the middle form, `-DdrawShare=1` gives the draws their own share (then one solve a temperature:
+the pumparound duties at the share, the draws at theirs), `-Devents=true` prints a failure's events, `-Dadvisories=true` a success's.
 
 ## What it prints
 
