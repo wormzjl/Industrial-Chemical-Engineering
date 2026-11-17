@@ -112,7 +112,7 @@ side's drop and height into its loop.
 | E3 | Internal lines and member pumps of any size (2.1 to 2.3) | open | laws 1 to 3 |
 | E4 | Held exchangers' drop and height (2.6) | open | laws 1 to 3 |
 | E5 | A small pump books little power: a pump books its rated shaft power times the cycle's share, whatever it would have to move | open | closed by laws 2 and 3: a pump moves at most its rated flow |
-| E6 | A receiver of any size: the product buffers are 24 cycles of make (`BUFFER_CYCLES`), not the drum's volume, and the check takes any lying drum with a boot | open | no steady-state effect; option O6 |
+| E6 | A receiver of any size: the product buffers are 24 cycles of make (`BUFFER_CYCLES`), not the drum's volume, and the check takes any lying drum with a boot | open | [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md) |
 | E7 | An exchanger side with no lines regulates by its internal bypass: no tee, valve or flowmeter, no drop | by design (heat-units.md) | the owner's call, option O7 |
 | E8 | A held device's wall: `Integrity.idle` says a held device is not idle, so it wears | closed | none |
 | E9 | The condenser's, coolers' and reboiler's surface: each duty passes through its utility side's room | closed | none (`COOLING_SHORT`, `PUMPAROUND_SHORT`, `HEATING_SHORT`) |
@@ -195,7 +195,6 @@ Open:
 - O5, the boundary lines (E1, E2). A (recommended): law 4 also takes the held line's drop at the port's flow, and
   applies to inlets (the void stands at the stage's pressure plus the feed's column up to its nozzle and the line's
   drop). B: outlets and height only, as O4 decided; a long held line stays free and a liquid feed is lifted for nothing.
-- O6, the receiver's size (E6). A (recommended): nothing; hold-up has no steady-state effect in this model. B: the
-  product buffers follow the receiver's volume.
+- O6, the receiver's size (E6): answered by the owner with a three-phase separator model, [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md).
 - O7, an exchanger side's internal bypass (E7). A (recommended): keep it; it is the simple control a side without lines
   has by design. B: a bypass control needs real lines.

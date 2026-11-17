@@ -17,13 +17,16 @@ the review plant, the proposed laws, the work packages and the owner's decisions
   No code.
 - 2026-11-17: the owner took O1 A, O2 A, O4 A and O3 (build after the solute batch's column package). Work package 1: `tools/column-hydraulics/ReviewPlantProbe.java` solved the plan's numbers (overhead 0.648 m3/s; the 0.05 m overhead passes 11 % under the 10 % budget, 30 % under the speed cap alone).
 - 2026-11-17: the owner asked the same of the exchanger structure and for the fence's other exploits. The exchanger structure holds nothing (its sides have friction and their nozzles' heights in the network); the exchangers a column holds join its loops. Plan 2.6, 2.7 (E1 to E12), options O5 to O7.
+- 2026-11-17: the owner answered O6 with a three-phase separator model: a drum gives clean oil and water only when properly sized, else oil in the water and water in the oil. `SEPARATOR_PLAN.md`: the ideal settler on the solute batch's settling speed (its plan 8.1 leaves the carried water out), Souders and Brown for the gas, the held receiver in the cycle, the sizer's rows; options S1 to S4. No code.
 
 ## Documents
 
 - [COLUMN_HYDRAULICS_PLAN.md](COLUMN_HYDRAULICS_PLAN.md)
+- [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md)
 
 ## Open items
 
-- Owner decisions O5 (the boundary lines' drop, and the inlets), O6 (the receiver's size), O7 (an exchanger side's internal bypass).
+- Owner decisions O5 (the boundary lines' drop, and the inlets), O7 (an exchanger side's internal bypass); O6 is answered by the separator plan.
+- Separator plan: options S1 (the liquids' form), S2 (the amount carried), S3 (the gas), S4 (the order against the solute batch).
 - The build waits for batch `2026-11-16-solute-reaction-system`'s column package (O3); state format 54 and facts schema 31 are reserved then.
 - Work package 1b: whether a held member's rating is read against the design pressure (E11).
