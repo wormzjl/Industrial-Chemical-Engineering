@@ -1,7 +1,7 @@
 # Column on a cold feed (2026-11-17)
 
-**Status:** Planned 2026-11-17 (feasibility study and plan), on branch `claude/column-testing-sizing-26b5b9`; nothing built. Class:
-PHYSICS. Lanes: column operation (plant layer and engine).
+**Status:** Building 2026-11-17, on branch `claude/column-testing-sizing-26b5b9`: packages 0 to 3 built, 4 (the texts) to come.
+Class: PHYSICS. Lanes: column operation (plant layer and engine).
 
 A running column that gets a feed too cold for its solved table trips and holds the feed, and where the hot feed
 stands behind the cold one it never recovers. The owner asked that a cold feed runs to the bottoms and that draws and
@@ -69,6 +69,21 @@ pumparounds work only as far as their trays hold liquid.
   pumparound's 0.4 bound, now the reboiler's 0.6. `aShortPumparoundCoolerLimitsTheColumn` (renamed
   `aShortPumparoundCoolerKeepsTheFeed`): before no feed after the water's loss, LIMITED: pumparound; now 25 mol in
   50 s (the set 0.5 mol/s), RUNNING with the notice at 0 %, COOLING LIMITED. No design-point reference moved.
+- 2026-11-17: package 3 built (commit `b8cffebb6`): the cooler's wall law against the pumparound's own stream (L5).
+  `ColumnSolve` samples each draw tray's oil liquid (300 K, or 10 K under a colder tray, to the tray; default films) with
+  the solve; `Solved.drawCurves` carries them, kept in memory with the table, not saved (D6: a reload whose pumparounds
+  have cooler sides asks one Start solve to sample them, which solves at the set points). The cooler's read
+  (`ExchangerRelay.Read.stream`) carries the draw at the draw tray's temperature and the design circulation (D3: the set
+  duty at the design feed over the sizer's 60 K fall), and `ExchangerRelay.column` bounds the give-back by the heat the
+  wall moves from that stream through the side's own cells and surface (the reading side's law with no bypass: the held
+  side's law is not reachable from the read, so the plan's "held side's HeatSide" became the reading side's). The heat is
+  read on the stream whose temperature changes the more: on the rig the water (24.5 kg/s) warms 0.003 K, within the
+  wall's tolerance, and read 0 W where the draw gives 333 W. A read without the stream is the read before L5, bit for
+  bit. Tests: `ExchangerRelayTest` 5/5 (new: on 1000 m² the ceiling's read stands; on 1 m², UA 1 kW/K, the water takes
+  92 kW, UA times the log-mean difference within 2 %, of a 200 kW due), `ColumnSolveTest` selected (the draw curves of
+  the real solve: cp 2326, 2577 and 2769 J/kgK at 452, 524 and 587 K), `ColumnRunTest` selected (new: on the rig's
+  56 m² the 300 K water takes the 400 J/mol duty with no turndown solve; on a tenth, NTU 0.67, it takes 327 J/mol, 82 %,
+  the effectiveness-NTU figure, and the table settles at 336 in 3 solves, the feed kept). No reference moved.
 
 ## Documents
 
