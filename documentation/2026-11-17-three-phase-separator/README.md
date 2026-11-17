@@ -86,6 +86,9 @@ phase carry-over.
   `LanguageFilesTest` and `UnitTextTest`: `test` 375 classes 2215 tests, `holdGates` 12 classes 92 tests,
   `equipmentGates` 22 classes 180 tests, 0 failed; `columnGates` (`V3RefluxFreeWaterTest`) up to date, its stored
   pass stands. No result moved. Both separator sheets rendered from the shipped builder and looked at.
+- 2026-11-17: the owner asked for a gas-liquid sizing requirement on a standing drum, then: "This is not only about
+  setting rule, but what happens if rules are not followed", and "add an optional demister". Proposed, not built (open
+  items): a height factor on a standing vessel's gas limit, and a mesh pad as a design option. Documents only.
 
 ## Documents
 
@@ -105,6 +108,19 @@ phase carry-over.
   (the `Separators` hook) and a component to `PassiveNetwork.Inventory`. That batch's plan is not edited from here; its
   desalter (WP6) takes its phase separation from this model and sets its own drop size.
 - Owner's call: whether a kettle and a still's pot take the gas law (plan section 5.1).
+- Gas space height (proposed 2026-11-17, waits for the owner's go-ahead): a standing vessel's gas limit times
+  (gas space height / 1.52 m)^0.56, at most 1, the gas space read from the liquid surface to the top each slice; the
+  sizer's `DRUM_GAS_STANDING` row reads the same law at half full. From API 12J's K table (0.35 ft/s at 10 ft, 0.24 at
+  5 ft; the exponent is its horizontal row's and gives 0.678 against the table's 0.686), read from secondary copies.
+  Assumed: the gas space is half the table's vessel height; under 5 ft the factor is extrapolated. Files: `Separation`,
+  `DrumSizing`, both free. A fixed height row with no consequence in the world was dropped.
+- Demister (owner, 2026-11-17: "add an optional demister"), not built: a mesh pad as a drum design option, off by
+  default; with it K is GPSA's padded 0.107 m/s (today's `GAS_K` is that halved), the carry-over law unchanged above
+  the limit. Needs a shape field (the design, the shell, the constructor's page), a field of the vessel's spec saved by
+  `FluidFacts.java` and `FluidCheckpointCodec.java` (a facts schema number, a corpus image), the sizer's gas rows.
+  Blocked on those two files, which batch `2026-11-16-solute-reaction-system` holds; it can share the facts schema
+  step of dynamic settling's package 2. Not decided: the pad's pressure drop (about 0.1 to 0.25 kPa, from memory;
+  it matters only in vacuum service), whether a pad fouls, whether Auto proposes one.
 - The Carry-over group's data is built (`icheme-7`, history). Left: the selector names `fluidSolverRegression`, the
   GameTest step and the campaign step for that commit; none ran (they are the final lane's). `FluidDeviceScreen`,
   `NetworkProtocol` and `FORMATS.md` have one-line edits that batch `2026-11-16-solute-reaction-system` (`icheme-6`)
