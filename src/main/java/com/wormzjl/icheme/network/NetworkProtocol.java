@@ -19,11 +19,13 @@ package com.wormzjl.icheme.network;
  * {@code icheme-3}: a steam turbine's inlet class gained LP, declared first, so every class's ordinal on the wire moved
  * (batch 2026-11-15-equipment-visual-design); the conversion rules sync, {@code FluidNetwork.ConversionRulesSync} (batch 2026-11-15-fluid-interfaces, W5), and the alarm beacon's
  * edit and view (same batch, W9). {@code icheme-5} (batch 2026-11-16-fouling-corrosion, WP3; {@code icheme-4} is held by another
- * batch): the constructor's design carries its material of construction.</p>
+ * batch): the constructor's design carries its material of construction. {@code icheme-7} (batch
+ * 2026-11-17-three-phase-separator; {@code icheme-6} is held by another batch): a vessel's view carries what its outlets
+ * carry beside their own phase.</p>
  */
 public final class NetworkProtocol {
     /** The version every registrar of the mod carries. */
-    public static final String VERSION = "icheme-5";
+    public static final String VERSION = "icheme-7";
 
     private NetworkProtocol() {
     }

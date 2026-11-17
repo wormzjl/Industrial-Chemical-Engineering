@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -54,6 +56,15 @@ class SeparationDrawTest extends PortFixture {
     private static double[] volumes(PassiveStepSolver.Result result,long pipe) {
         return result.pipeTransfers().stream().filter(t->t.pipeId()==pipe).findFirst().orElseThrow().forward().phaseVolumes();
     }
+    /** {@code graph} without the boot's water line, the oil line on {@code oil} and the top line on {@code top} at the drum. */
+    private static PassiveNetwork ported(PassiveNetwork graph,PassiveNetwork.PhasePort oil,PassiveNetwork.PhasePort top) {
+        var pipes=new ArrayList<PassiveNetwork.Pipe>();
+        for(var pipe:graph.pipes()) {
+            if(pipe.id()==BOOT)continue;
+            pipes.add(pipe.id()==HC?pipe.withPorts(oil,pipe.secondPort()):pipe.id()==TOP?pipe.withPorts(top,pipe.secondPort()):pipe);
+        }
+        return new PassiveNetwork(graph.reservoirs(),pipes,graph.scheduledTransfers());
+    }
     /** Every component: what the drum lost is what its three outlets moved. */
     private void assertLedger(PassiveNetwork graph,PassiveStepSolver.Result result) {
         double[] before=graph.reservoirs().getFirst().inventory().moles(),after=result.inventories().getFirst().moles(),moved=new double[before.length];
@@ -70,6 +81,22 @@ class SeparationDrawTest extends PortFixture {
         assertEquals(0,hc[1]+hc[2]+boot[0]+boot[2]+top[0]+top[1]);
         // The same graph with the plan's zeros written on it is the same record: nothing else reads it.
         assertEquals(graph.reservoirs().getFirst().inventory(),graph.reservoirs().getFirst().inventory().withCarried(new Separation.Carried(0,0,0)));
+    }
+
+    @Test void theLawsActOnAClosedVesselByTheOutletsItHas() {
+        var graph=drum(sized(),.4,.02,Separation.Carried.NONE,false);
+        // A booted drum with a gas line: both laws; an outlet's far end (a void) takes none.
+        assertEquals(new Separation.Acts(true,true),Separation.acts(graph,0));
+        assertFalse(Separation.acts(graph,1).any());
+        // A drum with only a bottom and a top line: the gas's alone.
+        assertEquals(new Separation.Acts(false,true),Separation.acts(ported(graph,PassiveNetwork.PhasePort.LIQUID,PassiveNetwork.PhasePort.VAPOR),0));
+        // No such port: neither.
+        assertFalse(Separation.acts(ported(graph,PassiveNetwork.PhasePort.LIQUID,PassiveNetwork.PhasePort.BULK),0).any());
+        // The same booted drum open to the air: neither.
+        var held=graph.reservoirs().getFirst();var i=held.inventory();
+        var open=new PassiveNetwork.Inventory(i.volume(),i.moles(),i.internalEnergy(),i.solids(),i.levelHeight(),true,i.geometry());
+        var nodes=new ArrayList<>(graph.reservoirs());nodes.set(0,new PassiveNetwork.Reservoir(held.id(),held.elevation(),held.state(),held.kind(),open));
+        assertFalse(Separation.acts(new PassiveNetwork(nodes,graph.pipes()),0).any());
     }
 
     @Test void theOilOutletCarriesWaterAndTheWaterOutletOil() {
@@ -121,6 +148,14 @@ class SeparationDrawTest extends PortFixture {
         // The slice input lasts the slice: the next plan replaces it, and with no slice behind it the drum is clean again.
         assertEquals(carried,second.graph().reservoirs().getFirst().inventory().carried());
         assertTrue(Separation.plan(model,second.graph(),null).reservoirs().getFirst().inventory().carried().none());
+        // The drum's view copies what the slice carried, for each law that acts on it: here all three.
+        var view=com.wormzjl.icheme.runtime.fluid.TankOutlets.tank(model,second.graph(),0,second).carried();
+        assertEquals(new com.wormzjl.icheme.runtime.fluid.FluidView.CarryOver(carried.waterInOil(),carried.oilInWater(),carried.liquidInGas()),view);
+        assertEquals(0.0,view.waterInOil());
+        // Without its boot lines only the gas's law acts on the drum, and without a gas line no law: no group.
+        var gasOnly=com.wormzjl.icheme.runtime.fluid.TankOutlets.tank(model,ported(second.graph(),PassiveNetwork.PhasePort.LIQUID,PassiveNetwork.PhasePort.VAPOR),0,second).carried();
+        assertEquals(new com.wormzjl.icheme.runtime.fluid.FluidView.CarryOver(null,null,carried.liquidInGas()),gasOnly);
+        assertNull(com.wormzjl.icheme.runtime.fluid.TankOutlets.tank(model,ported(second.graph(),PassiveNetwork.PhasePort.LIQUID,PassiveNetwork.PhasePort.BULK),0,second).carried());
         // The sized drum on the same feed, its outlets on 5 mm lines: it keeps its phases apart. (On 20 mm lines it does
         // not: its 0.35 m2 boot settles under a litre of water a second.)
         var large=drum(sized(),.4,.02,Separation.Carried.NONE,true,.005);

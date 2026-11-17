@@ -733,7 +733,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var m=deviceMeters();var input=new DeviceColumn.Input(data.kind(),canEdit()&&!fixed(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
             view.filter()!=null&&!view.filter().captured().empty(),m.level(),junction,lead,m.phases(),m.meters(),m.drive(),m.power(),m.suction())
             // The wall and the trim (batch 2026-11-16-fouling-corrosion, WP4); the names are lines under gui.icheme.
-            .withIntegrity(m.wall((key,args)->Component.translatable("gui.icheme."+key,args).getString()),m.trim());
+            .withIntegrity(m.wall((key,args)->Component.translatable("gui.icheme."+key,args).getString()),m.trim()).withCarried(m.carried());
         return data.controls().fixedMover()?input.withFixedDuty(tr(data.kind()==TopologyCompiler.Kind.PUMP?"inline.pump_rating":"inline.compressor_rating",value(data.controls().volumeFlow()*3600))):input;
     }
     /** Whether the Overview's glass draws this pump's curve (W10d): a constructed centrifugal pump with a driver. In-line pumps keep their tables. */

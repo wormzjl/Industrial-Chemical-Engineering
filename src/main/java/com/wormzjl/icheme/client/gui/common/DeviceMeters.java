@@ -294,6 +294,12 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         if(liquidInGas!=null)rows.add(new DeviceColumn.Meter("carried_liquid",value(100*liquidInGas),"%",tr("carried_liquid.hint")));
         return List.copyOf(rows);
     }
+    /** The Carry-over meters of the view's vessel ({@link FluidView.Tank#carried()}); none where no law acts on it. */
+    public List<DeviceColumn.Meter> carried(){
+        var tank=data.view().tank();
+        if(tank==null||tank.carried()==null)return List.of();
+        var c=tank.carried();return carried(c.waterInOil(),c.oilInWater(),c.liquidInGas());
+    }
     /** A tank's Level group: its fill (NaN while unknown), and its contents of its capacity in litres. */
     public DeviceColumn.Level level(){
         if(!tank()||converter()!=null)return null;

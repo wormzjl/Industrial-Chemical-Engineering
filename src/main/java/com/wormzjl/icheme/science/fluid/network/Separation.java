@@ -56,6 +56,33 @@ public final class Separation {
     }
 
     /**
+     * Which of the laws act on a vessel: the liquids' (an outlet for each liquid) and the gas's (a gas outlet).
+     */
+    public record Acts(boolean liquids,boolean gas) {
+        private static final Acts NEITHER=new Acts(false,false);
+        public boolean any(){return liquids||gas;}
+    }
+
+    /** Which laws act on node {@code node} of {@code graph}: the rule {@link #plan} applies. */
+    public static Acts acts(PassiveNetwork graph,int node) {
+        boolean oil=false,water=false,gas=false;
+        for(var pipe:graph.pipes())for(int end=0;end<2;end++) {
+            if((end==0?pipe.first():pipe.second())!=node)continue;
+            var port=end==0?pipe.firstPort():pipe.secondPort();
+            if(port==PassiveNetwork.PhasePort.BOOT_HC)oil=true;
+            else if(port==PassiveNetwork.PhasePort.BOOT_WATER)water=true;
+            else if(port==PassiveNetwork.PhasePort.VAPOR)gas=true;
+        }
+        return acts(graph.reservoirs().get(node),oil,water,gas);
+    }
+    /** A closed vessel that is no kettle, pot or tower basin takes the law on the outlets it has. */
+    private static Acts acts(PassiveNetwork.Reservoir reservoir,boolean oilPort,boolean waterPort,boolean gasPort) {
+        var inventory=reservoir.inventory();
+        if(reservoir.kind()!=PassiveNetwork.NodeKind.RESERVOIR||inventory.open()||inventory.pool()!=null||inventory.tower()!=null)return Acts.NEITHER;
+        return new Acts(oilPort&&waterPort,gasPort);
+    }
+
+    /**
      * A drop's settling speed, m/s: {@code g d² Δρ / (18 μ (1 + 0.15 Re^0.687))}, {@code Re = ρ v d / μ}, by five
      * fixed-point passes from Stokes' speed.
      *
@@ -204,13 +231,13 @@ public final class Separation {
         java.util.List<PassiveNetwork.Reservoir> planned=null;com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace scratch=null;
         for(int node=0;node<nodes;node++) {
             var reservoir=graph.reservoirs().get(node);var inventory=reservoir.inventory();var carried=Carried.NONE;
-            boolean liquids=oilPort[node]&&waterPort[node];
-            if(out!=null&&(liquids||gasPort[node])&&reservoir.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!inventory.open()&&inventory.pool()==null&&inventory.tower()==null) {
+            var acts=acts(reservoir,oilPort[node],waterPort[node],gasPort[node]);
+            if(out!=null&&acts.any()) {
                 var state=reservoir.state();
                 if(scratch==null)scratch=new com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace();
                 Layer oil=layer(model,state,FluidThermodynamics.OIL,out[node][0],in[node][0],scratch),water=layer(model,state,FluidThermodynamics.AQUEOUS,out[node][1],in[node][1],scratch);
                 double gas=FluidThermodynamics.holdsPhase(state,FluidThermodynamics.GAS)?PortStreams.phaseDensity(model,state,FluidThermodynamics.GAS):0;
-                carried=of(inventory.geometry(),DROPS,oil,water,liquids,gasPort[node]?out[node][2]:0,gas);
+                carried=of(inventory.geometry(),DROPS,oil,water,acts.liquids(),acts.gas()?out[node][2]:0,gas);
             }
             if(carried.equals(inventory.carried()))continue;
             if(planned==null)planned=new java.util.ArrayList<>(graph.reservoirs());

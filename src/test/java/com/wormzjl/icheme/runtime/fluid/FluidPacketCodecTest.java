@@ -122,6 +122,28 @@ class FluidPacketCodecTest {
         }finally{buffer.release();}
     }
 
+    /** A vessel's carry-over crosses with its tank (icheme-7, batch 2026-11-17-three-phase-separator); none decodes as null. */
+    @Test void aTanksCarryOverRoundTripsAndAShareAboveOneIsRejected() {
+        var base=generatorMenu("");int count=base.components().size();double[][] amounts=new double[3][count];amounts[0][0]=1000;
+        var state=new FluidView.State(200000,298.15,1,10,new double[]{1,0,0},amounts,SolidInventory.EMPTY,10);
+        var tank=new FluidView.Tank(5,false,0,0,10,200000.0,200049.03325,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(10,5),new FluidView.CarryOver(0.0,.395,null));
+        var gson=new Gson();
+        java.util.function.Function<FluidView.Tank,String> json=t->gson.toJson(live(new FluidNetwork.MenuData(TopologyCompiler.Kind.RESERVOIR,new FluidView(9,4,1200,1300,"READY",state,0,List.of()).withTank(t),base.controls(),base.components(),List.of(),"",base.materialNames(),base.molecularWeights())));
+        var buffer=new RegistryFriendlyByteBuf(Unpooled.buffer(),RegistryAccess.EMPTY);
+        try {
+            FluidNetwork.LivePayload.STREAM_CODEC.encode(buffer,new FluidNetwork.LivePayload(3,9,json.apply(tank)));
+            var decoded=FluidNetwork.decodeLive(FluidNetwork.LivePayload.STREAM_CODEC.decode(buffer).json());
+            assertEquals(tank,decoded.view().tank());
+        }finally{buffer.release();}
+        var plain=new FluidView.Tank(5,false,0,0,10,200000.0,200049.03325);
+        var without=FluidNetwork.decodeLive(json.apply(plain)).view().tank();
+        assertEquals(plain,without);assertNull(without.carried());
+        var above=com.google.gson.JsonParser.parseString(json.apply(tank)).getAsJsonObject();
+        above.getAsJsonObject("view").getAsJsonObject("tank").getAsJsonObject("carried").addProperty("oilInWater",1.5);
+        var rejected=assertThrows(RuntimeException.class,()->FluidNetwork.decodeLive(above.toString()));
+        assertTrue(FluidNetwork.reason(rejected).contains("Invalid carry-over presentation"));
+    }
+
     // ---------------- distinct static and live payloads ----------------
 
     private static FluidNetwork.MenuData generatorMenu(String message) {
@@ -142,7 +164,7 @@ class FluidPacketCodecTest {
     @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
         // One protocol for every registrar since icheme-1 (codebase review P3-22); the fluid menu payloads were fluid-24.
         // icheme-2: the pollution map's payloads joined (WP9).
-        assertEquals("icheme-5",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
+        assertEquals("icheme-7",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -216,7 +238,7 @@ class FluidPacketCodecTest {
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
         // The machine payloads ride on the one protocol since icheme-1 (P3-22); they were machine-4. icheme-2 since WP9, icheme-3 since the fluid interfaces batch, icheme-5 since the material of construction (batch 2026-11-16-fouling-corrosion).
-        assertEquals("icheme-5",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
+        assertEquals("icheme-7",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
         var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
         var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
                 com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);

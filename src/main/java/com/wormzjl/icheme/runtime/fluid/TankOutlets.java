@@ -51,6 +51,17 @@ public final class TankOutlets {
         Double top=tank.empty()?null:tank.state().pressure();
         return new FluidView.Tank(tank.inventory().levelHeight(),tank.inventory().open(),rates[0],rates[1],tank.inventory().volume(),top,top==null?null:top+bottomHead(model,tank),tank.inventory().geometry());
     }
+    /** {@link #tank(FluidThermodynamics,PassiveNetwork.Reservoir,PassiveIntervalSolver.Result)} for node {@code node} of
+     * {@code graph}, with what its outlets carried over the last slice ({@link Separation.Carried}, a copy of the committed
+     * inventory's) for each law that acts on it ({@link Separation#acts}); none where no law acts. */
+    public static FluidView.Tank tank(FluidThermodynamics model,PassiveNetwork graph,int node,PassiveIntervalSolver.Result result) {
+        var reservoir=graph.reservoirs().get(node);var base=tank(model,reservoir,result);
+        var acts=Separation.acts(graph,node);
+        if(!acts.any())return base;
+        var c=reservoir.inventory().carried();
+        var carried=new FluidView.CarryOver(acts.liquids()?c.waterInOil():null,acts.liquids()?c.oilInWater():null,acts.gas()?c.liquidInGas():null);
+        return new FluidView.Tank(base.levelHeight(),base.open(),base.ventKgPerSecond(),base.spillKgPerSecond(),base.capacity(),base.topPressure(),base.bottomPressure(),base.geometry(),carried);
+    }
     /** The same condensed head used by bottom/overflow hydraulic ports; no flash or process advancement. */
     private static double bottomHead(FluidThermodynamics model,PassiveNetwork.Reservoir tank){
         return tank.empty()?0:PortStreams.portHead(model,tank,PassiveNetwork.PhasePort.LIQUID,tank.state());
