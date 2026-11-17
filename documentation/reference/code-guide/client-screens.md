@@ -38,6 +38,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/j
 | `HeatFlowsheet` | Draws a `HeatDiagram` through `FlowsheetPainter` scaled to its area; `part` and `pill` hit tests | 358 |
 | `MachineColumn` | A machine page's door: a motor, a steam turbine's drive, a generator, a gearbox, a creative motor, a prime mover or a Create coupling (read only); widgets first (Off/On, drive, regulation and set point, limit or ratio, Trip reset), then the plant's readings from `MachineView` | 283 |
 | `MotorCurve` | The motor's finite VFD envelope on the machine page's glass | 72 |
+| `VesselSection` | A vessel's section on the glass: gas, clear oil, the turbid band (hatched) and clear water by their shares of the height; a standing vessel with its readings beside its layers, a lying drum across the glass with its readings under it; `layout` is pure, `draw` batches its fills. Not on a screen yet | 275 |
 | `PumpCurve` | A constructed centrifugal pump's curve on its Overview glass: H(Q) at the present speed, NPSH3(Q), the inception curve (dashed), NPSH available, the operating point; from the casing's `FluidView.Curve` and the view | 201 |
 | `DialogColumns` | The small dialogs' doors: `gauge`, `pipelineTool` (with `palette`), `vessel` (the datasheet's Size group and motion switch); `footer`; the datasheet's `Sheet` and its `glass` (warning, notes, the nozzle table, `BAND`), `material` (its material line), `TOP` | 279 |
 | `ControlColumns` | The controller and DCS operator form, shared with the offline renderer: viewport groups, selection (`choices`), hover texts, `Layout` | 254 |
@@ -88,6 +89,7 @@ In `test`, `src/test/java/com/wormzjl/icheme/client/gui/common/` unless noted; e
 | Test | Proves |
 |---|---|
 | `DeviceColumnTest` | The door column's groups for each kind, `assertInLine`, a widget keeps its slot while readings change, the accessory groups |
+| `VesselSectionTest` | The vessel section inside its box at every size, standing and lying, each layer empty in turn; readings whole and apart; one batch |
 | `DeviceMetersTest` | The meters' values, units and order |
 | `HeatControlColumnTest` | Layout C and its split, each side's switch, targets and settings, a ratio's reading, the lines' note, the `column` mode |
 | `HeatDiagramTest` | Every unit's and line design's parts inside the grid and apart, a square and a pill per nozzle, readings that name only the unit's parts, no lang key defined twice |

@@ -294,3 +294,20 @@ Blocked until batch `2026-11-16-solute-reaction-system` releases them: `PassiveN
 | Stirred drop size (L9, later batch) | Hinze, AIChE J. 1 (1955) 289; Chen and Middleman, AIChE J. 13 (1967) 989 | The Weber number form (power −0.6) confirmed; the constants not confirmed |
 
 Papers worth the owner's fetch, in order of need: Richardson and Zaki (the 0.2 to 1 step's factor, not blocking); Henschke et al. (to state the left-out coalescence in its own terms); Chen and Middleman (the stirred tank).
+
+## 11. As built
+
+- **1a** (commit `9b25df078`): `Separation.Band` (`turbid`, `held`, `NONE`, `within`: L4), `Separation.Slice`,
+  `Separation.advance` (L2 in `PARTS` = 16 parts, with Richardson and Zaki's exponent as an argument, 0 for none),
+  `Separation.swarmExponent` (the steps of section 10) and `Separation.dispersed` (L5, D1 B; equal inflows count as
+  water in oil). The built law (`settling` to `plan`) is unchanged. `SettlingBandTest` holds section 3's numbers. One
+  difference from the planned test: a 59 s clearing time at slices of 1 s cannot be checked to 1 %, so the swarm
+  batch is checked against `h / (v (1 − φ)^n)` within 1 % or one slice (the band clears on the 60th slice, as
+  `band.mjs` does).
+- **G** (commit `7a51f5e84`): `Column.Gauge` (a kit row: label, bar, value in a meter's box place, unit in the unit
+  place; `Placed.mark` holds its bar; `Skin.gauge` draws it as a split bar), `DeviceColumn.Input.separation` with
+  `withSeparation` and `Phase`, the Separation group between Readings and Carry-over, `DeviceMeters.separation`, and
+  `VesselSection` (a standing vessel's readings beside its layers with leader lines; a lying drum across the glass,
+  its readings under it, each after a swatch of its layer's colour; where the box leaves no room for the readings,
+  under 12 px of vessel, the vessel is drawn alone and the door's gauges hold the readings). No screen reads either yet:
+  the data comes with packages 2 and 3.

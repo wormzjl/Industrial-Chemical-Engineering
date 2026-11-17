@@ -23,7 +23,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | Class | Role | Lines |
 |---|---|---|
 | **The kit (`gui/common/kit`)** | | |
-| `Column` | Rows placed top to bottom from the width (`place`, `Metrics.DEFAULT` or `COMPACT`): `Group`, `Line`, `Paragraph`, `Choice`, `Field`, `Wide`, `Reading`, `Setting`, `Buttons` of `Button` (`latched`, `soft`), `Bar`, `Split`, `Gap`; a `Placed` row keeps its rect, slots, texts and hover; `slots`, `action`, `hover`, `draw`; `BOX`, `UNIT`, `STEP`, `INSET` | 456 |
+| `Column` | Rows placed top to bottom from the width (`place`, `Metrics.DEFAULT` or `COMPACT`): `Group`, `Line`, `Paragraph`, `Choice`, `Field`, `Wide`, `Reading`, `Setting`, `Buttons` of `Button` (`latched`, `soft`), `Bar`, `Split`, `Gauge` (a labelled bar of one share, its value and unit in a meter's box and unit places, a group's bars from one x to one x), `Gap`; a `Placed` row keeps its rect, slots, texts, hover and mark (a gauge's bar); `slots`, `action`, `hover`, `draw`; `BOX`, `UNIT`, `STEP`, `INSET` | 518 |
 | `Rect` | A rectangle in GUI pixels | 33 |
 | `Measure` | Text width, cut and wrap: the game font (`GuiCanvas.measure`), `Measure.fixed(6)` in tests and tools; `LINE` | 61 |
 | `Canvas` | Where the kit draws: fills, lines, text, clip, `sprite`, `batch` | 51 |

@@ -1,7 +1,8 @@
 # Dynamic settling (2026-11-17)
 
-**Status:** Planned 2026-11-17 (decisions D1, D2, D3, D5 and D6 taken), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
-runtime, client; flowsheet and fluid step by the owner's decisions. Nothing is coded.
+**Status:** In build 2026-11-17: packages 1a (the band law) and G (the page's parts that need no data) built, on branch
+`claude/column-testing-sizing-26b5b9`; 1b, 2 to 5 wait for batch `2026-11-16-solute-reaction-system`'s files. Class:
+PHYSICS. Lanes: fluid laws, runtime, client; flowsheet and fluid step by the owner's decisions.
 
 A vessel's liquids settle over time: a mixed feed forms a turbid band that a clear front crosses at the drops' settling
 speed, so separation follows the residence time against the settling time, slice by slice. It replaces the time form of
@@ -30,6 +31,18 @@ flow. The drum page gains a level of separation for gas, oil and water. The stir
 - 2026-11-17: the owner picked the sheet: "C: bars and section" (D6 C). The swarm law's exponent steps were checked
   again: 4.65, 4.45 Re^-0.1 and 2.39 hold; the 0.2 to 1 step's factor (4.35) stays from memory, 2 % in speed at most.
   Package 1a is no longer waiting for the paper. Documents only.
+- 2026-11-17: package 1a, the band law (commit `9b25df078`): `Separation.Band`, `Slice`, `advance` (16 parts),
+  `swarmExponent`, `dispersed`; `SettlingBandTest` (10 tests) holds section 3's steady shares to 1e-4, the clean
+  periods within 5 %, the batch times, the swarm factors. The swarm batch is checked within 1 % or one slice of 1 s
+  (59.2 s clears on the 60th slice). No vessel reads it. Plan section 11.
+- 2026-11-17: package G, the page's parts that need no data (commit `7a51f5e84`): the kit row `Column.Gauge`, the
+  Separation group (`DeviceColumn.withSeparation`, `DeviceMeters.separation`), `VesselSection`; `GuiPrototypes.separation`
+  draws from them (its local bar, section and overlay overload removed); gates in `DeviceColumnTest`, `DeviceMetersTest`,
+  `KitLayoutTest`, new `VesselSectionTest`. The eight separation and carry-over sheets rendered and looked at. Then the
+  selection of `affected.mjs` ran once: test 360 classes, 2147 tests; holdGates 5 classes, 47 tests; columnGates 1
+  class, 5 tests (stored pass); equipmentGates 1 class, 21 tests; no failure, no reference moved. Not run: the
+  `fluidSolverRegression` step, the GameTest and the campaign steps the selection names for `Separation.java` (the
+  final lane's), `LanguageFilesTest`, `UnitTextTest`.
 
 ## Documents
 
@@ -47,5 +60,5 @@ flow. The drum page gains a level of separation for gas, oil and water. The stir
   `PhysicalRegistry.java` and `FluidFacts.java`: packages 1b and 2. Package 1a (the law alone) is free.
 - Not blocking: the factor of Richardson and Zaki's 0.2 to 1 step (4.35 from memory; Trans. Inst. Chem. Eng. 32
   (1954) 35, reprinted doi:10.1016/S0263-8762(97)80006-8).
-- Free to build now, each on the owner's word: package 1a (the law and its test), and the page's parts that need no
-  data (the kit's bar row, the section drawing, their gates).
+- Built: package 1a and the page's parts that need no data (G). The screen reads neither until packages 2 and 3
+  (the bands on the inventory, the view's levels and band heights, a protocol number).
