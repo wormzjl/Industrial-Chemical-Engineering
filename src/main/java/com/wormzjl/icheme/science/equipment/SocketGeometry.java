@@ -46,10 +46,25 @@ public final class SocketGeometry {
             boolean junctionBox,
             CableMedium medium,
             RenderDetail detail) {
+        return polygons(centre, outward, junctionBox, medium, detail, false);
+    }
+
+    /**
+     * {@link #polygons(double[], double[], boolean, CableMedium, RenderDetail)}; {@code compact} is the gland of a small
+     * case (a control valve's positioner, a solenoid box): the hexagon alone, close on its cable, without the mounting
+     * disc that would cover the case's face.
+     */
+    public static List<Polygon> polygons(
+            double[] centre,
+            double[] outward,
+            boolean junctionBox,
+            CableMedium medium,
+            RenderDetail detail,
+            boolean compact) {
         var mesh = new Mesh(detail);
         double cableOutside = medium.outside();
         double opening = Math.max(.035, cableOutside / 2 + .00375);
-        double gland = Math.max(.075, opening / .8660254037844386 + .012);
+        double gland = compact ? opening / .8660254037844386 + .004 : Math.max(.075, opening / .8660254037844386 + .012);
         var ref = Math.abs(outward[1]) < .8 ? new double[] {0, 1, 0} : new double[] {1, 0, 0};
         var f = new Frame(centre, outward, ref);
         if (junctionBox) {
@@ -76,8 +91,8 @@ public final class SocketGeometry {
                             Material.BOLT);
         }
         mesh.cylinder(f, Math.max(.03, cableOutside / 2), -.22, -.04, 8, Material.PIPE);
-        mesh.cylinder(f, .11, -.04, .015, 8, Material.FLANGE);
-        mesh.prism(f, gland, .015, .05, 6, Material.PIPE);
+        if (!compact) mesh.cylinder(f, .11, -.04, .015, 8, Material.FLANGE);
+        mesh.prism(f, gland, compact ? -.005 : .015, .05, 6, Material.PIPE);
         mesh.annulus(f, opening, gland, .05, 6, 1, Material.GUARD);
         mesh.cylinder(f, opening, .025, .055, 8, Material.OPENING);
         var polygons = LineGeometry.overhanging(mesh);

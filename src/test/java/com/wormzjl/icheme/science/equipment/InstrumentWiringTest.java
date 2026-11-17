@@ -116,20 +116,27 @@ class InstrumentWiringTest {
     }
 
     @Test
-    void theCableLeavesThroughAGlandUnderTheHeadAndDripsBelowIt() {
+    void theCableLeavesThroughAGlandUnderTheHeadInStraightLegs() {
         var shape =
                 EquipmentShape.drum(4, 8, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 3);
         for (var p : EquipmentInstruments.of(shape).probes())
             assertEquals(p.centre()[1] - .115 - .025 * p.normal()[1], InstrumentWiring.seat(p)[1], 1e-9, p.id() + " seat is on the head's bottom face");
-        // The drip loop: from the gland's exit to the skin, its lowest point below both ends.
-        double[] exit = {0, 1, 0}, foot = {0, .97, -.15}, out = {0, 0, 1};
-        var loop = InstrumentWiring.loop(exit, foot, out);
+        // Straight legs (owner, 2026-11-17): down from the gland's exit, then level to the skin.
+        double[] exit = {0, 1, 0}, foot = {0, .97, -.15};
+        var loop = InstrumentWiring.straight(exit, foot);
         assertArrayEquals(exit, loop.getFirst(), 1e-12);
         assertArrayEquals(foot, loop.getLast(), 1e-12);
-        double lowest = loop.stream().mapToDouble(q -> q[1]).min().orElseThrow();
-        assertTrue(lowest < foot[1] - .03, "The loop must hang below where it meets the skin: " + lowest);
+        for (int i = 1; i < loop.size(); i++) {
+            int moved = 0;
+            for (int a = 0; a < 3; a++) if (Math.abs(loop.get(i)[a] - loop.get(i - 1)[a]) > 1e-12) moved++;
+            assertTrue(moved <= 1, "Leg " + i + " runs along one axis");
+        }
+        assertEquals(2 * InstrumentWiring.SIDES, InstrumentWiring.legs(loop, RenderDetail.NORMAL).size(), "Two legs, four faces each");
+        // A foot that is not lower: the cable still drops before it turns to the skin.
+        var level = InstrumentWiring.straight(exit, new double[] {0, 1.02, -.15});
+        assertEquals(exit[1] - InstrumentWiring.DROP, level.get(1)[1], 1e-12);
         var tube = InstrumentWiring.tube(loop, RenderDetail.NORMAL);
-        assertEquals(8 * (loop.size() - 1), tube.size());
+        assertEquals(InstrumentWiring.SIDES * 2, tube.size());
         var v = range(tube, 1);
         double length = 0;
         for (int i = 1; i < loop.size(); i++) length += SurfaceSection.distance(loop.get(i - 1), loop.get(i));

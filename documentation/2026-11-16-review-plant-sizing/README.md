@@ -108,6 +108,16 @@ the `Rig` class keep their sizes.
   or a drive mode. [PUMP_DRIVE_FLOW_PLAN.md](PUMP_DRIVE_FLOW_PLAN.md): the rig's charge pump on its drive, the set
   flow as a loop output and on the DCS, the pump page's unasked set flow fixed, a sized pump built regulating. The
   stopped valve work stays on `claude/pump-valve-c779f2`, not merged. Plan only, nothing built.
+- 2026-11-17, same branch (main thread; owner: "Connector on the control valve still looks weird", "you need some kind
+  of structure to hold the connector box instead of sticking it on the actuator shaft", "keep wires straight and save
+  polygons", "model is glitching"): drawings only. The control valve's positioner stands on a mounting plate and four
+  standoffs on the yoke's leg, with a feedback lever to the stem; its box is 0.24 by 0.26 m with one chamfer a corner
+  (8 side faces, were 16) and a hidden 16-sided part is gone; a small device's data socket is a compact gland with no
+  mounting disc (`SocketGeometry`, `DataControlRenderer.portMesh`). An instrument's cable runs from its gland to the
+  skin in straight legs as a four-sided tube (`InstrumentWiring.straight`, `legs`; it was a ten-step drip loop of
+  eight sides: an exchanger's four leads 320 faces, now 32). Tests: the 100 classes `affected.mjs select --since HEAD`
+  picked passed before the last valve change; the 7 classes that load the valve's mesh passed after it. No in-game
+  check. Open: the exchanger instrument the owner said looks unlike the others is not identified.
 
 ## Full crude unit, sized (2026-11-17)
 
