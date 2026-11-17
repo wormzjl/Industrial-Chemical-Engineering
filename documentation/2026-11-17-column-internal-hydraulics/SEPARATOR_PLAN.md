@@ -40,6 +40,21 @@ water 1.35 m3/h, 984 kg/m3, 0.47 mPa s; drops of 0.1 mm settle at 5.0 mm/s in th
 | 0.5 x 9 m, boot 0.25 m | 4.5 m2, 5.4 | 0.05 m2, 0.43 | 46 % | clean oil; 57 % of the water outlet's drops stay: oil in the water |
 | 2.0 x 5 m at 16 times the flow | 10 m2, 0.74 | 0.35 m2, 0.19 | 47 % | 26 % of the water stays in the oil; oil in the water |
 
+Gas from liquid, in a standing and a lying drum (owner, 2026-11-17: the gas law works with a vertical drum as well). The
+review plant's whole overhead vapour, 0.648 m3/s at 5.1 kg/m3 over a liquid of 666 kg/m3; the limit is 0.61 m/s standing
+(K 0.0535 m/s) and 0.76 m/s lying (1.25 times):
+
+| Drum | Vapour section | Gas speed | Of its limit | The gas outlet draws |
+|---|---|---|---|---|
+| Standing 0.5 m | 0.20 m2 (the whole section) | 3.3 m/s | 540 % | 18 % gas, 82 % the vessel's bulk |
+| Standing 1.0 m | 0.79 m2 | 0.83 m/s | 136 % | 74 % gas, 26 % bulk |
+| Standing 1.5 m | 1.77 m2 | 0.37 m/s | 60 % | clean gas |
+| Lying 1.0 m, half full | 0.39 m2 (the segment above the level) | 1.65 m/s | 217 % | 46 % gas, 54 % bulk |
+| Lying 1.5 m, half full | 0.88 m2 | 0.73 m/s | 96 % | clean gas |
+
+A standing drum's section does not change with its level; a lying drum's vapour space shrinks as it fills, so a high
+level carries liquid sooner.
+
 A heavier service has more teeth: an oil of 900 kg/m3 and 10 mPa s settles 0.1 mm drops at 0.05 mm/s, so 26.6 m3/h
 of it needs 150 m2 to leave dry. That is the desalter's case, which the solute batch answers with its field (1.3 mm).
 
@@ -52,8 +67,15 @@ as a plan (the solute batch's `TagPlan` pattern): the step's rows keep their for
    `r = max(0, 1 − N_w) x min(1, water in / oil in)` of water (the volumes that entered over the last slice).
 2. **Oil out of water.** `N_o = v_s(water) A_water / Q_water`, `A_water` the boot's section, or the interface's in a
    vessel without a boot. The water outlet draws its water and `max(0, 1 − N_o) x min(1, oil in / water in)` of oil.
-3. **Liquid out of gas.** The gas outlet draws gas up to Souders and Brown's speed through the vapour space above the
-   level (the simulator's `K`); the share of its volume above that, `1 − v_max / v`, it draws as the vessel's bulk.
+3. **Liquid out of gas**, in every closed vessel with a `VAPOR` port, standing or lying. The gas's speed is its outflow
+   over the vapour section: a standing vessel's whole section, `π D² / 4`; a lying vessel's segment above its level
+   (`VesselGeometry`). The limit is `K sqrt((ρ_l − ρ_g) / ρ_g)`, `K` the simulator's: 0.0535 m/s standing, 1.25 times
+   that lying. The gas outlet draws gas up to the limit; the share of its volume above it, `1 − v_max / v`, it draws as
+   the vessel's bulk.
+
+   Laws 1 and 2 act where a vessel has an outlet for each liquid: a lying drum with a boot (`BOOT_HC`, `BOOT_WATER`)
+   and the desalter. A standing drum and a lying drum without a boot have one liquid outlet (`LIQUID`), which draws both
+   liquids as today: there is nothing to keep apart.
 4. Clean at `N` of 1 or more and at a gas speed under its limit: a properly sized drum is as today, bit for bit.
 5. Mass, components and energy stay exact: a draw's composition changes, nothing else. A vessel with nothing entering
    settles: `r` is 0.
@@ -66,8 +88,29 @@ as a plan (the solute batch's `TagPlan` pattern): the step's rows keep their for
    the hold rows, so "properly sized" on the sheet is "clean" in the world. A drum's page shows `N` and what its
    outlets carry.
 
-The salt law keeps its stirred form (`N / (1 + N)`): salt rides fine brine in the oil, and the desalter's temperature
-effect rests on it. The two laws share `v_s` and `N` (one function, written by whichever batch lands first).
+### 4.1 The desalter (owner, 2026-11-17: "based on this, a bit different because it has higher coalescence rate")
+
+The desalter is this separator with one parameter changed: the drop size a vessel coalesces to. `Separation` takes the
+drop size from the vessel: 0.1 mm in a drum, 1.3 mm in a desalter with its field on (the solute plan's values, 8.1 and
+section 10), 0.1 mm in a desalter without power. Nothing else of the desalter's phases is its own: laws 1 and 2 on its oil
+and water outlets, law 3 on its gas (its status `GASSING`).
+
+On the solute plan's desalter (54 m2, 0.184 m3/s; its own `N`, which is this plan's):
+
+| Crude, temperature | `N` | Water in the oil, this model | "Water settled", solute plan 8.1 (stirred) |
+|---|---|---|---|
+| Medium, 60 C | 3.9 | none | 79 % |
+| Medium, 120 C | 9.1 | none | 90 % |
+| Heavy, 120 C | 1.3 | none | 56 % |
+| Medium, 120 C, no field | 0.11 | 89 % of it stays | 10 % |
+
+So with the field on, this desalter gives dry oil at every listed temperature; temperature shows only where `N` falls
+under 1 (a heavier crude, a colder one, a desalter of a quarter the area). The solute plan's salt law (8.1) is another
+quantity, the salt on the oil, and it is that batch's to state. Option S5 says how the two meet.
+
+For the solute batch (its branch, not edited from here): its plan's 8.1, D9 and section 10 rest on this plan's
+`Separation` (the settling speed, `N`, the drop size by vessel); its "Not modelled: water carried over in the oil" ends
+with this plan; its Sizing row `N` of 9 or more follows S5.
 
 ## 5. Owner options
 
@@ -77,15 +120,22 @@ effect rests on it. The two laws share `v_s` and `N` (one function, written by w
 - S2, how much is carried under `N` of 1. A (recommended): the share `1 − N` of the other liquid, at most volume for
   volume (laws 1 and 2). B: the same, capped at 10 % by volume: milder, one more constant.
 - S3, the gas. A (recommended): law 3. B: no gas law in this batch.
-- S4, order. A (recommended): its own batch after the solute batch's desalter (WP6): it shares `v_s`, `N`, the cadence
-  plan and `PhaseDraw`'s oil and water ports with it; law 6 joins the hydraulics batch's cycle package. B: before the
-  solute batch, which then rebases on it.
+- S4, order (changed by the owner's word on the desalter). The separator comes before the solute batch's desalter
+  (WP6), which is built on it. A (recommended): its own batch after the solute batch's WP2 (which holds
+  `IslandCoordinator` and the fluid laws lane) and before its WP6; law 6 joins the hydraulics batch's cycle package.
+  B: now, beside the solute batch's stage A, with the hot files shared by the owner's word.
+- S5, the desalter's salt against its water. A (recommended): the salt law keeps its form (8.1: the coalesced share `E`
+  and the stirred `N / (1 + N)`), so wash water and temperature act on the salt as that plan's table shows, while the
+  water follows this plan (dry oil at `N` of 1 or more). The two share `v_s`, `N` and the drop size. B: the salt follows
+  the water exactly, `E x min(1, N)`: one form, but with the field on the salt removed no longer moves with
+  temperature above `N` of 1 (the 54 m2 desalter: 92 % at 5 % wash from 60 to 150 C).
 
 ## 6. Work packages (under S4 A)
 
-1. `science/fluid/network/Separation`: `settling(d, Δρ, μ, ρ)`, `passes(N)`, `gasLimit`; the areas from
-   `VesselGeometry` (a lying drum's chord at the interface, the boot's section, the vapour space). `SeparationTest` on
-   section 3's numbers.
+1. `science/fluid/network/Separation`: `settling(d, Δρ, μ, ρ)`, `passes(N)`, `gasLimit(standing)`; the drop size a
+   vessel gives (`dropSize`: 0.1 mm; the desalter's kind sets its own); the areas from `VesselGeometry` (a standing
+   vessel's section; a lying drum's chord at the interface, its boot's section, its vapour segment above the level).
+   `SeparationTest` on section 3's numbers, both tables.
 2. The plan: `SeparationPlan(vessel, waterInOil, oilInWater, liquidInGas)`, built at dispatch from the committed slice;
    `PhaseDraw` reads it for `BOOT_HC`, `BOOT_WATER`, `VAPOR` and the desalter's ports. A plan of zeros is today's draw.
    Tests: `PhaseDrawTest` (zeros are exact; the shares at hand numbers), a network test of a small drum (oil in the
