@@ -527,6 +527,8 @@ public final class PassiveStepSolver {
         // Owner decision of 2026-11-10 (option A, batch 2026-11-10-custom-shader-system): the connections at a void or generator
         // end this solve has restarted in their allowed direction ({@link OneWayClosures#allowedRestart}), and how many restarts it took.
         boolean[] restarted=new boolean[graph.pipes().size()];int restarts=0;
+        // The flow valves a failed pass has opened in this solve ({@link DeviceModes#openFailedRegulators}).
+        boolean[] openedOnFailure=new boolean[graph.pipes().size()];
         // What the next pass's start point is handed (S-03): the first pass the junctions the seeds restated; each pass consumes it.
         var passStart=new PassStart(null,false,seeded.flashRestated());
         for(int pass=0;pass<maximumPasses;pass++) {
@@ -602,6 +604,9 @@ public final class PassiveStepSolver {
                 // Decision D11: a phase a vessel's ports draw at their full capacity leaves the vessel within the step; a
                 // pass whose seed still holds it may have no root (see drainedSeeds).
                 if(changedSeeds==null)changedSeeds=equations.drainedSeeds(checkpoint);
+                // Option B of VALVE_HOLD_TRACE.md (batch 2026-11-16-review-plant-sizing): where nothing else changed, a flow valve
+                // regulating in this pass is solved open, once per solve; asked for more than its line passes it has no root.
+                if(changedSeeds==null&&DeviceModes.openFailedRegulators(original,modes,openedOnFailure))continue;
                 if(changedSeeds==null)throw new SparseNewton.Nonconvergence(failure.getMessage()+"; active-set pass="+pass,failure.lastVariables(),failure.phaseHold());
                 seeds=changedSeeds;continue;
             }
