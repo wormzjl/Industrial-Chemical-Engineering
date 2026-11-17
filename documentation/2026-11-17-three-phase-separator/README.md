@@ -89,6 +89,9 @@ phase carry-over.
 - 2026-11-17: the owner asked for a gas-liquid sizing requirement on a standing drum, then: "This is not only about
   setting rule, but what happens if rules are not followed", and "add an optional demister". Proposed, not built (open
   items): a height factor on a standing vessel's gas limit, and a mesh pad as a design option. Documents only.
+- 2026-11-17: the owner on the order of the two branches: "this branch will land first so solute worktree needs to
+  incorporate work here". The files batch `2026-11-16-solute-reaction-system` changed no longer block this branch;
+  that batch merges this one and resolves the conflicts (five files in a trial merge today). Documents only.
 
 ## Documents
 
@@ -118,7 +121,9 @@ phase carry-over.
   default; with it K is GPSA's padded 0.107 m/s (today's `GAS_K` is that halved), the carry-over law unchanged above
   the limit. Needs a shape field (the design, the shell, the constructor's page), a field of the vessel's spec saved by
   `FluidFacts.java` and `FluidCheckpointCodec.java` (a facts schema number, a corpus image), the sizer's gas rows.
-  Blocked on those two files, which batch `2026-11-16-solute-reaction-system` holds; it can share the facts schema
+  Those two files are also changed by batch `2026-11-16-solute-reaction-system`; this branch lands first (owner,
+  history), so a saved field here takes facts schema 30 and state format 53 and that batch moves to 31, 54 and
+  protocol `icheme-8` (not agreed yet: `main` reserves 30 and 53 for that batch). It can share the facts schema
   step of dynamic settling's package 2. Not decided: the pad's pressure drop (about 0.1 to 0.25 kPa, from memory;
   it matters only in vacuum service), whether a pad fouls, whether Auto proposes one.
 - The Carry-over group's data is built (`icheme-7`, history). Left: the selector names `fluidSolverRegression`, the

@@ -56,8 +56,10 @@ flow. The drum page gains a level of separation for gas, oil and water. The stir
 ## Open items
 
 - D4 A (no gas bubbles) is a default the owner can overrule.
-- Blocked until batch `2026-11-16-solute-reaction-system` releases `PassiveNetwork.java`, `IslandSets.java`,
-  `PhysicalRegistry.java` and `FluidFacts.java`: packages 1b and 2. Package 1a (the law alone) is free.
+- Packages 1b and 2 change `PassiveNetwork.java`, `IslandSets.java`, `PhysicalRegistry.java` and `FluidFacts.java`,
+  which batch `2026-11-16-solute-reaction-system` also changes. No longer a block (owner, 2026-11-17: "this branch
+  will land first so solute worktree needs to incorporate work here"); the format numbers are still to settle (the
+  separator batch's README, open items).
 - Not blocking: the factor of Richardson and Zaki's 0.2 to 1 step (4.35 from memory; Trans. Inst. Chem. Eng. 32
   (1954) 35, reprinted doi:10.1016/S0263-8762(97)80006-8).
 - Built: package 1a and the page's parts that need no data (G). The screen reads neither until packages 2 and 3
