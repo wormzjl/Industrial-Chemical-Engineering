@@ -697,8 +697,13 @@ public final class PassiveStepSolver {
             // through a valve set to 0.75: law flow 5.25, -75.9, then 48, slope 1e-11, at every step size). The regulated pass takes its
             // law flows from the balance on these modes ({@link BalanceStart#balanceStart}) and keeps its seeds: a junction still holding its old
             // charge is laid out on that, not on the mixture the balance sends it (a liquid reaching a gas junction went singular).
+            // An unconverged balance states no point of the island (VALVE_HOLD_TRACE.md of batch 2026-11-16-review-plant-sizing,
+            // option C3: one left at 1 kPa behind a one-way inlet started that inlet 8.5 times past its reverse cap and the pass
+            // never took a step): the regulated pass then starts from this pass's own flows, as every other change does (below),
+            // and where that fails too the failure goes to the failure branch like any other.
             if(deviceChange>=0&&deviceNext==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(deviceChange).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()) {
-                seeds=states;balanceLawFlows=balance.balanceStart(graph,new ArrayList<>(modes),boundaryClosed,keep,checkpoint).lawFlows();passStart=new PassStart(null,true,null);carry=carry.withModes(List.copyOf(modes));continue;
+                var regulated=balance.balanceStart(graph,new ArrayList<>(modes),boundaryClosed,keep,checkpoint);
+                if(regulated.converged()){seeds=states;balanceLawFlows=regulated.lawFlows();passStart=new PassStart(null,true,null);carry=carry.withModes(List.copyOf(modes));continue;}
             }
             if(changed){seeds=states;carry=new CarriedPoint(pipeIdentities,nodeIds,inputStates,states,rateOnly,flows.clone(),lawFlows,heads.clone(),List.copyOf(modes));continue;}
             // Decision D11: the phase-port segments this pass froze must be the ones its own converged flows land in
