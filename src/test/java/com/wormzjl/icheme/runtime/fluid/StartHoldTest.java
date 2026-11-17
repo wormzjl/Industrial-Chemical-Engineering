@@ -28,8 +28,8 @@ import org.junit.jupiter.api.Test;
 class StartHoldTest {
     static final double T=300,DESIGN=159.42,TWO=318.85,BORE=0.11232481275267124,OPEN=216.4562;
     static final CentrifugalPump STRONG=new CentrifugalPump(.20279,170.98,.75,2950),WEAK=new CentrifugalPump(.21206,100,.75,2950);
-    private static double[] crude(){return Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),MaterialTestBasis.NETWORK+1);}
-    private static FlowControl.ControlValve inlet(double target,long revision){return new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,200000,target,.01,PortPlan.COLUMN_SENSOR,revision);}
+    static double[] crude(){return Arrays.copyOf(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.thermo("icheme:tjl20_methane_nitrogen").crudeFeed(com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.ASSAY_ID).moleFractions(),MaterialTestBasis.NETWORK+1);}
+    static FlowControl.ControlValve inlet(double target,long revision){return new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,200000,target,.01,PortPlan.COLUMN_SENSOR,revision);}
 
     @Test void aTargetAboveTheSuctionsBreakdownLeavesTheValveOpen(){
         check("2 x design",150000,250000,STRONG,TWO,OPEN,FlowControl.Mode.VALVE_OPEN,FlowControl.Mode.PUMP_SUCTION_LIMIT);
@@ -64,7 +64,7 @@ class StartHoldTest {
         }
     }
     /** The line, its valve shut; the valve's device id. */
-    private static long line(EventPathWorld w,double supply,double sink,CentrifugalPump pump) {
+    static long line(EventPathWorld w,double supply,double sink,CentrifugalPump pump) {
         double[] x=crude();
         w.place(0,0,0,Kind.GENERATOR,EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,T,supply,x.clone()),.4);
         w.place(1,0,0,Kind.PIPE,EAST,.4);
@@ -100,6 +100,6 @@ class StartHoldTest {
         assertEquals(valveMode,r.endpointModes().get(wv),name+", world: valve mode");
         assertEquals(pumpMode,r.endpointModes().get(wp),name+", world: pump mode");
     }
-    private static IslandCoordinator.Snapshot island(EventPathWorld w){return w.coordinator.snapshots().stream().filter(s->s.graph().pipes().stream().anyMatch(q->q.control() instanceof FlowControl.ControlValve)).findFirst().orElseThrow();}
-    private static int edge(PassiveNetwork g,Class<?> type){for(int e=0;e<g.pipes().size();e++)if(type.isInstance(g.pipes().get(e).control()))return e;return -1;}
+    static IslandCoordinator.Snapshot island(EventPathWorld w){return w.coordinator.snapshots().stream().filter(s->s.graph().pipes().stream().anyMatch(q->q.control() instanceof FlowControl.ControlValve)).findFirst().orElseThrow();}
+    static int edge(PassiveNetwork g,Class<?> type){for(int e=0;e<g.pipes().size();e++)if(type.isInstance(g.pipes().get(e).control()))return e;return -1;}
 }

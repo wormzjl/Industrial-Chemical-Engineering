@@ -8,6 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [load-hold/](load-hold/README.md) | Scratch test that loads a saved world's fluid checkpoint and prints each job's solver counters; the crude island's carried and fresh starts under a pump speed step | `2026-11-16-review-plant-sizing` | Diagnosis probe 2026-11-17 |
 | [valve-hold/](valve-hold/README.md) | Scratch tests of a flow valve whose change of target holds its island (run as tests, never committed in `src/test`), and the Newton and balance trace patch with its reader; the start-hold probe and its trace | `2026-11-16-review-plant-sizing` | Planning probe 2026-11-17 |
 | [dynamic-settling/](dynamic-settling/README.md) | The dynamic settling plan's band law run on the review plant's numbers (node, no mod code) | `2026-11-17-dynamic-settling` | Planning check 2026-11-17 |
 | [column-cold-feed/](column-cold-feed/README.md) | The V3 tray solver run on falling feed temperatures, with the draws and pumparounds cut (no mod code) | `2026-11-17-column-cold-feed` | Planning probe 2026-11-17 |

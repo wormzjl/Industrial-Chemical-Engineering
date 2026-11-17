@@ -10,6 +10,10 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 public final class SpeedControl {
     /** The largest change of speed in one slice. */
     public static final double LARGEST_STEP = .2;
+    /** The share of a flow-regulating pump's rise a drive leaves on the flow valve in its pump's series while the valve holds
+     * the flow (owner decision D4 of the pump-valve work, 2026-11-17: "Drive trims the valve"): enough for the valve to keep
+     * regulating, the rest of the throttling taken off by the speed. */
+    public static final double VALVE_TRIM_MARGIN = .05;
 
     private SpeedControl() {
     }
