@@ -92,6 +92,32 @@ replaces `origin(cell)` (only the tests call it). Gate: `PhysicalFluidTopologyTe
   not flanged; at its first the nozzle stays at its default. The column's VAPOUR_OUTLET (a route's first pipe) and its
   straight boundary lines pass. These are fluid devices too: not the new rule's. Diagnosis open; see the open items.
 
+## The 7 unjoined nozzles: trace and fix (2026-11-17)
+
+Main thread's choice: trace first, then fix where the trace points. One trace run (log lines in `computeFaces`,
+`refreshGeometry`, `FluidDeviceBlockEntity.setBlockState` and `refreshNozzles`; patch in `tmp/nozzle-join/trace.patch`,
+never committed):
+
+- A route's last pipe (the column's REFLUX): `Plant.pipe` set the default state (mask 0). The pipe took its joints later,
+  from its neighbour's placement, through `updateShape`. `computeFaces` ran (mask 0) just before `setBlockState 0->33`:
+  `server.execute` on the server thread runs at once, before the returned state is installed. Nothing recomputed the faces
+  until the plant was removed, so the face to the nozzle stayed unflanged.
+- A route's first pipe (the exchanger's SHELL_OUTLET): the shell heard the placement only at mask 0
+  (`refreshNozzles ... joined=false`). The later 0->3 came through a shape update, which does not notify neighbours.
+  So the nozzle stayed at its default.
+- `refreshGeometry` never ran for these hand-set pipes.
+
+A player's pipe is drawn joined at placement (`getStateForPlacement` → `placedFaces`), nozzles included, and the
+laying tool sets joined states. So only the rig's bare default state reaches this gap. Fix, in the rig only:
+`Plant.pipe` places `FluidDeviceBlock.withFaces(default, world.placedFaces(...))`, the state a player's placement gives.
+`world/**` is unchanged. Fluid GameTests: 116 of 116 (with the `drawn-joints-nozzle` fix). No unit test is selected:
+only the GameTest source set changed. Finding, not fixed: the same immediate `server.execute` in
+`FluidDeviceBlock.updateShape` leaves a neighbour's faces computed from its old state whenever a shape update changes
+its joints. Inferred for a player's sequence, not traced: a pipe with a fitting, then a pipe placed on its axis; the
+fitted pipe's face towards the new one is drawn from before. The option is to refresh the faces in
+`FluidDeviceBlockEntity.setBlockState` when the connection bits change, and drop that `server.execute`. The selection
+named `LanguageFilesTest` in the first run; it is left out of later picks until the translation commit.
+
 ## Hot-file lines
 
 | File | Lines (after the change) | What |

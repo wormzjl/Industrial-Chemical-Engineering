@@ -382,7 +382,12 @@ public final class AssemblyGameTests {
         }
 
         void pipe(BlockPos at) {
-            level.setBlock(at, ModBlocks.FLUID_PIPE.get().defaultBlockState(), Block.UPDATE_ALL);
+            // As a player's placement draws it (FluidDeviceBlock.getStateForPlacement): joined where the network will join it
+            // once registered, nozzles included. A bare default state would take its joints later, through its neighbours'
+            // shape updates, which neither redraw its faces nor tell the nozzle beside it (NOZZLE_JOIN_REVIEW.md, the trace).
+            var state = ModBlocks.FLUID_PIPE.get().defaultBlockState();
+            var facing = PhysicalFluidTopology.Direction.valueOf(state.getValue(FluidDeviceBlock.FACING).name());
+            level.setBlock(at, FluidDeviceBlock.withFaces(state, world.placedFaces(position(at), TopologyCompiler.Kind.PIPE, facing)), Block.UPDATE_ALL);
             devices.add(at.immutable());
         }
 

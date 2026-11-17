@@ -94,6 +94,10 @@ the `Rig` class keep their sizes.
   `RegistryRealignment.restate` redraws joints of chunks loaded before the fluid world opened. Gates:
   `PhysicalFluidTopologyTest` (2), `DrawnJointGameTests` (1), `Plant.joined`/`unjoined` in `assembly-complete` and the
   review rig. Compiled (all source sets); not run (dev client open): the tests owed are named in the review.
+- 2026-11-17, same branch: the owed tests run. Selected classes pass but the expected `SizingPageTest` and
+  `LanguageFilesTest` (and a fault of the new test, fixed). The fluid GameTests found 7 routed nozzles unjoined. The
+  trace showed the rig placing bare default states, which a player never places; `Plant.pipe` now places a player's
+  state. Fluid GameTests 116 of 116.
 
 ## Full crude unit, sized (2026-11-17)
 
@@ -143,10 +147,10 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
 
 ## Open items
 
-- Nozzle join (NOZZLE_JOIN_REVIEW.md): the selected tests and the fluid GameTests are owed (a dev client was open), with
-  the commands in the review. Owner options: the column start takes any registration in front of a nozzle, joined or
+- Nozzle join (NOZZLE_JOIN_REVIEW.md): tested (116 of 116 fluid GameTests). Owner options: the column start takes any registration in front of a nozzle, joined or
   not (one test in `startColumn`); the reactors and other non-fluid-device kinds now draw joined pipes too (COLUMN alone
-  would be one condition). The review world is not rebuilt; its overhead pipe should take its joint at its next load.
+  would be one condition); the immediate `server.execute` in `FluidDeviceBlock.updateShape` (a neighbour's stale faces).
+  The review world is not rebuilt; its overhead pipe should take its joint at its next load.
 - `ColumnOperationGameTests` and the failure-modes plants were compiled but not run on this change.
   `runFluidGameTestServer` selects by namespace only, not by class. The parent session read the diff and chose not to
   run `icheme_fluid_test`: the other rigs call the old `Options` constructor, whose defaults reproduce their old build.
