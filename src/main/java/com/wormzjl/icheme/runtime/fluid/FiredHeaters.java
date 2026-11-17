@@ -156,7 +156,8 @@ public final class FiredHeaters {
                 // Still tubes (owner, 2026-11-17: "if it is set to a temperature it should output at given temperature unless
                 // duty is not satisfied"): a lit coil whose contents stand below the set point keeps its design duty's fuel
                 // burning, so the stream that comes next, the first fill included, leaves at the set point.
-                if(flow<STILL)demand=coil.duty()>0&&!(inlet.temperature()>=coil.setTemperature()-.05)?coil.duty():0;
+                if(flow<STILL){var stock=solved.reservoirs().get(pipe.first()).state();
+                    demand=coil.duty()>0&&!(stock.temperature()>=coil.setTemperature()-.05)?coil.duty():0;}
                 else if(coil.firing()>0&&coil.firing()<1)demand=coil.available()/coil.firing();
                 else if(coil.firing()==1)demand=Math.max(0,rate);
                 else demand=inlet.temperature()<coil.setTemperature()-.05&&coil.duty()>0?coil.duty():0;

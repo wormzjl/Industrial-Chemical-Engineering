@@ -118,10 +118,10 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   180 % of its aim and the inlet valve closes. The cold first feed is not a start-order fault. The fuel lines read FULL
   before the start. A heater fires only on a demand read from flow through its radiant coil (`FiredHeaters.booked`: no
   flow, no demand, no fuel), so it cannot be lit ahead of the feed, and its duty then follows a slice behind on each of the
-  coil's and the fuel's islands. More decisive still: the charge line (0.6 m bore, about 0.28 m³ per metre, some 60 m to the
-  feed nozzle) and the coils hold cold crude from the plant's fill. That is roughly 17 m³, about 85 s of design flow
-  (0.2 m³/s), and it reaches the tower before any heated crude. The trip took the first 9 s of it. Only a path that sends
-  that inventory elsewhere (a start-up circulation) or a column that accepts a cold feed removes it. Build 4 tried the
+  coil's and the fuel's islands. (A first reading here, 17 m³ of cold crude standing in the charge line, was wrong: pipes
+  and heat-side passages are junctions, whose buffer is a 0.05 s relaxation state and not stock (owner decision D46). No
+  crude stands in a line; the cold crude is what passed the heaters before they fired, and what the column's own port
+  reservoir holds.) Build 4 tried the
   owner's "light the furnace before running any feed": the burners are lit and fueled, then the crude supply opens into the
   empty train. The train filled at once and stood still against the tower's shut feed valve. The heaters read 297.7 K at
   0 kW for 12000 ticks, because with no flow through a coil its burners ask for no fuel. The column then started on the
@@ -138,8 +138,17 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
     (their store not yet filled) and get no demand while the coils are empty (an empty island is not solved), so the line
     fills cold.
 
-  Part 2, heat into still contents, is a solver change: a heat term on a reservoir at no flow, in the residual, the Jacobian
-  and the reconstruction. Until then, a lit heater with still cold tubes burns its duty's fuel and heats nothing. Options: a start-up circulation in the rig, a trip that clears with its
+  Part 2, heat into still contents (owner: "Build it here"), was built and reverted the same day. It was a still heat planned
+  per step, added to the coil's first node in the energy rows and booked as the coil's heat in the reconstruction, with a
+  not-at-rest rule. It heated the coil's node, a junction: its 988 kg buffer is the relaxation state, not crude standing in
+  the tubes. The test water went from 323 K to 453 K in one slice on 10.5 MJ, so the term had no stock to act on. Part 1
+  stays, with its still test reading the coil's own node (`FiredHeaters.booked`).
+
+  With part 1, build 5b started the column on lit, fueled burners: the heaters' radiant outlets read 508 and 608 K, not
+  298 K. They fell short of 638 K ("DUTY INSUFFICIENT: outlet 29.7 K below the set point"). An empty feed account opens the
+  column's inlet valve to twice its rate (`ColumnOperation.inletPlan`, gain at most 2), and the heaters are sized for the
+  cold start at design flow. The account took that crude to 0.60 of its aim and the column tripped CLOSURE as before.
+  Options: a start-up circulation in the rig, a trip that clears with its
   condition (engine), or the world as it stands. The owner's direction for the engine: a cold feed goes to the bottom
   instead of holding, and a pumparound works only on what its stages hold. The column screen reads "Upset: inputs closed;
   last solve failed", which does not name the cold feed.
