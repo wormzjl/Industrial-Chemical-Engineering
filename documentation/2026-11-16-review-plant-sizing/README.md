@@ -142,6 +142,11 @@ the `Rig` class keep their sizes.
   flat outside a 16 kg/s window and its pass never lands in it (M3); every retry then starts with the pump on its suction
   limit before a shut valve, a singular set (M4); the fresh start takes an unconverged balance. The world's P-101 has
   NPSH3 12.5 m (2950 rpm), not the sizer's 3.30 m. Options S1 to S5 for the owner. Probe `tools/valve-hold/`.
+- 2026-11-17, start hold built (main thread's forms; owner: "Yes, build them", "Yes, go ahead" on `PassiveStepSolver`):
+  START_HOLD_REVIEW.md, "Built". D (the suction-limit row `max(-flow, p - limit(Q))`, no supplier clip), E1 (a valve
+  regulating below a pump on its limit puts the pump on its law), S2 (a retry starts from the attempt's own start; no
+  sealing exemption), F2 (the balance decides no pump mode); S3 withdrawn. `StartHoldTest` 4 of 4; selected classes 1781
+  tests, 1 failure (the expected `SizingPageTest` in Chinese); holdGates 105 of 105; regression exact. Moved references: none.
 
 ## Full crude unit, sized (2026-11-17)
 

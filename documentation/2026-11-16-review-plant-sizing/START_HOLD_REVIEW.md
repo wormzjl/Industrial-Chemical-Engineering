@@ -105,3 +105,69 @@ fails or sits on the clipped plateau; a build states any moved reference with ol
 
 Dumps: `tmp/start-hold/trace/{a-carried,a-fresh,b-carried,e-carried}/`, readings `tmp/start-hold/an-*.txt`, probe lines
 `tmp/start-hold/run-1.txt`, trace lines `tmp/start-hold/trace-1.txt`. One run of each class; no case repeated.
+
+## Built (2026-11-17)
+
+The main thread chose the forms after the options above: D for S1 (the owner approved S1, S2 and S3; D replaces S1's
+deletion of the clip, which serves cases the vapour lock does not cover), E1 for b and c1, S2 as planned, F2 for the fresh
+start, S3 withdrawn. The owner allowed this batch to edit `PassiveStepSolver` beside the solute batch's edits ("Yes, go
+ahead"). Branch `claude/start-hold-7f00cb`, after the merge of `claude/column-testing-sizing-26b5b9` (`248f05a4c`).
+
+| Commit | What it does |
+|---|---|
+| `4b2bd650b` D | The suction-limit row is `max(-flow, (P_suction - limit(Q))/pressureScale)` with `limit(Q) = max(E, pv + bd(Q))` (`StepEquations` row `PUMP_SUCTION_LIMIT`; `MoverSuction.suctionLimit` without the supplier's no-flow pressure). The pump delivers the flow at which its suction stands at its limit, or nothing where the suction cannot reach the limit even at no flow. The flow term is in the closed-edge row's unit (1 kg/s); at a tie the pressure branch; a reverse flow gives r > 0, so no reverse root. The roots are today's: (i) `P = limit(Q)` with `Q > 0`; (ii) `Q = 0` where the supplier stands at or below `limit(0)` (D17's delivery to zero, now decided on the trial). The flat plateau above the supplier and its double root at no flow are gone. The mode tests (`cavitationMargin` -> `cavitates`, `nextMode`) read the same unclipped limit; their sign decisions differ only where the suction stands above its supplier. The remote-supplier sparsity and sweep (`suctionSuppliers`, `suctionLinks`, `remoteSuctions`), which served only the clip, are removed. |
+| `cce21ea8e` E1 | `DeviceModes.lawBelowSuctionLimit`, `ControlConstraints.inSeries`, and one hook where the pass loop applies its device change. A flow valve whose change to `VALVE_REGULATING` is due, at a target (mass flow) below the converged flow of a pump on `PUMP_SUCTION_LIMIT` that carries one flow with it by the junction balances, puts that pump on `MOVER_LAW` in the same change. Derived: `limit(Q)` does not fall as Q falls, and the suction pressure does not fall either (the suction line's loss shrinks; decision A272 changes no other device in the pass), so below the limited flow the suction stands at or above its floor and the pump is on its law. No exception found in the code: every supplier the solver allows (a held end, a vessel, a junction fed through passive lines or by movers on their laws) holds or raises its pressure as the draw falls. |
+| `9928016de` S2 | (a) `PassiveStepSolver.solve` wraps the pass loop (`solvePasses`) and restores `carry` on a failure, so a retry at a shorter interval starts from the point the failed attempt started from (the committed interval at a job's first step), never from the failed attempt's modes. (b) `sealedWithout`: the exemption of a closed flow valve with a target is removed. A closed connection seals a mover's side in its current mode; the mover stands closed until a pass opens the valve, and reopens on its rise. |
+| `f200628e2` F2 | `BalanceStart.BalanceNet.solve`: the balance decides no pump's mode (the suction-limit decision and the anchor-and-prescribe update removed, with `suctionAnchor`). A pump starts on its law, or closed where vapour-locked (D16 A, unchanged), and the pass loop puts it on its limit with D's row. A pump that arrives on its limit keeps its statement (its junction anchored at `limit(0)`, nothing prescribed through it). |
+
+S3 (refuse an unconverged balance at the first start) is withdrawn and not built: no measured case reached it. In case a
+fresh the balance reported `converged=true` on a false point (below). The plan stays: at `PassiveStepSolver` lines 501 to
+504, take `start.graph()`, `start.lawFlows()` and `start.modes()` only where `start.converged()`; otherwise keep the input
+graph and `initialModes`. It is C3's rule at the solve's first start.
+
+**Seed 181 on paper (asked before the run).** D16 A does not lock it (256 Pa of NPSH at no flow, above the band). Under F2
+the balance starts the pump on its law: the law draws about 4.2 kg/s through a 1 cm line that gives 0.03 kg/s at the floor,
+so the balance's suction junction falls toward the hull's low end. Those pressures only seed the pass. Pass 0 on the law
+either converges with the suction below its floor, and `nextMode` (margin < -band) moves the pump to its limit, or fails
+with an iterate in the property domain, where `cavitates` moves it to its limit. The next pass is D's row at the 0.03 kg/s
+root. No state is committed from a pass or a rejected trial, so the supplier is not left drained. D15's drained reading
+came from the balance's own pressures read for the vapour lock; the lock now reads the step's start states. The run below
+is the check: `PumpCavitationTest`'s LNG cases and `HoldClassWorldsTest` pass unchanged.
+
+**Tests** (`affected.mjs select --since 248f05a4c` after `testClasses`; picks through `record.init.gradle`, one run;
+LanguageFilesTest and UnitTextTest left out; the left-out methods of `PumpCavitationTest`, `HoldClassWorldsTest`,
+`SuctionZoneEdgeTest` and `JunctionSeedingGateTest` put back in):
+- test: 295 classes, 1781 tests, 1 failure, the expected `SizingPageTest.theDoorFitsInEveryViewForEveryItemInChinese`;
+- holdGates: 9 classes, 105 tests, 0 failures;
+- equipmentGates: 1 class, 23 tests, 0 failures;
+- columnGates: up to date (its pass stands);
+- `fluidSolverRegression` (due by `affected.mjs`), chain-100 exact: max deviation 0 in moles, temperature, phase fraction and flow.
+`StartHoldTest` 4 of 4: cases a to f carried, fresh and in the world, and a target crossing the breakdown flow (318.85,
+167.39, 318.85 kg/s: open on the limit at 216.46, regulating on the law, open on the limit). `PumpCavitationTest` 6 of 6,
+`HoldClassWorldsTest` 41 of 41, `JunctionSeedingGateTest` 7 of 7, `SuctionZoneEdgeTest` 4 of 4.
+
+**Moved references:** none. No test that passed before changed result, and the regression chain is exact. Pass counts were
+not compared.
+
+**Line ranges for the solute batch's merge.**
+- `PassiveStepSolver`, current numbering: 387-397 (the `solve` wrapper, S2), 674-675 (the E1 hook after
+  `modes.set(deviceChange,deviceNext)`), 1811-1813 (the `sealedWithout` comment); removed: old 1806-1807 (the exemption).
+- `StepEquations`: the row at 1485-1493; removed: old 150-162, 349-360, 948-950 and 1614-1616 (the remote suctions).
+- `BalanceStart`, not a hot file: comment at 514-519; removed: old 372-384 (`suctionAnchor`) and 558-572 (the decision block).
+- `MoverSuction` (`suctionLimit`), `DeviceModes` (`lawBelowSuctionLimit`), `ControlConstraints` (`inSeries`).
+
+**Open finding, not fixed: the balance's false root below a one-way outlet.** `BalanceStart.BalanceNet.flow` (line 418)
+gives a connection nothing in a refused direction. A junction whose inflow is zero in the balance and whose outlet is an
+open one-way connection into a held end (a void, a tower port) therefore has net zero at every pressure below that end. The
+damped Newton can step there (the M2 crossing of `VALVE_HOLD_TRACE.md`, `solveOnce`), and `converged` (lines 562 and 586)
+accepts it. F2 removes the path case a reached (the balance's prescribed zero through a suction-limited pump). Other
+starts can still reach it: a pump that arrives on its suction limit (line 345, nothing prescribed through it), a closed or
+vapour-locked mover upstream of an open valve, a regulating flow valve far below its line's open flow (A2's charge valve;
+C3 refuses that case only where the balance reports unconverged). C1, which bounded the crossing, was withdrawn.
+
+**Later simplification for the owner, not built.** The pump's law and its suction limit as one complementarity row: the
+minimum of the law's residual and the suction margin, bounded at zero flow. `PUMP_SUCTION_LIMIT` would leave the active set
+altogether, with E1 and `cavitates` folded into the row.
+
+**Not verified:** the review world (the main thread runs it); fluid GameTests and the campaign, which `affected.mjs` marks
+due (BalanceStart changed) and which belong to the final lane; the pass counts of the D14/D15 seeds against their old values.
