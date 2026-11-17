@@ -370,7 +370,7 @@ class ColumnOperationC1BenchTest {
 
     private void write(String name) throws IOException {
         Files.createDirectories(OUT);
-        Files.write(OUT.resolve(name + "-" + (NativeColumnSolver.thermoBatchEnabled() ? "native" : "java") + ".tsv"), rows);
+        Files.write(OUT.resolve(name + "-java.tsv"), rows);
     }
 
     private static String fmt(double v) { return String.format("%.3f", v); }

@@ -18,6 +18,11 @@ java "-Dfile.encoding=UTF-8" -cp "build\classes\java\main;build\resources\main;<
   `ColumnOperationReviewWorld.sizing` builds its sheet), run and sized by Size all. Prints each stream, each line's steady
   flow, density, viscosity and speed limit, its speed and its drop over 20 and 30 m at each bore from 0.025 to 0.25 m, and
   each member pump's load against the casings' rated flows.
+- `RefluxWaterProbe.java` (batch `2026-11-17-three-phase-separator`, `REFLUX_WATER_REVIEW.md`): the same column solved
+  directly by the V3 calculator, cold, with 0, 8 % and 26 % of its decanted water returned with the reflux
+  (`V3ColumnInput#refluxFreeWaterMolPerSecond`). Prints the condenser duty, the top temperatures, tray one's free
+  water, the products and the solver's counters; `-Devents=true` adds the solver's events. Run it as
+  `ReviewPlantProbe.java`, with its own file name.
 
 ## Results, 2026-11-17
 

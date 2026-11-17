@@ -1,6 +1,6 @@
 # Three-phase separator (2026-11-17)
 
-**Status:** In progress since 2026-11-17 (packages 1 and 2 built and verified; package 4 half built, one owner decision open), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
+**Status:** In progress since 2026-11-17 (packages 1 and 2 built and verified; package 4 half built, one owner decision open; the reflux-water trial merged in), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
 fluid step, runtime, plant, flowsheet, client.
 
 A drum of the network gives clean gas, oil and water at any size and flow. The owner (2026-11-17): a drum gives well
@@ -37,20 +37,49 @@ phase carry-over.
   (4). Of the 50 flowsheet and sizing classes the selector names, 510 tests ran and 1 failed: a moved result (open items).
 - 2026-11-17: the drum page's readings, prototype only: `GuiPrototypes.separator`, two sheets (A, three meters at the end
   of Readings; B, a Carry-over group of their own), and their English lines. Not built: the owner picks.
+- 2026-11-17: the trial (owner: "try the reflux with water"), on branch `claude/rust-archive-reflux-water-762f04`:
+  [REFLUX_WATER_REVIEW.md](REFLUX_WATER_REVIEW.md). `V3ColumnInput#refluxFreeWaterMolPerSecond` (`R_w`, default 0) is a
+  liquid water feed to tray one; the drum returns it from the water that arrives and decants the rest. It converges at
+  0, 8 % and 26 % of the decanted water on the medium crude wet column and the review plant, and the audit passes.
+  Finding: with the reboiler duty fixed the condenser duty does not rise (within 0.03 %); the distillate falls 0.5 to
+  2.3 %. `V3RefluxFreeWaterTest` (5 tests), `tools/column-hydraulics/RefluxWaterProbe.java`. Open: the owner's choice
+  between E31 carry-over and falling water for the returned water (review section 4, options A and B). Tests:
+  `affected.mjs select --since c6f60e2aa..HEAD`, run as the lane's test step builds it (`-PlaneTests`,
+  `left-out.txt` honoured, `--max-workers=4`): `test` 153 classes (994 tests), `holdGates` 6 (59), `columnGates` 69
+  (381), `equipmentGates` 7 (64). One failure, `MaterialPresetsTest.allFourInputsRemainTheQualificationInputs`: it
+  compares the record's fields, through Gson, with the captured fixture `materials/column-preset-inputs.json`, which
+  lacked the new component. The fixture gains `"refluxFreeWaterMolPerSecond": 0.0` on its four inputs (no value
+  moves; only this test reads it), and the class then passes (6 tests). No production code serialises the record.
+  No other reference moved: every column gate that loads the changed classes passes as recorded.
+- 2026-11-17: the top tray under returned water. The owner chose "Fall to tray 2" (option B). It was tried and
+  rejected: on the review plant tray one could not hold free water (d ln(ratio)/dF of 3e-8 per kmol/h at 8 %, 1.2e-8
+  to 2.0e-8 at 26 %). The solver published it dry and supersaturated, 2.4 K and 12.3 K below its water dew point.
+  Without a liquid route out of the top there is no wet steady state. The owner then decided A: "Keep the carry-over".
+  `7bfbc3e42` stands, and B is not committed. Option C gives the same water state as B; option D (a top-temperature
+  margin above the dew point, about 14 K) is open and not taken. Law 6's note in the plan is corrected: the cost is
+  lost distillate and a cooler tray one, not condenser duty. Documents only; no test run.
+- 2026-11-17: branch `claude/rust-archive-reflux-water-762f04` merged into `claude/column-testing-sizing-26b5b9` (owner:
+  "Yes, merge it"). One conflict, in this file; both sides kept. On the merged tree: it compiles, and
+  `V3RefluxFreeWaterTest` (5) and `DrumSettlingTest` (4) pass. Not run on the merged tree: the classes that load both
+  package 4's sizer and the trial's column classes; each side passed them apart.
 
 ## Documents
 
 - [SEPARATOR_PLAN.md](SEPARATOR_PLAN.md)
+- [REFLUX_WATER_REVIEW.md](REFLUX_WATER_REVIEW.md): the trial of a reflux that returns free water to tray one
 
 ## Open items
 
 - The plan's hold-fuzz campaign on a world with an undersized drum is not run: the harness has no such world. The watch
   seeds ran instead (history).
+- Option D of `REFLUX_WATER_REVIEW.md` (a top-temperature margin above the water dew point as a sizing or operating
+  advisory): proposed, not taken.
+- The returned water's production form: the cycle's input, the ratio form, the mode with Water on the basis, the
+  sizing and editor rebuilds that drop it, tray one's liquid load (`REFLUX_WATER_REVIEW.md`, section 5).
 - Batch `2026-11-16-solute-reaction-system` holds the runtime lane: this batch added one line to `FluidWorldAuthority`
   (the `Separators` hook) and a component to `PassiveNetwork.Inventory`. That batch's plan is not edited from here; its
   desalter (WP6) takes its phase separation from this model and sets its own drop size.
-- Owner's calls: whether a kettle and a still's pot take the gas law (plan section 5.1); a free water reflux input for
-  the column solver (plan section 5).
+- Owner's call: whether a kettle and a still's pot take the gas law (plan section 5.1).
 - **A moved result, the owner's decision.** `CrudeUnitSampleTest$ColumnSizingSampleTest.theReceiversBootSetsIt`: Auto's
   receiver for the sample crude unit moves from a 4 m by 10 m booted drum (142 m3) to 5 m by 13 m (288 m3), because a
   settling row is not met at 4 by 10. The cause is the drop size, not the code: a 0.1 mm water drop falls 5 mm/s, so it
