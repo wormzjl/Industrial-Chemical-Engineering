@@ -150,6 +150,11 @@ the `Rig` class keep their sizes.
   regulating below a pump on its limit puts the pump on its law), S2 (a retry starts from the attempt's own start; no
   sealing exemption), F2 (the balance decides no pump mode); S3 withdrawn. `StartHoldTest` 4 of 4; selected classes 1781
   tests, 1 failure (the expected `SizingPageTest` in Chinese); holdGates 105 of 105; regression exact. Moved references: none.
+- 2026-11-17, load hold (diagnosis, no mod code; owner: "Yes, start it"): [LOAD_HOLD_REVIEW.md](LOAD_HOLD_REVIEW.md).
+  Island 1402's "round deadline" holds came from P-101's regulating drive: each planned speed change fails `sameLines`,
+  so the job loses the committed start and runs the balance start (20 against 4015 residual evaluations for a 0.1 % step;
+  speed 0.686 at 9961, 1.0 at 13400). Option A proposed (speed out of `Identity.line()`); B and C noted. Probe
+  `tools/load-hold/`. "Limited: outlet" can name its product from the binding condition's index.
 
 ## Full crude unit, sized (2026-11-17)
 
