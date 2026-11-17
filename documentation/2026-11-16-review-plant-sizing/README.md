@@ -121,7 +121,11 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   coil's and the fuel's islands. More decisive still: the charge line (0.6 m bore, about 0.28 m³ per metre, some 60 m to the
   feed nozzle) and the coils hold cold crude from the plant's fill. That is roughly 17 m³, about 85 s of design flow
   (0.2 m³/s), and it reaches the tower before any heated crude. The trip took the first 9 s of it. Only a path that sends
-  that inventory elsewhere (a start-up circulation) or a column that accepts a cold feed removes it. Options: a start-up circulation in the rig, a trip that clears with its
+  that inventory elsewhere (a start-up circulation) or a column that accepts a cold feed removes it. Build 4 tried the
+  owner's "light the furnace before running any feed": the burners are lit and fueled, then the crude supply opens into the
+  empty train. The train filled at once and stood still against the tower's shut feed valve. The heaters read 297.7 K at
+  0 kW for 12000 ticks, because with no flow through a coil its burners ask for no fuel. The column then started on the
+  298 K charge and tripped the same way. The rig keeps this order (`Rig.openCrude`, `Rig.warmed`). Options: a start-up circulation in the rig, a trip that clears with its
   condition (engine), or the world as it stands. The owner's direction for the engine: a cold feed goes to the bottom
   instead of holding, and a pumparound works only on what its stages hold. The column screen reads "Upset: inputs closed;
   last solve failed", which does not name the cold feed.

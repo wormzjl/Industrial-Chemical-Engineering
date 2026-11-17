@@ -125,6 +125,12 @@ public final class ColumnOperationReviewWorld {
                     if (failure[0] == null) rig.light(failure);
                 })
                 .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.fueled(), "Waiting for the heaters' fuel"))
+                // The furnace lit before any feed (owner, 2026-11-17): the crude enters the empty train only now, through
+                // lit burners, and the column starts once the charge line is full and hot (or after HOT_TICKS, logged).
+                .thenExecute(() -> {
+                    if (failure[0] == null && rig.chargeEnd != null) rig.openCrude();
+                })
+                .thenWaitUntil(() -> helper.assertTrue(failure[0] != null || rig.paced() && rig.warmed(), "Waiting for the hot charge"))
                 .thenExecute(() -> {
                     if (failure[0] == null) rig.start(failure);
                     if (failure[0] == null) rig.spawn();
@@ -672,6 +678,8 @@ public final class ColumnOperationReviewWorld {
         final List<Vessel> heaters = new ArrayList<>();
         final List<BlockPos> fuels = new ArrayList<>();
         Vessel heater;
+        /** The charge line's last cell before the tower's feed line ({@link #layPreheat}), where the start reads the crude's temperature. */
+        BlockPos chargeEnd;
         /** The shutoff valves beyond the boundary valves, each with its axis ({@link Options#shutoffs}), and which line each is on. */
         final java.util.Map<BlockPos, Direction> shutoffs = new java.util.LinkedHashMap<>();
         final java.util.Map<String, BlockPos> lines = new java.util.LinkedHashMap<>();
@@ -866,6 +874,7 @@ public final class ColumnOperationReviewWorld {
             // The first heater on the line's own path, each further one's convection inlet off it; every radiant outlet onto the charge line.
             var heated = laid(preheat(n + 1), plant.route(AssemblyGameTests.Plant.front(exchanger, Role.TUBE_OUTLET), AssemblyGameTests.Plant.front(heater, Role.CONVECTION_INLET)));
             var out = laid(CHARGE, toOpen(front(heater, Role.RADIANT_OUTLET, 0), feedLine, out(plant.column, Role.FEED, 0)));
+            chargeEnd = out.getLast();
             for (var h : heaters) {
                 if (h != heater) laid(preheat(n + 1), plant.join(heated, AssemblyGameTests.Plant.front(h, Role.CONVECTION_INLET)));
                 var radiant = laid(CHARGE, plant.route(AssemblyGameTests.Plant.front(h, Role.CONVECTION_OUTLET), front(h, Role.RADIANT_INLET, 0)));
@@ -979,8 +988,9 @@ public final class ColumnOperationReviewWorld {
             var preheat = options.preheat();
             if (preheat != null) {
                 // The crude from storage into the charge pump; the fuel gas into the heater's burners.
+                // Shut until the heaters are lit ({@link #openCrude}): the crude fills the train through lit burners.
                 resize(feed, preheat.crudeBore());
-                supply(feed, preheat.crudeBore(), new FluidDeviceSpec(1, CRUDE_TEMPERATURE, CRUDE_SUPPLY, crude(catalog)));
+                supply(feed, preheat.crudeBore(), new FluidDeviceSpec(1, CRUDE_TEMPERATURE, CRUDE_SUPPLY, crude(catalog)), false);
                 for (var fuel : fuels) {
                     resize(fuel, preheat.fuelBore());
                     supply(fuel, preheat.fuelBore(), new FluidDeviceSpec(1, 298.15, FUEL_SUPPLY, only(catalog, "Methane")));
@@ -1099,11 +1109,57 @@ public final class ColumnOperationReviewWorld {
          * screen makes it: a generator's connection is the least bore unless set.
          */
         void supply(BlockPos at, double bore, FluidDeviceSpec spec) {
+            supply(at, bore, spec, true);
+        }
+
+        void supply(BlockPos at, double bore, FluidDeviceSpec spec, boolean on) {
             long id = id(at);
             var r = plant.world.registrations().get(id);
             var g = r.device().geometry();
             var geometry = new PipeResistance.Geometry(g.length(), bore, g.roughness(), g.minorLoss(), g.channels());
-            plant.world.edit(id, r.revision(), r.device().withGeometry(geometry).withGeneratorEnabled(true), spec);
+            plant.world.edit(id, r.revision(), r.device().withGeometry(geometry).withGeneratorEnabled(on), spec);
+        }
+
+        /** Opens the crude's supply (shut by {@link #finish} while the heaters light). */
+        void openCrude() {
+            long id = id(feed);
+            var r = plant.world.registrations().get(id);
+            if (!r.device().generatorEnabled()) plant.world.edit(id, r.revision(), r.device().withGeneratorEnabled(true), r.spec());
+        }
+
+        /** The crude's temperature at the charge line's end, K (NaN before it holds any). */
+        double chargeTemperature() {
+            var state = plant.world.view(id(chargeEnd)).state();
+            return state == null ? Double.NaN : state.temperature();
+        }
+
+        /** Whether the charge line is full to the tower's feed line and at the feed temperature, within {@link #HOT_BAND} K. */
+        boolean hot() {
+            return plant.world.view(id(chargeEnd)).status().startsWith("FULL") && chargeTemperature() >= input.feedTemperatureKelvin() - HOT_BAND;
+        }
+
+        /** The start waits for the charge line within this many K of the feed temperature, at most this many ticks. */
+        static final double HOT_BAND = 10;
+        static final int HOT_TICKS = 12000;
+        private int warming;
+
+        /** Whether the column may start: no heaters, the charge line hot, or {@link #HOT_TICKS} gone; logs every 600 ticks. */
+        boolean warmed() {
+            if (chargeEnd == null) return true;
+            boolean hot = hot();
+            if (hot || ++warming % 600 == 0 || warming >= HOT_TICKS) {
+                var outlets = new ArrayList<String>();
+                for (var h : heaters) {
+                    var ids = com.wormzjl.icheme.world.level.block.EquipmentStructure.sideIdentities(plant.level, h);
+                    for (long id : ids) {
+                        var heat = plant.world.view(id).heat();
+                        outlets.add(heat == null ? "-" : String.format(Locale.ROOT, "%.1f/%.0fkW", heat.outletTemperature(), heat.heatWatt() / 1000));
+                    }
+                }
+                IChemE.LOGGER.info("review_operation warming ticks={} hot={} charge_K={} charge=\"{}\" heaters={} crude=\"{}\"", warming, hot,
+                        String.format(Locale.ROOT, "%.1f", chargeTemperature()), plant.world.view(id(chargeEnd)).status(), outlets, plant.world.view(id(feed)).status());
+            }
+            return hot || warming >= HOT_TICKS;
         }
 
         /** The pure component {@code id} on the network's axis, as mole fractions. */
