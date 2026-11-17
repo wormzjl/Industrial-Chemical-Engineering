@@ -20,8 +20,11 @@ public enum Condition {
     COOLING_SHORT(Rank.LIMIT, "condenser"),
     /** The reboiler's utility holds less than its duty. */
     HEATING_SHORT(Rank.LIMIT, "reboiler"),
-    /** A pumparound cooler's utility holds less than its duty; the index is the pumparound's. */
-    PUMPAROUND_SHORT(Rank.LIMIT, "pumparound"),
+    /**
+     * A pumparound cooler's sides take less than its duty: the cycle books what they take and the feed goes on (L2 of batch
+     * 2026-11-17-column-cold-feed; a LIMIT before it). The index is the pumparound's, the value the share of its duty taken.
+     */
+    PUMPAROUND_SHORT(Rank.NOTICE, "pumparound"),
     /** The worst tray would pass its flood limit at the set feed. */
     FLOODING(Rank.LIMIT, "flooding"),
     /** A member's electric store is empty; the index is the member's. */

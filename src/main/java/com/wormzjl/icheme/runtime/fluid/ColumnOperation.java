@@ -708,13 +708,39 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(trigger!=DriftBands.Trigger.SETPOINT&&r.refused!=null&&inside(r.refused,setpoints,state,designDemand))return;
         boolean[] held;if(r.table!=null)held=r.table.held();else{held=new boolean[weights.length];Arrays.fill(held,true);}
         var pending=new Pending(trigger,tick,setpoints,DriftBands.reference(state,designDemand,setpoints,r.table==null?0:r.table.reference().enthalpySlope()),held);
-        var job=new ColumnSolve.Job(trigger,design,setpoints,taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u));
+        double[] duties=urgent||r.table==null?setpoints.pumparoundsPerFeed():relaxed(r.table,setpoints,state);
+        // A pumparound band left where the relaxed duties are the table's own (each at its floor or its set point): a solve
+        // would give the same table, so none is asked.
+        if(trigger==DriftBands.Trigger.PUMPAROUND&&Arrays.equals(duties,r.table.reference().pumparounds()))return;
+        var job=new ColumnSolve.Job(trigger,design,setpoints,taken,trigger==DriftBands.Trigger.START?null:r.seed,solves.condenser(u),duties);
         // In flight before the submission: a solver may answer at once. A solve the service refuses (at capacity, a machine's
         // load) is not dropped: it is held and asked again at each decision point until it is taken (resend), and the cycle it
         // applies at waits for its outcome (applied), so the table applied is the one this cycle asked on a quiet machine
         // (codebase review R-ST4).
         r.pending=pending;r.lastSolve=tick;
         if(!solves.submit(r.unit,job,outcome->done(r,pending,outcome))){r.heldJob=job;refusedSolves.add(r.unit);}
+    }
+    /** The relaxation of a pumparound's duty toward what its cycle booked (L4 of batch 2026-11-17-column-cold-feed, decision D4). */
+    static final double PUMPAROUND_RELAXATION=.5;
+    /** A duty to solve at is at least this share of its set point: V3 refuses a pumparound of no duty (L4). */
+    static final double PUMPAROUND_FLOOR=1e-6;
+    /**
+     * Each pumparound's duty per mole of feed for a solve of {@code state} on {@code table} (L4): where the state booked it
+     * inside {@link DriftBands#PUMPAROUND} of the duty the table was solved at, that duty, unchanged; else that duty moved
+     * {@link #PUMPAROUND_RELAXATION} of the way to the booked, never past the set point of {@code setpoints} and at least
+     * {@link #PUMPAROUND_FLOOR} of it. A state with no duties booked (a trip's, a pass's) keeps the table's.
+     */
+    static double[] relaxed(SplitTable table,Setpoints setpoints,ColumnCycle.Step state) {
+        double[] set=setpoints.pumparoundsPerFeed(),out=new double[set.length],solvedAt=table.reference().pumparounds(),booked=state.pumparounds();
+        double fed=state.feedMoles();
+        for(int j=0;j<out.length;j++) {
+            double at=j<solvedAt.length?solvedAt[j]:set[j],b=j<booked.length&&fed>0?booked[j]/fed:at;
+            if(!(Math.abs(b-at)>DriftBands.PUMPAROUND*Math.max(Math.abs(b),Math.abs(at)))){out[j]=at;continue;}
+            double q=at+PUMPAROUND_RELAXATION*(b-at);
+            // Column sign: a cooler's duty is negative; its magnitude between the floor and the set point.
+            out[j]=set[j]<0?Math.min(PUMPAROUND_FLOOR*set[j],Math.max(set[j],q)):set[j]>0?Math.max(PUMPAROUND_FLOOR*set[j],Math.min(set[j],q)):0;
+        }
+        return out;
     }
     /** The units whose solve in flight the service refused ({@link Run#heldJob}), in unit order. */
     private final Set<Long> refusedSolves=new TreeSet<>();
@@ -1238,7 +1264,10 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             owed=Math.max(owed,utility.sign()*held);
         }
         // The water's hold is of its own share: an air-then-water condenser's trim takes part of the duty (COOLER_MODEL_PLAN.md section 6).
-        return condenserHoldSeconds()*Math.abs(perFeed(t,utility))*u.setpoints().designFeedRate()-sides.size()*owed;
+        // A pumparound's hold is of the duty its set point asks (L2): a table solved at a cut duty leaves its cooler the same hold.
+        double[] asked=running(u,t).pumparoundsPerFeed();
+        double duty=utility.kind()==Utility.Kind.PUMPAROUND&&utility.index()<asked.length?asked[utility.index()]:perFeed(t,utility);
+        return condenserHoldSeconds()*Math.abs(duty)*u.setpoints().designFeedRate()-sides.size()*owed;
     }
     /** A cycle's {@code joule} owed to {@code utility} at {@code tick} (column sign reversed), and each side's heat rate for a valve the column sets (U2). */
     private void owed(Run r,ColumnUnit u,long tick,Utility utility,double joule) {

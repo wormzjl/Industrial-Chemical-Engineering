@@ -82,16 +82,32 @@ public final class ColumnSolve {
     }
 
     /**
-     * One solve: why, the design's calculator input, the setpoints, the state taken, the last accepted seed (null: cold), and
-     * the design's condenser, which says what share of its duty the cooling water takes.
+     * One solve: why, the design's calculator input, the setpoints, the state taken, the last accepted seed (null: cold), the
+     * design's condenser, which says what share of its duty the cooling water takes, and each pumparound's duty per mole of
+     * feed to solve at, J (column sign; batch 2026-11-17-column-cold-feed, L4): the set points' at a start or an edit, else
+     * the engine's relaxed duties, which follow the coolers.
      */
-    public record Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed, ColumnComponents.Condenser condenser) {
+    public record Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed, ColumnComponents.Condenser condenser,
+                      double[] pumparounds) {
         public Job {
             Objects.requireNonNull(trigger, "trigger");
             Objects.requireNonNull(design, "design");
             Objects.requireNonNull(setpoints, "setpoints");
             Objects.requireNonNull(taken, "taken");
             Objects.requireNonNull(condenser, "condenser");
+            pumparounds = pumparounds.clone();
+            if (pumparounds.length != setpoints.pumparoundsPerFeed().length) throw new IllegalArgumentException("One duty per pumparound set point");
+            for (double q : pumparounds) if (!Double.isFinite(q)) throw new IllegalArgumentException("Invalid pumparound duty " + q);
+        }
+
+        /** A solve at the set points' pumparound duties. */
+        public Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed, ColumnComponents.Condenser condenser) {
+            this(trigger, design, setpoints, taken, seed, condenser, setpoints.pumparoundsPerFeed());
+        }
+
+        @Override
+        public double[] pumparounds() {
+            return pumparounds.clone();
         }
 
         /** A solve of a water-cooled condenser's column. */
@@ -349,7 +365,8 @@ public final class ColumnSolve {
         double[] drawRatios = setpoints.drawsPerFeed();
         for (int j = 0; j < design.sideDraws().size(); j++) draws.add(new V3SideDrawSpec(design.sideDraws().get(j).trayNumber(), drawRatios[j] * rate));
         var pumparounds = new ArrayList<V3PumparoundSpec>();
-        double[] paRatios = setpoints.pumparoundsPerFeed();
+        // At the duties the job asks (L4): the set points' at a start or an edit, the relaxed ones that follow the coolers otherwise.
+        double[] paRatios = job.pumparounds();
         for (int j = 0; j < design.pumparounds().size(); j++) {
             var p = design.pumparounds().get(j);
             pumparounds.add(new V3PumparoundSpec(p.returnTray(), p.drawTray(), paRatios[j] * rate, p.split()));
@@ -374,7 +391,7 @@ public final class ColumnSolve {
         int worldWater = world.indexOf(SplitTable.WATER);
         double[] z = new double[world.size()];
         for (int i = 0; i < z.length; i++) z[i] = worldFeed[i] / rate;
-        var reference = new SplitTable.Reference(z, h, feedSlope, steamRatios, rate / setpoints.designFeedRate(), setpoints, t, steamT);
+        var reference = new SplitTable.Reference(z, h, feedSlope, steamRatios, rate / setpoints.designFeedRate(), setpoints, t, steamT, paRatios);
         var solved = SplitTable.of(world, boilingPoints(model.whole().catalog(), packageId, world), input, success.result(), reference);
         // Each product's partial molar enthalpies and the closure on the network's basis.
         double[] pooled = worldFeed.clone();

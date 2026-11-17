@@ -90,7 +90,7 @@ public final class ColumnCycle {
      * @param condenser        J into the column (negative: removed), closing the balance
      * @param solvedCondenser  the table's condenser duty at the feed taken, J
      * @param conditions       what held (W1): each LIMIT with the share of the set feed it allows, in the order the cycle
-     *                         weighs them (feed, outlets, condenser water, air face, reboiler, pumparounds, flooding, steam), or the TRIP (the closure would
+     *                         weighs them (feed, outlets, condenser water, air face, reboiler, flooding, steam), a short pumparound's NOTICE, or the TRIP (the closure would
      *                         heat, or departs too far) with its departure
      */
     public record Step(double alpha, Account feed, List<Account> steam, List<Account> products, double reboiler, double[] pumparounds,
@@ -313,13 +313,7 @@ public final class ColumnCycle {
             double alphaHeating = Math.max(0, rooms.reboiler()) / heating;
             if (alphaHeating < 1) conditions.add(new Condition.Active(Condition.HEATING_SHORT, alphaHeating));
         }
-        double[] perFeed = table.pumparoundPerFeed();
-        for (int j = 0; j < perFeed.length; j++) {
-            double cooling = -perFeed[j] * demand, r = rooms.pumparound(j);
-            if (!(cooling > 0) || r == Double.POSITIVE_INFINITY) continue;
-            double alphaCooling = Math.max(0, r) / cooling;
-            if (alphaCooling < 1) conditions.add(new Condition.Active(Condition.PUMPAROUND_SHORT, alphaCooling, j, ""));
-        }
+        // A pumparound cooler's room no longer cuts the feed (L2 of batch 2026-11-17-column-cold-feed): it caps the duty booked.
         // Flooding (W3.1, decision D2): at one table the worst tray's flood fraction is proportional to the feed taken, so the
         // share that keeps it at its limit is the inverse of its fraction at the set feed. Fouled trays (WP8) flood at their
         // capacity left: the fraction is divided by it (1 for clean trays, so the cycle is as before bit for bit).
@@ -361,14 +355,23 @@ public final class ColumnCycle {
         }
         double fed = takenFeed.total();
         double reboiler = table.reboilerPerFeed() * fed;
-        double[] pa = table.pumparoundPerFeed();
-        double paTotal = 0;
+        // Each pumparound books the duty its set point asks of the feed taken, as far as its cooler's sides can still take it
+        // (L2 of batch 2026-11-17-column-cold-feed): a short cooler books what it takes, a NOTICE with the share taken, and the
+        // feed goes on. The table's own duty (the one it was solved at) is what the solved condenser closed with.
+        double[] pa = table.pumparoundPerFeed(), asked = setpoints.pumparoundsPerFeed();
+        double paTotal = 0, left = 0;
         for (int j = 0; j < pa.length; j++) {
-            pa[j] *= fed;
+            double solvedDuty = pa[j] * fed, want = j < asked.length ? asked[j] * fed : solvedDuty, r = rooms.pumparound(j);
+            pa[j] = want < 0 && r < Double.POSITIVE_INFINITY ? Math.max(want, -Math.max(0, r)) : want;
+            if (pa[j] != want) conditions.add(new Condition.Active(Condition.PUMPAROUND_SHORT, pa[j] / want, j,
+                    String.format(java.util.Locale.ROOT, "pumparound %d's cooler takes %.0f %% of its duty, the condenser the rest", j + 1, 100 * pa[j] / want)));
             paTotal += pa[j];
+            left += solvedDuty - pa[j];
         }
         double condenser = out - energyIn - reboiler - paTotal;
-        double solved = table.condenserPerFeed() * fed;
+        // The condenser closes the balance; the trip compares it with the solved duty plus what the pumparounds left (L3), so a
+        // short pumparound alone never trips.
+        double solved = table.condenserPerFeed() * fed + left;
         double departure = solved == 0 ? 0 : (condenser - solved) / Math.abs(solved);
         Condition.Active trip = null;
         boolean heats = fed > 0 && condenser > 0;

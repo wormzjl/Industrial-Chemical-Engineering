@@ -67,7 +67,7 @@ public final class ColumnStatus {
         String line = pending == null ? out.toString() : "RE-SOLVING: " + pending.text() + "; " + out;
         var notes = new StringBuilder(line);
         // The notices and refusals, after the line, in the order they matter: a refusal, then what the solve or the plan said.
-        for (var c : List.of(Condition.SOLVE_REFUSED, Condition.SETPOINT_REFUSED, Condition.HIGH_LOAD, Condition.WEEPING, Condition.THIN_WALL, Condition.TRAYS_FOULED,
+        for (var c : List.of(Condition.SOLVE_REFUSED, Condition.SETPOINT_REFUSED, Condition.PUMPAROUND_SHORT, Condition.HIGH_LOAD, Condition.WEEPING, Condition.THIN_WALL, Condition.TRAYS_FOULED,
                 Condition.FEED_WATER_ROUTED, Condition.ADVISORY, Condition.UNMETERED))
             for (var a : conditions)
                 if (a.condition() == c && !a.text().isEmpty()) notes.append("; ").append(a.text());
