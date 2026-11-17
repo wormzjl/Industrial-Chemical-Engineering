@@ -128,7 +128,7 @@ class ColumnRunTest {
             edits.add(new WorldTopologyLedger.Edit(s,new WorldTopologyLedger.Registration(heatSide(s,z+4,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,t)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
         }
         if(utility!=null) {
-            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(.5,3);
+            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=utilityArea*com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(.5,3);
             edits.add(new WorldTopologyLedger.Edit(utilityTube,new WorldTopologyLedger.Registration(heatSide(utilityTube,20,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE,area,utilityShell)),new FluidDeviceSpec(1,utilityTemperature,utilityPressure,water),0)));
             edits.add(new WorldTopologyLedger.Edit(utilityShell,new WorldTopologyLedger.Registration(heatSide(utilityShell,24,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,utilityTube)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
             last=utilityShell;
@@ -179,7 +179,7 @@ class ColumnRunTest {
     /** A rig's utility line (W4): a reboiler's heating, or the first pumparound's cooler. */
     private enum Utility { REBOILER, PUMPAROUND }
     /** The rig's utility line, or none; its fluid (water), K and Pa; whether its unit names the side (false: a unit saved before W4). */
-    private Utility utility;private double utilityTemperature=450,utilityPressure=300000,utilityValveBore=Double.NaN,utilityBore=.05;private boolean utilitySaved=true;
+    private Utility utility;private double utilityTemperature=450,utilityPressure=300000,utilityValveBore=Double.NaN,utilityBore=.05,utilityArea=1;private boolean utilitySaved=true;
     /** The rig's reboiler duty and its pumparound's removal, J per mol of feed. */
     private double reboilerPerFeed=400,pumparoundPerFeed=400;
     /** A liquid water feed on the rig's line through a pump, ahead of its boundary valve. */
@@ -673,6 +673,8 @@ class ColumnRunTest {
         java.util.function.UnaryOperator<SplitTable> duties;
         /** The table at the job's pumparound duties (L4), or null: the fake's own. */
         java.util.function.BiFunction<ColumnSolve.Job,SplitTable,SplitTable> atDuties;
+        /** Each pumparound's draw liquid the table's solve sampled (L5), or null: none, as a table solved before L5. */
+        java.util.function.Function<ColumnSolve.Job,List<com.wormzjl.icheme.science.fluid.network.HeatCurve>> curves;
         final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();
         final TreeMap<Long,List<Runnable>> due=new TreeMap<>();
         /** The service refuses every job asked from {@link #refuseFrom} to before {@link #refuseUntil} (at capacity, a machine's load); never by default. */
@@ -690,6 +692,7 @@ class ColumnRunTest {
             if(o instanceof ColumnSolve.Solved s&&flood.apply(job).known())o=new ColumnSolve.Solved(s.table().withFlood(flood.apply(job)),s.enthalpy(),null,s.solvedCondenser(),"test","");
             if(o instanceof ColumnSolve.Solved s&&duties!=null)o=new ColumnSolve.Solved(duties.apply(s.table()),s.enthalpy(),null,s.solvedCondenser(),"test","");
             if(o instanceof ColumnSolve.Solved s&&atDuties!=null)o=new ColumnSolve.Solved(atDuties.apply(job,s.table()),s.enthalpy(),null,s.solvedCondenser(),"test","");
+            if(o instanceof ColumnSolve.Solved s&&curves!=null)o=new ColumnSolve.Solved(s.table(),s.enthalpy(),null,s.solvedCondenser(),"test","",null,List.of(),curves.apply(job));
             var answer=o;
             if(delay==0)done.accept(answer);else due.computeIfAbsent(now+delay,t->new ArrayList<>()).add(()->done.accept(answer));
             return true;
@@ -1582,6 +1585,42 @@ class ColumnRunTest {
         assertEquals(booked,duty,DriftBands.PUMPAROUND*Math.abs(duty),"the table within the band of what the cooler takes");
         assertTrue(last.alpha()>.99,"the column keeps its feed: "+last.alpha());
         assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+    }
+    /**
+     * L5 of batch 2026-11-17-column-cold-feed: a pumparound cooler's water takes heat from the pumparound's own stream through
+     * its wall. The draw liquid (2000 J/kgK, film 0.4 W/m²K, the fake's) leaves its tray at 400 K at the design circulation
+     * (D3): the set 200 W (400 J/mol at 0.5 mol/s) over a 60 K fall, 1/600 kg/s, 3.3 W/K. On the rig's 56 m² (UA about
+     * 22 W/K, NTU 6.7) the 300 K water could take 333 W and takes the duty; on a tenth of it (NTU 0.67, effectiveness
+     * 0.49) about 164 W, 82 % of the duty: the column keeps its feed and its table settles on what the cooler takes (L4).
+     */
+    @Test void aPumparoundCoolerTakesWhatItsWallMovesFromTheDraw() {
+        double[] taken=new double[2];
+        for(int k=0;k<2;k++) {
+            utility=Utility.PUMPAROUND;utilityTemperature=300;openOutlet=true;utilityArea=k==0?1:.1;
+            var f=new Fake(0);
+            f.atDuties=(job,t)->{double[] d=job.pumparounds();var ref=t.reference();
+                var reference=new SplitTable.Reference(ref.feedFractions(),ref.feedEnthalpy(),ref.enthalpySlope(),ref.steamRatios(),ref.alpha(),ref.setpoints(),ref.feedTemperature(),ref.steamTemperatures(),d);
+                return new SplitTable(t.axis(),t.products(),0,d,t.condenserPerFeed()-(d.length>0?d[0]:0),reference,t.held()).withPumparoundDraw(new double[]{400});};
+            var oil=com.wormzjl.icheme.science.fluid.network.HeatCurve.of(List.of(new double[]{0,280,.4},new double[]{2000*140,420,.4}));
+            f.curves=job->List.of(oil);
+            var r=rig(0,f);f.world=r.world();
+            f.runTo(30000);
+            var table=r.ops().run(r.unit()).table;var last=r.ops().last(r.unit());
+            double duty=table.pumparoundPerFeed()[0],booked=last.pumparounds()[0]/last.feedMoles(),set=-pumparoundPerFeed;taken[k]=booked;
+            System.out.printf(Locale.ROOT,"L5_WALL area=%.1f solves=%d set=%.2f table=%.2f booked=%.2f J/mol status=%s%n",utilityArea,f.asked(DriftBands.Trigger.PUMPAROUND).size(),set,duty,booked,r.ops().status(r.unit()));
+            assertTrue(last.alpha()>.99,"the column keeps its feed: "+last.alpha());
+            assertTrue(r.world().held.isEmpty(),"no island held: "+r.world().held);
+            if(k==0) {
+                assertEquals(set,booked,.02*Math.abs(set),"the whole surface takes the duty");
+                assertNull(Condition.find(r.ops().conditions(r.unit()),Condition.PUMPAROUND_SHORT),r.ops().conditions(r.unit()).toString());
+                assertTrue(f.asked(DriftBands.Trigger.PUMPAROUND).isEmpty(),"no turndown solve");
+            } else {
+                assertEquals(.82*set,booked,.06*Math.abs(set),"a tenth of the surface takes what its wall moves, about 82 % of the duty");
+                assertEquals(booked,duty,DriftBands.PUMPAROUND*Math.abs(duty),"the table within the band of what the cooler takes");
+            }
+            closesWithDuties(r);
+        }
+        assertTrue(taken[1]>taken[0],"the short surface takes less: "+Arrays.toString(taken));
     }
     /**
      * W4: a unit saved before its utility sides (none named) keeps its reboiler's duty free until its next Start, as before

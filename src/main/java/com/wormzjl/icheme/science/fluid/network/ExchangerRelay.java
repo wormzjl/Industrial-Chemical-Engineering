@@ -87,13 +87,20 @@ public final class ExchangerRelay {
      * A side that gives a running column heat (W4, a reboiler's tubes, {@link #heating}) reads its floor in the ceiling's place
      * and a negative {@code heatRate}, the heat it is asked to give.
      */
-    public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate,double ceiling) {
-        public Read {if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1)||!Double.isFinite(heatRate)||!(ceiling>=0)||!Double.isFinite(ceiling))throw new IllegalArgumentException("Invalid side read");}
+    public record Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate,double ceiling,
+                       @Nullable ColumnStream stream) {
+        public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate,double ceiling){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,heatRate,ceiling,null);}
+        public Read {if(stream!=null&&!(ceiling>0&&heatRate>=0))throw new IllegalArgumentException("A column's stream goes with a cooling read");if(!Double.isFinite(transitDue)||!(partnerSeconds>=0)||!Double.isFinite(partnerSeconds)||!(sitOut>=0&&sitOut<=1)||!Double.isFinite(heatRate)||!(ceiling>=0)||!Double.isFinite(ceiling))throw new IllegalArgumentException("Invalid side read");}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation,double heatRate){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,heatRate,0);}
         /** A running column's condenser read by its water side: the heat it owes (J) as of the slice start, the outlet's ceiling (K). */
         public static Read column(double transitDue,double seconds,double ceiling){return column(transitDue,seconds,ceiling,0);}
         /** {@link #column(double,double,double)} with the heat the column asks its water to take over the slice, W (U2). */
-        public static Read column(double transitDue,double seconds,double ceiling,double heatRate){if(!(ceiling>0)||!(heatRate>=0))throw new IllegalArgumentException("A column partner has a ceiling");return new Read(null,false,transitDue,seconds,0,null,heatRate,ceiling);}
+        public static Read column(double transitDue,double seconds,double ceiling,double heatRate){return column(transitDue,seconds,ceiling,heatRate,null);}
+        /**
+         * {@link #column(double,double,double,double)} with the column's own stream on the other side of the wall (L5 of batch
+         * 2026-11-17-column-cold-feed: a pumparound's draw liquid at its circulation), or null: the ceiling alone bounds the heat.
+         */
+        public static Read column(double transitDue,double seconds,double ceiling,double heatRate,@Nullable ColumnStream stream){if(!(ceiling>0)||!(heatRate>=0))throw new IllegalArgumentException("A column partner has a ceiling");return new Read(null,false,transitDue,seconds,0,null,heatRate,ceiling,stream);}
         /**
          * A running column's reboiler read by its heating utility, a kettle's tubes (W4, batch 2026-11-10-column-failure-modes):
          * the heat it owes the column (J, negative: the side gives it) as of the slice start, the outlet's floor (K) in the
@@ -104,7 +111,7 @@ public final class ExchangerRelay {
         /** Whether this is a column's read of a side that gives it heat (its bound a floor, W4). */
         public boolean gives(){return ceiling>0&&heatRate<0;}
         /** This read with the real valve {@code value} a side's control works (W8; U2: a column's water side). */
-        public Read withOperation(@Nullable Operation value){return new Read(partner,stopped,transitDue,partnerSeconds,sitOut,value,heatRate,ceiling);}
+        public Read withOperation(@Nullable Operation value){return new Read(partner,stopped,transitDue,partnerSeconds,sitOut,value,heatRate,ceiling,stream);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut,@Nullable Operation operation){this(partner,stopped,transitDue,partnerSeconds,sitOut,operation,0);}
         public Read(@Nullable Partner partner,boolean stopped,double transitDue,double partnerSeconds,double sitOut){this(partner,stopped,transitDue,partnerSeconds,sitOut,null);}
         /** A convection coil's read of its radiant coil in another island (the owner's test of 2026-10-28, F1): the radiant
@@ -112,6 +119,14 @@ public final class ExchangerRelay {
         public static Read radiant(double heatRate){return new Read(null,false,0,0,0,null,heatRate);}
         /** No partner known, nothing in transit: the side moves no heat. */
         public static final Read NONE=new Read(null,true,0,0,0);
+    }
+    /**
+     * A running column's own stream through a utility's exchanger (L5 of batch 2026-11-17-column-cold-feed): a pumparound's draw
+     * liquid on its {@code curve}, arriving at {@code inlet} J/kg at {@code massFlow} kg/s, counterflow to the side that reads
+     * it. It meets the same wall: its cells and surface are the reading side's.
+     */
+    public record ColumnStream(HeatCurve curve,double inlet,double massFlow) {
+        public ColumnStream {Objects.requireNonNull(curve);if(!Double.isFinite(inlet)||!(massFlow>0)||!Double.isFinite(massFlow))throw new IllegalArgumentException("Invalid column stream");}
     }
     /**
      * A stream as the plan sees it: its curve, the specific enthalpy it arrives at (J/kg), its mass flow (kg/s, the sign in
@@ -369,7 +384,9 @@ public final class ExchangerRelay {
      * down so that its outlet at the slice start stays at or below the ceiling (the rest stays owed, and the column, finding
      * its condenser short, cuts its throughput). None without flow. A column's heating side (W4, {@link Read#heating}: a
      * reboiler's tubes) is the same with the other sign: the transit due is negative, the shift takes heat from the stream,
-     * and its outlet stays at or above the floor the read carries in the ceiling's place.
+     * and its outlet stays at or above the floor the read carries in the ceiling's place. Where the read carries the column's
+     * own stream (L5, {@link Read#stream}), the shift is bounded too by the heat the wall moves from that stream to this one,
+     * through this side's cells and surface, over the slice ({@link #wall}): a short surface takes less than its duty.
      */
     static HeatSide column(HeatSide own,Stream stream,Read read,double seconds) {
         var still=controlled(own,stream,null,0,read);double mass=Math.abs(stream.massFlow());
@@ -377,8 +394,25 @@ public final class ExchangerRelay {
         double shift=read.transitDue()/(mass*seconds);
         double mixed=stream.inlet+still.heat(stream.curve,stream.inlet,stream.massFlow)/mass;
         double bound=stream.curve.enthalpyAt(read.ceiling()),lo=Math.min(stream.inlet,bound),hi=Math.max(stream.inlet,bound);
-        double allowed=Math.clamp(mixed+shift,lo,hi),scale=Math.clamp((allowed-mixed)/shift,0,1);
+        if(read.stream()!=null&&shift>0)hi=Math.min(hi,mixed+wallHeat(still,stream,read.stream())/mass);
+        double allowed=Math.clamp(mixed+shift,Math.min(lo,hi),hi),scale=Math.clamp((allowed-mixed)/shift,0,1);
         return own.withInputs(still.wall(),still.bypass(),scale*shift,still.active(),still.limit());
+    }
+    /**
+     * The heat (W, into {@code stream}) the wall between {@code stream}, through {@code side}'s cells, and the column's
+     * {@code partner}, counterflow on the same cells and surface with no bypass, moves at its quasi-steady state (L5); none
+     * where it would move heat the other way or either draws nothing through the cells.
+     */
+    static double wallHeat(HeatSide side,Stream stream,ColumnStream partner) {
+        var at=stream.through(side);
+        if(!(at.through()>0))return 0;
+        var other=new Stream(partner.curve(),partner.inlet(),partner.massFlow(),side.withInputs(side.wall(),0,0,1),false);
+        var wall=wall(at,other,side.wall());
+        // The heat as the stream that changes the more temperature carries it: the other's change is within the wall's
+        // tolerance where its flow is far the larger (a cooler's water on a small draw).
+        double own=outlet(at,wall.temperatures()),theirs=outlet(other,wall.temperatures());
+        boolean mine=Math.abs(at.curve().temperatureAt(own)-at.temperature())>=Math.abs(other.curve().temperatureAt(theirs)-other.temperature());
+        return Math.max(0,mine?at.through()*(own-at.inlet):other.through()*(other.inlet-theirs));
     }
     /**
      * A kettle's tube side planned for a slice (W7, plan section 8): as {@link #plan} against a pool at {@code bath} (null

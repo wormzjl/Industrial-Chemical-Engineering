@@ -173,6 +173,14 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         /** The table the last applied one replaced, for plans dated before it applied. */
         SplitTable before;
         /**
+         * Each pumparound's draw liquid as the table's solve sampled it, and the replaced table's (L5 of batch
+         * 2026-11-17-column-cold-feed, ColumnSolve.Solved#drawCurves): the stream its cooler meets. Memory only (D6): a reload has
+         * none until its first solve, and its coolers read the ceiling alone.
+         */
+        List<com.wormzjl.icheme.science.fluid.network.HeatCurve> curves=List.of(),curvesBefore=List.of();
+        /** The draw curves in force with the table at {@code tick}. */
+        List<com.wormzjl.icheme.science.fluid.network.HeatCurve> curvesAt(long tick){return before!=null&&tick<applied?curvesBefore:curves;}
+        /**
          * The wall's corrosion on the bottoms liquid of {@link #corroded} (WP8, plan section 13.1): its rate on the unit's material,
          * mm/y, and what governs it (null for none). State, computed once per installed table; a reload computes it again.
          */
@@ -331,6 +339,8 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(s==null||!s.table().axis().equals(axis)||missingStation(u,s.table())!=null)return r;
         r.table=s.table();r.enthalpy=s.enthalpy();r.tableTick=s.tableTick();r.applied=s.applied();r.solvedCondenser=s.solvedCondenser();publish(r,List.of(),null);
         r.lastSolve=s.tableTick();r.probes=s.probes();r.rebuildProbes=s.probes()==null;
+        // The draw curves are not saved (D6): a unit whose pumparounds have cooler sides solves once to sample them.
+        for(var utility:utilities(u))if(utility.kind()==Utility.Kind.PUMPAROUND&&!sideList(u,utility).isEmpty())r.rebuildProbes=true;
         for(var l:s.levels())r.levels.computeIfAbsent(l.device(),d->new ArrayDeque<>()).addLast(new Level(l.tick(),l.held(),l.rate(),l.molarMass()));
         for(var c:s.credits())r.credits.computeIfAbsent(c.device(),d->new ArrayDeque<>()).addLast(new Credit(c.tick(),c.product(),SolidInventory.EMPTY));
         return r;
@@ -661,7 +671,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         }
         String refused=p.outcome instanceof ColumnSolve.Solved s?missingStation(u,s.table()):null;
         if(p.outcome instanceof ColumnSolve.Solved s&&refused==null) {
-            r.before=r.table;r.table=s.table();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");
+            r.before=r.table;r.table=s.table();r.curvesBefore=r.curves;r.curves=s.drawCurves();r.enthalpy=s.enthalpy();r.seed=s.seed();r.probes=probes(s.inspection(),s.table());r.rebuildProbes=false;r.tableTick=p.tick;r.applied=tick;r.solvedCondenser=s.solvedCondenser();r.solvedBy=p.trigger;r.warm=s.route().contains("warm");
             r.routed=s.note().isEmpty()?null:new Condition.Active(Condition.FEED_WATER_ROUTED,s.note());
             r.advisories=s.advisories().stream().map(a->new Condition.Active(Condition.ADVISORY,a)).toList();
             r.refused=null;r.retried=false;r.frozen=null;
@@ -1313,10 +1323,27 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             double rate=rate(r,u,utility,start-FENCE_TICKS),excess=Math.max(0,utility.sign()*due-rate*(seconds+cycleSeconds()));
             double bound=utility.kind()==Utility.Kind.CONDENSER?Math.max(1,condenserTemperature(u)-APPROACH_KELVIN):bound(u,table,utility);
             return utility.gives()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.heating(due,seconds,bound,rate+excess/condenserHoldSeconds())
-                    :com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,bound,rate+excess/condenserHoldSeconds());
+                    :com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.column(due,seconds,bound,rate+excess/condenserHoldSeconds(),drawStream(r,u,table,utility,start-FENCE_TICKS));
         }
         var held=registry.registrations().get(partner-PhysicalFluidTopology.sideIdentity(0));
         return held!=null&&held.device().suspended()?com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Read.NONE:null;
+    }
+    /**
+     * A pumparound cooler's other stream (L5 of batch 2026-11-17-column-cold-feed): the draw liquid on the curve its table's
+     * solve sampled, entering at the draw tray's temperature as {@code table} solved it, at the design circulation (decision D3:
+     * the duty its set point asks at the design feed over a {@link com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis#paFall}
+     * fall, the sizer's), all as of {@code fence}. Null for any other utility, or where no curve is known (a reload before its
+     * solve): the ceiling alone bounds the heat, as before L5.
+     */
+    private com.wormzjl.icheme.science.fluid.network.ExchangerRelay.ColumnStream drawStream(Run r,ColumnUnit u,SplitTable table,Utility utility,long fence) {
+        if(utility.kind()!=Utility.Kind.PUMPAROUND||table==null)return null;
+        var curves=r.curvesAt(fence);int j=utility.index();
+        if(j>=curves.size()||curves.get(j)==null)return null;
+        var curve=curves.get(j);double[] asked=running(u,table).pumparoundsPerFeed();
+        double draw=table.drawTemperature(j),fall=Math.min(com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis.DEFAULT.paFall(),draw-curve.temperature(0));
+        double drop=curve.enthalpyAt(draw)-curve.enthalpyAt(draw-fall),duty=j<asked.length?Math.abs(asked[j])*u.setpoints().designFeedRate():0;
+        if(!(drop>0)||!(duty>0)||!(fall>0))return null;
+        return new com.wormzjl.icheme.science.fluid.network.ExchangerRelay.ColumnStream(curve,curve.enthalpyAt(draw),duty*fall/(drop*com.wormzjl.icheme.science.flowsheet.sizing.DesignBasis.DEFAULT.paFall()));
     }
     private static ColumnUnit withPort(ColumnUnit u,ColumnUnit.Station s,Account account,SolidInventory solids) {
         var next=new ArrayList<ColumnUnit.Station>();for(var st:u.stations())next.add(st==s||st.port()==s.port()&&st.index()==s.index()?st.withAccount(account).withSolids(solids):st);

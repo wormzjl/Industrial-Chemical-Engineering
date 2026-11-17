@@ -180,6 +180,16 @@ class ColumnSolveTest {
         assertTrue(b.condenserPerFeed() < a.condenserPerFeed(), "the condenser takes what the pumparounds leave: " + a.condenserPerFeed() + " -> " + b.condenserPerFeed());
         assertArrayEquals(half, b.reference().pumparounds(), 0, "the reference carries the duties it was solved at");
         assertFalse(b.reference().setpoints().intensivelyDiffers(setpoints), "and the set points it ran on: no setpoint solve");
+        // L5: each pumparound's draw liquid, sampled with the solve, is an oil liquid's (about 2 to 3 kJ/kgK) up to its tray.
+        assertEquals(half.length, solved.drawCurves().size(), "a draw curve per pumparound");
+        for (int j = 0; j < half.length; j++) {
+            var curve = solved.drawCurves().get(j);double td = b.pumparoundDraw()[j];
+            assertNotNull(curve, "pumparound " + j + "'s draw curve");
+            assertEquals(Math.min(ColumnSolve.DRAW_CURVE_LOW, td - 10), curve.temperature(0), 1e-9, "from the curve's low end");
+            double cp = (curve.enthalpyAt(td) - curve.enthalpyAt(td - 60)) / 60;
+            System.out.printf(java.util.Locale.ROOT, "L5_CURVE %d draw=%.1f K cp=%.0f J/kgK%n", j, td, cp);
+            assertTrue(cp > 1500 && cp < 3500, "an oil liquid's heat capacity: " + cp + " J/kgK");
+        }
         // A cycle at the reference whose pumparounds book the table's duties (their coolers take half): the closure is the table's.
         var axis = model.whole().components();
         int water = axis.indexOf(SplitTable.WATER);
