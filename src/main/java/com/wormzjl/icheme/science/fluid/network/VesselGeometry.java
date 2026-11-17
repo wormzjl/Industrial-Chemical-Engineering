@@ -56,6 +56,38 @@ public record VesselGeometry(Form form,double capacity,double height,double diam
             default->throw new IllegalStateException();};
         return bootCapacity()+body;
     }
+    /**
+     * The horizontal section at a body-relative elevation, m²: the slope of {@link #volumeAt}, the area a drop settles
+     * across there ({@link Separation}); a boot's own section below the body. The nearest section inside the vessel
+     * beyond its ends.
+     */
+    public double planArea(double h){
+        if(!Double.isFinite(h))throw new IllegalArgumentException("Nonfinite height");
+        if(form==Form.PRISM)return capacity/height;
+        h=Math.clamp(h,-bootDepth(),height);
+        if(h<0){double z=h+bootDepth(),c=bootDiameter/4,r=bootDiameter/2;return z<c?headSection(r,c,z):Math.PI*r*r;}
+        double r=diameter/2;
+        return switch(form){
+            case CYLINDER->Math.PI*r*r;
+            case SPHERE->Math.PI*h*(diameter-h);
+            case HORIZONTAL_DRUM->{double t=h/diameter;yield length*2*Math.sqrt(h*(diameter-h))+Math.PI*diameter*diameter/2*t*(1-t);}
+            case VERTICAL_DRUM->{double c=diameter/4;yield h<c?headSection(r,c,h):h<c+length?Math.PI*r*r:headSection(r,c,height-h);}
+            default->throw new IllegalStateException();};
+    }
+    /**
+     * The section the gas crosses above a liquid level at body-relative elevation {@code level}, m² ({@link Separation}'s
+     * gas law): a standing vessel's whole section, whatever its level; a lying drum's segment above the level, along its
+     * axis.
+     */
+    public double vapourSection(double level){
+        if(!Double.isFinite(level))throw new IllegalArgumentException("Nonfinite height");
+        if(form==Form.PRISM)return capacity/height;
+        double r=diameter/2;
+        return form==Form.HORIZONTAL_DRUM?Math.PI*r*r-segmentArea(r,Math.clamp(level,0,diameter)):Math.PI*r*r;
+    }
+    /** Whether the gas crosses the vessel along a lying axis ({@link Separation#gasLimit}). */
+    public boolean lying(){return form==Form.HORIZONTAL_DRUM;}
+    private static double headSection(double r,double c,double h){return Math.PI*r*r*(2*h/c-h*h/(c*c));}
     static double segmentArea(double r,double h){
         if(h>r)return Math.PI*r*r-segmentArea(r,2*r-h);
         double angle=2*DeterministicMath.asin(Math.sqrt(Math.max(0,h/(2*r))));
