@@ -184,13 +184,15 @@ public final class ColumnOperationReviewWorld {
      * and product line carries a shutoff valve beyond its boundary valve. Batch 2026-11-16-review-plant-sizing: the column's
      * diameter (null: the design's, at the scale's area), the reflux pump's shape (null: the least pump), each pumparound's
      * pump and cooler (a list shorter than the pumparounds: the least pump, {@code coolerUnit}), and a bore by product line
-     * name ({@code offgas}, {@code water}, {@code distillate}, {@code drawN}, {@code bottoms}) over {@code productBore}.
+     * name ({@code offgas}, {@code water}, {@code distillate}, {@code drawN}, {@code bottoms}) over {@code productBore}, and a
+     * bore by internal line name ({@link Rig#routes}: {@code overhead}, {@code receiver out}, {@code reflux}, {@code paN draw},
+     * {@code paN return}; a line not named stays as laid).
      */
     record Options(double scale, @Nullable java.util.function.Function<MaterialCatalog, V3ColumnInput> design, ColumnComponents.Condenser condenser,
                    EquipmentShape condenserUnit, @Nullable EquipmentShape trimUnit, EquipmentShape coolerUnit, @Nullable EquipmentShape kettleUnit,
                    double feedBore, double steamBore, double waterBore, double productBore, boolean motors, boolean shutoffs, Layout layout,
                    @Nullable Double diameter, @Nullable EquipmentShape refluxPumpUnit, List<EquipmentShape> pumpUnits, List<EquipmentShape> coolerUnits,
-                   Map<String, Double> productBores) {
+                   Map<String, Double> productBores, Map<String, Double> lineBores) {
         /** The fixed units of the column tests and the failure-modes plants. */
         static final Options REVIEW = new Options(SCALE, null, ColumnComponents.Condenser.EXCHANGER, exchanger(CONDENSER_SIZE), null,
                 AssemblyGameTests.Plant.unit(Kind.EXCHANGER), null, FEED_BORE, STEAM_BORE, 0, 0, false, false, Layout.REVIEW);
@@ -199,6 +201,7 @@ public final class ColumnOperationReviewWorld {
             pumpUnits = List.copyOf(pumpUnits);
             coolerUnits = List.copyOf(coolerUnits);
             productBores = Map.copyOf(productBores);
+            lineBores = Map.copyOf(lineBores);
         }
 
         /** The design's diameter, the least pumps, {@code coolerUnit} on every pumparound, the product lines at {@code productBore}. */
@@ -206,7 +209,7 @@ public final class ColumnOperationReviewWorld {
                 EquipmentShape condenserUnit, @Nullable EquipmentShape trimUnit, EquipmentShape coolerUnit, @Nullable EquipmentShape kettleUnit,
                 double feedBore, double steamBore, double waterBore, double productBore, boolean motors, boolean shutoffs, Layout layout) {
             this(scale, design, condenser, condenserUnit, trimUnit, coolerUnit, kettleUnit, feedBore, steamBore, waterBore, productBore, motors, shutoffs, layout,
-                    null, null, List.of(), List.of(), Map.of());
+                    null, null, List.of(), List.of(), Map.of(), Map.of());
         }
 
         EquipmentShape pumpUnit(int j) {
@@ -278,10 +281,11 @@ public final class ColumnOperationReviewWorld {
     /**
      * The review plant as the process simulator sizes it (batch 2026-11-16-review-plant-sizing): the column's diameter, the
      * condenser's shells and their count, the receiver, the reflux pump, each pumparound's cooler and pump, and each boundary
-     * line's bore by its name ({@code feed}, {@code steam1}, the products').
+     * line's bore by its name ({@code feed}, {@code steam1}, the products'), and each internal line's by the rig's name
+     * ({@link Rig#routes}).
      */
     record SizedPlant(V3ColumnInput input, double diameter, EquipmentShape condenser, int condensers, EquipmentShape receiver, EquipmentShape refluxPump,
-                      List<EquipmentShape> coolers, List<EquipmentShape> pumps, Map<String, Double> bores) {
+                      List<EquipmentShape> coolers, List<EquipmentShape> pumps, Map<String, Double> bores, Map<String, Double> lines) {
     }
 
     /**
@@ -359,6 +363,17 @@ public final class ColumnOperationReviewWorld {
             coolers.add(cooler.shape());
             pumps.add(pump(require(sized, SheetSizing.member(TOWER, SheetSizing.PumparoundMember.name(pumparound.id(), "pump"))).size()));
         }
+        // The column's own lines by the rig's names. The condenser's outlet to the receiver has no line of its own on the sheet:
+        // the rig lays it at the overhead's bore. The reflux pump's discharge and the reflux are one laid line: the larger.
+        var lines = new LinkedHashMap<String, Double>();
+        lines.put("overhead", internal(sized, "overhead"));
+        lines.put("receiver out", internal(sized, "receiver out"));
+        lines.put("reflux", Math.max(internal(sized, "pump out"), internal(sized, "reflux")));
+        for (int j = 0; j < door.pumparounds().size(); j++) {
+            var id = door.pumparounds().get(j).id();
+            lines.put("pa" + (j + 1) + " draw", internal(sized, SheetSizing.PumparoundMember.name(id, "draw")));
+            lines.put("pa" + (j + 1) + " return", internal(sized, SheetSizing.PumparoundMember.name(id, "return")));
+        }
         var bores = new LinkedHashMap<String, Double>();
         for (var stream : streams) {
             var line = sized.lines().get(stream.id());
@@ -369,7 +384,14 @@ public final class ColumnOperationReviewWorld {
                 input.stageCount(), flood == null ? "none" : String.format(Locale.ROOT, "%.1f", flood.value()), condenser.shells(),
                 String.format(Locale.ROOT, "%.3f", run.reports().get(TOWER).readings().getOrDefault("condenser", Double.NaN) / 1e6), bores);
         double diameter = ColumnDesign.builtDiameter(columnSize.diameter());
-        return new SizedPlant(withDiameter(input, diameter), diameter, condenser.shape(), condenser.shells(), receiver.shape(), refluxPump, coolers, pumps, bores);
+        return new SizedPlant(withDiameter(input, diameter), diameter, condenser.shape(), condenser.shells(), receiver.shape(), refluxPump, coolers, pumps, bores, lines);
+    }
+
+    /** The sized bore of the column's own line {@code name}, m. */
+    private static double internal(SheetSizing.Sized sized, String name) {
+        var line = sized.lines().get(SheetSizing.member(TOWER, name));
+        if (line == null || line.size() == null) throw new IllegalStateException("The " + name + " line has no size: " + sized.lines().keySet());
+        return bore(line.size());
     }
 
     private static Flowsheet.Stream product(String id, String port) {
@@ -460,7 +482,7 @@ public final class ColumnOperationReviewWorld {
         IChemE.LOGGER.info("review_operation sizing layout condensers={} drum={} support={} reflux_pump={} pumps={} coolers={} below={} above={}", condensers, drumAt.toShortString(),
                 support, refluxAt.toShortString(), pumps, coolers, layout.below().toShortString(), layout.above().toShortString());
         return new Options(SCALE, null, ColumnComponents.Condenser.EXCHANGER, s.condenser(), null, s.coolers().getFirst(), null, feed, steam, 0, 0, false, false, layout,
-                s.diameter(), s.refluxPump(), s.pumps(), s.coolers(), bores);
+                s.diameter(), s.refluxPump(), s.pumps(), s.coolers(), bores, s.lines());
     }
 
     static final class Rig {
@@ -479,6 +501,12 @@ public final class ColumnOperationReviewWorld {
         final java.util.Map<String, BlockPos> lines = new java.util.LinkedHashMap<>();
         /** Each boundary line's end (its generator or void) by its name, the distillate's void with them. */
         final java.util.Map<String, BlockPos> ends = new java.util.LinkedHashMap<>();
+        /**
+         * The laid paths of each internal line by its name: {@code overhead} (the column to the condenser and on to the receiver,
+         * every further shell's branches), {@code receiver out} (to the reflux pump), {@code reflux} (the pump's discharge to the
+         * column), {@code paN draw} (to the pump), {@code paN return} (the pump through the cooler back to the column).
+         */
+        final java.util.Map<String, List<List<BlockPos>>> routes = new java.util.LinkedHashMap<>();
         /** The units as placed: the condenser's, the trim's, the receiver, the pumps (the reflux pump first), the coolers, the kettle. */
         final List<Vessel> condensers = new ArrayList<>(), trims = new ArrayList<>(), pumps = new ArrayList<>(), coolers = new ArrayList<>(), motors = new ArrayList<>();
         Vessel kettle;
@@ -573,12 +601,12 @@ public final class ColumnOperationReviewWorld {
             // The overhead: column, condenser (an air cooler's process side, then the trim's shell, or an exchanger's shell),
             // receiver, reflux pump, the distillate's tee, the reflux back.
             if (options.condenser() == ColumnComponents.Condenser.EXCHANGER) {
-                var in = plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condensers.getFirst(), Role.SHELL_INLET));
-                var out = plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE));
+                var in = laid("overhead", plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condensers.getFirst(), Role.SHELL_INLET)));
+                var out = laid("overhead", plant.route(AssemblyGameTests.Plant.front(condensers.getFirst(), Role.SHELL_OUTLET), AssemblyGameTests.Plant.front(drum, Role.SIDE)));
                 // Every further shell in parallel with the first, as an air cooler's banks.
                 for (var shell : condensers.subList(1, condensers.size())) {
-                    plant.join(in, AssemblyGameTests.Plant.front(shell, Role.SHELL_INLET));
-                    plant.join(out, AssemblyGameTests.Plant.front(shell, Role.SHELL_OUTLET));
+                    laid("overhead", plant.join(in, AssemblyGameTests.Plant.front(shell, Role.SHELL_INLET)));
+                    laid("overhead", plant.join(out, AssemblyGameTests.Plant.front(shell, Role.SHELL_OUTLET)));
                 }
             } else {
                 var in = plant.route(AssemblyGameTests.Plant.front(column, Role.VAPOUR_OUTLET), AssemblyGameTests.Plant.front(condensers.getFirst(), Role.PROCESS_INLET));
@@ -591,9 +619,10 @@ public final class ColumnOperationReviewWorld {
                     plant.join(out, AssemblyGameTests.Plant.front(bank, Role.PROCESS_OUTLET));
                 }
             }
-            plant.route(AssemblyGameTests.Plant.front(drum, Role.LIQUID_OUTLET), AssemblyGameTests.Plant.front(refluxPump, Role.SUCTION));
+            laid("receiver out", plant.route(AssemblyGameTests.Plant.front(drum, Role.LIQUID_OUTLET), AssemblyGameTests.Plant.front(refluxPump, Role.SUCTION)));
+            var reflux = laid("reflux", plant.route(AssemblyGameTests.Plant.front(refluxPump, Role.DISCHARGE), front(column, Role.REFLUX, 0)));
             var before = new HashSet<>(plant.devices);
-            plant.tee(plant.route(AssemblyGameTests.Plant.front(refluxPump, Role.DISCHARGE), front(column, Role.REFLUX, 0)));
+            plant.tee(reflux);
             // The tee's branch ends at a tank: the distillate leaves to a void instead.
             for (var at : new ArrayList<>(plant.devices))
                 if (!before.contains(at) && plant.level.getBlockState(at).is(ModBlocks.FLUID_RESERVOIR.get())) {
@@ -604,9 +633,9 @@ public final class ColumnOperationReviewWorld {
                 }
             // Each pumparound: drawn through its pump and its exchanger's shell, back two trays up; the lowest first, the upper ones around it.
             for (int j = pumparounds - 1; j >= 0; j--) {
-                plant.route(front(column, Role.PUMPAROUND_DRAW, j), AssemblyGameTests.Plant.front(paPumps.get(j), Role.SUCTION));
-                plant.route(AssemblyGameTests.Plant.front(paPumps.get(j), Role.DISCHARGE), AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_INLET));
-                plant.route(AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_OUTLET), front(column, Role.RETURN, j));
+                laid("pa" + (j + 1) + " draw", plant.route(front(column, Role.PUMPAROUND_DRAW, j), AssemblyGameTests.Plant.front(paPumps.get(j), Role.SUCTION)));
+                laid("pa" + (j + 1) + " return", plant.route(AssemblyGameTests.Plant.front(paPumps.get(j), Role.DISCHARGE), AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_INLET)));
+                laid("pa" + (j + 1) + " return", plant.route(AssemblyGameTests.Plant.front(coolers.get(j), Role.SHELL_OUTLET), front(column, Role.RETURN, j)));
             }
             // The reboiler: the bottoms into the kettle, its vapour back under the bottom tray.
             if (kettle != null) {
@@ -629,13 +658,25 @@ public final class ColumnOperationReviewWorld {
                 var role = (Role) line[0];
                 for (int n = 0; n < (int) line[2]; n++)
                     for (int k : options.shutoffs() ? new int[]{0, 2, 4} : new int[]{0, 2})
-                        plant.world.resizeLine(id(front(column, role, n).relative(out(column, role, n), k)), (double) line[1], d -> PipeSizes.MAX_BORE);
+                        resizeLine(front(column, role, n).relative(out(column, role, n), k), (double) line[1]);
             }
             if (options.productBore() > 0) for (var at : sinks) resize(at, options.productBore());
             for (var line : options.productBores().entrySet()) {
                 var at = ends.get(line.getKey());
                 if (at == null) throw new IllegalStateException("No product line " + line.getKey() + " to size: " + ends.keySet());
                 resize(at, line.getValue());
+            }
+            for (var line : options.lineBores().entrySet()) {
+                var paths = routes.get(line.getKey());
+                if (paths == null) throw new IllegalStateException("No internal line " + line.getKey() + " to size: " + routes.keySet());
+                for (var path : paths) {
+                    // One bore along a path: the sized one, or the largest its nozzles take.
+                    double bore = line.getValue();
+                    for (var at : path) bore = Math.min(bore, largest(at));
+                    if (bore < line.getValue())
+                        IChemE.LOGGER.info("review_operation sizing line=\"{}\" sized_bore={} laid_bore={} (the nozzle's largest)", line.getKey(), line.getValue(), bore);
+                    for (var at : path) if (plant.world.at(plant.position(at)).isPresent()) resizeLine(at, bore);
+                }
             }
             if (options.waterBore() > 0) {
                 var utilities = new ArrayList<BlockPos>(condenserWater);
@@ -674,8 +715,29 @@ public final class ColumnOperationReviewWorld {
                 var at = end.relative(d);
                 if (!plant.devices.contains(at)) continue;
                 for (int k = 0; k < 8 && plant.devices.contains(at); k++, at = at.relative(d))
-                    if (plant.world.at(plant.position(at)).isPresent()) plant.world.resizeLine(id(at), bore, x -> PipeSizes.MAX_BORE);
+                    if (plant.world.at(plant.position(at)).isPresent()) resizeLine(at, bore);
             }
+        }
+
+        /** {@code path} kept as a path of the internal line {@code name} ({@link #routes}). */
+        List<BlockPos> laid(String name, List<BlockPos> path) {
+            routes.computeIfAbsent(name, k -> new ArrayList<>()).add(path);
+            return path;
+        }
+
+        /** The largest bore a pipe at {@code at} takes: the least of the nozzles beside it ({@code NozzleBore}), as the pipeline tool's. */
+        double largest(BlockPos at) {
+            return com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity.largestBoreBeside(plant.level, at, 0x3F);
+        }
+
+        /**
+         * The line through the pipe at {@code at} at bore {@code bore}, m, within what the nozzles beside its pipes take.
+         *
+         * @throws IllegalStateException where the line refuses the bore
+         */
+        void resizeLine(BlockPos at, double bore) {
+            int pipes = plant.world.resizeLine(id(at), bore, d -> largest(new BlockPos(d.position().x(), d.position().y(), d.position().z())));
+            if (pipes < 0) throw new IllegalStateException("The line at " + at.toShortString() + " does not take a bore of " + bore + " m: " + pipes);
         }
 
         /** A shutoff valve on the pipe at {@code at}, its handle on {@code axis}, open, as the fitting item installs one. */

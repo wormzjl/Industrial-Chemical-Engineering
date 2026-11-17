@@ -22,6 +22,16 @@ the `Rig` class keep their sizes.
   report 1 (t=915, before the feed reached the column) read LIMITED with FEED_SHORT at 0 %. All 4 required tests passed.
   The world is copied to `run/saves/column-operation-sized-2026-11-16` in the main checkout.
 
+- 2026-11-17, branch `claude/column-testing-sizing-26b5b9` (the batch's branch merged in): the owner found the sized world's
+  lines thin, the column's top and side lines looking unconnected, and the pumps and exchangers small. The rig applied only the
+  boundary bores; every internal line stayed at the laid 0.05 m, and a nozzle draws at its pipe's size. `SizedPlant.lines` and
+  `Options.lineBores` now carry the sized bores of the column's own lines, `Rig.routes` keeps each laid path, and `finish`
+  resizes them: overhead 0.20 m (the condenser's outlet to the receiver too: the sheet has no line for it), receiver out
+  0.10, reflux 0.075 (the larger of pump out and reflux, one laid line), pumparound draws 0.15, returns 0.075 / 0.10 / 0.075.
+  Every resize of the rig now takes the nozzles' largest bore as the pipeline tool does (`Rig.largest`; a path is laid at the
+  least of its sized bore and its nozzles' largest, with a log line) and throws where a line refuses its bore. Compiled
+  (`compileFluidGameTestJava`); the world is not rebuilt and nothing was run.
+
 ## Sized units against the old fixed ones
 
 | Item | Fixed (before) | Sized | Rows off green |
@@ -57,4 +67,8 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
 - Pumparound pumps read PUMP_RATED outside the window, and the coolers are 3 to 8 times the need: these are the sizer's catalogue gaps, not
   the rig's.
 - The cooling water lines stay as laid; a tower-water line size would need the sizer to size the free port's water.
+- The world with the sized internal lines is not rebuilt: `runReviewWorldServer -PreviewBatch=review-operation`, then a look
+  at the top and side nozzles in game (the "not connected" reading is inferred from the code, not seen).
+- Owner decision open: where no pump size lands in the 70 to 120 % window, Auto keeps the nearest, so pumparounds 1 and 3
+  run 0.05 m pumps at 170 % and 143 % of rated flow. The next size up would read about 42 % and 36 %.
 - No merge preparation (owner).
