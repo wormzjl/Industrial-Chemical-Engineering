@@ -48,6 +48,25 @@ final class DeviceModes {
         }
         return -1;
     }
+    /**
+     * Option E1 of START_HOLD_REVIEW.md (batch 2026-11-16-review-plant-sizing), beside {@link #regulatesInSeries}: the pump
+     * that returns to its law in the same change as flow valve {@code edge} goes to {@code next}, or -1. A pump's suction
+     * limit, {@code max(E, pv + bd(Q))} ({@link MoverSuction#suctionLimit}), does not fall as its flow falls, and its suction
+     * pressure does not fall either (its suction line's loss shrinks, and no other device changes mode in the same pass,
+     * decision A272). So below the flow at which a pump sits on its suction limit its suction stands at or above its floor
+     * and the pump is on its law. The pump is the one on {@code PUMP_SUCTION_LIMIT} that carries one flow with the valve by
+     * the junction balances ({@link ControlConstraints#inSeries}), where the valve's change to {@code VALVE_REGULATING} is due
+     * and its target, as a mass flow at {@code density}, lies below the pump's converged flow {@code flows}. A valve set to
+     * 167 kg/s behind a crude pump on its limit at 216 kg/s otherwise regulated with the pump still on its limit, a pass with
+     * no root (its limit 138 kPa, its suction line 149.85 kPa), and the valve opened, regulated and cycled.
+     */
+    static int lawBelowSuctionLimit(PassiveNetwork graph,List<FlowControl.Mode> modes,int edge,FlowControl.Mode next,double[] flows,double density) {
+        if(next!=FlowControl.Mode.VALVE_REGULATING||!(graph.pipes().get(edge).control() instanceof FlowControl.Valve valve)||valve.pressureControl()||valve.bare())return -1;
+        double target=valve.targetMassFlow(density);
+        for(int e=0;e<modes.size();e++)
+            if(modes.get(e)==FlowControl.Mode.PUMP_SUCTION_LIMIT&&target<flows[e]&&ControlConstraints.inSeries(graph,e,edge))return e;
+        return -1;
+    }
     /** Whether connection {@code e} in {@code mode} fixes what it regulates: a valve regulating, or a set-flow mover on its law (its displacement on its supply's density, {@link MoverSuction#riseDensity}) or closed (no flow). */
     static boolean regulating(PassiveNetwork graph,int e,FlowControl.Mode mode) {
         return graph.pipes().get(e).control() instanceof FlowControl.Valve?mode==FlowControl.Mode.VALVE_REGULATING:mode==FlowControl.Mode.CLOSED||mode==FlowControl.Mode.INLET_WRONG_PHASE;

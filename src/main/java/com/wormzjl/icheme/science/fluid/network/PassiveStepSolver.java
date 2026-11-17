@@ -660,6 +660,8 @@ public final class PassiveStepSolver {
             // mode, so the reversible correction comes first.
             if(deviceChange>=0) {
                 modes.set(deviceChange,deviceNext);changed=true;
+                // Option E1 (START_HOLD_REVIEW.md): a flow valve regulating below a pump on its suction limit puts the pump on its law.
+                if(deviceNext==FlowControl.Mode.VALVE_REGULATING){var dp=graph.pipes().get(deviceChange);int law=DeviceModes.lawBelowSuctionLimit(graph,modes,deviceChange,deviceNext,flows,equations.drawn(deviceChange,0,equations.cachedTransport[dp.first()],flows[deviceChange]).density());if(law>=0)modes.set(law,FlowControl.Mode.MOVER_LAW);}
                 // A flow valve that closes can seal a mover's side (owner decision D58).
                 if(flowValve(graph.pipes().get(deviceChange)))relieveSealedPockets(graph,modes,boundaryClosed);
             }
