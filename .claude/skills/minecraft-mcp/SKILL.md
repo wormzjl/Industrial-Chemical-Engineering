@@ -6,7 +6,7 @@ description: How to drive the IChemE dev client in game through the langyo/minec
 # Minecraft MCP bridge (IChemE)
 
 The bridge is the official langyo/minecraft-mod-mcp mod, pinned in `tools/minecraft-mcp-bridge/` (jar,
-digest, what changed per version). Agents drive it over its own HTTP endpoint with `scripts/bridge.js`;
+what changed per version, how to update). Agents drive it over its own HTTP endpoint with `scripts/bridge.js`;
 no MCP tools need to be loaded.
 
 ## Rules first
@@ -18,7 +18,7 @@ no MCP tools need to be loaded.
 
 ## Lane setup (once per worktree)
 
-1. Copy `tools/minecraft-mcp-bridge/minecraft-mcp-1.21.1-neoforge-v0.4.28.jar` into `<worktree>/run/mcp-client-mods/`. `prepareMcpControlMod` checks the SHA-256 and copies it into `run/mcp-client/mods/`.
+1. Nothing to copy: `prepareMcpControlMod` takes the tracked `tools/minecraft-mcp-bridge/minecraft-mcp-1.21.1-neoforge-v0.4.28.jar` and copies it into `run/mcp-client/mods/`.
 2. With the client stopped, set `pauseOnLostFocus:false` and `onboardAccessibility:false` in `run/mcp-client/options.txt` (create the file with those lines if it is missing). Optional: `guiScale:1` makes GUI units equal framebuffer pixels.
 3. The `mcpClient` run in `build.gradle` already sets `mcp.background_input=true` (the OS cursor is never touched), `mcp.remote_control=true` (a remote `enter_control_mode` is allowed) and `mcp.screenshot.dir=<worktree>/tmp` (screenshots may only go there).
 4. Make sure nothing answers on port 9876: `node .claude/skills/minecraft-mcp/scripts/bridge.js status` must fail.

@@ -13,7 +13,6 @@ unless the owner is watching. Read this before improvising.
 | Input command before `enter_control_mode` | `not in control mode` | `enter_control_mode` first, also after every client restart; it works on the title screen |
 | `screenshot_to_file` outside the jail (0.4.28) | `path resolves outside the screenshot directory` | a path inside `<worktree>/tmp/` (the lane's `mcp.screenshot.dir`); a worktree whose `build.gradle` predates this has the default `run/mcp-client/screenshots/` |
 | Raw stdio JSON-RPC into `npx minecraft-mod-mcp mcp` | answers out of order, or never | HTTP through `bridge.js`. Subagent sessions never have the MCP tools; HTTP always works |
-| Bridge jar missing | no endpoint on 9876; `prepareMcpControlMod` fails | copy `tools/minecraft-mcp-bridge/minecraft-mcp-1.21.1-neoforge-v0.4.28.jar` into `<worktree>/run/mcp-client-mods/` |
 | Port 9876 already bound (another client, the owner's game) | `Address already in use`; commands reach the wrong game | `bridge.js status` must fail before launch; check its `pid` after launch |
 | Compat mod not loaded | typing and `use_item` misbehave | `runMcpClient`, not `runClient`; `icheme_mcp_compat` must be in the log's mod list |
 | `execute_command` | `"sent":true` yet "Unknown or incomplete command", even `/help` | chat: `bridge.js chat` / `bridge.js cmds` |

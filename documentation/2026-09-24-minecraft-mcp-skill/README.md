@@ -95,6 +95,7 @@ Status: Implemented 2026-11-17 (0.34.4). Index: [../INDEX.md](../INDEX.md).
 
 - In progress since 2026-09-24 on `claude/minecraft-mcp-skill-c3f0f0` (skill written, mining consolidated; eval runs skipped; `runMcpClient` typing lane unconfirmed)
 - 2026-11-17: skill lost with its branch; rebuilt for bridge v0.4.28 on `claude/mcp-skill-status-632852` (jar updated, lane consent and screenshot folder set, robot helpers dropped); in-game check open
+- 2026-11-17: owner: stop hashing the jar in the build; `prepareMcpControlMod` copies the tracked `tools/minecraft-mcp-bridge/` jar with no digest check (`549b9faab`), folded into 0.34.4 (not pushed yet)
 - 2026-11-17: merged to `main` as 0.34.4 (owner: patch bump; no final lane: no test class loads `src/mcpCompat` or the `mcpClient` run settings; code guide `client-kit.md` updated; tooling cleanup: nothing created outside `tmp/`)
 - 2026-11-17: owner's in-game check on v0.4.28 passed; text-field clearing recipe and the `new-world.sh` path fix added to the skill
 
