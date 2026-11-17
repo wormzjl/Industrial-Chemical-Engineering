@@ -35,7 +35,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | `PanelSkin` | The light door (`PanelSkin.LIGHT`, RAL 7035, red LED meters) and the dark door (`.DARK`, RAL 7016, amber meters): engraved plates, 7-segment LCD entries (`segments`), LED meters, IEC 60073 button colours | 389 |
 | `ScrollView` | A viewport over a taller column: an offset and its own 8 px bar; input only while shown and inside | 120 |
 | `KitWidgets` | Game widgets kept at their slots in a scrolled column, shown only wholly inside | 39 |
-| `KitDoor` | A door's columns in one view with one bar (`layout`, `place`, `placeAll`), the kept widgets (`keep`), `draw`, `action` (the `Choice` under a door point), `wheel`, `press`, `drag`, `release`, static `hint` | 200 |
+| `KitDoor` | A door's columns in one view with one bar (`layout`, `place`, `placeAll`), the kept widgets (`keep`), `draw`, `action` (the `Choice` under a door point), `choice` (its row, where a choice's hover stands beside the column), `wheel`, `press`, `drag`, `release`, static `hint` | 213 |
 | `DoorInput` | Static input order shared by kit screens: `press` (the tour, `SkinField.clickOutside`, the door), `wheel`, `overlay` (the tour, else the hint); its `Overlay` is what a tour implements | 51 |
 | `EditFocus` | `ends`: a press outside the focused entry ends its edit, as Enter does (Minecraft-free) | 18 |
 | `GuiCanvas` | The canvas on `GuiGraphics` with the game font: scissor, linear sprite blits, `batch` held as `HeldDraws` says, `release`, `drawOut`, `of(g, font)` one per frame, `measure` | 237 |

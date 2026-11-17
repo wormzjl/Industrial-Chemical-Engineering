@@ -168,8 +168,15 @@ public final class ValveGeometry {
     private static double pressureHalf(double od){return Math.min(.31,Math.max(.105,.20+.12*od));}
     private static double[] stem(int facing){return (facing&~1)==0?new double[]{0,0,-1}:new double[]{0,1,0};}
     private static double positionerSeat(LineGeometry.Key key){double od=PipeSizes.outsideOf(key.outside());return pressureRadius(od)+Math.max(.075,.19*od);}
+    /** The yoke's leg spread and leg width, m: the positioner's bracket stands on the leg on its side. */
+    private static double[] yoke(LineGeometry.Key key){double od=PipeSizes.outsideOf(key.outside()),casing=Math.min(.96,Math.max(.34,.30+.75*od));return new double[]{Math.max(.045,.28*pressureRadius(od)),Math.max(.016,.045*casing)};}
+    /** The mounting plate's inner face from the stem's axis, m, its thickness and the standoffs' length. */
+    private static final double PLATE=.012,STANDOFF=.025;
+    private static double plateAt(LineGeometry.Key key){var y=yoke(key);return .86*y[0]+y[1]/2;}
+    /** How far the positioner stands out from its old place against the stem, m: clear of the yoke leg, on its plate and standoffs. */
+    private static double positionerShift(LineGeometry.Key key){return plateAt(key)+PLATE+STANDOFF-.03;}
     /** Cable entry on the positioner's outward side, perpendicular to its process pipe. */
-    public static SocketGeometry.Socket socket(LineGeometry.Key key){var up=stem(key.facing());var run=LineGeometry.step(key.facing()|1);var n=cross(run,up);var q=plus(CENTRE,plus(scale(up,positionerSeat(key)+.18),scale(n,.245)));return new SocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(n),false);}
+    public static SocketGeometry.Socket socket(LineGeometry.Key key){var up=stem(key.facing());var run=LineGeometry.step(key.facing()|1);var n=cross(run,up);var q=plus(CENTRE,plus(scale(up,positionerSeat(key)+.18),scale(n,.215+positionerShift(key))));return new SocketGeometry.Socket(q[0],q[1],q[2],EquipmentServices.face(n),false);}
 
     private static void pressureBody(Mesh mesh,LineGeometry.Key key,boolean accessory) {
         double od=PipeSizes.outsideOf(key.outside()),r=pressureRadius(od),h=pressureHalf(od);int sides=Math.max(16,PipeSizes.sides(2*r));
@@ -211,13 +218,20 @@ public final class ValveGeometry {
         mesh.annulus(f,0,.34*rc,cap,n,1,Material.ACTUATOR);
         mesh.cylinder(f,.13*rc,cap,cap+.025,8,Material.BOLT);
         for(int i=0;i<8;i++)mesh.nut(new Frame(f.at(i*Math.PI/4,.92*rc,edge),stem,run),Math.max(.007,.018*casing),0,.022,6,Material.BOLT);
-        var normal=cross(run,stem);var positioner=new Frame(plus(CENTRE,scale(stem,seat+.18)),normal,run);
-        positioner(mesh,positioner,.12,.13,.03,.23,.035,Material.SERVICE_CASE);
-        positioner(mesh,positioner,.109,.119,.228,.239,.028,Material.SERVICE_COVER);
-        mesh.frustum(positioner,.105,.095,.125,.205,16,Material.SERVICE_CASE);
+        // The positioner on a mounting plate bolted to the yoke's leg, on four standoffs (owner, 2026-11-17: a structure
+        // holds the box; it does not sit on the stem).
+        var normal=cross(run,stem);double plate=plateAt(key),shift=positionerShift(key);
+        bar(mesh,plus(CENTRE,scale(normal,plate+PLATE/2)),stem,normal,.12,PLATE,seat+.04,seat+.32,START|END,Material.STEELWORK);
+        for(int i=0;i<4;i++)bar(mesh,plus(CENTRE,plus(scale(stem,seat+.18+((i&1)==0?-.10:.10)),scale(run,(i&2)==0?-.04:.04))),normal,stem,.02,.02,plate+PLATE,plate+PLATE+STANDOFF,0,Material.BOLT);
+        var positioner=new Frame(plus(CENTRE,plus(scale(stem,seat+.18),scale(normal,shift))),normal,run);
+        positioner(mesh,positioner,.12,.13,.03,.20,.03,Material.SERVICE_CASE);
+        positioner(mesh,positioner,.109,.119,.20,.209,.025,Material.SERVICE_COVER);
+        // The feedback lever from the stem's coupling to the positioner's back, outside the plate.
+        double lever=seat+.20*yoke;
+        mesh.bar(plus(CENTRE,plus(scale(stem,lever),scale(run,Math.max(.013,.035*od)))),plus(CENTRE,plus(scale(stem,lever),plus(scale(normal,plate+PLATE+STANDOFF),scale(run,.075)))),.012,stem,Material.FLANGE);
         if(!accessory)arms(mesh,key,h,od,PipeSizes.sides(od));
     }
-    private static void positioner(Mesh mesh,Frame frame,double width,double height,double back,double front,double radius,Material material){var a=new ArrayList<double[]>();var b=new ArrayList<double[]>();var vertical=cross(frame.axis(),frame.ref());for(double[] corner:new double[][]{{width-radius,height-radius,0},{-width+radius,height-radius,Math.PI/2},{-width+radius,-height+radius,Math.PI},{width-radius,-height+radius,3*Math.PI/2}})for(int j=0;j<4;j++){double angle=corner[2]+j*Math.PI/6;var offset=plus(scale(frame.ref(),corner[0]+radius*DeterministicMath.cos(angle)),scale(vertical,corner[1]+radius*DeterministicMath.sin(angle)));a.add(plus(frame.along(back),offset));b.add(plus(frame.along(front),offset));}mesh.flat(a,neg(frame.axis()),material);mesh.flat(b,frame.axis(),material);for(int i=0;i<a.size();i++)mesh.add(List.of(a.get(i),a.get((i+1)%a.size()),b.get((i+1)%a.size()),b.get(i)),frame.along((back+front)/2),FLAT,material,null,null);}
+    private static void positioner(Mesh mesh,Frame frame,double width,double height,double back,double front,double radius,Material material){var a=new ArrayList<double[]>();var b=new ArrayList<double[]>();var vertical=cross(frame.axis(),frame.ref());for(double[] corner:new double[][]{{width-radius,height-radius,0},{-width+radius,height-radius,Math.PI/2},{-width+radius,-height+radius,Math.PI},{width-radius,-height+radius,3*Math.PI/2}})for(int j=0;j<2;j++){double angle=corner[2]+j*Math.PI/2;var offset=plus(scale(frame.ref(),corner[0]+radius*DeterministicMath.cos(angle)),scale(vertical,corner[1]+radius*DeterministicMath.sin(angle)));a.add(plus(frame.along(back),offset));b.add(plus(frame.along(front),offset));}mesh.flat(a,neg(frame.axis()),material);mesh.flat(b,frame.axis(),material);for(int i=0;i<a.size();i++)mesh.add(List.of(a.get(i),a.get((i+1)%a.size()),b.get((i+1)%a.size()),b.get(i)),frame.along((back+front)/2),FLAT,material,null,null);}
 
     /** A placed valve block's own flanged arms to both ends of its run, from the casting's end faces at {@code half}. */
     private static void arms(Mesh mesh,LineGeometry.Key key,double half,double od,int sides) {

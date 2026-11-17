@@ -151,15 +151,8 @@ public final class InstrumentService {
             if(value==null){sensorNotice(player,"occupied");return;}
             if(!player.isCreative())held.shrink(1);
         }
-        if(key.mount().equals("valve_sensor")){
-            var record=world.registrations().get(host.identity());
-            if(record!=null){var source=remove?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE:kind==Sensor.Kind.PRESSURE?com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.PRESSURE:com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW;
-                double target=source==com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.VOLUME_FLOW?.01:200000;
-                if(record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous&&(remove||previous.source()==source))target=previous.target();
-                var next=record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve previous?previous.withSource(remove?previous.source():source,remove?null:value.instance(),store.revision(host.identity())):new com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve(source,target,remove?null:value.instance(),store.revision(host.identity()));
-                editSensorValve(record,next);
-            }
-        }
+        // Fitting a sensor writes no law: the player selects a valve's sensor on its screen (ValveSignal). Removing one frees the laws that selected it.
+        if(remove)release(host.identity(),value.instance());
         if(kind==Sensor.Kind.FLOW){world.flowmeter(host.identity(),!remove);metered(host);}
         // A speed pickup binds or frees its turbine's governor valve through a queued shaft event.
         if(kind==Sensor.Kind.SPEED)governor(host.identity(),remove?null:value.instance());
@@ -169,15 +162,27 @@ public final class InstrumentService {
     private void editSensorValve(WorldTopologyLedger.Registration record,com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve control){
         var d=record.device();world.edit(d.id(),record.revision(),d.withControl(control),record.spec());
     }
-    private void recoverSensors(long host,ServerPlayer player,Level level,BlockPos position,boolean drop){for(var sensor:store.sensors(host))if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW)world.forgetFlowmeter(host);if(sensor.kind()==Sensor.Kind.SPEED)governor(host,null);if(drop)refund(player,level,position,sensorItem(sensor.kind()));}}
+    /**
+     * Sensor {@code instance}, on {@code host}, is gone: each control valve that selected it, the host itself or one its data
+     * cables reach, loses its sensor by a queued edit and stands open (ValveSignal.released). A valve the cables no longer
+     * reach keeps its law and has no signal (ValveSignal.linked).
+     */
+    private void release(long host,UUID instance){
+        var reached=new java.util.TreeSet<Long>(world.controls().connectedHosts(host));reached.add(host);
+        for(long id:reached){var record=world.registrations().get(id);
+            if(record!=null&&record.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve law){var next=com.wormzjl.icheme.runtime.control.ValveSignal.released(law,instance);if(next!=null)editSensorValve(record,next);}}
+    }
+    private void recoverSensors(long host,ServerPlayer player,Level level,BlockPos position,boolean drop){for(var sensor:store.sensors(host))if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());release(host,sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW)world.forgetFlowmeter(host);if(sensor.kind()==Sensor.Kind.SPEED)governor(host,null);if(drop)refund(player,level,position,sensorItem(sensor.kind()));}}
     /** Queues turbine {@code host}'s governor binding (W3): {@code sensor} installed, or null removed. */
     private void governor(long host,UUID sensor){world.shafts().queue(new ShaftTrains.Governor(host,sensor));}
+    /** The sensors installed on {@code host}: what a control valve's screen lists from it (ValveSignal.choices). */
+    public List<Sensor.Installed> sensors(long host){return store.sensors(host);}
     /** The speed pickup installed on turbine {@code host}, or null (W3). */
     public UUID speedSensor(long host){for(var s:store.sensors(host))if(s.kind()==Sensor.Kind.SPEED)return s.instance();return null;}
     private void recoverInvalidSensors(){for(var sensor:store.allSensors()){
         var host=world.instrumentHost(sensor.key().host());if(host==null)continue;
         if(Sensor.mounts(host,sensor.kind()).stream().anyMatch(m->m.id().equals(sensor.key().mount())))continue;
-        if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),false);metered(host);}if(sensor.kind()==Sensor.Kind.SPEED)governor(host.identity(),null);refund(null,host.entity().getLevel(),host.entity().getBlockPos(),sensorItem(sensor.kind()));sync(host);world.markViewDirty(host.identity());}
+        if(store.removeSensor(sensor.key(),sensor.instance())!=null){sensorSamples.remove(sensor.instance());release(host.identity(),sensor.instance());if(sensor.kind()==Sensor.Kind.FLOW){world.flowmeter(host.identity(),false);metered(host);}if(sensor.kind()==Sensor.Kind.SPEED)governor(host.identity(),null);refund(null,host.entity().getLevel(),host.entity().getBlockPos(),sensorItem(sensor.kind()));sync(host);world.markViewDirty(host.identity());}
     }}
     public static ItemStack sensorItem(Sensor.Kind kind){return new ItemStack(switch(kind){case PRESSURE->ModItems.PRESSURE_PROBE.get();case TEMPERATURE->ModItems.TEMPERATURE_PROBE.get();case FLOW->ModItems.FLOWMETER.get();case LEVEL->ModItems.DIGITAL_LEVEL_METER.get();case SPEED->ModItems.SPEED_SENSOR.get();case ALARM,ANALYSER->throw new IllegalArgumentException("An alarm or an analyser is an equipment channel");});}
     /** The readings of {@code host}'s sensors; a host with none reads nothing, not even its pipe (code base review R1). */

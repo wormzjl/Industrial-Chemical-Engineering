@@ -601,6 +601,11 @@ public final class LevelLoopGameTests {
 
     /** A sensor of {@code kind} fitted from {@code item} on {@code host}, as a player fits one; its instance. */
     static UUID fit(AssemblyGameTests.Plant plant, BlockPos host, Sensor.Kind kind, net.minecraft.world.item.Item item) {
+        return fit(plant, host, kind, item, null);
+    }
+
+    /** {@link #fit(AssemblyGameTests.Plant, BlockPos, Sensor.Kind, net.minecraft.world.item.Item)} on mount {@code mount} alone (null: any of the kind's). */
+    static UUID fit(AssemblyGameTests.Plant plant, BlockPos host, Sensor.Kind kind, net.minecraft.world.item.Item item, @org.jetbrains.annotations.Nullable String mount) {
         var level = plant.level;
         var h = InstrumentHosts.at(level, host);
         if (h == null) throw new IllegalStateException("No instrument host at " + host.toShortString());
@@ -609,6 +614,7 @@ public final class LevelLoopGameTests {
         fitter.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(item));
         var why = new ArrayList<String>();
         for (var m : Sensor.mounts(h, kind)) {
+            if (mount != null && !mount.equals(m.id())) continue;
             why.add(m.id() + " at " + m.centre() + (InstrumentHosts.clear(level, h, m) ? "" : " blocked by "
                     + BlockPos.betweenClosedStream(m.bounds()).filter(p -> !level.getBlockState(p).canBeReplaced() && !p.equals(host)).map(p -> p.toShortString() + "=" + level.getBlockState(p).getBlock()).toList()));
             var eye = m.centre().add(m.normal().scale(1.6));
@@ -616,7 +622,7 @@ public final class LevelLoopGameTests {
             fitter.lookAt(EntityAnchorArgument.Anchor.EYES, m.centre());
             plant.world.instruments().requestSensor(fitter, InteractionHand.MAIN_HAND, kind);
             for (var s : plant.world.instruments().allSensors())
-                if (s.key().host() == h.identity() && s.kind() == kind) return s.instance();
+                if (s.key().host() == h.identity() && s.kind() == kind && (mount == null || mount.equals(s.key().mount()))) return s.instance();
         }
         throw new IllegalStateException("The " + kind + " sensor did not fit on " + host.toShortString() + ": mounts " + why);
     }

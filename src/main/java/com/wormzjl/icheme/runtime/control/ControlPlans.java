@@ -100,7 +100,8 @@ final class ControlPlans {
             if (record != null
                     && record.device().control() instanceof FlowControl.ControlValve base
                     && pipe.control() instanceof FlowControl.ControlValve) {
-                var law = valvePlans.getOrDefault(host, base);
+                // The cadence's plan (a wired loop's), else the valve's own law where it has its signal, else bare: open.
+                var law = ValveSignal.slice(world, host, base, valvePlans.get(host));
                 if (!pipe.control().equals(law)) next = next.withControl(law);
             }
             if (pipe.heat() != null) {

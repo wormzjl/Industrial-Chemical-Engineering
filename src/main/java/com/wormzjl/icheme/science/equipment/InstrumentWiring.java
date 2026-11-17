@@ -10,8 +10,9 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * added.
  *
  * <p>Batch 2026-11-10-custom-shader-system (CUSTOM_SHADER_SYSTEM_PLAN.md section 4.4, W2): each
- * transmitter's cable leaves its head through an Ex gland in the head's bottom M20 entry and drops
- * in a drip loop to the skin (owner X9 A); a 20 mm branch carries that one light-blue IS cable on
+ * transmitter's cable leaves its head through an Ex gland in the head's bottom M20 entry and runs
+ * in straight legs to the skin (owner, 2026-11-17: "keep wires straight and save polygons"; it
+ * was a drip loop, X9 A); a 20 mm branch carries that one light-blue IS cable on
  * its strap to the baseline, a 25 mm perforated tray that carries every cable joined beyond it
  * (owner X10 A) to the service enclosure's side entry. Finish v runs in metres along each run; the
  * textures repeat every {@link #PERIOD} (owner X1).
@@ -31,8 +32,11 @@ public final class InstrumentWiring {
     /** Single-pair armoured IS cable, m across its sheath (real cables are 10 to 14 mm). */
     static final double CABLE = .012;
 
-    /** The Ex gland below the head's entry, m long (hex body and shroud), and the drip loop's drop below it, m. */
-    static final double GLAND = .045, DROP = .09;
+    /** Sides of a cable tube: a 12 mm cable is a square tube with round normals. */
+    static final int SIDES = 4;
+
+    /** The Ex gland below the head's entry, m long (hex body and shroud), and the cable's least straight drop below it, m. */
+    static final double GLAND = .045, DROP = .02;
 
     /**
      * One wiring run. {@code cables} holds, per segment between consecutive points, how many cables
@@ -54,7 +58,7 @@ public final class InstrumentWiring {
 
     /**
      * What a wiring polygon shows: steel hardware on the block atlas ({@code cables == 0}), the
-     * branch cable (ribbon or drip-loop tube) or a tray of {@code cables}.
+     * branch cable (ribbon or lead tube) or a tray of {@code cables}.
      */
     public record Finish(int cables, boolean tray) {
         public static final Finish HARDWARE = new Finish(0, false), BRANCH = new Finish(1, false);
@@ -315,9 +319,8 @@ public final class InstrumentWiring {
 
     /**
      * The ATEX entry at a transmitter head (owner X9 A): an Ex gland screwed down into the head's
-     * bottom M20 entry, then the cable as a tube dropping in a drip loop below the gland, so water
-     * runs off its lowest point before it reaches the gland, to the skin, where its branch starts.
-     * Returns that foot.
+     * bottom M20 entry, then the cable as a tube in straight legs to the skin, where its branch
+     * starts. Returns that foot.
      */
     private static double[] lead(
             ServiceSurface surface,
@@ -345,7 +348,7 @@ public final class InstrumentWiring {
                 b[2] = foot[2];
                 path = List.of(exit, a, b, foot);
             }
-            cables.addAll(tube(path, detail));
+            cables.addAll(legs(path, detail));
             return foot;
         }
         int axis = Math.abs(p.normal()[0]) > .5 ? 0 : 2, sign = p.normal()[axis] > 0 ? 1 : -1;
@@ -360,11 +363,9 @@ public final class InstrumentWiring {
             var low = surface.ray(axis, wanted, sign, PROCESS);
             if (Math.abs(low[axis] - level[axis]) < .06) foot = low;
         } catch (IllegalArgumentException kept) {
-            // No skin below the head: the loop rises to the level foot.
+            // No skin below the head: the cable meets the level foot.
         }
-        var out = new double[3];
-        out[axis] = sign;
-        cables.addAll(tube(loop(exit, foot, out), detail));
+        cables.addAll(legs(straight(exit, foot), detail));
         return foot;
     }
 
@@ -395,23 +396,28 @@ public final class InstrumentWiring {
     }
 
     /**
-     * The drip loop from the gland's exit to the skin at {@code foot}: a cubic curve that drops
-     * {@link #DROP} below the exit and meets the skin from {@code out}, its lowest point below both
-     * ends.
+     * The cable from the gland's exit to the skin at {@code foot} in straight legs: down at least
+     * {@link #DROP} to the foot's height (or below a foot that is not lower), level to the skin, then
+     * along the skin to the foot.
      */
-    static List<double[]> loop(double[] exit, double[] foot, double[] out) {
-        var p1 = down(exit, DROP);
-        var p2 = down(plus(foot, scale(out, .03)), .8 * DROP);
+    static List<double[]> straight(double[] exit, double[] foot) {
+        double y = Math.min(foot[1], exit[1] - DROP);
+        return List.of(exit, new double[] {exit[0], y, exit[2]}, new double[] {foot[0], y, foot[2]}, foot);
+    }
+
+    /** {@code points} as straight tubes, one a leg, each a cable's radius longer at a corner so the legs close. */
+    static List<Polygon> legs(List<double[]> points, RenderDetail detail) {
+        var out = new ArrayList<Polygon>();
         var path = new ArrayList<double[]>();
-        int steps = 10;
-        for (int k = 0; k <= steps; k++) {
-            double t = (double) k / steps, s = 1 - t;
-            path.add(
-                    plus(
-                            plus(scale(exit, s * s * s), scale(p1, 3 * s * s * t)),
-                            plus(scale(p2, 3 * s * t * t), scale(foot, t * t * t))));
+        for (var p : points)
+            if (path.isEmpty() || SurfaceSection.distance(path.getLast(), p) > 1e-6) path.add(p);
+        for (int i = 1; i < path.size(); i++) {
+            var a = path.get(i - 1);
+            var b = path.get(i);
+            var along = scale(unit(sub(b, a)), CABLE / 2);
+            out.addAll(tube(List.of(i > 1 ? sub(a, along) : a, i + 1 < path.size() ? plus(b, along) : b), detail));
         }
-        return path;
+        return out;
     }
 
     /**
@@ -424,7 +430,7 @@ public final class InstrumentWiring {
         for (var p : points)
             if (path.isEmpty() || SurfaceSection.distance(path.getLast(), p) > 1e-6) path.add(p);
         if (path.size() < 2) return out;
-        int sides = detail.sides(8);
+        int sides = Math.min(SIDES, detail.sides(8));
         double r = CABLE / 2;
         double[] ref = null;
         double[][] previous = null, previousNormal = null;
