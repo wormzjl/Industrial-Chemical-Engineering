@@ -71,6 +71,13 @@ phase carry-over.
   package 4's selection with `SeparationTest`, `SeparationDrawTest` and `ProcessOutletTest`, 56 classes, 531 tests,
   0 failed. Not run: the other classes that load `Separation`. A larger drop only raises a settling number, so a
   vessel that carried nothing at 0.1 mm (package 2's verification: no reference moved) carries nothing now.
+- 2026-11-17: the drum page's Carry-over group (owner: "B: own group"), the column's part. `DeviceColumn.Input`
+  carries a vessel's carry-over meters (`withCarried`; empty for any other device), `rows` puts them in a group right
+  under Readings, `DeviceMeters.carried` builds them in percent by volume, one for each outlet the law acts on.
+  `GuiPrototypes.separator` draws the shipped builder (a lying drum with a boot; a standing drum, the gas's meter
+  alone); both sheets looked at. Run: the 77 classes `affected.mjs select --since` names for the commit, without
+  `LanguageFilesTest` (500 tests, 0 failed). No payload changes: the screen does not set the meters yet (open items).
+- 2026-11-17: the owner: "delegate all implementation to opus". From here this session plans, briefs and reviews.
 
 ## Documents
 
@@ -89,7 +96,10 @@ phase carry-over.
   (the `Separators` hook) and a component to `PassiveNetwork.Inventory`. That batch's plan is not edited from here; its
   desalter (WP6) takes its phase separation from this model and sets its own drop size.
 - Owner's call: whether a kettle and a still's pot take the gas law (plan section 5.1).
-- The drum page's readings: option A or B of the prototype; then `FluidView.Tank` carries `carried` to the client (a wire
-  payload change in the runtime lane, which batch `2026-11-16-solute-reaction-system` holds).
+- The Carry-over group's data: `FluidView.Tank` carries what the vessel's outlets carry and which laws act on it,
+  `TankOutlets.tank` fills it, `FluidDeviceScreen` sets the meters. The view crosses the wire as JSON, so the payload
+  changes: it needs a protocol number (`icheme-7`; batch `2026-11-16-solute-reaction-system` holds `icheme-6` on its
+  branch, not yet reserved on `main`) and a line in `FluidDeviceScreen`, `NetworkProtocol` and `FORMATS.md`, which
+  that batch also changes. Waits for the owner's word; an Opus thread builds it.
 - Package 3 (the held receiver) joins the hydraulics batch's cycle package. The rest of package 4 after the sizer:
   the 330 other classes the selector names for it are not run (history: the drops).
