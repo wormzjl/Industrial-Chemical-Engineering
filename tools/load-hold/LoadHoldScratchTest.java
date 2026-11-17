@@ -71,6 +71,15 @@ class LoadHoldScratchTest {
         var row3=new FluidCheckpointCodec.IndexRow(ISLAND,4,30,row.online(),9961,0,row.cadence(),row.base(),row.since(),row.start(),row.horizon(),new FluidCheckpointCodec.UnitRef(3,offset,length,FluidCheckpointCodec.sha256(pack3,offset,length)));
         var old=FluidCheckpointCodec.island(pack3,row3,core.epoch(),core.strings(),byKey);
         out("pack 3: "+summary(old.snapshot()));
+        // The trim law on paper at 9961 (LOAD_HOLD_REVIEW.md, "Built"): the pump's rise and the series valve's drop in the committed
+        // interval, and the speed share whose curve gives the rise less the drop with 5 % left on the valve at the measured flow.
+        {var r=old.snapshot().lastResult().orElseThrow();var g=r.graph();int pe=-1;for(int e=0;e<g.pipes().size();e++)if(g.pipes().get(e).control() instanceof FlowControl.Machine)pe=e;
+            var m=(FlowControl.Machine)g.pipes().get(pe).control();var suction=g.reservoirs().get(g.pipes().get(pe).first()).state();double rho=suction.mass()/suction.volume();
+            double q=r.endpointFlows()[pe]/rho,rise=r.endpointHeads()[pe],drop=ShaftTrains.seriesValveDrop(r,pe);
+            double kappa=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.suctionKappa(model,m,suction);
+            double trim=com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(m.law(),q,(rise-drop)/(1-com.wormzjl.icheme.science.machine.SpeedControl.VALVE_TRIM_MARGIN),rho,suction.pressure(),kappa,com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,m.speed());
+            out(String.format(Locale.ROOT,"    trim at 9961: speed %.4f, flow %.4f kg/s = %.5f m3/s (set %.5f), suction %.1f kPa, density %.2f, rise %.1f kPa (%.2f m), valve drop %.1f kPa (%.3f of the rise), trimmed speed %.4f (a step of %.4f)",
+                    m.speed(),r.endpointFlows()[pe],q,m.setFlow(),suction.pressure()/1e3,rho,rise/1e3,rise/(rho*9.80665),drop/1e3,drop/rise,trim,trim-m.speed()));}
         {var g=old.snapshot().graph();var r=old.snapshot().lastResult().orElseThrow();for(int p=0;p<g.pipes().size();p++){var q=g.pipes().get(p);if(!(q.control() instanceof FlowControl.Passive)||q.heat()!=null)out("    9961 pipe "+p+" "+q.first()+">"+q.second()+" "+q.control()+" heat="+(q.heat()==null?"-":q.heat().getClass().getSimpleName()+" "+q.heat().shape())+" flow="+f(r.averageMassFlows()[p])+" mode="+r.endpointModes().get(p));}}
         {var g=loaded.checkpoint().islands().stream().filter(e->e.snapshot().id()==ISLAND).findFirst().orElseThrow().snapshot().graph();for(int p=0;p<g.pipes().size();p++){var q=g.pipes().get(p);if(q.heat()!=null)out("    13400 pipe "+p+" heat="+q.heat().getClass().getSimpleName()+" "+q.heat().shape());}}
         var mixed=new ArrayList<FluidCheckpointCodec.IslandEntry>();
@@ -122,7 +131,7 @@ class LoadHoldScratchTest {
             out("    step attempts "+attempts.size()+(attempts.isEmpty()?"":" last "+attempts.subList(Math.max(0,attempts.size()-6),attempts.size())));
         }
         // The same job from the committed interval with only the pump's speed changed (an electric store's SPEED plan: 1 powered, 0 not).
-        for(double factor:new double[]{1.001,1.01,1.05}) {
+        for(double factor:new double[]{1.001,1.01,1.2}) {
             var pipes=new ArrayList<PassiveNetwork.Pipe>();
             for(var q:c.snapshot().pipes())pipes.add(q.control() instanceof FlowControl.Machine m?q.withControl(m.withSpeed(m.speed()*factor)):q);
             var g=new PassiveNetwork(c.snapshot().reservoirs(),List.copyOf(pipes),c.snapshot().scheduledTransfers());

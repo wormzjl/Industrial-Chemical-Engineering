@@ -102,7 +102,7 @@ public final class ControlConstraints {
     }
     /** Whether connections {@code a} and {@code b} carry one flow by the junction balances: the test {@link #series} and
      * {@link #moverBounds} group regulators by (option E1 of START_HOLD_REVIEW.md reads it for a flow valve and a pump). */
-    static boolean inSeries(PassiveNetwork graph,int a,int b) {
+    public static boolean inSeries(PassiveNetwork graph,int a,int b) {
         int edges=graph.pipes().size();var basis=junctionBasis(graph);
         double[] row=reduced(basis,unit(edges,a));
         return !same(row,new double[edges])&&same(row,reduced(basis,unit(edges,b)));
