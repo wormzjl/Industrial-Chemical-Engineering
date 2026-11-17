@@ -22,6 +22,11 @@ flow. The drum page gains a level of separation for gas, oil and water. The stir
   (the bands are saved with the vessel's facts). D4 A (no gas bubbles) stands as the default, not asked. D1 B changes
   law 2 of the separator batch: on an oil-rich feed the water leaves clean, and `SeparationDrawTest`'s
   undersized-boot case moves when package 2 is built. Documents only.
+- 2026-11-17: the page's option sheets, drawn by an Opus subagent in `GuiPrototypes.separation` (prototypes only, no
+  kit or screen change) with the group's English lines: A, a bar a phase; B, a meter a phase; C, A's group and a
+  section of the vessel on the glass; each on a half-settled standing drum and a lying drum over its gas limit. What a
+  build needs: A a labelled bar row in the kit (`Column.Bar` has no label, colour or value); B nothing; C that row,
+  a Minecraft-free section drawing and a glass shared by the table and the drawing. Not run: any test.
 
 ## Documents
 
@@ -35,7 +40,6 @@ flow. The drum page gains a level of separation for gas, oil and water. The stir
 ## Open items
 
 - D6, the page's sheet, after the option sheets are rendered; D4 A (no gas bubbles) is a default the owner can overrule.
-- The page's option sheets (plan section 6) are not rendered.
 - Blocked until batch `2026-11-16-solute-reaction-system` releases `PassiveNetwork.java`, `IslandSets.java`,
   `PhysicalRegistry.java` and `FluidFacts.java`: packages 1b and 2. Package 1a (the law alone) is free.
 - To read before package 1a: Richardson and Zaki's exponent steps (from memory in the plan; the owner fetches the
