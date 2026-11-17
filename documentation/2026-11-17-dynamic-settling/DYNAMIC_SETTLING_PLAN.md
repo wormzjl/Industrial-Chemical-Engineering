@@ -1,8 +1,7 @@
 # Dynamic settling: plan (2026-11-17)
 
 Class: PHYSICS (owner's options, with numbers). Lanes: fluid laws (`Separation`), runtime (the slice plan, the facts),
-client (the drum page, the tank display), flowsheet (the sizer's rows, only with decision D2 B), fluid step (only with
-decision D3 B). Nothing is coded. It follows batch `2026-11-17-three-phase-separator` and replaces its law's time form.
+client (the drum page, the tank display), flowsheet (the sizer's rows, decision D2 B), fluid step (decision D3 B). Nothing is coded. It follows batch `2026-11-17-three-phase-separator` and replaces its law's time form.
 
 ## 1. The request
 
@@ -142,6 +141,12 @@ becomes a band's third number. Interfacial tension is not a property the materia
 
 ## 5. Owner decisions
 
+Taken by the owner on 2026-11-17, each the recommended option: **D1 B** (the minority liquid is in drops), **D2 B**
+(Richardson and Zaki's swarm law), **D3 B** (a standing drum's bottom outlet draws by layer, as the last package),
+**D5 A** (the bands are saved with the vessel's facts). D4 A (no gas bubbles) was not asked: it is the default and the
+owner can overrule it. D6 (the page's sheet) is open until the sheets are rendered. The options stay below as the
+record of what was weighed.
+
 D1. **Which liquid is dispersed.**
 - A (today): every feed is mixed both ways, up to volume for volume. An undersized boot on an oil-rich feed gives
   water with 13 % to 40 % of oil in it (section 3's table). Keeps every number of the separator batch.
@@ -196,7 +201,7 @@ D6. **The page** (section 6): the owner picks from rendered sheets.
 
 ## 7. Work packages
 
-Order: 1, 2, 3, then 4 and 5 by the owner's decisions. Each package is one Opus thread with its own brief (owner,
+Order: 1a, 1b, 2, 3, 4, 5 (D1 B, D2 B, D3 B and D5 A are taken, so every package is in). Each package is one Opus thread with its own brief (owner,
 2026-11-17: "delegate all implementation to opus"); this plan is the design. Before each, read `rules/physics.md`;
 package 2 `rules/saves.md` and `rules/engine-schedule.md`; package 3 the `gui-creation` skill.
 
@@ -208,7 +213,7 @@ Blocked until batch `2026-11-16-solute-reaction-system` releases them: `PassiveN
    - `record Band(double turbid, double held)` with `NONE`; `record Slice(Band next, double carried)`;
      `static Slice advance(Band band, double volume, double area, double speed, double inflow, double ratio,
      double outflow, double seconds)`: L2, 16 parts, plain arithmetic, no `Math.pow`.
-   - D2 B: `static double swarm(double speed, double drop, double viscosity, double density, double fraction)`,
+   - `static double swarm(double speed, double drop, double viscosity, double density, double fraction)`,
      the exponent by Richardson and Zaki's steps on the single drop's Reynolds number, through `DeterministicMath.pow`.
    - `SettlingBandTest` on section 3's two tables: the steady ratios to 1e-4; the clean periods within 5 %; a batch
      clear within one part of `h / v_s`; a sized layer exactly 0 on every slice; a band never negative and never over
@@ -224,7 +229,7 @@ Blocked until batch `2026-11-16-solute-reaction-system` releases them: `PassiveN
      `PhysicalRegistry` (a re-specified vessel: kept while its geometry is the same, else settled);
      `ConservativeTransport` keeps them through `inventory().with(...)`. `PassiveStepSolver` line 1554 rebuilds
      generator nodes only: no change.
-   - D5 A: `FluidFacts`, the vessel's inventory record, four doubles appended, schema bumped, a file of the older
+   - `FluidFacts` (D5 A), the vessel's inventory record, four doubles appended, schema bumped, a file of the older
      schema reads settled; `FORMATS.md` row; `FluidFactsTest` round trip and the older schema's read.
    - Tests in `SeparationDrawTest` (its interval fixtures): an undersized boot is clean for the first slices, then
      carries, and its ratio reaches today's law within 1 %; the feed stopped, the page's value falls to 0 within
@@ -238,9 +243,9 @@ Blocked until batch `2026-11-16-solute-reaction-system` releases them: `PassiveN
    draws the band; `DeviceMeters` and `DeviceColumn` the group of the sheet the owner picked; the protocol version;
    gates `DeviceColumnTest` (every case at every width, `assertInLine`), `DeviceMetersTest`, `FluidPacketCodecTest`;
    the sheets rendered from the shipped builder.
-4. **The sizer** (D2 B only): `Separation.numbers` and `DrumSizing.rate` take the design feed's dispersed fraction;
+4. **The sizer** (D2 B): `Separation.numbers` and `DrumSizing.rate` take the design feed's dispersed fraction;
    the settling rows read the swarm speed. Moved results listed with old and new values.
-5. **The bottom outlet** (D3 B only): `PhaseDraw.order` for `LIQUID` on a vessel of two liquids, the mixed segment
+5. **The bottom outlet** (D3 B): `PhaseDraw.order` for `LIQUID` on a vessel of two liquids, the mixed segment
    replaced by the settled order and the band's shares; one campaign of at most 200 seeds.
 
 ## 8. Ruled out
