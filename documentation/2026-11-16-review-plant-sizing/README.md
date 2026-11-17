@@ -98,6 +98,11 @@ the `Rig` class keep their sizes.
   `LanguageFilesTest` (and a fault of the new test, fixed). The fluid GameTests found 7 routed nozzles unjoined. The
   trace showed the rig placing bare default states, which a player never places; `Plant.pipe` now places a player's
   state. Fluid GameTests 116 of 116.
+- 2026-11-17, branch `claude/column-testing-sizing-26b5b9` (main thread; owner: "The pump should have a built-in
+  control valve to regulate the flow and exposed to DCS, instead of relying on external valves", "add it to pump model
+  as well"): [PUMP_VALVE_PLAN.md](PUMP_VALVE_PLAN.md). A constructed centrifugal pump with a set flow compiles to its
+  curve and a flow valve in series; the set flow is a loop output and on the DCS; the drawn model, the sizer and the
+  rig follow; the drive's speed regulation stays. Plan only, nothing built.
 
 ## Full crude unit, sized (2026-11-17)
 
