@@ -172,6 +172,13 @@ the `Rig` class keep their sizes.
   crude unit at spawn on the first load through the rig's own entry (`ColumnOperationReviewWorld.rig(level, base,
   options)`; `Plant` takes a `ServerLevel`) and starts it in the rig's order on the server tick (`ColumnTestWorld`).
   Run task `runReviewClient`; flag `icheme_fluid_test_column_test_world`. review-operation passes as before (1340 devices); the preset batch `review-column-test-world` passes (column past its first solve 707 online ticks after the build). Not seen in a client.
+- 2026-11-18, column test world in the mod (owner: "it should be a ingame world type", listed "In the mod, for players"): the
+  preset is `icheme:column_test`, in the mod's data and its `en_us.json` (`generator.icheme.column_test`), listed by
+  `runClient` and a released jar; `runReviewClient` removed. Moved to `src/main/.../testworld/`: `PlantBuilder` (the
+  GameTests' `Plant`), `CrudeUnitPlant` (the rig, its sizing, layouts and options), `ColumnTestWorld`; the flag is a format of
+  the mod (`icheme_column_test_world`, FORMATS.md); chat messages at the start's end. A move: no plant result changed.
+  review-operation passes (1340 devices; charge share 0.800, 0.583, 0.588, 1.000 at reports 1 to 4 as at f31db3a4b; reports
+  5 and 6 differ after a round-deadline hold at tick 2495); review-column-test-world passes under the new id.
 
 ## Full crude unit, sized (2026-11-17)
 
