@@ -482,7 +482,7 @@ public final class ColumnOperationReviewWorld {
         lines.put(BOTTOMS, bores.remove(BOTTOMS));
         for (var unit : List.of(CHARGE_PUMP, RESIDUE_EXCHANGER, HEATER))
             IChemE.LOGGER.info("review_operation sizing readings unit=\"{}\" {} rating={}", unit, all.run().reports().containsKey(unit) ? all.run().reports().get(unit).readings() : all.run().reports().keySet(),
-                    require(sized, unit).rating().readings().stream().map(r -> r.limit().name() + "=" + String.format(Locale.ROOT, "%.4g", r.value())).toList());
+                    require(sized, unit).rating().readings().stream().map(r -> r.limit().name() + "=" + String.format(Locale.ROOT, "%.4g[%.4g,%.4g]", r.value(), r.low(), r.high())).toList());
         var chargePump = pump(require(sized, CHARGE_PUMP).size());
         var exchanger = (ExchangerSizing.Size) require(sized, RESIDUE_EXCHANGER).size();
         if (exchanger.shells() != 1) throw new IllegalStateException("The residue exchanger is sized at " + exchanger.shells() + " shells: the rig places one");
@@ -536,11 +536,11 @@ public final class ColumnOperationReviewWorld {
     /** The crude unit's sheet names (owner, 2026-11-17): its feed, units and the streams between them. */
     static final String CRUDE = "crude", CHARGE_PUMP = "P-101", RESIDUE_EXCHANGER = "E-101", HEATER = "H-101", CHARGE = "charge", BOTTOMS = "bottoms", RESIDUE = "residue";
     /**
-     * The crude from storage, K and Pa: 25 °C, at 10 bar so it reaches the charge pump liquid; the charge pump's outlet, Pa
+     * The crude from storage, K and Pa: 25 °C, at a storage tank's 1.5 bar, so the charge pump makes the line's head and its drive holds the flow (PUMP_DRIVE_FLOW_REVIEW.md); the charge pump's outlet, Pa
      * (16 bar: the coolers' and the exchanger's tube drops, the heater's coils, 7.6 bar, and the feed valve above the tower's
      * 2.5 bar); the residue's outlet from the residue exchanger, K (200 °C, as the sheet example's E-101).
      */
-    static final double CRUDE_TEMPERATURE = 298.15, CRUDE_SUPPLY = 10e5, CHARGE_PRESSURE = 16e5, RESIDUE_TEMPERATURE = 473.15;
+    static final double CRUDE_TEMPERATURE = 298.15, CRUDE_SUPPLY = 1.5e5, CHARGE_PRESSURE = 16e5, RESIDUE_TEMPERATURE = 473.15;
     /** The heater's fuel gas supply, Pa: methane at 3 bar. */
     static final double FUEL_SUPPLY = 3e5;
 
