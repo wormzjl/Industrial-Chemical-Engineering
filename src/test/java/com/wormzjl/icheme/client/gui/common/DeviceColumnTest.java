@@ -53,6 +53,13 @@ class DeviceColumnTest {
         return liquids ? List.of(new DeviceColumn.Meter("carried_water", "1.8", "%", "a hint"), new DeviceColumn.Meter("carried_oil", "100.0", "%", "a hint"), gas) : List.of(gas);
     }
 
+    /** A vessel's levels of separation (batch 2026-11-17-dynamic-settling): gas, oil and water; gas and oil; the gas's alone. */
+    private static List<DeviceColumn.Phase> separation(int phases) {
+        var all = List.of(new DeviceColumn.Phase("separation_gas", 1, "100.0", "a hint"), new DeviceColumn.Phase("separation_oil", .55, "55.0", "a hint"),
+                new DeviceColumn.Phase("separation_water", .4, "40.0", null));
+        return all.subList(0, phases);
+    }
+
     /** Every kind as an editor and a reader, a valve in every setting, a mover with and without its switch, every phase basis. */
     private static List<Case> cases() {
         var out = new ArrayList<Case>();
@@ -68,6 +75,13 @@ class DeviceColumnTest {
         for (boolean edit : new boolean[]{true, false})
             for (boolean liquids : new boolean[]{true, false})
                 out.add(new Case("RESERVOIR carry-over " + (liquids ? "boot" : "gas") + (edit ? "" : " reader"), input(Kind.RESERVOIR, edit, false, DeviceColumn.Valve.NONE, 6, "", "volume").withCarried(carried(liquids))));
+        // Its levels of separation (batch 2026-11-17-dynamic-settling): three, two and one phase, with and without Carry-over.
+        for (boolean edit : new boolean[]{true, false})
+            for (int phases = 1; phases <= 3; phases++)
+                for (boolean carry : new boolean[]{true, false}) {
+                    var in = input(Kind.RESERVOIR, edit, false, DeviceColumn.Valve.NONE, 6, "", "volume").withSeparation(separation(phases));
+                    out.add(new Case("RESERVOIR separation " + phases + (carry ? " carry-over" : "") + (edit ? "" : " reader"), carry ? in.withCarried(carried(phases == 3)) : in));
+                }
         return out;
     }
 
@@ -275,6 +289,7 @@ class DeviceColumnTest {
                     if (p.row() instanceof Column.Group g) assertEquals(1, p.texts().size(), c.name() + " a plate in one line at " + width + ": " + g.title());
                     if (p.row() instanceof Column.Reading r) assertTrue(p.texts().contains(r.unit()), c.name() + " a unit whole at " + width + ": " + r.unit());
                     if (p.row() instanceof Column.Field f) assertTrue(p.texts().contains(f.unit()), c.name() + " a unit whole at " + width + ": " + f.unit());
+                    if (p.row() instanceof Column.Gauge g) assertTrue(p.texts().contains(g.unit()), c.name() + " a unit whole at " + width + ": " + g.unit());
                 }
                 column.slots();
                 assertInLine(column, c.name() + " at " + width);
@@ -288,7 +303,7 @@ class DeviceColumnTest {
     static void assertInLine(Column column, String what) {
         var boxes = new java.util.HashSet<List<Integer>>();
         for (var p : column.rows())
-            if (p.row() instanceof Column.Field || p.row() instanceof Column.Reading || p.row() instanceof Column.Setting) {
+            if (p.row() instanceof Column.Field || p.row() instanceof Column.Reading || p.row() instanceof Column.Setting || p.row() instanceof Column.Gauge) {
                 var box = p.slots().values().iterator().next();
                 boxes.add(List.of(box.x(), box.w()));
                 assertTrue(M.width(p.texts().getLast()) <= Column.UNIT, what + ": a unit wider than its place after the box: " + p.texts().getLast());
@@ -352,6 +367,74 @@ class DeviceColumnTest {
         assertEquals(carrying.carried(), carrying.withFixedDuty("x").carried());
         assertEquals(carrying.carried(), carrying.withIntegrity(null, null).carried());
         assertEquals(carrying.carried(), carrying.withSuction(null).carried());
+    }
+
+    /**
+     * Batch 2026-11-17-dynamic-settling (owner: "C: bars and section"): a vessel's levels of separation are a Separation
+     * group between Readings and Carry-over, one gauge a phase it holds in the phase's colour; none without them. The
+     * gauges' bars start and end at one x, and their values and units stand in line with the meters'. The group moves no
+     * widget, and the other inputs carry it along.
+     */
+    @Test
+    void aVesselsSeparationStandsBetweenReadingsAndCarryOver() {
+        var texts = new HeatControlColumnTest.Recording();
+        var plain = input(Kind.RESERVOIR, true, false, DeviceColumn.Valve.NONE, 6, "", "volume");
+        for (var row : DeviceColumn.rows(plain.withCarried(carried(true)), texts))
+            assertFalse(row instanceof Column.Group g && g.title().equals(texts.get("device_group.separation")), "no group without levels");
+        for (int phases = 1; phases <= 3; phases++)
+            for (boolean carry : new boolean[]{true, false}) {
+                var in = plain.withSeparation(separation(phases));
+                if (carry) in = in.withCarried(carried(true));
+                var rows = DeviceColumn.rows(in, texts);
+                int readings = -1, group = -1, carryOver = -1;
+                for (int i = 0; i < rows.size(); i++)
+                    if (rows.get(i) instanceof Column.Group g) {
+                        if (g.title().equals(texts.get("device_group.readings"))) readings = i;
+                        if (g.title().equals(texts.get("device_group.separation"))) group = i;
+                        if (g.title().equals(texts.get("device_group.carry_over"))) carryOver = i;
+                    }
+                assertTrue(readings >= 0 && group == readings + 1, "the group stands right under Readings: " + readings + ", " + group);
+                assertEquals(carry ? group + 1 : -1, carryOver, "Carry-over right under it");
+                var separation = (Column.Group) rows.get(group);
+                assertEquals(texts.get("separation.hint"), separation.hint());
+                var gauges = separation.rows().stream().map(r -> (Column.Gauge) r).toList();
+                assertEquals(List.of("separation:separation_gas", "separation:separation_oil", "separation:separation_water").subList(0, phases), gauges.stream().map(Column.Gauge::key).toList());
+                assertEquals(List.of(DeviceColumn.PHASE_COLOURS[2], DeviceColumn.PHASE_COLOURS[0], DeviceColumn.PHASE_COLOURS[1]).subList(0, phases), gauges.stream().map(Column.Gauge::colour).toList());
+                assertEquals(List.of(1.0, .55, .4).subList(0, phases), gauges.stream().map(Column.Gauge::share).toList());
+                assertEquals(List.of("100.0", "55.0", "40.0").subList(0, phases), gauges.stream().map(Column.Gauge::value).toList());
+                for (var g : gauges) assertEquals("%", g.unit());
+                for (int width = 300; width <= 790; width += 7) {
+                    var column = place(in, texts, width);
+                    var bars = new java.util.HashSet<List<Integer>>();
+                    var boxes = new java.util.HashSet<List<Integer>>();
+                    for (var p : column.rows()) {
+                        if (p.row() instanceof Column.Gauge g) {
+                            bars.add(List.of(p.mark().x(), p.mark().right()));
+                            assertTrue(p.mark().inside(p.rect()) && p.mark().w() >= Column.GAUGE_MIN, "a bar inside its row at " + width + ": " + p.mark());
+                            assertEquals(g.hint(), column.hover(p.rect().x() + 1, p.rect().y() + 1), "its hover at " + width);
+                            assertEquals("%", p.texts().getLast(), "the unit in its place at " + width);
+                        }
+                        // Explicitly: a gauge's box place is a meter's, so its value and unit stand in line with them.
+                        if (p.row() instanceof Column.Gauge || p.row() instanceof Column.Reading) {
+                            var box = p.slots().values().iterator().next();
+                            boxes.add(List.of(box.x(), box.w()));
+                        }
+                    }
+                    assertEquals(1, bars.size(), "the bars start and end at one x at " + width + ": " + bars);
+                    assertEquals(1, boxes.size(), "the gauges' values and units in line with the meters' at " + width + ": " + boxes);
+                    assertInLine(column, "separation " + phases + " at " + width);
+                    var without = carry ? plain.withCarried(carried(true)) : plain;
+                    assertEquals(widgets(place(without, texts, width)), widgets(column), "no widget moves at " + width);
+                }
+            }
+        var settling = plain.withSeparation(separation(3)).withCarried(carried(true));
+        assertEquals(separation(3), settling.separation());
+        assertEquals(settling.separation(), settling.withFixedDuty("x").separation());
+        assertEquals(settling.separation(), settling.withIntegrity(null, null).separation());
+        assertEquals(settling.separation(), settling.withSuction(null).separation());
+        assertEquals(settling.separation(), settling.withCarried(List.of()).separation());
+        assertEquals(settling.carried(), settling.withSeparation(List.of()).carried());
+        assertThrows(IllegalArgumentException.class, () -> new DeviceColumn.Phase("separation_oil", 1.2, "120.0", null));
     }
 
     /** What an editor sets on each kind, by its fields' keys; a reader sets nothing. */

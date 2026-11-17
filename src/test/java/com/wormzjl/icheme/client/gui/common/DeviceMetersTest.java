@@ -102,6 +102,23 @@ class DeviceMetersTest {
         assertEquals(List.of(), m.carried(null, null, null));
     }
 
+    /** Batch 2026-11-17-dynamic-settling: one level of separation for each phase the vessel holds, in percent. */
+    @Test
+    void aVesselsLevelsOfSeparationReadInPercentForThePhasesItHolds() {
+        var tank = new FluidView.Tank(2, false, 0, 0, 4.0, 101325.0, 120000.0);
+        var view = new FluidView(2, 1, 0, 0, "FULL", null, 0, List.of(), null, 1, List.of(), null, null, List.of(), tank);
+        var m = new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MOLAR,
+                TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_HOUR, true, T);
+        // A standing drum half settled: the gas clean, the oil and the water partly turbid.
+        assertEquals(List.of(new DeviceColumn.Phase("separation_gas", 1.0, "100.0", "separation_gas.hint"), new DeviceColumn.Phase("separation_oil", .55, "55.0", "separation_oil.hint"),
+                new DeviceColumn.Phase("separation_water", .40, "40.0", "separation_water.hint")), m.separation(1.0, .55, .40));
+        // A drum without water: gas and oil.
+        assertEquals(List.of(new DeviceColumn.Phase("separation_gas", .74, "74.0", "separation_gas.hint"), new DeviceColumn.Phase("separation_oil", 1.0, "100.0", "separation_oil.hint")),
+                m.separation(.74, 1.0, null));
+        // No phase: no gauge, so no group.
+        assertEquals(List.of(), m.separation(null, null, null));
+    }
+
     /** The Carry-over meters read off the view's tank (protocol icheme-7): the server's carry-over, none without it. */
     @Test
     void aVesselsCarryOverMetersReadTheViewsTank() {

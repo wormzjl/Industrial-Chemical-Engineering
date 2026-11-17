@@ -110,19 +110,24 @@ public final class DeviceColumn {
      */
     public record Input(Kind kind, boolean canEdit, boolean switchable, boolean powerOn, String pressureUnit, String temperatureUnit, String flowTime,
                         Valve valve, @Nullable Opening opening, boolean recoverable, @Nullable Level level, @Nullable String junction,
-                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction,@Nullable String fixedDuty,@Nullable Wall wall,@Nullable Trim trim,List<Meter> carried) {
+                        List<Column.Row> lead, @Nullable Phases phases, List<Meter> readings, @Nullable Drive drive, @Nullable Power power, @Nullable Suction suction,@Nullable String fixedDuty,@Nullable Wall wall,@Nullable Trim trim,List<Meter> carried,List<Phase> separation) {
+        /** A vessel without a level of separation: no Separation group (batch 2026-11-17-dynamic-settling). */
+        public Input(Kind kind,boolean canEdit,boolean switchable,boolean powerOn,String pressureUnit,String temperatureUnit,String flowTime,Valve valve,@Nullable Opening opening,boolean recoverable,@Nullable Level level,@Nullable String junction,List<Column.Row> lead,@Nullable Phases phases,List<Meter> readings,@Nullable Drive drive,@Nullable Power power,@Nullable Suction suction,@Nullable String fixedDuty,@Nullable Wall wall,@Nullable Trim trim,List<Meter> carried) {this(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,wall,trim,carried,List.of());}
+        /** This input with a vessel's levels of separation, one a phase it holds: the Separation group, between Readings and Carry-over. */
+        public Input withSeparation(List<Phase> value){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,wall,trim,carried,value);}
         /** A device whose outlets the separation law does not act on: no Carry-over group. */
         public Input(Kind kind,boolean canEdit,boolean switchable,boolean powerOn,String pressureUnit,String temperatureUnit,String flowTime,Valve valve,@Nullable Opening opening,boolean recoverable,@Nullable Level level,@Nullable String junction,List<Column.Row> lead,@Nullable Phases phases,List<Meter> readings,@Nullable Drive drive,@Nullable Power power,@Nullable Suction suction,@Nullable String fixedDuty,@Nullable Wall wall,@Nullable Trim trim) {this(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,wall,trim,List.of());}
         /** This input with a vessel's carry-over meters: the Carry-over group, under Readings. */
-        public Input withCarried(List<Meter> value){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,wall,trim,value);}
+        public Input withCarried(List<Meter> value){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,wall,trim,value,separation);}
         public Input(Kind kind,boolean canEdit,boolean switchable,boolean powerOn,String pressureUnit,String temperatureUnit,String flowTime,Valve valve,@Nullable Opening opening,boolean recoverable,@Nullable Level level,@Nullable String junction,List<Column.Row> lead,@Nullable Phases phases,List<Meter> readings,@Nullable Drive drive,@Nullable Power power,@Nullable Suction suction) {this(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,null,null,null);}
-        public Input withFixedDuty(String text){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,text,wall,trim,carried);}
+        public Input withFixedDuty(String text){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,text,wall,trim,carried,separation);}
         /** This input with a constructed device's wall and a control valve's trim (batch 2026-11-16-fouling-corrosion, WP4). */
-        public Input withIntegrity(@Nullable Wall w,@Nullable Trim v){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,w,v,carried);}
+        public Input withIntegrity(@Nullable Wall w,@Nullable Trim v){return new Input(kind,canEdit,switchable,powerOn,pressureUnit,temperatureUnit,flowTime,valve,opening,recoverable,level,junction,lead,phases,readings,drive,power,suction,fixedDuty,w,v,carried,separation);}
         public Input {
             lead = List.copyOf(lead);
             readings = List.copyOf(readings);
             carried = List.copyOf(carried);
+            separation = List.copyOf(separation);
         }
 
         /** A device that is no pump: no Suction and Health groups. */
@@ -134,7 +139,7 @@ public final class DeviceColumn {
 
         /** This input with a pump's readings. */
         public Input withSuction(@Nullable Suction value) {
-            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value,fixedDuty,wall,trim,carried);
+            return new Input(kind, canEdit, switchable, powerOn, pressureUnit, temperatureUnit, flowTime, valve, opening, recoverable, level, junction, lead, phases, readings, drive, power, value,fixedDuty,wall,trim,carried,separation);
         }
 
         /** A device with no driver and no fans. */
@@ -289,9 +294,42 @@ public final class DeviceColumn {
             readings.add(new Column.Reading("meter:" + i, t.get(m.key()), m.value(), m.unit(), m.hint()));
         }
         if (!readings.isEmpty()) rows.add(new Column.Group(t.get("device_group.readings"), null, readings));
+        if (!in.separation().isEmpty()) rows.add(separation(in.separation(), t));
         if (!in.carried().isEmpty()) rows.add(carryOver(in.carried(), t));
         if (in.power() != null) rows.add(power(in.power(), t));
         return rows;
+    }
+
+    /**
+     * A phase's level of separation in a vessel (batch 2026-11-17-dynamic-settling, law L7): the share of its volume that
+     * stands in its own clear layer, 0 to 1, as shown, with its hover.
+     *
+     * @param key {@code separation_gas}, {@code separation_oil} or {@code separation_water}
+     */
+    public record Phase(String key, double share, String value, @Nullable String hint) {
+        public Phase {
+            if (!(share >= 0 && share <= 1)) throw new IllegalArgumentException("A level of separation outside 0 to 1");
+        }
+    }
+
+    /**
+     * A vessel's Separation group (batch 2026-11-17-dynamic-settling, decision D6 C: "bars and section"): a gauge a phase
+     * it holds, filled to its level of separation in the phase's colour ({@link #PHASE_COLOURS}), the value in percent.
+     */
+    static Column.Group separation(List<Phase> phases, HeatControlColumn.Texts t) {
+        var rows = new ArrayList<Column.Row>();
+        for (var ph : phases) rows.add(new Column.Gauge("separation:" + ph.key(), t.get(ph.key()), ph.share(), phaseColour(ph.key()), ph.value(), "%", ph.hint()));
+        return new Column.Group(t.get("device_group.separation"), t.get("separation.hint"), rows);
+    }
+
+    /** A Separation gauge's colour: the vapour's for the gas, the oil's, the aqueous liquid's. */
+    public static int phaseColour(String key) {
+        return switch (key) {
+            case "separation_gas" -> PHASE_COLOURS[2];
+            case "separation_oil" -> PHASE_COLOURS[0];
+            case "separation_water" -> PHASE_COLOURS[1];
+            default -> throw new IllegalArgumentException("No phase " + key);
+        };
     }
 
     /**

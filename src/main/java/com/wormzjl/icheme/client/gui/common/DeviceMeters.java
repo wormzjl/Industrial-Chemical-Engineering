@@ -294,6 +294,17 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         if(liquidInGas!=null)rows.add(new DeviceColumn.Meter("carried_liquid",value(100*liquidInGas),"%",tr("carried_liquid.hint")));
         return List.copyOf(rows);
     }
+    /**
+     * A vessel's levels of separation (batch 2026-11-17-dynamic-settling, law L7), 0 to 1: the gas's, the oil's, the
+     * water's. Null for a phase the vessel does not hold: no gauge. The view does not carry them yet.
+     */
+    public List<DeviceColumn.Phase> separation(@Nullable Double gas,@Nullable Double oil,@Nullable Double water){
+        var rows=new ArrayList<DeviceColumn.Phase>();
+        if(gas!=null)rows.add(new DeviceColumn.Phase("separation_gas",gas,value(100*gas),tr("separation_gas.hint")));
+        if(oil!=null)rows.add(new DeviceColumn.Phase("separation_oil",oil,value(100*oil),tr("separation_oil.hint")));
+        if(water!=null)rows.add(new DeviceColumn.Phase("separation_water",water,value(100*water),tr("separation_water.hint")));
+        return List.copyOf(rows);
+    }
     /** The Carry-over meters of the view's vessel ({@link FluidView.Tank#carried()}); none where no law acts on it. */
     public List<DeviceColumn.Meter> carried(){
         var tank=data.view().tank();

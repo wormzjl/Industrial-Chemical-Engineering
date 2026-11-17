@@ -340,6 +340,97 @@ class KitLayoutTest {
         assertEquals(List.of("Mass flow", "kg/min"), flows.texts().subList(0, flows.lead()), "the label's words and the unit, each whole");
     }
 
+    /**
+     * Batch 2026-11-17-dynamic-settling (owner: "C: bars and section"): a gauge is a label, a bar in its colour and a value
+     * in a meter's box place with its unit after it. A group's bars start after its widest gauge label and end at one x;
+     * where that leaves too short a bar, every gauge label goes above its bar. Its slot takes no widget; its hover is its
+     * hint. The skin draws the bar as a split bar, the value right-aligned in the box place.
+     */
+    @Test
+    void aGaugeIsALabelledBarInLineWithTheMeters() {
+        var rows = List.<Column.Row>of(new Column.Group("Separation", null, List.of(new Column.Reading("m", "Pressure", "2.50", "bar", null),
+                new Column.Gauge("g", "Gas", 1, 0xFFB3C0CA, "100.0", "%", "The gas's share"), new Column.Gauge("w", "Water", .4, 0xFF549BD2, "40.0", "%", null))));
+        for (int width = 150; width <= 300; width++) {
+            var column = Column.place(rows, 0, 0, width, M);
+            var meter = column.rows().get(1);
+            var gas = column.rows().get(2);
+            var water = column.rows().get(3);
+            assertEquals(meter.slots().get("m").x(), gas.slots().get("g").x(), "the value in a meter's box place at " + width);
+            assertEquals(Column.BOX, gas.slots().get("g").w());
+            assertEquals(List.of(gas.mark().x(), gas.mark().right()), List.of(water.mark().x(), water.mark().right()), "bars from one x to one x at " + width);
+            assertEquals(M.width("Water") + 6, gas.mark().x() - gas.rect().x(), "after the widest label at " + width);
+            assertTrue(gas.mark().right() <= gas.slots().get("g").right() - 4 - M.width(Column.GAUGE_VALUE), "the bar ends before the value at " + width);
+            assertEquals(List.of("Gas", "%"), gas.texts());
+            assertEquals("The gas's share", column.hover(gas.slots().get("g").x() + 2, gas.slots().get("g").y() + 2));
+            assertNull(column.hover(water.rect().x() + 1, water.rect().y() + 1), "no hint, no hover");
+            assertEquals(gas.rect().bottom(), water.rect().y());
+        }
+        assertThrows(IllegalArgumentException.class, () -> new Column.Gauge("g", "Gas", 1.01, 0, "", "%", null));
+        // A label that leaves less than the shortest bar: the group's gauge labels go above their bars, from the row's left.
+        var narrow = Column.place(List.<Column.Row>of(new Column.Gauge("g", "Settled oil layer", .5, 0, "50.0", "%", null), new Column.Gauge("h", "Gas", .5, 0, "50.0", "%", null)), 0, 0, 120, M);
+        for (var p : narrow.rows()) {
+            assertEquals(0, p.mark().x(), "the bar from the row's left");
+            assertTrue(p.slots().values().iterator().next().y() > p.rect().y(), "the label above");
+            for (var t : p.texts()) assertTrue(M.width(t) <= 120, "nothing cut: " + t);
+        }
+        // Drawn: the label muted, the bar as a split bar, the value right-aligned in its box place, the unit after the box.
+        var texts = new ArrayList<String>();
+        var splits = new ArrayList<String>();
+        var canvas = new Canvas() {
+            @Override
+            public Measure measure() {
+                return M;
+            }
+
+            @Override
+            public void fill(int x0, int y0, int x1, int y1, int argb) {
+            }
+
+            @Override
+            public void text(String text, int x, int y, int argb) {
+                texts.add(text + "@" + x);
+            }
+
+            @Override
+            public void text(String text, float x, float y, float scale, int argb) {
+            }
+
+            @Override
+            public void clip(Rect area) {
+            }
+
+            @Override
+            public void unclip() {
+            }
+        };
+        var skin = new Skin() {
+            @Override
+            public void mark(Canvas c, int x, int y, boolean selected) {
+            }
+
+            @Override
+            public void bar(Canvas c, Rect r, double share) {
+            }
+
+            @Override
+            public void scrollbar(Canvas c, Rect track, Rect thumb, boolean dragging) {
+            }
+
+            @Override
+            public void split(Canvas c, Rect r, double[] amounts, int[] colours) {
+                splits.add(r.x() + "," + r.right() + " " + amounts[0] + " " + Integer.toHexString(colours[0]));
+            }
+        };
+        var column = Column.place(rows, 0, 0, 200, M);
+        column.draw(canvas, 0, skin);
+        var water = column.rows().get(3);
+        var box = water.slots().get("w");
+        assertTrue(splits.contains(water.mark().x() + "," + water.mark().right() + " 0.4 ff549bd2"), "the bar as a split bar: " + splits);
+        assertTrue(texts.contains("Water@" + water.rect().x()), "its label: " + texts);
+        assertTrue(texts.contains("40.0@" + (box.right() - 4 - M.width("40.0"))), "its value right-aligned in the box place: " + texts);
+        assertTrue(texts.contains("%@" + (box.right() + 3)), "its unit after the box: " + texts);
+    }
+
     /** Owner: "need to differentiate editable value fields with non-editable"; GUI_TOOLKIT_PLAN.md section 13. */
     @Test
     void aReadingIsPlacedAsAFieldAndDrawnAsAMeter() {

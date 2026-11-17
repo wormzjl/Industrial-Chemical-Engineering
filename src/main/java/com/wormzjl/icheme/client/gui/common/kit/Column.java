@@ -14,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
  * correctly"): a text wider than its row wraps, and a button row whose texts do not fit side by side stacks its buttons.
  */
 public final class Column {
-    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Wide, Reading, Setting, Buttons, Bar, Split, Gap {
+    public sealed interface Row permits Group, Line, Paragraph, Choice, Field, Wide, Reading, Setting, Buttons, Bar, Split, Gauge, Gap {
     }
 
     /**
@@ -130,6 +130,20 @@ public final class Column {
         }
     }
 
+    /**
+     * A labelled bar of one share (batch 2026-11-17-dynamic-settling, the drum's Separation group; owner: "C: bars and
+     * section"): its label, a bar filled to {@code share} (0 to 1) in {@code colour}, then {@code value} right-aligned in a
+     * meter's box place ({@link #BOX}) and {@code unit} in the unit place ({@link #UNIT}), so values and units stand in
+     * line with the {@link Reading} rows above and below. The bars of a group's gauges start at one x, after the group's
+     * widest gauge label, and end at one x; where a label leaves the bar too short, the group's gauge labels go above
+     * their bars. Its slot, keyed {@code key}, is its box place and takes no widget; its hover is {@code hint}.
+     */
+    public record Gauge(String key, String label, double share, int colour, String value, String unit, @Nullable String hint) implements Row {
+        public Gauge {
+            if (!(share >= 0 && share <= 1)) throw new IllegalArgumentException("A gauge's share outside 0 to 1");
+        }
+    }
+
     public record Gap(int height) implements Row {
         public Gap {
             if (height < 0) throw new IllegalArgumentException("A negative gap");
@@ -171,12 +185,22 @@ public final class Column {
      * A row as placed: its rect, its widget slots by key, the lines it draws, how many of them lead (a field's label;
      * after them its unit), and its hover text (or null). A group is placed before its rows, its rect around them.
      */
-    public record Placed(Row row, Rect rect, Map<String, Rect> slots, List<String> texts, int lead, @Nullable String hover) {
+    public record Placed(Row row, Rect rect, Map<String, Rect> slots, List<String> texts, int lead, @Nullable String hover, @Nullable Rect mark) {
         public Placed {
             slots = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(slots));
             texts = List.copyOf(texts);
         }
+
+        /** A row that draws no mark of its own placement ({@code mark}: a {@link Gauge}'s bar). */
+        public Placed(Row row, Rect rect, Map<String, Rect> slots, List<String> texts, int lead, @Nullable String hover) {
+            this(row, rect, slots, texts, lead, hover, null);
+        }
     }
+
+    /** The widest value a {@link Gauge} shows, right-aligned in its box place: the bar ends before it. */
+    public static final String GAUGE_VALUE = "100.0";
+    /** A gauge bar's height, and the shortest bar its label leaves beside it before the group's labels go above. */
+    public static final int GAUGE_BAR = 8, GAUGE_MIN = 20;
 
     private final List<Placed> rows;
     private final Rect bounds;
@@ -211,6 +235,9 @@ public final class Column {
      */
     private static int place(List<? extends Row> rows, int x, int y, int w, Measure m, Metrics h, List<Placed> out) {
         boolean beside = rows.stream().filter(Column::labelled).allMatch(row -> beside(label(row), unit(row), share(row, w), m));
+        // A group's gauges: their bars start after the widest gauge label (-1: every gauge label above its bar).
+        int widest = rows.stream().filter(Gauge.class::isInstance).mapToInt(row -> m.width(((Gauge) row).label())).max().orElse(0);
+        int gauge = widest + 6 + GAUGE_MIN <= gaugeEnd(w, m) ? widest + 6 : -1;
         int at = y;
         for (var row : rows) {
             if (row instanceof Group g) {
@@ -222,7 +249,7 @@ public final class Column {
                 out.set(index, new Placed(g, new Rect(x, at, w, bottom + GROUP_GAP - at), Map.of(), title, title.size(), g.hint()));
                 at = bottom + GROUP_GAP;
             } else {
-                var p = place(row, x, at, w, m, h, beside);
+                var p = row instanceof Gauge g ? gauge(g, x, at, w, m, h, gauge) : place(row, x, at, w, m, h, beside);
                 out.add(p);
                 at = p.rect().bottom();
             }
@@ -312,8 +339,34 @@ public final class Column {
                 yield new Placed(row, new Rect(x, y, w, 12 + s.shares().size() * Measure.LINE + 2), slots, texts, texts.size(), s.hint());
             }
             case Gap g -> new Placed(row, new Rect(x, y, w, g.height()), slots, List.of(), 0, null);
+            case Gauge g -> gauge(g, x, y, w, m, h, -1);
             case Group g -> throw new IllegalStateException("A group is placed with its rows");
         };
+    }
+
+    /** Where a gauge's bar ends in a row {@code w} wide, from the row's left: before the widest value, right-aligned in the box place. */
+    private static int gaugeEnd(int w, Measure m) {
+        return w - FIELD_TAIL + 4 + BOX - 4 - m.width(GAUGE_VALUE) - 4;
+    }
+
+    /**
+     * A gauge's row: beside ({@code start} ≥ 0, the bar's start from the row's left, the same for its group) its label on
+     * the bar's line; else its label wrapped to the row on the lines above a bar across the row's left. The box place
+     * after the bar holds the value; the unit after it in the unit place, or a wider unit as the label's last line.
+     */
+    private static Placed gauge(Gauge g, int x, int y, int w, Measure m, Metrics h, int start) {
+        boolean under = under(g.unit(), m);
+        var lines = new ArrayList<>(start >= 0 ? List.of(g.label()) : m.wrap(g.label(), w));
+        if (under) lines.add(g.unit());
+        int above = start >= 0 ? 0 : lines.size() * Measure.LINE, line = h.line() + 1;
+        var texts = new ArrayList<>(lines);
+        texts.add(under ? "" : g.unit());
+        var box = new Rect(x + w - FIELD_TAIL + 4, y + above, BOX, line);
+        var bar = new Rect(x + Math.max(0, start), y + above + 2, gaugeEnd(w, m) - Math.max(0, start), GAUGE_BAR);
+        var slots = new LinkedHashMap<String, Rect>();
+        slots.put(g.key(), box);
+        int height = above + (start >= 0 ? Math.max(line, lines.size() * Measure.LINE + 2) : line);
+        return new Placed(g, new Rect(x, y, w, height), slots, texts, lines.size(), g.hint(), bar);
     }
 
     /**
@@ -432,6 +485,15 @@ public final class Column {
                         String value = shares.get(i).value();
                         skin.text(c, value, r.right() - c.measure().width(value), y, Palette.TEXT);
                     }
+                }
+                case Gauge g -> {
+                    var bar = p.mark().moved(0, dy);
+                    var box = p.slots().get(g.key()).moved(0, dy);
+                    int top = box.y() > r.y() ? r.y() : bar.y();
+                    for (int i = 0; i < p.lead(); i++) skin.text(c, texts.get(i), r.x(), top + i * Measure.LINE, Palette.MUTED);
+                    skin.gauge(c, bar, g.share(), g.colour());
+                    skin.text(c, g.value(), box.right() - 4 - c.measure().width(g.value()), bar.y(), Palette.TEXT);
+                    skin.text(c, texts.getLast(), box.right() + 3, bar.y(), Palette.MUTED);
                 }
                 case Buttons ignored -> {
                 }

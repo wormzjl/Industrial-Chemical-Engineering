@@ -13,8 +13,10 @@ import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.PumpCurve;
 import com.wormzjl.icheme.client.gui.common.StillDoor;
 import com.wormzjl.icheme.client.gui.common.ConverterDoor;
+import com.wormzjl.icheme.client.gui.common.VesselSection;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.Format;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
@@ -1355,14 +1357,6 @@ public final class GuiPrototypes {
 
     /** As {@link #device(Door, DeviceColumn.Input, Map)} with {@code rows} in place of the input's own (a prototype's added groups); the name is the caller's. */
     static Rect device(Door d, DeviceColumn.Input in, List<Column.Row> rows, Map<String, String> drafts) {
-        return device(d, in, rows, drafts, Map.of());
-    }
-
-    /**
-     * As {@link #device(Door, DeviceColumn.Input, List, Map)}, and draws each row of {@code overlays} (a prototype's row the
-     * kit has no kind for, held by a {@link Column.Gap}; looked up by identity) on screen in its placed rect.
-     */
-    static Rect device(Door d, DeviceColumn.Input in, List<Column.Row> rows, Map<String, String> drafts, Map<Column.Row, BiConsumer<Door, Rect>> overlays) {
         int side = FluidGuiLayout.side(d.w), top = FluidGuiLayout.DOOR_TOP, bottom = d.h - FluidGuiLayout.DOOR_FOOT;
         var column = Column.place(rows, 10, top, side - 10, d.m, Column.Metrics.COMPACT);
         var view = new ScrollView();
@@ -1381,10 +1375,6 @@ public final class GuiPrototypes {
                     if (spec.soft()) d.skin.softKey(d.c, view.onScreen(r), spec.text(), false);
                     else d.skin.button(d.c, view.onScreen(r), spec.text(), spec.latched() ? Skin.Press.CURRENT : !spec.active() ? Skin.Press.OFF : Skin.Press.REST, false);
                 }
-            else if (!overlays.isEmpty()) {
-                var draw = overlays.entrySet().stream().filter(e -> e.getKey() == p.row()).map(Map.Entry::getValue).findFirst();
-                draw.ifPresent(f -> f.accept(d, view.onScreen(p.rect())));
-            }
         }
         d.c.unclip();
         view.drawBar(d.c, d.skin);
@@ -1430,157 +1420,68 @@ public final class GuiPrototypes {
     }
 
     /**
-     * A drum's level of separation (batch 2026-11-17-dynamic-settling, law L7, decision D6 open): the group Separation
-     * between Readings and Carry-over, one row a phase the vessel holds. Three options, each on a standing drum half
-     * settled and a lying drum without water over its gas limit: A a bar a phase in its phase colour (drawn here, the kit
-     * has no such row); B an LED meter a phase; C A's group, and a section of the vessel on the glass beside the table.
+     * A drum's level of separation (batch 2026-11-17-dynamic-settling, law L7; owner: "C: bars and section", D6 C), from the
+     * shipped builders: the group Separation between Readings and Carry-over, one gauge a phase the vessel holds
+     * ({@link DeviceColumn.Input#withSeparation}, {@link Column.Gauge}). Three sheets each on a standing drum half settled
+     * and a lying drum without water over its gas limit: A the gauges alone; B an LED meter a phase (the option not
+     * taken, drawn from {@link Column.Reading} rows); C, the one built, the gauges and the vessel's section on the glass
+     * beside the table ({@link VesselSection}).
      */
     static List<Prototype> separation() {
-        record Case(String file, String title, String name, boolean standing, String[] values, String carried, DeviceColumn.Phases phases, double[] layers) {}
-        // layers: gas, clear oil, turbid band, clear water, as shares of the vessel's height from the top.
+        record Case(String file, String title, String name, boolean lying, Double[] shares, String carried, DeviceColumn.Phases phases, double level, double oil, double turbid, double water) {}
         var cases = List.of(
-                new Case("standing", "Standing drum", "V-102", true, new String[]{"100.0", "55.0", "40.0"}, "0.0", phases("volume", 30, 20, 50, 0),
-                        new double[]{.5, .5 * .45, .5 * .35, .5 * .20}),
-                new Case("gas-limit", "Lying drum", "V-103", false, new String[]{"74.0", "100.0", null}, "26.0", phases("volume", 50, 0, 50, 0),
-                        new double[]{.5, .5, 0, 0}));
+                new Case("standing", "Standing drum", "V-102", false, new Double[]{1.0, .55, .40}, "0.0", phases("volume", 30, 20, 50, 0), .5, .45, .35, .20),
+                new Case("gas-limit", "Lying drum", "V-103", true, new Double[]{.74, 1.0, null}, "26.0", phases("volume", 50, 0, 50, 0), .5, 1, 0, 0));
         String[] keys = {"separation_gas", "separation_oil", "separation_water"};
-        int[] colours = {DeviceColumn.PHASE_COLOURS[2], DeviceColumn.PHASE_COLOURS[0], DeviceColumn.PHASE_COLOURS[1]};
+        int[] layers = {VesselSection.GAS_LAYER, VesselSection.OIL_LAYER, VesselSection.WATER_LAYER};
         var base = List.of(meter("temperature", "40.0", "°C"), meter("pressure", "2.50", "bar"), new DeviceColumn.Meter("net_flow", "0.0", "kg/h", TEXTS.get("net_flow.hint")));
         var out = new ArrayList<Prototype>();
         for (String option : new String[]{"a-bars", "b-meters", "c-section"})
             for (var k : cases) {
+                var separation = new ArrayList<DeviceColumn.Phase>();
+                var labels = new ArrayList<VesselSection.Label>();
+                for (int i = 0; i < 3; i++) {
+                    if (k.shares()[i] == null) continue;
+                    String value = Format.number(100 * k.shares()[i]);
+                    separation.add(new DeviceColumn.Phase(keys[i], k.shares()[i], value, TEXTS.get(keys[i] + ".hint")));
+                    labels.add(new VesselSection.Label(TEXTS.get(keys[i]) + " " + value + " %", layers[i]));
+                }
                 var input = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false,
                         new DeviceColumn.Level(.5, "885.0", "1770.0", false), null, List.of(), k.phases(), base, null, null)
                         .withCarried(List.of(new DeviceColumn.Meter("carried_liquid", k.carried(), "%", TEXTS.get("carried_liquid.hint"))));
                 var rows = new ArrayList<>(DeviceColumn.rows(input, TEXTS));
-                var group = new ArrayList<Column.Row>();
-                var overlays = new java.util.IdentityHashMap<Column.Row, BiConsumer<Door, Rect>>();
-                var labels = new ArrayList<String>();
-                for (int i = 0; i < 3; i++) if (k.values()[i] != null) labels.add(TEXTS.get(keys[i]));
-                for (int i = 0; i < 3; i++) {
-                    String value = k.values()[i];
-                    if (value == null) continue;
-                    if (option.startsWith("b")) group.add(new Column.Reading("separation:" + i, TEXTS.get(keys[i]), value, "%", TEXTS.get(keys[i] + ".hint")));
-                    else {
-                        var row = new Column.Gap(12);
-                        group.add(row);
-                        String label = TEXTS.get(keys[i]);
-                        int colour = colours[i];
-                        overlays.put(row, (d, r) -> phaseBar(d, r, label, labels, Double.parseDouble(value) / 100, value, colour));
-                    }
+                if (option.startsWith("b")) {
+                    // The option not taken: a meter a phase, in the shipped group's place.
+                    var meters = new ArrayList<Column.Row>();
+                    for (var ph : separation) meters.add(new Column.Reading("separation:" + ph.key(), TEXTS.get(ph.key()), ph.value(), "%", ph.hint()));
+                    String carryOver = TEXTS.get("device_group.carry_over");
+                    int at = 0;
+                    while (at < rows.size() && !(rows.get(at) instanceof Column.Group g && g.title().equals(carryOver))) at++;
+                    rows.add(at, new Column.Group(TEXTS.get("device_group.separation"), TEXTS.get("separation.hint"), meters));
+                } else {
+                    input = input.withSeparation(separation);
+                    rows = new ArrayList<>(DeviceColumn.rows(input, TEXTS));
                 }
-                String carryOver = TEXTS.get("device_group.carry_over");
-                int at = 0;
-                while (at < rows.size() && !(rows.get(at) instanceof Column.Group g && g.title().equals(carryOver))) at++;
-                rows.add(at, new Column.Group(TEXTS.get("device_group.separation"), TEXTS.get("separation.hint"), group));
+                var shown = input;
+                var section = new VesselSection.Layers(k.lying(), k.level(), k.oil(), k.turbid(), k.water(), k.lying(), labels);
                 var table = List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"N-pentane", "62.1", "6.76"}, new String[]{"N-hexane", "37.9", "4.12"});
-                out.add(devicePage("separation-" + option + "-" + k.file(), WINDOW[0], WINDOW[1], rows, (d, s) -> {
+                var page = List.copyOf(rows);
+                out.add(devicePage("separation-" + option + "-" + k.file(), WINDOW[0], WINDOW[1], page, (d, s) -> {
                     d.title(k.title());
                     d.name(k.name(), false);
                     d.tabs(0, "Overview", "Outlets", "Datasheet");
                     d.status("RUNNING", Palette.ACCENT);
-                    var box = device(d, input, rows, Map.of(), overlays);
+                    var box = device(d, shown, page, Map.of());
                     if (option.startsWith("c")) {
                         int sw = Math.max(110, box.w() * 2 / 5), tw = box.w() - sw - 6;
                         contents(d, new Rect(box.x(), box.y(), tw, box.h()), 0, table);
                         d.c.vLine(box.x() + tw + 3, box.y(), box.bottom(), Palette.LINE);
-                        section(d, new Rect(box.right() - sw, box.y(), sw, box.h()), k.standing(), k.layers(), k.values(), keys, !k.standing());
+                        VesselSection.draw(d.c, new Rect(box.right() - sw, box.y(), sw, box.h()), section);
                     } else contents(d, box, 0, table);
                     d.footer(2, "Close", "Mole", "°C", "bar", "/h");
                 }));
             }
         return out;
-    }
-
-    /**
-     * Option A's row, which no kit row draws: the phase's name, a bar filled to {@code share} in the phase's {@code colour}
-     * from one x for every row of the group (after its widest label) to before the value, the value right-aligned in the
-     * meters' box place and "%" in the units' place, so values and units stand in line with the meters above and below.
-     */
-    static void phaseBar(Door d, Rect r, String label, List<String> labels, double share, String value, int colour) {
-        int widest = labels.stream().mapToInt(d.m::width).max().orElse(0);
-        int box = r.x() + r.w() - Column.FIELD_TAIL + 4, boxRight = box + Column.BOX;
-        int x0 = r.x() + widest + 6, x1 = boxRight - d.m.width("100.0") - 8;
-        d.skin.text(d.c, label, r.x(), r.y() + 2, Palette.MUTED);
-        d.skin.split(d.c, new Rect(x0, r.y() + 2, x1 - x0, 8), new double[]{share, 1 - share}, new int[]{colour, 0x00000000});
-        d.skin.text(d.c, value, boxRight - 4 - d.m.width(value), r.y() + 2, Palette.TEXT);
-        d.skin.text(d.c, "%", boxRight + 3, r.y() + 2, Palette.MUTED);
-    }
-
-    /**
-     * Option C's section on the glass, in {@code area}: the vessel's outline (a standing drum upright with 2:1 heads, a lying
-     * drum lying), inside it from the top gas, clear oil, the turbid band (a hatch of the oil and water colours) and
-     * clear water, {@code layers} giving each one's share of the height; each phase's level of separation beside its
-     * layer. {@code drops}: a few liquid drops in the gas space.
-     */
-    static void section(Door d, Rect area, boolean standing, double[] layers, String[] values, String[] keys, boolean drops) {
-        var c = d.c;
-        int oil = DeviceColumn.PHASE_COLOURS[0], water = DeviceColumn.PHASE_COLOURS[1], gas = 0x50B3C0CA;
-        int labelW = 0;
-        for (int i = 0; i < 3; i++) if (values[i] != null) labelW = Math.max(labelW, d.m.width(TEXTS.get(keys[i]) + " " + values[i] + " %"));
-        int room = area.w() - labelW - 14;
-        int vw, vh;
-        if (standing) {
-            vh = area.h() - 12;
-            vw = Math.min(room, (int) Math.round(vh * .42));
-        } else {
-            vw = room;
-            vh = Math.min(area.h() - 12, (int) Math.round(vw * .42));
-        }
-        int vx = area.x() + 2, vy = area.y() + (area.h() - vh) / 2;
-        int[] inset = new int[vh];
-        for (int y = 0; y < vh; y++) {
-            double yc = y + .5;
-            if (standing) {
-                double hh = vw / 4.0, t = yc < hh ? (hh - yc) / hh : yc > vh - hh ? (yc - (vh - hh)) / hh : 0;
-                inset[y] = (int) Math.round(vw / 2.0 * (1 - Math.sqrt(Math.max(0, 1 - t * t))));
-            } else {
-                double hw = vh / 4.0, t = Math.abs(yc - vh / 2.0) / (vh / 2.0);
-                inset[y] = (int) Math.round(hw * (1 - Math.sqrt(Math.max(0, 1 - t * t))));
-            }
-        }
-        // Layer bounds in px from the vessel's top: gas, clear oil, turbid, clear water.
-        int[] bound = new int[5];
-        double sum = 0;
-        for (int i = 0; i < 4; i++) {
-            sum += layers[i];
-            bound[i + 1] = (int) Math.round(vh * sum);
-        }
-        c.batch(() -> {
-            // The outline: each row a span 1 px wider than its own and its neighbours', then the inside over it.
-            for (int y = -1; y <= vh; y++) {
-                int in = Integer.MAX_VALUE;
-                for (int j = y - 1; j <= y + 1; j++) if (j >= 0 && j < vh) in = Math.min(in, inset[j]);
-                c.fill(vx + in - 1, vy + y, vx + vw - in + 1, vy + y + 1, Palette.MUTED);
-            }
-            for (int y = 0; y < vh; y++) {
-                int x0 = vx + inset[y], x1 = vx + vw - inset[y];
-                if (y < bound[1]) {
-                    c.fill(x0, vy + y, x1, vy + y + 1, 0xFF1A2228);
-                    c.fill(x0, vy + y, x1, vy + y + 1, gas);
-                } else if (y < bound[2]) c.fill(x0, vy + y, x1, vy + y + 1, oil);
-                else if (y < bound[3])
-                    for (int x = x0; x < x1; x += 2) c.fill(x, vy + y, Math.min(x + 2, x1), vy + y + 1, ((x - vx + y) / 2 & 1) == 0 ? oil : water);
-                else c.fill(x0, vy + y, x1, vy + y + 1, water);
-            }
-            if (drops) {
-                int[][] at = {{30, 18}, {48, 30}, {62, 12}, {74, 38}, {40, 44}, {86, 24}, {56, 52}};
-                for (var p : at) {
-                    int x = vx + vw * p[0] / 100, y = vy + bound[1] * p[1] / 60;
-                    c.fill(x, y, x + 2, y + 2, oil);
-                }
-            }
-        });
-        // The levels of separation beside their layers: gas, clear oil, clear water.
-        int[] layer = {0, 1, 3};
-        int lx = vx + vw + 8;
-        for (int i = 0; i < 3; i++) {
-            if (values[i] == null) continue;
-            int top = bound[layer[i]], bottom = bound[layer[i] + 1];
-            int y = vy + (top + bottom) / 2 - 4;
-            c.hLine(vx + vw + 2, lx - 2, y + 4, Palette.LINE);
-            c.text(TEXTS.get(keys[i]) + " " + values[i] + " %", lx, y, Palette.TEXT);
-        }
     }
 
     static DeviceColumn.Meter meter(String key, String value, String unit) {
