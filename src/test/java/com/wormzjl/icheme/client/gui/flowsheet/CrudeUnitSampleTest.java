@@ -489,9 +489,11 @@ class CrudeUnitSampleTest {
         @Test
         void p101() {
             var unit = alone.units().get("P-101");
-            assertEquals(new PumpSizing.Size(.30), unit.size());
+            // Auto takes the smallest bore whose rated flow holds the design flow with its 20 % spare (PUMP_DRIVE_FLOW_REVIEW.md,
+            // option B): 876 m³/h, so 0.35 m (1039 m³/h) at 70 % of it; it took 0.30 m (763 m³/h) at 96 % before.
+            assertEquals(new PumpSizing.Size(.35), unit.size());
             closest(unit.rating(), Limit.PUMP_RATED);
-            assertEquals(96, read(unit.rating(), Limit.PUMP_RATED), ONE);
+            assertEquals(70.3, read(unit.rating(), Limit.PUMP_RATED), ONE);
             assertEquals(730, read(unit.rating(), Limit.PUMP_FLOW), ONE);
             assertEquals(71, read(unit.rating(), Limit.PUMP_HEAD), ONE);
             // 80.4 m before W3b: the derived pairs (light ends over the heavy cuts) put the dry crude's bubble pressure at
@@ -914,7 +916,9 @@ class CrudeUnitSampleTest {
             // Before the conductive film (D15): needs 354.5, 330.1, 211.5; 1.00 × 6, 1.00 × 6 and 1.00 × 4 m, 450, 450 and 300 m².
             // Before the halved end deposits (D14): needs 400.4, 385.2, 271.2; 1.25 × 5, 1.25 × 4 and 1.00 × 5 m, 585.9, 468.8 and 375 m².
             // Before the viscous film (D13): needs 290, 348, 270; PA 1 1.00 × 5 m, 375 m².
-            double[] needs = {449.9, 398.9, 242.2}, rated = {109, 107, 92}, pumps = {.25, .3, .25}, surfaces = {585.9, 585.9, 300}, shells = {1.25, 1.25, 1};
+            // The pumps take the smallest bore that holds their flow with the 20 % spare (option B of PUMP_DRIVE_FLOW_REVIEW.md):
+            // PA 1 and PA 2 a bore larger than before (0.25 and 0.30 m at 109 and 107 %); PA 3 stands.
+            double[] needs = {449.9, 398.9, 242.2}, rated = {75.7, 78.6, 92}, pumps = {.3, .35, .25}, surfaces = {585.9, 585.9, 300}, shells = {1.25, 1.25, 1};
             int[] tubes = {5, 5, 4};
             for (int i = 0; i < 3; i++) {
                 var cooler = unit("pa " + (i + 1) + " cooler");
