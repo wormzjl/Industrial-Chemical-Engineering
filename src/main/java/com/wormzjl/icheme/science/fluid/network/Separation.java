@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.science.fluid.network;
 
+import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 
 /**
@@ -137,5 +138,60 @@ public final class Separation {
             liquidInGas=section>0?entrained(gasOutflow/section,gasLimit(geometry.lying(),liquid,gasDensity)):1;
         }
         return new Carried(waterInOil,oilInWater,liquidInGas);
+    }
+
+    /**
+     * {@code graph} with what each of its vessels carries over the slice it is dispatched for (plan section 4): read off
+     * the vessel's committed state and what its connections moved over the last slice ({@code last}, its
+     * {@link PipeTransfer}s by phase; null or empty: nothing moved, so every vessel is clean). A read, no solve.
+     *
+     * <p>A vessel takes the law where it is a closed vessel that is no kettle, pot or tower basin. The liquids' laws need
+     * an outlet for each liquid ({@code BOOT_HC} and {@code BOOT_WATER}); the gas's a {@code VAPOR} port. Each phase's
+     * outflow is all of it that left the vessel, and its inflow all of it that reached the vessel through a connection.</p>
+     */
+    public static PassiveNetwork plan(FluidThermodynamics model,PassiveNetwork graph,@org.jetbrains.annotations.Nullable PassiveIntervalSolver.Result last) {
+        int nodes=graph.reservoirs().size();
+        double seconds=last==null?0:last.advancedSeconds();
+        double[][] out=null,in=null;boolean[] oilPort=new boolean[nodes],waterPort=new boolean[nodes],gasPort=new boolean[nodes];boolean any=false;
+        for(var pipe:graph.pipes())for(int end=0;end<2;end++) {
+            var port=end==0?pipe.firstPort():pipe.secondPort();int node=end==0?pipe.first():pipe.second();
+            if(port==PassiveNetwork.PhasePort.BOOT_HC)oilPort[node]=true;
+            else if(port==PassiveNetwork.PhasePort.BOOT_WATER)waterPort[node]=true;
+            else if(port==PassiveNetwork.PhasePort.VAPOR)gasPort[node]=true;
+            else continue;
+            any=true;
+        }
+        if(any&&seconds>0) {
+            var moved=new java.util.HashMap<Long,PipeTransfer>();for(var transfer:last.pipeTransfers())moved.put(transfer.pipeId(),transfer);
+            out=new double[nodes][3];in=new double[nodes][3];
+            for(var pipe:graph.pipes()) {
+                var transfer=moved.get(pipe.id());if(transfer==null)continue;
+                double[] forward=transfer.forward().phaseVolumes(),reverse=transfer.reverse().phaseVolumes();
+                for(int row=0;row<3;row++) {
+                    out[pipe.first()][row]+=forward[row]/seconds;in[pipe.second()][row]+=forward[row]/seconds;
+                    out[pipe.second()][row]+=reverse[row]/seconds;in[pipe.first()][row]+=reverse[row]/seconds;
+                }
+            }
+        }
+        java.util.List<PassiveNetwork.Reservoir> planned=null;com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace scratch=null;
+        for(int node=0;node<nodes;node++) {
+            var reservoir=graph.reservoirs().get(node);var inventory=reservoir.inventory();var carried=Carried.NONE;
+            boolean liquids=oilPort[node]&&waterPort[node];
+            if(out!=null&&(liquids||gasPort[node])&&reservoir.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!inventory.open()&&inventory.pool()==null&&inventory.tower()==null) {
+                var state=reservoir.state();
+                if(scratch==null)scratch=new com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace();
+                Layer oil=layer(model,state,FluidThermodynamics.OIL,out[node][0],in[node][0],scratch),water=layer(model,state,FluidThermodynamics.AQUEOUS,out[node][1],in[node][1],scratch);
+                double gas=FluidThermodynamics.holdsPhase(state,FluidThermodynamics.GAS)?PortStreams.phaseDensity(model,state,FluidThermodynamics.GAS):0;
+                carried=of(inventory.geometry(),DROP,oil,water,liquids,gasPort[node]?out[node][2]:0,gas);
+            }
+            if(carried.equals(inventory.carried()))continue;
+            if(planned==null)planned=new java.util.ArrayList<>(graph.reservoirs());
+            planned.set(node,new PassiveNetwork.Reservoir(reservoir.id(),reservoir.elevation(),reservoir.state(),reservoir.kind(),inventory.withCarried(carried)));
+        }
+        return planned==null?graph:new PassiveNetwork(planned,graph.pipes(),graph.scheduledTransfers());
+    }
+    private static Layer layer(FluidThermodynamics model,FluidThermodynamics.State state,int phase,double outflow,double inflow,com.wormzjl.icheme.science.fluid.transport.MixtureViscosity.Workspace scratch) {
+        if(!FluidThermodynamics.holdsPhase(state,phase))return new Layer(0,0,0,outflow,inflow);
+        return new Layer(FluidThermodynamics.phaseVolume(state,phase),PortStreams.phaseDensity(model,state,phase),model.phaseCarrierViscosity(state,phase,scratch),outflow,inflow);
     }
 }

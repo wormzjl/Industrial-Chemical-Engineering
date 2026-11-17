@@ -185,7 +185,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 id->{var island=registry.owner(id);if(island!=null)runtime.coordinator().portsMoved(island);},com.wormzjl.icheme.science.fluid.conversion.ConversionRuntime::active);
         // A tag rule names the fluid registry's tags (W3), read without the hash.
         converters.tags(FluidWorldAuthority::fluidTags);
-        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,IslandCoordinator.Ports.both(stills,IslandCoordinator.Ports.both(ejectors,converters))));
+        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,IslandCoordinator.Ports.both(stills,IslandCoordinator.Ports.both(ejectors,IslandCoordinator.Ports.both(converters,new Separators(runtime.coordinator()))))));
         stills.solves((pot,island,job,done)->{
             var at=registrations().get(pot);if(at==null)return false;
             var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(at.device().position().dimension()));

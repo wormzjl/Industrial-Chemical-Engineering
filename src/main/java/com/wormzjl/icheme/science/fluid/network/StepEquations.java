@@ -251,6 +251,13 @@ final class StepEquations implements SparseNewton.Equations {
      * {@link PhaseDraw.Segment#marginalAt}). */
     private final double[] carriedMoments=new double[3],mixedMoments=new double[3],solidMix=new double[3];
     private final boolean[] heldScratch=new boolean[3];
+    /**
+     * What a vessel's outlets carry beside their own phase for this slice ({@link Separation.Carried}, a slice input on
+     * its inventory): per connection end, the mass share of its stream it draws as each other phase ({@code [edge][end]}
+     * by phase id), on the densities and the volumes of the step's start state; {@code carriedOwn} the end's own phase.
+     * Null where no vessel of the graph carries anything, which leaves every draw as it was, to the bit.
+     */
+    final double[][][] carriedShares;final int[][] carriedOwn;
     /** Per node, its solids' moments at the step's start ({@link #startMoments}), worked out at the first evaluation that
      * reads them and kept for the pass: a function of the graph's inventory, which a pass does not change. Read only. */
     private final double[][] startMoments;
@@ -278,6 +285,14 @@ final class StepEquations implements SparseNewton.Equations {
         capacities=capacities(graph,dt);overflowCapacities=overflowCapacities(graph,dt);
         seedHeld=new boolean[count][];startPhases=new Transport[count][];
         for(int i=0;i<count;i++)if(drawsPhase[i]){seedHeld[i]=PhaseDraw.held(this.seeds.get(i));startPhases[i]=transport(i,graph.reservoirs().get(i).state(),null).phases;}
+        double[][][] carrying=null;int[][] own=null;
+        for(int edge=0;edge<graph.pipes().size();edge++)for(int end=0;end<2;end++) {
+            var pipe=graph.pipes().get(edge);int node=end==0?pipe.first():pipe.second();
+            var shares=carriedShares(node,end==0?pipe.firstPort():pipe.secondPort());if(shares==null)continue;
+            if(carrying==null){carrying=new double[graph.pipes().size()][2][];own=new int[graph.pipes().size()][2];}
+            carrying[edge][end]=shares;own[edge][end]=(int)shares[3];
+        }
+        carriedShares=carrying;carriedOwn=own;
         int cursor=0;dry=new boolean[count];bagStart=new double[count];
         for(int i=0;i<count;i++) {
             var node=graph.reservoirs().get(i);
@@ -703,8 +718,62 @@ final class StepEquations implements SparseNewton.Equations {
         var rates=segment.rates(segment.marginalAt(held(node)),q);
         return Math.max(0,q-rates[FluidThermodynamics.OIL]-rates[3+FluidThermodynamics.OIL]);
     }
-    private double[] phaseRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q){
-        int marginal=segment.marginalAt(held(node));
+    /**
+     * The mass shares a {@code port} end of vessel {@code node} draws as the phases beside its own (entries by phase id,
+     * then its own phase), from what the vessel carries this slice ({@link Separation.Carried}); null where it carries
+     * nothing there. An oil outlet draws {@code waterInOil} m3 of water per m3 of oil and a water outlet {@code oilInWater}
+     * of oil; a gas outlet draws the share {@code liquidInGas} of its volume as the vessel's bulk, each phase in the
+     * volume the vessel holds of it. Densities and volumes are the start state's, so the shares are constants of the step.
+     */
+    private double[] carriedShares(int node,PassiveNetwork.PhasePort port) {
+        if(port!=PassiveNetwork.PhasePort.BOOT_HC&&port!=PassiveNetwork.PhasePort.BOOT_WATER&&port!=PassiveNetwork.PhasePort.VAPOR)return null;
+        var carried=graph.reservoirs().get(node).inventory().carried();var start=startPhases[node];
+        if(carried.none()||start==null)return null;
+        var state=graph.reservoirs().get(node).state();var oil=start[FluidThermodynamics.OIL];var water=start[FluidThermodynamics.AQUEOUS];var gas=start[FluidThermodynamics.GAS];
+        double[] shares=new double[4];int own=PhaseDraw.order(model,state,port)[0];shares[3]=own;
+        if(own==FluidThermodynamics.GAS) {
+            if(gas==null||!(carried.liquidInGas()>0))return null;
+            double vo=oil==null?0:FluidThermodynamics.phaseVolume(state,FluidThermodynamics.OIL),vw=water==null?0:FluidThermodynamics.phaseVolume(state,FluidThermodynamics.AQUEOUS);
+            double total=state.vaporVolume()+vo+vw,bulk=carried.liquidInGas();
+            double mo=oil==null?0:bulk*vo/total*oil.density,mw=water==null?0:bulk*vw/total*water.density;
+            double sum=(1-bulk+bulk*state.vaporVolume()/total)*gas.density+mo+mw;
+            shares[FluidThermodynamics.OIL]=mo/sum;shares[FluidThermodynamics.AQUEOUS]=mw/sum;
+        } else {
+            if(oil==null||water==null)return null;
+            int other=own==FluidThermodynamics.OIL?FluidThermodynamics.AQUEOUS:FluidThermodynamics.OIL;
+            double ratio=own==FluidThermodynamics.OIL?carried.waterInOil():carried.oilInWater();
+            double mass=ratio*start[other].density;
+            shares[other]=mass/(start[own].density+mass);
+        }
+        return shares[FluidThermodynamics.OIL]>0||shares[FluidThermodynamics.AQUEOUS]>0?shares:null;
+    }
+    /** The carried shares of end {@code end} of {@code edge} ({@link #carriedShares}) where its segment draws its own phase
+     * alone, {@code marginal} at the end state; null otherwise: an end already drawing by priority (a phase run out) or
+     * the two liquids together carries nothing more. */
+    private double[] carriedAt(PhaseDraw.Segment segment,int edge,int end,int marginal) {
+        var shares=carriedShares==null?null:carriedShares[edge][end];
+        return shares!=null&&segment.pinned().length==0&&!segment.mixed()&&marginal==carriedOwn[edge][end]?shares:null;
+    }
+    private double[] phaseRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q){return phaseRates(segment,edge,end,node,q,true);}
+    /**
+     * {@link #ownRates} with what the end carries ({@link #carriedAt}): each carried phase takes its share of {@code q}
+     * from the end's own phase, drawn at the step's start state as a pinned phase is and, where {@code limited}, up to
+     * its capacity there (what the vessel held of it at the start, over its drawing ends), so the step never draws more
+     * of a phase than the vessel held. {@code limited} is false for the stream of a vanishing flow, whose shares are the
+     * limit's.
+     */
+    private double[] phaseRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q,boolean limited) {
+        int marginal=segment.marginalAt(held(node));var rates=ownRates(segment,edge,end,node,q,marginal);
+        var shares=carriedAt(segment,edge,end,marginal);if(shares==null)return rates;
+        var pipe=graph.pipes().get(edge);var capacity=capacities==null?null:capacities[end==0?pipe.first():pipe.second()];
+        for(int phase=FluidThermodynamics.OIL;phase<=FluidThermodynamics.AQUEOUS;phase++) {
+            if(!(shares[phase]>0))continue;
+            double take=shares[phase]*q;if(limited)take=Math.min(take,capacity==null?0:capacity[phase]);
+            rates[3+phase]+=take;rates[marginal]-=take;
+        }
+        return rates;
+    }
+    private double[] ownRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q,int marginal){
         if(weirOffsets[edge][end]<0)return segment.rates(marginal,q,densityOf(node.phases,FluidThermodynamics.OIL),densityOf(node.phases,FluidThermodynamics.AQUEOUS));
         var rates=segment.rates(marginal,q);double remaining=remainingAfterHc(segment,node,q);
         double water=node.phases[FluidThermodynamics.GAS]==null?remaining:Math.min(remaining,Math.max(0,weirValues[edge][end]));
@@ -726,11 +795,12 @@ final class StepEquations implements SparseNewton.Equations {
     private Transport drawn(PhaseDraw.Segment segment,int edge,int end,Transport node,double q,double[][] pool,int slot) {
         if(segment==null||node.phases==null)return node;
         int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
-        if(pinned.length==0&&!segment.mixed()&&weirOffsets[edge][end]<0)return marginal<0?node:node.phases[marginal];
+        boolean carries=carriedAt(segment,edge,end,marginal)!=null;
+        if(pinned.length==0&&!segment.mixed()&&weirOffsets[edge][end]<0&&!carries)return marginal<0?node:node.phases[marginal];
         var pipe=graph.pipes().get(edge);var start=startPhases[end==0?pipe.first():pipe.second()];
         if(pinned.length==1&&marginal<0&&weirOffsets[edge][end]<0)return start[pinned[0]];
-        double total=segment.pinnedTotal(),basis=weirOffsets[edge][end]>=0?(q==0?1:Math.abs(q)):segment.mixed()?Math.max(Math.abs(q),1):marginal<0?total:Math.max(Math.abs(q),total);
-        var rates=phaseRates(segment,edge,end,node,basis);
+        double total=segment.pinnedTotal(),basis=weirOffsets[edge][end]>=0||carries?(q==0?1:Math.abs(q)):segment.mixed()?Math.max(Math.abs(q),1):marginal<0?total:Math.max(Math.abs(q),total);
+        var rates=phaseRates(segment,edge,end,node,basis,q!=0);
         double[] moles=pool==null?new double[node.moles.length]:pooled(pool,slot,node.moles.length);double volume=0,viscous=0,heat=0,limit=Double.POSITIVE_INFINITY,solidMass=0,solidVolume=0,solidCapacity=0;
         for(int k=0;k<6;k++) {
             if(!(rates[k]>0)&&!(k<3&&k==marginal))continue;
@@ -792,7 +862,7 @@ final class StepEquations implements SparseNewton.Equations {
         var pipe=graph.pipes().get(edge);
         if(segment==null||node.phases==null)return node.density*pipe.minimumArea()*node.velocityLimit;
         int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
-        if(segment.mixed()||weirOffsets[edge][end]>=0){var stream=drawn(segment,edge,end,node,1,capMoles,0);return stream.density*pipe.minimumArea()*stream.velocityLimit;}
+        if(segment.mixed()||weirOffsets[edge][end]>=0||carriedAt(segment,edge,end,marginal)!=null){var stream=drawn(segment,edge,end,node,1,capMoles,0);return stream.density*pipe.minimumArea()*stream.velocityLimit;}
         if(pinned.length==0){var stream=marginal<0?node:node.phases[marginal];return stream.density*pipe.minimumArea()*stream.velocityLimit;}
         var start=startPhases[end==0?pipe.first():pipe.second()];
         double velocity=marginal<0?Double.POSITIVE_INFINITY:node.phases[marginal].velocityLimit,total=segment.pinnedTotal(),pinnedVolume=0;

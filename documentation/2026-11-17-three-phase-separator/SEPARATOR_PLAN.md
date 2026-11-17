@@ -115,13 +115,40 @@ wrote it.
 - S1 A: the ideal settler, clean at `N` of 1 or more.
 - S2 A: under `N` of 1 the share `1 − N` of the other liquid is carried, at most volume for volume (laws 1 and 2).
 - S3 A: the gas law (law 3), for standing and lying vessels.
-- S4 A: its own batch, after the solute batch's WP2 (which holds `IslandCoordinator` and the fluid laws lane) and
-  before its desalter (WP6), which takes its phase separation from this model. Law 6 joins the hydraulics batch's
-  cycle package.
+- S4: its own batch, built at once in the session that planned it (owner, 2026-11-17: "Do the separator job here"),
+  ahead of the solute batch's WP2 and its desalter (WP6), which takes its phase separation from this model. Law 6
+  joins the hydraulics batch's cycle package.
 - Salt has nothing to do with phase carry-over: the solute batch's salt law is not read or changed.
 
-Open: law 6's simplification (the carried water's return with the reflux is not re-solved and its heat is left out)
-is confirmed with the owner when that package starts.
+Open: law 6's simplification (the carried water's return with the reflux is not re-solved and its heat is left out).
+The owner asked whether the column solver takes a reflux with water (2026-11-17). It does not take free water:
+- A basis without Water (the review plant's): water is a vapour profile the steam feeds author, not an unknown of the
+  trays (`V3SteamFeedSpec`); a steam feed must be 5 K over saturation (`V3ColumnProblemResolver`); the condenser
+  decants free water and the reflux is the organic phase. There is no liquid water feed to tray 1.
+- A basis that names Water: water is a compound of the cubic, so the reflux carries the water the oil dissolves, and
+  no more.
+So the simplification stands until the solver has a free water reflux input, which changes the column solver and its
+Rust twin: its own batch, the owner's call.
+
+## 5.1 As built (packages 1 and 2)
+
+- The slice input is `Separation.Carried` on `PassiveNetwork.Inventory` (`carried`, never saved), set at dispatch by
+  `Separation.plan` through a `Ports` hook (`runtime/fluid/Separators`); `IslandCoordinator` is unchanged. The plan
+  reads the island's last accepted slice: each phase's outflow and inflow are the phase volumes its connections moved
+  (`PipeTransfer`), over the slice's seconds. A restored island plans from its own saved last result.
+- `StepEquations.phaseRates` applies it where an end draws its own phase alone (`BOOT_HC`, `BOOT_WATER`, `VAPOR`):
+  the carried phase takes its mass share of the flow, drawn at the step's start state as a pinned phase is, up to the
+  capacity a pinned phase has (what the vessel held at the start, over its drawing ends). An end already drawing by
+  priority (a phase run out) carries nothing more. A graph none of whose vessels carries anything takes none of these
+  branches.
+- Scope, narrower than law 3's "every closed vessel": a vessel with a pool (a kettle, a still's pot) or a cooling
+  tower's basin, and an open vessel, take no law. A kettle and a pot are sized as exchangers and boilers, not by
+  Souders and Brown; whether they entrain is the owner's call.
+- Not in the inflow: a scheduled injection (a unit's product placed in a vessel). The readers of a vanishing flow
+  (`PortStreams`, `InletPhase`, a mover's suction estimate) read the outlet's own phase clean; the step's own stream
+  carries the shares.
+- The desalter's drop size (4.1) waits for the solute batch's desalter kind: `Separation.plan` gives every vessel
+  `Separation.DROP`.
 
 ## 6. Work packages
 
