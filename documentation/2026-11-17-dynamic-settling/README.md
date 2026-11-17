@@ -1,6 +1,6 @@
 # Dynamic settling (2026-11-17)
 
-**Status:** Planned 2026-11-17 (decisions D1, D2, D3 and D5 taken), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
+**Status:** Planned 2026-11-17 (decisions D1, D2, D3, D5 and D6 taken), on branch `claude/column-testing-sizing-26b5b9`. Class: PHYSICS. Lanes: fluid laws,
 runtime, client; flowsheet and fluid step by the owner's decisions. Nothing is coded.
 
 A vessel's liquids settle over time: a mixed feed forms a turbid band that a clear front crosses at the drops' settling
@@ -27,6 +27,9 @@ flow. The drum page gains a level of separation for gas, oil and water. The stir
   section of the vessel on the glass; each on a half-settled standing drum and a lying drum over its gas limit. What a
   build needs: A a labelled bar row in the kit (`Column.Bar` has no label, colour or value); B nothing; C that row,
   a Minecraft-free section drawing and a glass shared by the table and the drawing. Not run: any test.
+- 2026-11-17: the owner picked the sheet: "C: bars and section" (D6 C). The swarm law's exponent steps were checked
+  again: 4.65, 4.45 Re^-0.1 and 2.39 hold; the 0.2 to 1 step's factor (4.35) stays from memory, 2 % in speed at most.
+  Package 1a is no longer waiting for the paper. Documents only.
 
 ## Documents
 
@@ -39,8 +42,10 @@ flow. The drum page gains a level of separation for gas, oil and water. The stir
 
 ## Open items
 
-- D6, the page's sheet, after the option sheets are rendered; D4 A (no gas bubbles) is a default the owner can overrule.
+- D4 A (no gas bubbles) is a default the owner can overrule.
 - Blocked until batch `2026-11-16-solute-reaction-system` releases `PassiveNetwork.java`, `IslandSets.java`,
   `PhysicalRegistry.java` and `FluidFacts.java`: packages 1b and 2. Package 1a (the law alone) is free.
-- To read before package 1a: Richardson and Zaki's exponent steps (from memory in the plan; the owner fetches the
-  paper if it is behind a paywall: Trans. Inst. Chem. Eng. 32 (1954) 35, reprinted doi:10.1016/S0263-8762(97)80006-8).
+- Not blocking: the factor of Richardson and Zaki's 0.2 to 1 step (4.35 from memory; Trans. Inst. Chem. Eng. 32
+  (1954) 35, reprinted doi:10.1016/S0263-8762(97)80006-8).
+- Free to build now, each on the owner's word: package 1a (the law and its test), and the page's parts that need no
+  data (the kit's bar row, the section drawing, their gates).

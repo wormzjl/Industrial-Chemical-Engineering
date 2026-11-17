@@ -144,7 +144,8 @@ becomes a band's third number. Interfacial tension is not a property the materia
 Taken by the owner on 2026-11-17, each the recommended option: **D1 B** (the minority liquid is in drops), **D2 B**
 (Richardson and Zaki's swarm law), **D3 B** (a standing drum's bottom outlet draws by layer, as the last package),
 **D5 A** (the bands are saved with the vessel's facts). D4 A (no gas bubbles) was not asked: it is the default and the
-owner can overrule it. D6 (the page's sheet) is open until the sheets are rendered. The options stay below as the
+owner can overrule it. **D6 C** (owner, 2026-11-17: "C: bars and section"): the bars on the door and the vessel's
+section on the glass. The options stay below as the
 record of what was weighed.
 
 D1. **Which liquid is dispersed.**
@@ -182,7 +183,7 @@ B can follow.
 D5. **Saved.** A (recommended): with the vessel's facts, four numbers appended, default settled: a reload then does
 not settle an emulsion that needs 11 h. B: not saved, as `Inventory.carried` today: a loaded world starts settled.
 
-D6. **The page** (section 6): the owner picks from rendered sheets.
+D6. **The page** (section 6): the owner picked sheet S-C from the rendered sheets (`GuiPrototypes.separation`).
 
 ## 6. The drum page and the tank display
 
@@ -194,6 +195,8 @@ D6. **The page** (section 6): the owner picks from rendered sheets.
   - S-A: three bars, one a phase, in the phase colours of the Phases group, the percentage after each.
   - S-B: three meters (LED), as the Carry-over group's, no bars.
   - S-C: S-A's group, and on the glass a section of the vessel: gas, clear oil, the turbid band, clear water.
+- Chosen: S-C. For the build: the lying drum's labels go under its section, so the drum can take the width (on the
+  sheet it is about 50 by 21 GUI px beside its labels).
 - The tank display (sight glass, tank render): the turbid band between the oil and the water as a blend of their two
   colours, from the band's volume through the vessel's geometry.
 - Texts: `gui.icheme.fluid.device_group.separation`, `separation.hint`, `separation_gas`, `separation_oil`,
@@ -240,7 +243,11 @@ Blocked until batch `2026-11-16-solute-reaction-system` releases them: `PassiveN
    - Done: no reference moved but those D1 names; the report lists each with old and new value.
 3. **The page and the display.** `FluidView.Tank` gains the three levels of separation (boxed, null where the vessel
    does not hold the phase) and the band's heights; `TankOutlets.tank` fills them from the inventory; `TankDisplay`
-   draws the band; `DeviceMeters` and `DeviceColumn` the group of the sheet the owner picked; the protocol version;
+   draws the band; the protocol version; sheet S-C: a labelled bar row in the kit (`Column.Gauge`: key, label, share,
+   colour, value, unit, hint; placed with the box and unit places of a meter, with its own hover), a Minecraft-free
+   section drawing beside `AssemblyBlock` and `HeatFlowsheet` (the vessel's orientation, its layer heights from the
+   band volumes through the geometry, the three readings), the Overview's glass shared by the contents table and the
+   section, `DeviceMeters` and `DeviceColumn` for the group;
    gates `DeviceColumnTest` (every case at every width, `assertInLine`), `DeviceMetersTest`, `FluidPacketCodecTest`;
    the sheets rendered from the shipped builder.
 4. **The sizer** (D2 B): `Separation.numbers` and `DrumSizing.rate` take the design feed's dispersed fraction;
@@ -278,7 +285,7 @@ Blocked until batch `2026-11-16-solute-reaction-system` releases them: `PassiveN
 | Drop speed | Stokes; Schiller and Naumann, VDI-Z. 77 (1935) 318 | Built and tested in the separator batch |
 | Ideal basin, `N = v_s A / Q` | Hazen, Trans. ASCE 53 (1904) 45; Camp, Trans. ASCE 111 (1946) 895 | Secondary sources: removal by area and flow, not depth; the `v_s / v_0` share from memory |
 | Sharp front in a uniform dispersion | Kynch, Trans. Faraday Soc. 48 (1952) 166, doi:10.1039/TF9524800166 | From memory; not read |
-| Swarm settling, `(1 − φ)^n` | Richardson and Zaki, Trans. Inst. Chem. Eng. 32 (1954) 35 | 4.65 at small Reynolds number confirmed; the steps 4.35 Re^-0.03, 4.45 Re^-0.1 and 2.39 from memory: read before package 1a |
+| Swarm settling, `(1 − φ)^n` | Richardson and Zaki, Trans. Inst. Chem. Eng. 32 (1954) 35 | 4.65 under Re 0.2 and 2.39 over Re 500 confirmed from a scan of the paper; 4.45 Re^-0.1 (1 to 500) agrees with them (2.39 at Re 500); 4.35 Re^-0.03 (0.2 to 1) from memory, a course table rounds both factors to 4.4: a difference of 0.05 in `n`, 2 % in speed at a fraction of 0.3. The steps are the paper's own: `n` jumps by 0.1 at Re 1 |
 | Batch settling: sedimentation and dense-packed zones | Henschke, Schlieper, Pfennig, Chem. Eng. J. 85 (2002) 369, doi:10.1016/S1385-8947(01)00251-0; Jeelani and Hartland, AIChE J. 31 (1985) 711 | Citation and structure confirmed from secondary sources (it uses the Richardson and Zaki swarm law); the paper not read |
 | Liquid-liquid swarm alternative | Kumar and Hartland, Can. J. Chem. Eng. 63 (1985) 368 | From memory; an alternative to Richardson and Zaki if the owner wants the liquid-liquid form |
 | Design drops, 0.5 mm and 0.2 mm | Arnold and Stewart, Surface Production Operations, vol. 1 | 0.5 mm confirmed from secondary sources; 0.2 mm as the upper end of practice's 0.15 to 0.2 mm |
@@ -286,5 +293,4 @@ Blocked until batch `2026-11-16-solute-reaction-system` releases them: `PassiveN
 | Phase inversion by volume share | Selker and Sleicher, Can. J. Chem. Eng. 43 (1965) 298 | From memory; not read |
 | Stirred drop size (L9, later batch) | Hinze, AIChE J. 1 (1955) 289; Chen and Middleman, AIChE J. 13 (1967) 989 | The Weber number form (power −0.6) confirmed; the constants not confirmed |
 
-Papers worth the owner's fetch, in order of need: Richardson and Zaki (the exponent's steps, before package 1a with
-D2 B); Henschke et al. (to state the left-out coalescence in its own terms); Chen and Middleman (the stirred tank).
+Papers worth the owner's fetch, in order of need: Richardson and Zaki (the 0.2 to 1 step's factor, not blocking); Henschke et al. (to state the left-out coalescence in its own terms); Chen and Middleman (the stirred tank).
