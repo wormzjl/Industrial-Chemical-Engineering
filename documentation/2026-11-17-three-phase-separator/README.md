@@ -92,6 +92,17 @@ phase carry-over.
 - 2026-11-17: the owner on the order of the two branches: "this branch will land first so solute worktree needs to
   incorporate work here". The files batch `2026-11-16-solute-reaction-system` changed no longer block this branch;
   that batch merges this one and resolves the conflicts (five files in a trial merge today). Documents only.
+- 2026-11-17: the gas space law (`e394260ab`, an Opus sub-thread; owner: "what happens if rules are not followed").
+  `Separation.GAS_SPACE` 1.524 m, `GAS_SPACE_EXPONENT` 0.56, `gasSpaceFactor`, `gasLimit(geometry, level, ...)`: a
+  standing vessel's gas limit times (gas space / 1.524 m)^0.56, at most 1; a liquid-full standing vessel's gas outlet
+  draws the bulk. A lying drum is unchanged bit for bit. `DrumSizing`'s gas rows read the world's law at half full:
+  0.607 for a 0.5 m by 1 m drum, 0.844 for 0.5 by 2, 0.895 for 1 by 2, 1 from 3 m long up (the brief's 0.608 and
+  0.845 were rounded; the hand values are these). Tests: `SeparationTest` +1, `DrumSettlingTest` +1. Run:
+  `affected.mjs select --since 7e3ac017e`, without `LanguageFilesTest`, `UnitTextTest` and the
+  `fluidSolverRegression`, GameTest and campaign steps: `test` 334 classes, 2064 tests, 1 failure (the new test's
+  0.845, corrected; the class then passed, 5 tests); `holdGates` 13 classes, 95 tests, 0 failed; `columnGates` and
+  `equipmentGates` up to date. No reference moved: every other selected test passed as recorded
+  (`UnitSizingTest.aDrumTakesItsTypesLeastVolume`, 1.5 m by 7 m, among them). Not run: the steps named above.
 
 ## Documents
 
@@ -111,12 +122,9 @@ phase carry-over.
   (the `Separators` hook) and a component to `PassiveNetwork.Inventory`. That batch's plan is not edited from here; its
   desalter (WP6) takes its phase separation from this model and sets its own drop size.
 - Owner's call: whether a kettle and a still's pot take the gas law (plan section 5.1).
-- Gas space height (proposed 2026-11-17, waits for the owner's go-ahead): a standing vessel's gas limit times
-  (gas space height / 1.52 m)^0.56, at most 1, the gas space read from the liquid surface to the top each slice; the
-  sizer's `DRUM_GAS_STANDING` row reads the same law at half full. From API 12J's K table (0.35 ft/s at 10 ft, 0.24 at
-  5 ft; the exponent is its horizontal row's and gives 0.678 against the table's 0.686), read from secondary copies.
-  Assumed: the gas space is half the table's vessel height; under 5 ft the factor is extrapolated. Files: `Separation`,
-  `DrumSizing`, both free. A fixed height row with no consequence in the world was dropped.
+- Gas space height: built (history). Left: the two assumptions (the gas space is half API 12J's vessel height; the
+  factor is extrapolated under 5 ft) are not checked against a primary copy of the table; the law reaches every
+  standing closed vessel (spheres, closed cylinders, prisms), not drums alone.
 - Demister (owner, 2026-11-17: "add an optional demister"), not built: a mesh pad as a drum design option, off by
   default; with it K is GPSA's padded 0.107 m/s (today's `GAS_K` is that halved), the carry-over law unchanged above
   the limit. Needs a shape field (the design, the shell, the constructor's page), a field of the vessel's spec saved by

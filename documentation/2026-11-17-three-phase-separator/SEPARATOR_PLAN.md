@@ -178,6 +178,18 @@ the cycle does not set the input.
   `Separation.acts` finds (the rule `plan` applies, one place); `DeviceMeters.carried()` sets the Carry-over group.
   Not saved: after a load, or an island split or merge, a vessel reads 0 until the next dispatch.
 
+## 5.2 Gas space and demister, as built
+
+- Gas space (owner: "what happens if rules are not followed"). Drops need height above the liquid to fall back. In a
+  standing vessel (`!geometry.lying()`) the gas limit is times `min(1, gas space / GAS_SPACE)^GAS_SPACE_EXPONENT`,
+  `GAS_SPACE` = 1.524 m, exponent 0.56, the gas space from the liquid surface to the top, each slice. Source: API 12J's
+  K table, read from secondary copies: 0.35 ft/s for a standing vessel 10 ft high, 0.24 ft/s for 5 ft, and
+  (L / 10 ft)^0.56 for a lying vessel's length; that exponent gives 0.678 for 5 ft against the table's 0.686.
+  Assumed: the table is on vessel height and a design vessel runs half full, so the full K needs 5 ft of gas space;
+  under 5 ft of vessel the factor is extrapolated. With no gas space a standing vessel's gas outlet draws the bulk,
+  as a full lying drum's does. A lying drum's law is unchanged. The sizer's `DRUM_GAS_STANDING` row reads the same
+  `Separation.gasLimit` at half full: 0.5 m by 1 m 0.607, 0.5 by 2 0.844, 1 by 2 0.895, 1 from 3 m long up.
+
 ## 6. Work packages
 
 1. `science/fluid/network/Separation`: `settling(d, Δρ, μ, ρ)`, `passes(N)`, `gasLimit(standing)`; the drop size a
