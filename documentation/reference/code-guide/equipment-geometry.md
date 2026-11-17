@@ -26,6 +26,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | `Mesh` | Planar convex facets with a `Material` and a part index; primitives (prisms, frustums, rings, discs, boxes, elbows, spheres, hoops, tori); quarter-turn `Transform`; the cut into one cell's polygons; `headHeight` | 1245 |
 | `Part` | Blender OBJ parts from `assets/icheme/parts/`, flat triangle pairs merged into quads | 195 |
 | `PipeSizes` | Drawn OD from bore, flanges, Class 150 bolting, `code` (the nozzle code), `drawn`, `MIN_OUTSIDE`, `MAX_OUTSIDE`, `MAX_BORE` | 110 |
+| `NozzlePorts` | The one rule for a pipe meeting a nozzle: `at(shape, x, y, z, dx, dy, dz)`, the port at that flange cell and outward step, and `front(port)`, the pipe block in front; used by the shell cell, the assembly walk, the column start and the fluid world's `StructureNozzles` | 30 |
 | `NozzleBore` | The largest pipe a nozzle takes: `largest`, `fits`, `proposed`, `clear`; `STEP`, `SURFACE`; cached, never saved | 149 |
 | `Paint` | Body and structure colours, the RAL swatches, `DEFAULT`, `tint`, a laid line's single colours or `BARE`, `line` | 104 |
 | `VesselPlacement` | The box origin from the constructor (`forward`, `right`, `up`); `Form`; `front` | 109 |

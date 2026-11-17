@@ -602,10 +602,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     /** The port this cell offers towards {@code outward}, or null. */
     public ShapeRasterizer.@Nullable Port port(Direction outward) {
         if (shape == null) return null;
-        for (var port : ShapeRasterizer.ports(shape))
-            if (port.cell().x() == cellX && port.cell().y() == cellY && port.cell().z() == cellZ
-                    && port.dx() == outward.getStepX() && port.dy() == outward.getStepY() && port.dz() == outward.getStepZ()) return port;
-        return null;
+        return com.wormzjl.icheme.science.equipment.NozzlePorts.at(shape, cellX, cellY, cellZ, outward.getStepX(), outward.getStepY(), outward.getStepZ());
     }
 
     @Override

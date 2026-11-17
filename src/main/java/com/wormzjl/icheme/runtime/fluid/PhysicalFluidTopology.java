@@ -934,13 +934,25 @@ public final class PhysicalFluidTopology {
      * cells draw, so it has none here. Reads the registry alone, never a block.
      */
     public static int builtFaces(java.util.function.Function<Position,Device> at,Device device) {
+        return builtFaces(at,device,(cell,outward)->false);
+    }
+    /**
+     * {@link #builtFaces(java.util.function.Function,Device)}, a pipe also joined through a face where no device stands
+     * across it but a structure's nozzle does ({@code nozzle}: whether a cell is the flange cell of a nozzle that faces
+     * the given way, {@code StructureNozzles#faces}; batch 2026-11-16-review-plant-sizing, NOZZLE_JOIN_REVIEW.md): a
+     * structure that is no fluid device, a column, has no registration, so only its nozzles say where a pipe meets it. The
+     * pipe joins it as it would a device: through a joint of its own. A rack lane and a device with ports never do.
+     * Nothing the network compiles reads this: islands and joins are unchanged.
+     */
+    public static int builtFaces(java.util.function.Function<Position,Device> at,Device device,java.util.function.BiPredicate<Position,Direction> nozzle) {
         if(!device.ports.isEmpty())return 0;
         java.util.function.Function<Position,Device> built=p->p.lane()==PORT_LANE?null:at.apply(p);
+        boolean meetsNozzles=device.kind==TopologyCompiler.Kind.PIPE&&device.position.lane()==0;
         int faces=0;
         for(var d:Direction.values()) {
             if(!device.mechanicallyConnects(d))continue;
             var other=across(built,x->x,device,device.position,d);
-            if(other!=null&&device.mechanicallyJoins(other,device.position,d))faces|=1<<d.ordinal();
+            if(other!=null?device.mechanicallyJoins(other,device.position,d):meetsNozzles&&nozzle.test(device.position.offset(d),opposite(d)))faces|=1<<d.ordinal();
         }
         return faces;
     }

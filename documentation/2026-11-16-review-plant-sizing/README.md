@@ -86,6 +86,18 @@ the `Rig` class keep their sizes.
   to 10); at t=6818 charge 167.39 kg/s regulating, feed 634.0 K, heaters 634.4 and 634.6 K (26.0 and 25.2 MW), bottoms
   831.9 kmol/h. Build 8's one "round deadline" recurs on the same island (column unit + 11: 1399 here, 4215 in build 8),
   so it is the plant's own, not the old plants'. The world (9.5 MB) is saved for the owner's client.
+- 2026-11-17, branch `claude/nozzle-join-b7040b` from `e25dae469` (sub-thread; owner: "top connection still broken",
+  "better connection checking ... instead of relying on 'the block required is there'", "Yes, start it"): one rule for a
+  pipe meeting a nozzle, [NOZZLE_JOIN_REVIEW.md](NOZZLE_JOIN_REVIEW.md). `NozzlePorts.at` behind the shell cell's port,
+  the assembly walk and the column start; `StructureNozzles` (the ledger's structures that are no fluid device) behind
+  a three-argument `builtFaces`, so a pipe draws its joint to a column nozzle and the nozzle takes the pipe's size;
+  `RegistryRealignment.restate` redraws joints of chunks loaded before the fluid world opened. Gates:
+  `PhysicalFluidTopologyTest` (2), `DrawnJointGameTests` (1), `Plant.joined`/`unjoined` in `assembly-complete` and the
+  review rig. Compiled (all source sets); not run (dev client open): the tests owed are named in the review.
+- 2026-11-17, same branch: the owed tests run. Selected classes pass but the expected `SizingPageTest` and
+  `LanguageFilesTest` (and a fault of the new test, fixed). The fluid GameTests found 7 routed nozzles unjoined. The
+  trace showed the rig placing bare default states, which a player never places; `Plant.pipe` now places a player's
+  state. Fluid GameTests 116 of 116.
 
 ## Full crude unit, sized (2026-11-17)
 
@@ -127,10 +139,18 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
 `src/fluidGameTest/java/com/wormzjl/icheme/fluid/gametest/ColumnOperationReviewWorld.java` (`sized`, `review`, `extent`,
 `Options`, `Rig.layout`, `Rig.finish`; 2026-11-17: `sizing`, `Preheat`, `Rig.layPreheat`, `Rig.fire`, `Rig.fueled`),
 `ColumnFailureModesReviewWorld.java` (calls `extent`), `AssemblyGameTests.java` (`Plant.bendCost`, `Plant.straightRoute`,
-`clearStartControls`), `ReviewBatch.java` (`skipped` clears the start controls).
+`clearStartControls`), `ReviewBatch.java` (`skipped` clears the start controls). The nozzle join (2026-11-17):
+`science/equipment/NozzlePorts`, `runtime/fluid/StructureNozzles`, `PhysicalFluidTopology.builtFaces`, `Placement`,
+`FluidWorldAuthority` (lines 84-85, 129, 328-329), `AssemblyWalker.port`, `ColumnStarts.build`,
+`EquipmentShellBlockEntity.port`, `RegistryRealignment.restate`; `DrawnJointGameTests`, `AssemblyGameTests.Plant.joined`,
+`unjoined`, the rig's check after its valves.
 
 ## Open items
 
+- Nozzle join (NOZZLE_JOIN_REVIEW.md): tested (116 of 116 fluid GameTests). Owner options: the column start takes any registration in front of a nozzle, joined or
+  not (one test in `startColumn`); the reactors and other non-fluid-device kinds now draw joined pipes too (COLUMN alone
+  would be one condition); the immediate `server.execute` in `FluidDeviceBlock.updateShape` (a neighbour's stale faces).
+  The review world is not rebuilt; its overhead pipe should take its joint at its next load.
 - `ColumnOperationGameTests` and the failure-modes plants were compiled but not run on this change.
   `runFluidGameTestServer` selects by namespace only, not by class. The parent session read the diff and chose not to
   run `icheme_fluid_test`: the other rigs call the old `Options` constructor, whose defaults reproduce their old build.

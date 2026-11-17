@@ -288,13 +288,77 @@ public final class AssemblyGameTests {
         }
 
         static BlockPos front(Vessel vessel, Role role) {
-            var p = port(vessel, role);
-            return vessel.origin().offset(p.cell().x() + p.dx(), p.cell().y() + p.dy(), p.cell().z() + p.dz());
+            return front(vessel, port(vessel, role));
+        }
+
+        /** The pipe block in front of {@code p} of {@code vessel} ({@link com.wormzjl.icheme.science.equipment.NozzlePorts#front}). */
+        static BlockPos front(Vessel vessel, ShapeRasterizer.Port p) {
+            var c = com.wormzjl.icheme.science.equipment.NozzlePorts.front(p);
+            return vessel.origin().offset(c.x(), c.y(), c.z());
         }
 
         static Direction out(Vessel vessel, Role role) {
             var p = port(vessel, role);
             return Direction.fromDelta(p.dx(), p.dy(), p.dz());
+        }
+
+        /** {@link #joined(Vessel, ShapeRasterizer.Port)} for {@code vessel}'s first {@code role} nozzle. */
+        @Nullable String joined(Vessel vessel, Role role) {
+            return joined(vessel, port(vessel, role));
+        }
+
+        /**
+         * Null when the pipe in front of {@code port} of {@code vessel} meets the nozzle as the player sees it (batch
+         * 2026-11-16-review-plant-sizing, NOZZLE_JOIN_REVIEW.md): its block state is joined towards the nozzle, its face
+         * there is flanged, and the nozzle is drawn at the pipe's size, not at its default. Otherwise what is wrong, naming
+         * the vessel, the nozzle's role and the block.
+         */
+        @Nullable String joined(Vessel vessel, ShapeRasterizer.Port port) {
+            return joined(level, vessel, port);
+        }
+
+        /** {@link #joined(Vessel, ShapeRasterizer.Port)} in {@code level}. */
+        static @Nullable String joined(ServerLevel level, Vessel vessel, ShapeRasterizer.Port port) {
+            var role = vessel.shape().nozzles().get(port.nozzle()).role();
+            var flange = vessel.origin().offset(port.cell().x(), port.cell().y(), port.cell().z());
+            var front = front(vessel, port);
+            var towards = Direction.fromDelta(-port.dx(), -port.dy(), -port.dz());
+            String name = "the " + vessel.shape().kind() + " at " + vessel.origin().toShortString() + ", nozzle " + role + " (" + port.nozzle() + "), pipe at " + front.toShortString();
+            var state = level.getBlockState(front);
+            if (!(state.getBlock() instanceof FluidDeviceBlock) || !(level.getBlockEntity(front) instanceof com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity pipe))
+                return name + ": no pipe there (" + state + ")";
+            if (!state.getValue(FluidDeviceBlock.connection(towards))) return name + ": its block state is not joined " + towards;
+            var drawn = pipe.getModelData().get(com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity.DRAWN);
+            if (drawn == null || !drawn.flanged(towards)) return name + ": its face " + towards + " is not flanged";
+            if (!(level.getBlockEntity(flange) instanceof EquipmentShellBlockEntity piece) || !vessel.origin().equals(piece.origin()))
+                return name + ": no shell cell of it at " + flange.toShortString();
+            int code = ShapeRasterizer.nozzleCode(vessel.shape(), piece.cell(), port.nozzle(), piece.nozzles());
+            int pipeCode = com.wormzjl.icheme.science.equipment.PipeSizes.code(com.wormzjl.icheme.science.equipment.PipeSizes.outside(pipe.bore()));
+            if (code != pipeCode) return name + ": the nozzle is drawn at size code " + code + (code == 0 ? " (its default)" : "") + ", the pipe's is " + pipeCode;
+            return null;
+        }
+
+        /** The size code {@code port} of {@code vessel} is drawn at: 0 for its default, under a blind flange. */
+        static int nozzleCode(ServerLevel level, Vessel vessel, ShapeRasterizer.Port port) {
+            var flange = vessel.origin().offset(port.cell().x(), port.cell().y(), port.cell().z());
+            if (!(level.getBlockEntity(flange) instanceof EquipmentShellBlockEntity piece)) return -1;
+            return ShapeRasterizer.nozzleCode(vessel.shape(), piece.cell(), port.nozzle(), piece.nozzles());
+        }
+
+        /**
+         * Every nozzle of the plant's structures with a pipe of the plant in front of it that does not meet it ({@link
+         * #joined(Vessel, ShapeRasterizer.Port)}), joined by "; ", or null when every one does: the plant's lines start and
+         * end at nozzles only there, as {@link #free} keeps every other line off a nozzle's pipe block.
+         */
+        @Nullable String unjoined() {
+            var out = new StringBuilder();
+            for (var vessel : structures)
+                for (var p : ShapeRasterizer.ports(vessel.shape())) {
+                    if (!devices.contains(front(vessel, p))) continue;
+                    var wrong = joined(vessel, p);
+                    if (wrong != null) out.append(out.isEmpty() ? "" : "; ").append(wrong);
+                }
+            return out.isEmpty() ? null : out.toString();
         }
 
         boolean inside(BlockPos at) {
@@ -318,7 +382,12 @@ public final class AssemblyGameTests {
         }
 
         void pipe(BlockPos at) {
-            level.setBlock(at, ModBlocks.FLUID_PIPE.get().defaultBlockState(), Block.UPDATE_ALL);
+            // As a player's placement draws it (FluidDeviceBlock.getStateForPlacement): joined where the network will join it
+            // once registered, nozzles included. A bare default state would take its joints later, through its neighbours'
+            // shape updates, which neither redraw its faces nor tell the nozzle beside it (NOZZLE_JOIN_REVIEW.md, the trace).
+            var state = ModBlocks.FLUID_PIPE.get().defaultBlockState();
+            var facing = PhysicalFluidTopology.Direction.valueOf(state.getValue(FluidDeviceBlock.FACING).name());
+            level.setBlock(at, FluidDeviceBlock.withFaces(state, world.placedFaces(position(at), TopologyCompiler.Kind.PIPE, facing)), Block.UPDATE_ALL);
             devices.add(at.immutable());
         }
 
@@ -602,6 +671,8 @@ public final class AssemblyGameTests {
             complete(plant, failure);
             if (failure[0] == null && plant.entry().report().slots().size() != ColumnBlueprint.of(plant.column.shape().trays()).slots().size())
                 failure[0] = "slots: " + plant.entry().report().slots();
+            // Every nozzle a line starts or ends at is met as the player sees it, the column's too (NOZZLE_JOIN_REVIEW.md).
+            if (failure[0] == null) failure[0] = plant.unjoined();
         });
     }
 
