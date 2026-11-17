@@ -189,6 +189,12 @@ the cycle does not set the input.
   under 5 ft of vessel the factor is extrapolated. With no gas space a standing vessel's gas outlet draws the bulk,
   as a full lying drum's does. A lying drum's law is unchanged. The sizer's `DRUM_GAS_STANDING` row reads the same
   `Separation.gasLimit` at half full: 0.5 m by 1 m 0.607, 0.5 by 2 0.844, 1 by 2 0.895, 1 from 3 m long up.
+- Demister (owner: "add an optional demister"). A mesh pad under a drum's gas outlet catches the fine drops: with it
+  the limit's K is GPSA's padded 0.107 m/s, `DEMISTER` = 2 times `GAS_K`, inside the one `gasLimit` formula. Above
+  the limit the pad floods and `entrained` applies unchanged; the gas space factor still applies, as API 12J's table is
+  for vessels with a pad. A drum only (standing or lying); off by default; no pressure drop and no fouling (owner's
+  defaults); Auto never proposes one, and rates one the player chose (a Fixed size). Saved as a fact: shape fields 14
+  (tag `Demister`), fluid facts schema 30 and state format 53 on the vessel geometry.
 
 ## 6. Work packages
 

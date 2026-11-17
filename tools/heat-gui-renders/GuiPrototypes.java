@@ -1114,6 +1114,12 @@ public final class GuiPrototypes {
         var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var connections = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
                 new ConstructorColumn.Outlet(0b1011, 0, STANDING)), DIALOG);
+        // The Demister group with a pad (batch 2026-11-17-three-phase-separator; -Donly=equipment-constructor-nozzles): a standing
+        // drum, and a lying drum with its boot.
+        var padded = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
+                new ConstructorColumn.Outlet(0b1011, 0, STANDING), true), DIALOG);
+        var paddedLying = ConstructorColumn.connections(new ConstructorColumn.Connections(1, 0, 1, STANDING, "6.5", true, 0, null, true, true, true,
+                new ConstructorColumn.Outlet(1, 0, STANDING), true), DIALOG);
         var nozzles = ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(7, 2, new ConstructorColumn.Nozzle("pumparound_draw", 1, true, "18.5",
                 new UnitDesign.Line("nozzle.under_out", 12), false, 3, 1), STANDING, 0), DIALOG);
         String volume = DIALOG.get(CONSTRUCTOR + "volume", "20.9", "46.4");
@@ -1144,6 +1150,8 @@ public final class GuiPrototypes {
                         DIALOG.get(CONSTRUCTOR + "blocked", 3), Palette.WARN, Map.of()), true),
                 new Prototype("equipment-constructor-nozzles", 464, 254, (d, s) -> constructorDoor(d, connections, "Vertical drum", null,
                         DIALOG.get(CONSTRUCTOR + "clash.liquid", 2), Palette.WARN, Map.of()), true),
+                new Prototype("equipment-constructor-nozzles-demister", 464, 254, (d, s) -> constructorDoor(d, padded, "Vertical drum", null, volume, Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-nozzles-lying-demister", 464, 254, (d, s) -> constructorDoor(d, paddedLying, "Horizontal drum", null, volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-column", 464, 254, (d, s) -> {
                     constructorDoor(d, nozzles, "Distillation column", null, DIALOG.get(CONSTRUCTOR + "volume", "1696.5", "792.7"), Palette.ACCENT, Map.of());
                     // The schematic on its glass beside the world (the screen draws the calculator's; here an illustration).

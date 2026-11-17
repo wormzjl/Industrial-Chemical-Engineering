@@ -103,6 +103,25 @@ phase carry-over.
   0.845, corrected; the class then passed, 5 tests); `holdGates` 13 classes, 95 tests, 0 failed; `columnGates` and
   `equipmentGates` up to date. No reference moved: every other selected test passed as recorded
   (`UnitSizingTest.aDrumTakesItsTypesLeastVolume`, 1.5 m by 7 m, among them). Not run: the steps named above.
+- 2026-11-17: the demister (`4fd766c56`, the same sub-thread; owner: "add an optional demister"). A drum may carry a mesh
+  pad: `VesselGeometry.demister` (a drum only), `Separation.DEMISTER` = 2 inside the one `gasLimit` formula (GPSA's
+  0.107 m/s; the gas space factor still applies); `EquipmentShape.demister` (`Kind.DRUM` only, no cell); the
+  constructor's design and the shell (tag `Demister`, written only when true); the constructor payload (`icheme-7`
+  kept); fluid facts schema 30 and state format 53 append it to a vessel geometry; corpus images `compat/fluid/schema-30`
+  and `compat/equipment/shapes-14`; `FORMATS.md` rows. The constructor's drum page (Nozzles) gains a Demister group
+  (Off, On, latched; standing and lying); the datasheet a Demister line; `DrumSizing.Size.demister` (Auto's lists stay
+  pad-free) with a Demister key on the Sizing page for a Fixed drum size, saved by `SizingFactsFile` only when true
+  (the sheet file's row, format 2, no new number). Sheets `equipment-constructor-nozzles` (no pad),
+  `-nozzles-demister` and `-nozzles-lying-demister` rendered and looked at. Run: `affected.mjs select --since
+  1bb9f9b18`, same exclusions: `test` 409 classes, 2411 tests, 3 failures; `holdGates` 13 classes, 95 tests, 0 failed;
+  `equipmentGates` 22 classes, 182 tests, 0 failed (`EquipmentLayoutGoldenTest` unchanged); `columnGates` up to date.
+  The failures: `FormatsTableTest` read the table before its rows were updated, and `FluidCheckpointCodecTest`'s byte
+  budget (moved: five devices' facts 2,085 to 2,091 bytes, one byte a vessel geometry; bound 2,090 to 2,095, as every
+  schema step has done); both passed on their rerun (1 and 16 tests). `SizingPageTest.theDoorFitsInEveryViewForEveryItemInChinese`
+  fails until the translation commit: the two new Sizing-page keys have no Chinese line (`zh_cn.json` is not edited
+  during a batch). Moved, test only: `ConstructorColumnTest`'s Nozzles slot list gains `demister:off`, `demister:on`;
+  `EquipmentNetworkCodecTest`'s unknown-material case steps over the payload's new last byte. No sizing reference and
+  no Auto proposal moved.
 
 ## Documents
 
@@ -125,15 +144,10 @@ phase carry-over.
 - Gas space height: built (history). Left: the two assumptions (the gas space is half API 12J's vessel height; the
   factor is extrapolated under 5 ft) are not checked against a primary copy of the table; the law reaches every
   standing closed vessel (spheres, closed cylinders, prisms), not drums alone.
-- Demister (owner, 2026-11-17: "add an optional demister"), not built: a mesh pad as a drum design option, off by
-  default; with it K is GPSA's padded 0.107 m/s (today's `GAS_K` is that halved), the carry-over law unchanged above
-  the limit. Needs a shape field (the design, the shell, the constructor's page), a field of the vessel's spec saved by
-  `FluidFacts.java` and `FluidCheckpointCodec.java` (a facts schema number, a corpus image), the sizer's gas rows.
-  Those two files are also changed by batch `2026-11-16-solute-reaction-system`; this branch lands first (owner,
-  history), so a saved field here takes facts schema 30 and state format 53 and that batch moves to 31, 54 and
-  protocol `icheme-8` (not agreed yet: `main` reserves 30 and 53 for that batch). It can share the facts schema
-  step of dynamic settling's package 2. Not decided: the pad's pressure drop (about 0.1 to 0.25 kPa, from memory;
-  it matters only in vacuum service), whether a pad fouls, whether Auto proposes one.
+- Demister: built (history), with the owner's defaults: no pressure drop (about 0.1 to 0.25 kPa, from memory; it
+  matters only in vacuum service), no fouling, Auto never proposes one. Left: the translation commit gives the
+  Sizing page's two new keys their Chinese lines; batch `2026-11-16-solute-reaction-system` takes facts schema 31,
+  state format 54 and `icheme-8` when it merges this branch (`main`, `6e1f94195`).
 - The Carry-over group's data is built (`icheme-7`, history). Left: the selector names `fluidSolverRegression`, the
   GameTest step and the campaign step for that commit; none ran (they are the final lane's). `FluidDeviceScreen`,
   `NetworkProtocol` and `FORMATS.md` have one-line edits that batch `2026-11-16-solute-reaction-system` (`icheme-6`)
