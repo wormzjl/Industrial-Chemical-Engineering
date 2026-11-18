@@ -49,6 +49,11 @@ public record PipeTransfer(long pipeId, Stream forward, Stream reverse) {
         var result=new ArrayList<PipeTransfer>();
         for(int i=0;i<rates.length;i++) {
             var pipe=graph.pipes().get(i);var state=states.get(rates[i]>=0?pipe.first():pipe.second());
+            if (rates[i]==0) {
+                var none=zero(state.componentCount());
+                result.add(new PipeTransfer(pipe.id(),none,none));
+                continue;
+            }
             double[] drawn=draws==null?null:draws[i];var start=graph.reservoirs().get(rates[i]>=0?pipe.first():pipe.second()).state();
             // Entries 0-2 are drawn at the step's end state (these states), 3-5 at its start state (the graph's): a phase
             // pinned at its capacity (PhaseDraw).

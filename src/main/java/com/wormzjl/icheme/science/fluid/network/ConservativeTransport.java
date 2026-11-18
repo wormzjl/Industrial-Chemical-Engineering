@@ -307,7 +307,9 @@ public final class ConservativeTransport {
         for(int edge=0;edge<flows.length;edge++) {
             if(!Double.isFinite(flows[edge])||!Double.isFinite(heads[edge]))throw new IllegalArgumentException("Nonfinite candidate flow/head");
             var pipe=graph.pipes().get(edge);int donor=flows[edge]>=0?pipe.first():pipe.second(),receiver=flows[edge]>=0?pipe.second():pipe.first();double massRate=Math.abs(flows[edge]);
-            var rates=draws==null?null:draws[edge];boolean phase=rates!=null;
+            // Pinning can close a line whose trial still had a roundoff phase draw.
+            // The closed connection has no stream or phase enthalpy to reconstruct.
+            var rates=massRate==0||draws==null?null:draws[edge];boolean phase=rates!=null;
             if(phase) {
                 drawn[edge]=streamFractions(model,rates,candidate.get(donor),graph.reservoirs().get(donor).state(),graph.reservoirs().get(donor),populationKeys,molecularWeight,components);
                 // Unbacked traces. A vessel's Newton seed carries an entry trace (1e-12 of its amount) of every component the
@@ -554,19 +556,22 @@ public final class ConservativeTransport {
             var w=drawn[edge]!=null?drawn[edge]:fractions[donor];var rates=drawn[edge]==null?null:draws[edge];var phases=rates==null?null:drawnPhases(rates);
             var startState=graph.reservoirs().get(donor).state();
             double specificEnthalpy;
-            if(rates==null)specificEnthalpy=upstream.enthalpy()/upstream.mass();
+            if(moved==0)specificEnthalpy=0;
+            else if(rates==null)specificEnthalpy=upstream.enthalpy()/upstream.mass();
             else{specificEnthalpy=0;for(int k:phases)specificEnthalpy+=weight(rates,phases,k)*model.phaseSpecificEnthalpy(at(k,upstream,startState),k%3,null);}
             double movedEnergy=moved*specificEnthalpy;
             energy[donor]-=movedEnergy;
             SolidInventory movedSolids;
-            if(drawn[edge]==null)movedSolids=upstream.solids().scale(moved/upstream.mass());
+            if(moved==0)movedSolids=SolidInventory.EMPTY;
+            else if(drawn[edge]==null)movedSolids=upstream.solids().scale(moved/upstream.mass());
             else{var moving=new ArrayList<SolidInventory.Population>();
                 for(int c=0;c<populationKeys.size();c++){var source=populationBasis.get(populationKeys.get(c));moving.add(new SolidInventory.Population(source.material(),source.size(),moved*w[components+c]));}
                 movedSolids=new SolidInventory(moving);}
             double deliveredEnergy=movedEnergy;
             if(pipe.filter()!=null){
                 double capturedEnergy;
-                if(drawn[edge]==null)capturedEnergy=moved*(upstream.solidMoments().enthalpy(upstream.temperature(),upstream.pressure())/upstream.mass());
+                if(moved==0)capturedEnergy=0;
+                else if(drawn[edge]==null)capturedEnergy=moved*(upstream.solidMoments().enthalpy(upstream.temperature(),upstream.pressure())/upstream.mass());
                 else{double perMass=0;
                     // Each liquid phase's share of the solids, over its stream's mass, weighted by its mass flow (none in the gas).
                     for(int k:phases)if(k%3!=FluidThermodynamics.GAS){var state=at(k,upstream,startState);int phase=k%3;double share=FluidThermodynamics.phaseSolidShare(state,phase),streamMass=model.phaseMass(state,phase);

@@ -10,6 +10,24 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 
 class ConservativeTransportTest {
+    @Test void aClosedConnectionCannotBookARoundoffDrawOfAnAbsentPhase() {
+        var model = FluidTestSupport.networkModel();
+        var gas = model.initialNitrogenCharge(1,298.15,101325,() -> {});
+        var nodes = List.of(new PassiveNetwork.Reservoir(1,0,gas,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,gas));
+        var graph = new PassiveNetwork(nodes,List.of(new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(1,.05,.000045,0))));
+        var states = List.of(gas,gas);
+        double[][] draws = {new double[6]};
+        draws[0][FluidThermodynamics.AQUEOUS] = 1.55e-112;
+        var zero = new double[]{0};
+        var balance = ConservativeTransport.reconstruct(graph,states,zero,zero,1,model,() -> {},null,false,draws,null,null,null);
+        assertEquals(nodes.get(1).inventory().internalEnergy(),balance.inventories().get(1).internalEnergy(),0);
+        var history = PipeTransfer.sample(model,graph,states,zero,1,draws).getFirst();
+        assertEquals(0,history.forward().massKg());
+        assertEquals(0,history.reverse().massKg());
+        assertArrayEquals(new double[model.componentCount()],history.forward().componentMoles(),0);
+    }
+
     @Test void simultaneousBranchTransfersRemainPositiveAndCannotInventAnAbsentComponent() {
         var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:tjl20_methane");
         var nodes=new ArrayList<PassiveNetwork.Reservoir>();
