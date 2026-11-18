@@ -62,12 +62,13 @@ public final class ColumnSoakReviewWorld {
         var masters = new java.util.TreeMap<String, com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position>();
         int[] ticks = {0};
         long[] wall = {0};
-        PrintWriter[] out = new PrintWriter[5];
+        PrintWriter[] out = new PrintWriter[6];
+        var traces = new java.util.HashMap<com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position,JunctionLagTrace>();
         helper.startSequence()
                 .thenExecute(() -> {
                     try {
                         var dir = Path.of("");
-                        String[] names = {"soak-islands.csv", "soak-devices.csv", "soak-feed.csv", "soak-column.csv", "soak-burners.csv"};
+                        String[] names = {"soak-islands.csv", "soak-devices.csv", "soak-feed.csv", "soak-column.csv", "soak-burners.csv", "junction-lag.csv"};
                         for (int i = 0; i < names.length; i++) out[i] = new PrintWriter(Files.newBufferedWriter(dir.resolve(names[i])));
                     } catch (IOException e) {
                         throw new IllegalStateException(e);
@@ -77,6 +78,10 @@ public final class ColumnSoakReviewWorld {
                     out[2].println("tick,island,committed,pipe,id,control,mode,avg_kg_s,end_kg_s,head_pa,valve_drop_pa,drive");
                     out[3].println("tick,online,phase,alpha,resolving,engine,conditions");
                     out[4].println("tick,what,heater,id,a,b,c,d,e,f,g");
+                    out[5].println(JunctionLagTrace.HEADER);
+                    world.observe((changed,metrics) -> {
+                        for(var master:masters.values()) traces.computeIfAbsent(master,key -> new JunctionLagTrace()).sample(world,master,changed,out[5]);
+                    });
                     // A player standing at the plant: every chunk with a device (and one around) ticks, so block entities
                     // such as the creative power sources push FE as they do in a client.
                     var chunks = new java.util.TreeSet<Long>();
@@ -118,6 +123,7 @@ public final class ColumnSoakReviewWorld {
                     helper.assertTrue(t >= SAVE_TICKS, "Soaking the save: tick " + t + " of " + SAVE_TICKS);
                 })
                 .thenExecute(() -> {
+                    world.observe(null);
                     for (var w : out) w.close();
                     IChemE.LOGGER.info("column_soak save done ticks={}", ticks[0]);
                 })
@@ -168,13 +174,13 @@ public final class ColumnSoakReviewWorld {
                     } catch (IOException e) {
                         throw new IllegalStateException(e);
                     }
-                    if (out[5] != null) out[5].println("start_tick,end_tick,endpoint_full_firing,accepted,rejected,coil_kg,feed_kg,coil_j_per_kg,feed_j_per_kg,coil_at_feed_pressure_K,feed_K");
+                    if (out[5] != null) out[5].println(JunctionLagTrace.HEADER);
                     out[0].println("tick,island,status,online,committed,retry_at,cadence,accepted,rejected,advanced_s,rejections");
                     out[1].println("tick,device,kind,pos,island,status,p_pa,t_k,mass_kg,flow_kg_s,level_m,heat_out_k,heat_w");
                     out[2].println("tick,island,committed,pipe,id,control,mode,avg_kg_s,end_kg_s,head_pa,valve_drop_pa,drive");
                     out[3].println("tick,online,phase,alpha,resolving,engine,conditions");
                     out[4].println("tick,what,heater,id,a,b,c,d,e,f,g");
-                    if (out[5] != null) rig.plant.world.observe((changed, metrics) -> lag.sample(rig, changed, out[5]));
+                    if (out[5] != null) rig.plant.world.observe((changed, metrics) -> lag.sample(rig.plant.world, rig.plant.position(rig.plant.column.origin()), changed, out[5]));
                     IChemE.LOGGER.info("column_soak started ticks={} every={}", soakTicks, EVERY);
                     wall[0] = System.nanoTime();
                 })

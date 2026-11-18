@@ -8,7 +8,7 @@ import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.plant.column.Port;
-import com.wormzjl.icheme.testworld.CrudeUnitPlant;
+import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
 import java.io.PrintWriter;
 import java.util.ArrayDeque;
 import java.util.HashSet;
@@ -18,12 +18,12 @@ import java.util.Set;
 
 /** Integral control volume from the two radiant outlet faces to the column feed account. */
 final class JunctionLagTrace {
+    static final String HEADER="start_tick,end_tick,endpoint_full_firing,accepted,rejected,coil_kg,feed_kg,coil_j_per_kg,feed_j_per_kg,coil_at_feed_pressure_K,feed_K,feed_id";
     private record Stock(long island, long tick, long revision, Set<Long> nodes, double energy, double[] amounts) {}
     private Stock previous;
 
-    void sample(CrudeUnitPlant.Rig rig, List<IslandCoordinator.Snapshot> snapshots, PrintWriter out) {
-        var world = rig.plant.world;
-        var column = world.column(rig.plant.position(rig.plant.column.origin()));
+    void sample(FluidWorldAuthority world, PhysicalFluidTopology.Position master, List<IslandCoordinator.Snapshot> snapshots, PrintWriter out) {
+        var column = world.column(master);
         if (column == null) return;
         var feed = column.station(Port.FEED, 0);
         if (feed == null) return;
@@ -114,8 +114,8 @@ final class JunctionLagTrace {
         var coil = model.fluidPH(seed, p, inletEnergy, passed, () -> {});
         var column = model.fluidPH(seed, p, received, taken, () -> {});
         if (coil == null || column == null) return;
-        out.printf(Locale.ROOT,"%d,%d,%s,%d,%d,%.9g,%.9g,%.9g,%.9g,%.6f,%.6f%n",before.tick,now.tick,full,
-                result.acceptedSubsteps(),result.rejectedSubsteps(),inKg,kg,inletEnergy/inKg,received/kg,coil.temperature(),column.temperature());
+        out.printf(Locale.ROOT,"%d,%d,%s,%d,%d,%.9g,%.9g,%.9g,%.9g,%.6f,%.6f,%d%n",before.tick,now.tick,full,
+                result.acceptedSubsteps(),result.rejectedSubsteps(),inKg,kg,inletEnergy/inKg,received/kg,coil.temperature(),column.temperature(),graph.reservoirs().get(feed).id());
         out.flush();
     }
 
