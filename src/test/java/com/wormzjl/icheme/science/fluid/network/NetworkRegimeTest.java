@@ -27,9 +27,7 @@ class NetworkRegimeTest {
         var n=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.NETWORK+1];n[component]=1;var unit=model.flashTP(t,p,n,()->{});n[component]/=unit.volume();
         return new PassiveNetwork.Reservoir(id,0,model.flashTP(t,p,n,()->{}),kind);
     }
-    /** A junction owns a small holdup m_J (tau 0.05 s of its largest cap flow): one backward-Euler step of dt mixes the
-     * inflow into it with the lag of that stock, {@code (m_J/dt + Q) w = (m_J/dt) w_old + sum q w_e}, and it converges to the
-     * inflow mixture with time constant m_J/Q (mixed-gas junction batch, decisions D1/D2). */
+    /** Total D46 stock, including the fluid set aside from the flowing mixture. */
     private double ownedMass(PassiveNetwork.Inventory inventory) {
         var n=inventory.moles();double m=inventory.solids().massKg();for(int c=0;c<n.length;c++)m+=n[c]*model.molecularWeight(c);return m;
     }
@@ -39,14 +37,17 @@ class NetworkRegimeTest {
                 new PassiveNetwork.Pipe(1,0,2,geometry),new PassiveNetwork.Pipe(2,1,2,geometry),new PassiveNetwork.Pipe(3,2,3,geometry)));
         var result=new PassiveStepSolver(model).solve(graph,1,()->{});var q=result.massFlows();assertTrue(q[0]>0&&q[1]>0);
         assertEquals(q[0]+q[1],q[2],1e-9);var mixture=result.states().get(2);var n=PhaseLayout.totalAmounts(mixture);
-        // The junction starts as its nitrogen seed; over dt = 1 s it lags the inflow's methane fraction q0/q2 by its holdup.
-        double mJ=ownedMass(result.inventories().get(2)),dt=1,methane=n[0]*model.hydrocarbon.molecularWeight(0)/mixture.mass();
-        assertTrue(mJ>0,"the junction owns its holdup");
-        assertEquals(q[0]/(mJ/dt+q[2]),methane,1e-8);
-        assertTrue(methane>0&&methane<q[0]/q[2],"the junction fraction lies between the initial and the inflow mixture: "+methane+" of "+q[0]/q[2]);
-        var seed=graph.reservoirs().get(2).state();
-        double h=mJ/dt*seed.enthalpy()/seed.mass();for(int i=0;i<2;i++){var feed=graph.reservoirs().get(i).state();h+=q[i]*feed.enthalpy()/feed.mass();}
-        assertEquals(h/(mJ/dt+q[2]),mixture.enthalpy()/mixture.mass(),.001);
+        var before=PassiveNetwork.sizeJunctionHoldups(graph,model).reservoirs().get(2).inventory();
+        var after=result.inventories().get(2);
+        assertEquals(ownedMass(before),ownedMass(after),1e-12);
+        double methane=n[0]*model.molecularWeight(0)/mixture.mass();
+        assertEquals(q[0]/q[2],methane,.001,"both inlet streams reach the outlet in the first step");
+        double retainedMethane=(after.moles()[0]-before.moles()[0])*model.molecularWeight(0);
+        assertEquals(q[0]-q[2]*methane,retainedMethane,1e-8,"methane retained in the junction over one second");
+        double sent=0;
+        for(int i=0;i<2;i++){var feed=graph.reservoirs().get(i).state();sent+=q[i]*feed.enthalpy()/feed.mass();}
+        assertEquals(sent-q[2]*mixture.enthalpy()/mixture.mass(),after.internalEnergy()-before.internalEnergy(),.001);
+
     }
     @Test void reversingOneFeedSwitchesJunctionUpwindingAndSerialValvesRemainSolvable() {
         var reversed=new PassiveNetwork(List.of(gas(1,350,220000,0,PassiveNetwork.NodeKind.GENERATOR),gas(2,400,170000,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.RESERVOIR),
@@ -56,9 +57,12 @@ class NetworkRegimeTest {
         // Only methane now enters the junction, so its nitrogen holdup is flushed with the lag of its stock: over dt = 0.1 s
         // the nitrogen fraction falls from 1 to (m_J/dt)/(m_J/dt + Q_in).
         var junction=back.states().get(2);int nitrogen=com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN;
-        double mJ=ownedMass(back.inventories().get(2)),inflow=back.massFlows()[0];
+        var previous=PassiveNetwork.sizeJunctionHoldups(reversed,model).reservoirs().get(2).inventory();
+        double inflow=back.massFlows()[0];
         double fraction=PhaseLayout.totalAmounts(junction)[nitrogen]*model.hydrocarbon.molecularWeight(nitrogen)/junction.mass();
-        assertEquals((mJ/.1)/(mJ/.1+inflow),fraction,1e-8);assertTrue(fraction>0&&fraction<1);
+        assertEquals(0,fraction,.001,"the methane inlet displaces the initial nitrogen in the first step");
+        double nitrogenLost=(previous.moles()[nitrogen]-back.inventories().get(2).moles()[nitrogen])*model.molecularWeight(nitrogen);
+        assertEquals(.1*inflow*fraction,nitrogenLost,1e-8,"the D46 stock supplies exactly the discharged nitrogen");
         assertTrue(back.inventories().get(1).moles()[0]>0);
         var serial=new PassiveNetwork(List.of(gas(1,350,250000,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.GENERATOR),gas(2,350,200000,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.JUNCTION),gas(3,350,101325,com.wormzjl.icheme.science.material.MaterialTestBasis.NITROGEN,PassiveNetwork.NodeKind.VOID)),List.of(
                 new PassiveNetwork.Pipe(1,0,1,geometry,new FlowControl.PressureValve(200000)),new PassiveNetwork.Pipe(2,1,2,geometry,new FlowControl.PressureValve(180000))));
