@@ -43,9 +43,7 @@ com.wormzjl.icheme.science.column.v3.thermo.RegroupedCrudeTest.previouslyDifficu
 com.wormzjl.icheme.science.flowsheet.FlowsheetColumnTest.anAirThenWaterCondenserSplitsItsDutyAsTheWorldDoes  # 22 s, no failure in 20 lanes
 com.wormzjl.icheme.client.gui.flowsheet.SmallUnitRecordingTest.aRerunOfTheSimulatorGivesTheFile  # 22 s, no failure in 11 lanes
 com.wormzjl.icheme.client.gui.tutorial.HelpCoverageTest.everyAnchorOfTheColumnStillsTourStandsOnSuchAStillsPage  # 18 s, no failure in 10 lanes
-com.wormzjl.icheme.runtime.fluid.HoldClassWorldsTest.aSealedJunctionTheBalanceHasBalancedKeepsItsPressure  # 18 s, no failure in 20 lanes
 com.wormzjl.icheme.science.plant.column.ColumnSolveTest.aHotWetFeedsWaterEntersAsASteamFeedAtTheFeedTray  # 18 s, no failure in 10 lanes
-com.wormzjl.icheme.runtime.fluid.HoldClassWorldsTest.aJunctionPutAtANewPressureIsStatedAsWhatItsRowMixes  # 17 s, no failure in 20 lanes
 com.wormzjl.icheme.client.gui.flowsheet.UtilityRegulationTest.aHotterSupplyGivesTheColumnHotterSteam  # 17 s, no failure in 21 lanes
 com.wormzjl.icheme.client.gui.flowsheet.CrudeUnitSampleTest$SimulatorRunTest.stopReachesInsideAColdColumnOnTheGamesPath  # 16 s, no failure in 11 lanes
 com.wormzjl.icheme.client.gui.flowsheet.ColumnBlockTest.everythingStaysInTheFrameAtAnySettingOfTheDoor  # 14 s, no failure in 20 lanes
@@ -69,13 +67,11 @@ com.wormzjl.icheme.runtime.fluid.TracePhaseFoldTest.waterThroughATankHoldingACru
 com.wormzjl.icheme.science.flowsheet.ColumnEjectorTest.theMotivePortClosesFreeAndWired  # 8.6 s, no failure in 21 lanes
 com.wormzjl.icheme.runtime.fluid.HoldClassWorldsTest.aLiquidTraceAtATanksBottomPortLeavesItsDropLineAGasColumn  # 8.4 s, no failure in 20 lanes
 com.wormzjl.icheme.runtime.fluid.IslandSchedulerTest.idleIslandsCostNothingPerTickAtOneHundredOrAThousand  # 8.3 s, no failure in 20 lanes
-com.wormzjl.icheme.runtime.fluid.CoolingTowerRuntimeTest.aPumpedLoopKeepsUpWithItsIntervalsInEveryFanMode  # 8.2 s, no failure in 20 lanes
 com.wormzjl.icheme.science.column.v3.V3TrayHydraulicsColumnTest.theDefaultPresetPublishesItsMarchedProfileAfterOneCorrection  # 8.0 s, no failure in 15 lanes
 com.wormzjl.icheme.science.column.v3.V3StageContinuationTest.theWetLiteraturePresetItselfNeverEntersTheFullBudgetSweep  # 7.6 s, no failure in 14 lanes
 com.wormzjl.icheme.science.equipment.ProcessUnitTest.fanRingsKeepApartInsideThePlenum  # 7.4 s, no failure in 17 lanes
 com.wormzjl.icheme.client.gui.common.PumpCurveTest.everythingItDrawsLiesInsideItsBoxInAFewDrawCalls  # 7.4 s, no failure in 18 lanes
 com.wormzjl.icheme.runtime.fluid.HoldClassWorldsTest.aStillPipeBesideATankHoldingCrystalsDepositsNothing  # 7.3 s, no failure in 20 lanes
-com.wormzjl.icheme.runtime.fluid.JunctionSeedingGateTest.aFilterPlacedBeyondATankLeavesAnUnchangedVentHeaderItsState  # 7.1 s, no failure in 20 lanes
 com.wormzjl.icheme.science.equipment.ProcessUnitTest.aTrickleBedsEffluentTurnsWhereNoLadderComesDown  # 7.0 s, no failure in 17 lanes
 com.wormzjl.icheme.science.equipment.InstrumentWiringTest.noInstrumentEntryIsOnATopFace  # 6.9 s, no failure in 14 lanes
 com.wormzjl.icheme.science.column.v3.V3ColdStartTest.reasonableSetupMatrixHasBoundedTypedColdOutcomes  # 6.9 s, no failure in 14 lanes
@@ -303,7 +299,6 @@ com.wormzjl.icheme.runtime.fluid.ActuatedValveTest.aHandIsRefusedWhileAnEnabledL
 com.wormzjl.icheme.runtime.fluid.PresentationBucketTest.scientificProgressIsIdenticalWithAndWithoutViewers  # 1.3 s, no failure in 20 lanes
 com.wormzjl.icheme.runtime.fluid.FluidCheckpointFormatTest.aThousandCertifiedIslandsLoadWithoutASolveBurst  # 1.3 s, no failure in 20 lanes
 com.wormzjl.icheme.runtime.fluid.PumpCavitationTest.aPumpWhoseSuctionLineCannotFeedItsTargetStandsOnItsSuctionLimit  # 1.3 s, no failure in 20 lanes
-com.wormzjl.icheme.science.fluid.network.PressureValveContinuationTest.equalSetpointOutletsContinueMixedDischargeWithoutLosingMaterialOrEnergy  # 1.3 s, no failure in 19 lanes
 com.wormzjl.icheme.runtime.fluid.IslandCertificateTest.aTankBeingFlushedWithAnotherCompositionDoesNotCertifyUntilTheFlushIsComplete  # 1.3 s, no failure in 20 lanes
 com.wormzjl.icheme.science.tutorial.TutorialTextTest.everyMarkedTermIsDefinedOnTheStepOfItsFirstUse  # 1.3 s, no failure in 11 lanes
 com.wormzjl.icheme.science.column.v3.V3LearnedRecoveryTest.coarseRecoveryNeverPublishesTheDrySurrogateForAnAuthoredFeatureRequest  # 1.3 s, no failure in 14 lanes
@@ -342,7 +337,6 @@ com.wormzjl.icheme.science.fluid.network.LevelHeadTest.aDrainTheHeadLiftsAboveTh
 com.wormzjl.icheme.science.fluid.thermo.AmbientCrudePresetTest.actualGeneratorInitializationAndPipeFlowAccept298Kelvin  # 1.2 s, no failure in 19 lanes
 com.wormzjl.icheme.science.assembly.AssemblyMatcherTest.everyCaseOfTheDesignTableIsCompleteOnItsPlantBuiltAsDesigned  # 1.2 s, no failure in 19 lanes
 com.wormzjl.icheme.science.column.v3.V3LearnedRecoveryTest.anUnavailableRegroupedModelKeepsClassicalFallbackAvailable  # 1.2 s, no failure in 14 lanes
-com.wormzjl.icheme.LayeringTest.layersReferenceOnlyWhatTheLayeringAllows  # 1.1 s, no failure in 9 lanes
 com.wormzjl.icheme.science.flowsheet.FlowsheetColumnTest.theSampleClosesInTwoPasses  # 1.1 s, no failure in 20 lanes
 com.wormzjl.icheme.runtime.fluid.ColumnRunTest.withoutItsValveACondensersWaterRunsAsBefore  # 1.1 s, no failure in 20 lanes
 com.wormzjl.icheme.client.gui.common.StillDoorTest.thePotsDoorFitsAtEveryWidthWithItsBoxesInLine  # 1.1 s, no failure in 16 lanes

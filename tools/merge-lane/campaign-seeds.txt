@@ -2,11 +2,12 @@
 # A run with no line here is not made. The list holds the seeds with a tendency to hold: every seed that held in at
 # least one of the 15 archived 1000-seed campaigns at the game's time factor (4, since 2026-11-11). Owner, 2026-11-16:
 # "remove all which have no tendency to fail at all and keep it below 200".
-#   cold random: 14 of 1000 seeds; bundled random: 13 of 1000; bundled defaults: none held in 23 campaigns, not run.
+# The 2026-11-19 full junction campaign added cold and bundled holds, including the first bundled-defaults watch entries.
 # Upkeep: a seed that holds in any run (a full campaign the owner asks for, a batch's replay) joins its line. The three
 # lines together stay under 200 seeds; when they would pass it, drop the seeds with the fewest holds first.
-# Not watched: the seeds that held only at time factor 1 (8 campaigns before 2026-11-11) and in none of the 15 since:
+# Historical factor-1 holds absent from the first 15 factor-4 campaigns. Later factor-4 holds appear in the watch lines below:
 #   cold 29 110 206 244 430 446 475 651 683 768 787 788 792 833 855 907 957 988 994; bundled 6 157 200 430 514 575 696 698.
 # The full 3 x 1000 seeds: LANE_SEEDS=1-1000 bash tools/merge-lane/lane.sh head campaign (AGENTS.md: on the owner's word).
-cold-random 6,65,85,101,118,181,431,589,629,743,752,803,826,919
-bundled-random 12,47,59,118,145,241,301,431,579,678,707,896,941
+cold-random 6,29,65,85,98,101,118,181,183,397,431,475,534,555,589,628,629,651,673,743,752,792,803,826,857,919,994
+bundled-random 12,19,47,59,78,113,116,118,123,145,164,241,298,301,430,431,453,483,579,645,651,678,683,698,707,788,803,824,853,854,855,889,896,941,978
+bundled-defaults 665,768,847

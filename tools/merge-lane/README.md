@@ -28,7 +28,7 @@ bash tools/merge-lane/lane.sh head
 
 ## The campaign's watch seeds
 
-- `campaign-seeds.txt` holds the seeds with a tendency to hold: every seed that held in at least one of the 15 archived 1000-seed campaigns at the game's time factor. 14 cold seeds and 13 bundled random seeds; the bundled defaults never held in 23 campaigns and do not run (owner, 2026-11-16: "remove all which have no tendency to fail at all and keep it below 200").
+- `campaign-seeds.txt` records seeds that held in an archived campaign at the game's time factor. After the 2026-11-19 full run it contains 27 cold random, 35 bundled random and 3 bundled-defaults entries, within the owner's limit of 200. Each distribution replays its own list. The same run returned six previously excluded failing methods to the usual test selection.
 - A seed that holds in any run joins its line. The file stays under 200 seeds.
 - `compare.mjs` compares a head of watch seeds with a baseline of 1000 on the head's seeds. The counters of a report total all its seeds, so they compare only between two runs of the same seeds.
 
