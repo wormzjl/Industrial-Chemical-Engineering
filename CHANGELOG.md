@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- A new column test world builds its plant in about 5 s instead of 74 s (`2026-11-18-column-test-world-speed`, on `claude/column-test-world-perf-96ee33`): the plant builder's line search runs on a flat grid of the plant's box and lays the same lines, block for block. Its sizing starts in the background once the Create World screen has the column test world type, and is kept for the game's run (`SizingCache`).
+
 ### Removed
 
 - Tests that guard no behaviour (`2026-11-18-prune-tests`, on `claude/prune-tests-97440b`, `7b9ba01c4`): four tests and four assertions that read source text for helper, method or field names, or asserted that removed code stays removed. No game change.

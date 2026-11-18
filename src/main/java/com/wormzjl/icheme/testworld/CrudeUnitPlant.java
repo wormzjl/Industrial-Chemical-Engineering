@@ -249,6 +249,13 @@ public final class CrudeUnitPlant {
     public record SizedPlant(V3ColumnInput input, double diameter, EquipmentShape condenser, int condensers, EquipmentShape receiver, EquipmentShape refluxPump,
                       List<EquipmentShape> coolers, List<EquipmentShape> pumps, Map<String, Double> bores, Map<String, Double> lines,
                       EquipmentShape chargePump, EquipmentShape exchanger, EquipmentShape heater, int heaters, double fuelBore, double chargeSetFlow) {
+        /** Read-only: one plant's sizes serve every build of the game's run ({@link SizingCache}). */
+        public SizedPlant {
+            coolers = List.copyOf(coolers);
+            pumps = List.copyOf(pumps);
+            bores = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(bores));
+            lines = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(lines));
+        }
     }
 
     /**
@@ -532,7 +539,7 @@ public final class CrudeUnitPlant {
      * row south-west; every unit placed by its extent with a {@code gap} between, the box from the extents.
      */
     public static Options review(MaterialCatalog catalog) {
-        var s = sized(catalog);
+        var s = SizingCache.plant(catalog);
         var design = ColumnDesign.of(s.input(), new ColumnComponents.Choices(ColumnComponents.Condenser.EXCHANGER, ColumnComponents.Pump.STANDARD,
                 java.util.Collections.nCopies(s.input().pumparounds().size(), ColumnComponents.Pump.STANDARD)));
         var column = extent(EquipmentShape.column(design.diameter(), design.trays(), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(design.diameter())));
