@@ -159,6 +159,21 @@ class PollutionDriftTest {
     static final long DIGEST_DEFAULT = 0x5ae9aaa2c9acc5c5L;
 
     @Test
+    void theHintedSearchAnswersAsBinarySearch() {
+        Random random = new Random(3);
+        for (int round = 0; round < 200; round++) {
+            int n = random.nextInt(40);
+            long[] keys = random.longs(n, -50, 50).distinct().sorted().toArray();
+            for (int q = 0; q < 50; q++) {
+                long key = random.nextInt(120) - 60;
+                int from = random.nextInt(keys.length + 4) - 2;
+                assertEquals(java.util.Arrays.binarySearch(keys, key), PollutionField.search(keys, key, from),
+                        "key " + key + " from " + from + " in " + java.util.Arrays.toString(keys));
+            }
+        }
+    }
+
+    @Test
     void riseShareZeroReproducesTheFieldBeforeTheDrift() {
         assertEquals(Long.toHexString(DIGEST_NO_RISE), Long.toHexString(digest(settings(0.0, 600))));
     }
@@ -170,7 +185,8 @@ class PollutionDriftTest {
 
     /**
      * 120 passes of five releases (80 passes on) over a 12 × 8 × 12 block of open, enclosed, thin, closed and unloaded
-     * cubes, in rain, with the top a sink at y 6 and the cap at 600 cubes; the field and ledger bits every 20 passes.
+     * cubes, in rain, with the top a sink at y 6 and the cap at 600 cubes (at the cap in 5 of the 6 sampled passes);
+     * the field and ledger bits every 20 passes.
      * The copy in {@code tools/pollution-bench/} computes the same digest.
      */
     static long digest(PollutionSettings s) {

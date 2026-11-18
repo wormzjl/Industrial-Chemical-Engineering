@@ -5,7 +5,6 @@ import com.wormzjl.icheme.science.pollution.Environment.Cell;
 import com.wormzjl.icheme.science.pollution.PollutionLedger.Total;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 
@@ -297,7 +296,9 @@ public final class PollutionField {
         long[] keys = work.keys;
         double[] a = work.amounts;
         double[] delta = new double[n * CHANNELS];
-        Front front = new Front();
+        Front front = new Front(n);
+        // Where each face's last neighbour stood: the keys are sorted, so the next cube's neighbour is near it.
+        int[] hint = new int[6];
         for (int i = 0; i < n; i++) {
             double phiA = work.phi[i];
             if (!work.loaded[i] || phiA < closed) {
@@ -319,7 +320,8 @@ public final class PollutionField {
                     continue;
                 }
                 long neighbour = CubeKey.offset(key, DX[d], DY[d], DZ[d]);
-                int j = Arrays.binarySearch(keys, neighbour);
+                int j = search(keys, neighbour, hint[d]);
+                hint[d] = j >= 0 ? j : -(j + 1);
                 if (j >= 0) {
                     if (up && work.loaded[j] && work.phi[j] >= closed) {
                         double u = r * Math.min(phiA, work.phi[j]) / phiA;
@@ -438,7 +440,7 @@ public final class PollutionField {
                 continue;
             }
             long below = CubeKey.offset(key, 0, -1, 0);
-            int j = Arrays.binarySearch(keys, below);
+            int j = search(keys, below, i);
             if (j >= 0) {
                 if (!work.loaded[j]) {
                     continue;
@@ -562,21 +564,24 @@ public final class PollutionField {
             peak[i] = max;
             loaded++;
         }
-        Integer[] order = new Integer[loaded];
+        int[] order = new int[loaded];
+        double[] peaks = new double[loaded];
+        long[] orderKeys = new long[loaded];
         int o = 0;
         for (int i = 0; i < n; i++) {
             if (work.loaded[i]) {
-                order[o++] = i;
+                order[o] = i;
+                peaks[o] = peak[i];
+                orderKeys[o] = keys[i];
+                o++;
             }
         }
-        Arrays.sort(order, (Integer p, Integer q) -> {
-            int byPeak = Double.compare(peak[p], peak[q]);
-            return byPeak != 0 ? byPeak : Long.compare(keys[p], keys[q]);
-        });
+        // Lowest peak first, then the smaller key: a total order (the keys are distinct), so any sort gives it.
+        CapOrder.sort(peaks, orderKeys, order);
         boolean[] keep = new boolean[n];
         Arrays.fill(keep, true);
         int remaining = n;
-        for (Integer i : order) {
+        for (int i : order) {
             if (remaining <= maximum) {
                 break;
             }
@@ -611,6 +616,46 @@ public final class PollutionField {
             }
         }
         return new Result(new PollutionField(keys, amounts), new PollutionLedger(book));
+    }
+
+    /**
+     * The position of {@code key} in the sorted, distinct {@code keys}, or {@code -(insertion point) - 1}, searched
+     * outward from {@code from} and then by halves: the same answer as {@link Arrays#binarySearch}, in a few steps
+     * when the key stands near {@code from}.
+     */
+    static int search(long[] keys, long key, int from) {
+        int n = keys.length;
+        if (n == 0) {
+            return -1;
+        }
+        int at = Math.min(Math.max(from, 0), n - 1);
+        long here = keys[at];
+        if (here == key) {
+            return at;
+        }
+        int lo;
+        int hi;
+        int step = 1;
+        if (here < key) {
+            lo = at + 1;
+            hi = lo;
+            while (hi < n && keys[hi] < key) {
+                lo = hi + 1;
+                step <<= 1;
+                hi = at + step;
+            }
+            hi = Math.min(hi, n - 1);
+        } else {
+            hi = at - 1;
+            lo = hi;
+            while (lo >= 0 && keys[lo] > key) {
+                hi = lo - 1;
+                step <<= 1;
+                lo = at - step;
+            }
+            lo = Math.max(lo, 0);
+        }
+        return Arrays.binarySearch(keys, lo, hi + 1, key);
     }
 
     private static double factor(double seconds, double halfLife) {
@@ -670,11 +715,13 @@ public final class PollutionField {
             if (count == 0) {
                 return;
             }
-            Integer[] order = new Integer[count];
+            // The added keys in ascending order: order[r] is the added cube of rank r (the keys are distinct).
+            long[] sorted = Arrays.copyOf(addKeys, count);
+            Arrays.sort(sorted);
+            int[] order = new int[count];
             for (int t = 0; t < count; t++) {
-                order[t] = t;
+                order[Arrays.binarySearch(sorted, addKeys[t])] = t;
             }
-            Arrays.sort(order, (Integer p, Integer q) -> Long.compare(addKeys[p], addKeys[q]));
             int size = keys.length;
             int n = size + count;
             long[] mergedKeys = new long[n];
@@ -757,26 +804,40 @@ public final class PollutionField {
      * slot and never orders anything.
      */
     private static final class Front {
-        final HashMap<Long, Integer> slots = new HashMap<>();
-        long[] keys = new long[16];
-        Cell[] cells = new Cell[16];
-        double[] sums = new double[16 * CHANNELS];
+        final LongSlots slots;
+        long[] keys;
+        Cell[] cells;
+        double[] sums;
         int size;
-        int[] slotOf = new int[64];
-        int[] donor = new int[64];
-        int[] channel = new int[64];
-        double[] amount = new double[64];
+        int[] slotOf;
+        int[] donor;
+        int[] channel;
+        double[] amount;
         int entries;
+
+        /** Sized for a field of {@code cubes} cubes: its front is of the same order, and growing is the exception. */
+        Front(int cubes) {
+            int slots = Math.max(16, cubes);
+            this.slots = new LongSlots(slots);
+            keys = new long[slots];
+            cells = new Cell[slots];
+            sums = new double[slots * CHANNELS];
+            int records = Math.max(64, 2 * cubes);
+            slotOf = new int[records];
+            donor = new int[records];
+            channel = new int[records];
+            amount = new double[records];
+        }
 
         void offer(long key, int donorIndex, double[] a, int base, double phiA, double k, double closed,
                 Environment environment) {
-            Integer known = slots.get(key);
-            Cell cell = known != null ? cells[known] : cell(environment, key);
+            int known = slots.get(key);
+            Cell cell = known >= 0 ? cells[known] : cell(environment, key);
             if (!cell.loaded() || cell.airShare() < closed) {
                 return;
             }
             double m = k * Math.min(phiA, cell.airShare());
-            int slot = known != null ? known : -1;
+            int slot = known;
             for (int c = 0; c < CHANNELS; c++) {
                 double f = m * (a[base + c] / phiA);
                 if (!(f > 0.0)) {
@@ -815,6 +876,114 @@ public final class PollutionField {
             channel[entries] = c;
             amount[entries] = f;
             entries++;
+        }
+    }
+
+    /** A map from a cube key to a front slot, open addressing, no boxing; -1 when absent. Nothing iterates it. */
+    private static final class LongSlots {
+        long[] keys;
+        int[] values;
+        boolean[] used;
+        int size;
+
+        /** Room for {@code expected} keys before it grows. */
+        LongSlots(int expected) {
+            int capacity = Integer.highestOneBit(Math.max(32, 2 * expected - 1)) << 1;
+            keys = new long[capacity];
+            values = new int[capacity];
+            used = new boolean[capacity];
+        }
+
+        int get(long key) {
+            int mask = keys.length - 1;
+            for (int h = mix(key) & mask; used[h]; h = (h + 1) & mask) {
+                if (keys[h] == key) {
+                    return values[h];
+                }
+            }
+            return -1;
+        }
+
+        void put(long key, int value) {
+            if (2 * (size + 1) > keys.length) {
+                grow();
+            }
+            int mask = keys.length - 1;
+            int h = mix(key) & mask;
+            while (used[h]) {
+                if (keys[h] == key) {
+                    values[h] = value;
+                    return;
+                }
+                h = (h + 1) & mask;
+            }
+            used[h] = true;
+            keys[h] = key;
+            values[h] = value;
+            size++;
+        }
+
+        private void grow() {
+            long[] oldKeys = keys;
+            int[] oldValues = values;
+            boolean[] oldUsed = used;
+            keys = new long[oldKeys.length * 2];
+            values = new int[oldKeys.length * 2];
+            used = new boolean[oldKeys.length * 2];
+            size = 0;
+            for (int i = 0; i < oldKeys.length; i++) {
+                if (oldUsed[i]) {
+                    put(oldKeys[i], oldValues[i]);
+                }
+            }
+        }
+
+        private static int mix(long key) {
+            long h = key * 0x9E3779B97F4A7C15L;
+            return (int) (h ^ (h >>> 32));
+        }
+    }
+
+    /** The cap's order: a merge sort of parallel arrays by peak, then key, carrying the cube positions along. */
+    static final class CapOrder {
+        private CapOrder() {
+        }
+
+        static void sort(double[] peaks, long[] keys, int[] cubes) {
+            int n = cubes.length;
+            double[] p2 = new double[n];
+            long[] k2 = new long[n];
+            int[] c2 = new int[n];
+            double[] ps = peaks;
+            long[] ks = keys;
+            int[] cs = cubes;
+            for (int width = 1; width < n; width <<= 1) {
+                for (int from = 0; from < n; from += 2 * width) {
+                    int middle = Math.min(from + width, n);
+                    int to = Math.min(from + 2 * width, n);
+                    int i = from;
+                    int j = middle;
+                    for (int k = from; k < to; k++) {
+                        boolean left = j >= to || i < middle && (ps[i] < ps[j] || ps[i] == ps[j] && ks[i] < ks[j]);
+                        int from2 = left ? i++ : j++;
+                        p2[k] = ps[from2];
+                        k2[k] = ks[from2];
+                        c2[k] = cs[from2];
+                    }
+                }
+                double[] pt = ps;
+                ps = p2;
+                p2 = pt;
+                long[] kt = ks;
+                ks = k2;
+                k2 = kt;
+                int[] ct = cs;
+                cs = c2;
+                c2 = ct;
+            }
+            if (cs != cubes) {
+                System.arraycopy(cs, 0, cubes, 0, n);
+            }
         }
     }
 }
