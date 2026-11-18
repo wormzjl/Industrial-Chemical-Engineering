@@ -340,6 +340,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var s=topology.structure(origin);if(s!=null)into.accept(new Silhouettes.Placement(new BlockPos(origin.x(),origin.y(),origin.z()),s.shape(),s.paint()));
         }
     }
+    /** The non-empty names of the registry's structures of {@code dimension} (a plant tag's taken names). */
+    public java.util.Set<String> structureNames(String dimension) {
+        owned();var out=new HashSet<String>();
+        for(var origins:chunks.structureChunks.getOrDefault(dimension,Map.of()).values())for(var origin:origins) {
+            var s=topology.structure(origin);if(s!=null&&!s.name().isEmpty())out.add(s.name());
+        }
+        return out;
+    }
     /**
      * A client's far silhouette subscription (W10): within {@code radius} blocks ({@link Silhouettes#MAXIMUM_RADIUS} at most) of
      * where it stands ({@code on}), or none. A subscription is answered at once with the registry's records, as stored, at

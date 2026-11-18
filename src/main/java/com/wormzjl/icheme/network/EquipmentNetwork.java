@@ -641,7 +641,9 @@ public final class EquipmentNetwork {
             com.wormzjl.icheme.runtime.tutorial.TutorialTriggers.EQUIPMENT_BUILT.get().trigger(player, vessel.shape());
             var at = vessel.origin().toShortString();
             var kind = Component.translatable("gui.icheme.vessel.title." + vessel.shape().kind().name().toLowerCase(java.util.Locale.ROOT));
-            player.sendSystemMessage(!design.name().isEmpty() ? Component.translatable("message.icheme.equipment.built_named", design.name(), kind, placed, at)
+            // An unnamed design was built with its plant tag (EquipmentStructure.place): the message names what was built.
+            var name = EquipmentStructure.name(player.serverLevel(), vessel);
+            player.sendSystemMessage(!name.isEmpty() ? Component.translatable("message.icheme.equipment.built_named", name, kind, placed, at)
                     : design.form().column()
                     ? Component.translatable("message.icheme.equipment.built_column", vessel.shape().diameter(), vessel.shape().trays().trays() + 2, placed, at)
                     : vessel.shape().designed() ? Component.translatable("message.icheme.equipment.built_unit",
