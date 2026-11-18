@@ -247,21 +247,23 @@ class HeatSideTopologyTest {
      * Water at {@code inlet} K from a 10 bar generator through {@code coils} in series into a 9.9 bar void, settled for 300 s
      * (about 15 lags of a coil's outlet junction), then measured over 30 s more.
      */
-    private Fired fire(double inlet,HeatUnit... coils) {
+    private Fired fire(double inlet,HeatUnit... coils){return fire(inlet,COIL,990_000,300,coils);}
+    /** {@link #fire} through coils of passage {@code passage} into a void at {@code outlet} Pa, settled for {@code settle} s. */
+    private Fired fire(double inlet,PipeResistance.Geometry passage,double outlet,double settle,HeatUnit... coils) {
         var devices=new ArrayList<PhysicalFluidTopology.Device>(List.of(plain(1,8,0,10,Kind.GENERATOR),plain(20,9,0,10,Kind.PIPE)));
         var from=at(10,0,10);
         for(int c=0;c<coils.length;c++) {
             var to=at(c*5,0,0);
-            devices.add(side(10+c,List.of(port(from,WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(to,EAST,PhysicalFluidTopology.ConnectionRole.OUTLET)),COIL,coils[c]));
+            devices.add(side(10+c,List.of(port(from,WEST,PhysicalFluidTopology.ConnectionRole.INLET),port(to,EAST,PhysicalFluidTopology.ConnectionRole.OUTLET)),passage,coils[c]));
             devices.add(PhysicalFluidTopology.Device.builder(30+c,at(c*5+1,0,0),Kind.PIPE,EAST,OUTLET,new FlowControl.Passive()).build());
             from=at(c*5+2,0,0);
         }
         devices.add(plain(2,from.x(),0,0,Kind.VOID));
         var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,new PassiveNetwork.Reservoir(1,0,water(inlet,1_000_000),PassiveNetwork.NodeKind.GENERATOR),
-                2L,new PassiveNetwork.Reservoir(2,0,water(300,990_000),PassiveNetwork.NodeKind.VOID)));
+                2L,new PassiveNetwork.Reservoir(2,0,water(300,outlet),PassiveNetwork.NodeKind.VOID)));
         assertEquals(1,compiled.islands().size());
         var solver=new PassiveIntervalSolver(model);
-        var settled=solver.solve(compiled.islands().getFirst().graph(),300,PassiveIntervalSolver.Settings.defaults(),()->{});
+        var settled=solver.solve(compiled.islands().getFirst().graph(),settle,PassiveIntervalSolver.Settings.defaults(),()->{});
         var last=solver.solve(settled.graph(),30,PassiveIntervalSolver.Settings.defaults(),()->{});
         var heat=new double[coils.length];
         for(var boundary:last.boundaries())for(int c=0;c<coils.length;c++)
@@ -284,6 +286,29 @@ class HeatSideTopologyTest {
         var curve=waterCurve(323.15);
         assertEquals(run.flow()*(curve.enthalpyAt(393.15)-curve.enthalpyAt(323.15)),run.heat()[0],.01*run.heat()[0]);
         assertTrue(run.heat()[0]<7e6);
+    }
+    /**
+     * The set point is the outlet's temperature at the outlet's pressure (owner, 2026-11-18): water from 10 bar through a
+     * narrow coil (100 m of 4 cm tube, 14 MW) into 8 bar, set at 175 °C, settled 1500 s. Its saturation at 8 bar is 170.4 °C, so the coil raises
+     * steam at 175 °C there. On the inlet's curve (before) it aimed at 175 °C liquid at 10 bar, which flashes at 8 bar to a
+     * wet mixture at 170.4 °C.
+     */
+    @Test void aFiredCoilsSetPointIsItsOutletsTemperatureAtItsOutletsPressure() {
+        var run=fire(323.15,new PipeResistance.Geometry(100,.04,.000045,0),800_000,1500,coil(HeatSides.Side.RADIANT,400,448.15,1));
+        var pipe=run.coil(10);double in=run.graph().reservoirs().get(pipe.first()).state().pressure();var out=run.outlet(10);
+        System.out.printf(Locale.ROOT,"fired coil across a drop: %.2f kg/s, %.0f -> %.0f Pa, out %.2f K, %.0f kW%n",run.flow(),in,out.pressure(),out.temperature(),run.heat()[0]/1e3);
+        assertTrue(run.flow()>0,"the line flows: "+run.flow());
+        assertTrue(in-out.pressure()>1e5,"the coil drops more than a bar: "+in+" -> "+out.pressure()+" Pa");
+        assertEquals(1,((FiredCoil)pipe.heat()).firing(),"within its duty");
+        var at8=HeatCurve.sample(model,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(water(323.15,out.pressure())),out.pressure(),313.15,458.15,HeatCurve.Films.DEFAULT,()->{});
+        var at10=waterCurve(323.15);
+        // The heat raises the stream to the set point's enthalpy on the outlet's curve, to 1 %; on the inlet's curve (before)
+        // it was 175 °C liquid, a fifth of it.
+        assertEquals(run.flow()*(at8.enthalpyAt(448.15)-at10.enthalpyAt(323.15)),run.heat()[0],.01*run.heat()[0],"to the set point at the outlet's pressure");
+        assertTrue(run.heat()[0]>3*run.flow()*(at10.enthalpyAt(448.15)-at10.enthalpyAt(323.15)),"far more than to the inlet's 175 °C liquid");
+        // Its outlet junction starts full of water: after 300 s it still read 445.6 K, after 1500 s 448.146 K.
+        assertEquals(448.15,out.temperature(),.1,"its outlet at the set point, at the outlet's pressure");
+        assertFalse(FluidThermodynamics.holdsLiquid(out),"steam above its saturation at the outlet");
     }
     /** With its burners at a tenth, the coil fires at its 700 kW and shows the shortfall: h_out = h_in + Q_max / ṁ. */
     @Test void aFiredCoilShortOfDutyFiresAtItsMaximum() {

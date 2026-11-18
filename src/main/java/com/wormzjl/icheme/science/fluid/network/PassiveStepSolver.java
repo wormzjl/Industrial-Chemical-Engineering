@@ -129,7 +129,7 @@ public final class PassiveStepSolver {
      * port and the donor's state are the ones it was built for: the start balance, the seeds and every pass and retry of a
      * step read one curve, and a slice input (a fired coil's firing share, a wall side's bypass) does not resample it
      * (batch 2026-10-27-heat-exchanger-design). */
-    private record SideCurve(double coldest,double hottest,HeatCurve.Films films,PassiveNetwork.PhasePort port,double volume,FluidThermodynamics.State start,HeatCurve curve) {}
+    private record SideCurve(double coldest,double hottest,HeatCurve.Films films,PassiveNetwork.PhasePort port,double volume,FluidThermodynamics.State start,double pressure,HeatCurve curve) {}
     private final Map<Long,SideCurve[]> sideCurves=new HashMap<>();
     /**
      * The heat curves this solver has sampled ({@link #sideCurve}), and of them those sampled while a pass's residual or
@@ -1330,17 +1330,17 @@ public final class PassiveStepSolver {
     /**
      * The heat curve (plan section 5.1) of the stream {@code pipe} draws from {@code node} in {@code graph}: the amounts its
      * end's port draws at the node's state ({@link PortStreams#endMoles}; a drum's liquid draw has its own bubble point, not the
-     * drum's whole mixture's), at the node's pressure, over the node's temperature and the side's wall temperatures, 10 K
+     * drum's whole mixture's), at the node's pressure ({@link #curvePressure}: a fired coil's at its outlet's), over the node's temperature and the side's wall temperatures, 10 K
      * beyond each, inside the numerical box. Past that span the curve extends its end lines (AGENTS.md "Thermo validity").
      * Null where the end draws nothing. A curve kept for the same stream and span takes new films without a flash (an air
      * cooler's planned fans, W4).
      */
     HeatCurve sideCurve(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node,Runnable checkpoint) {
         var start=graph.reservoirs().get(node).state();int end=node==pipe.first()?0:1;var port=pipe.portAt(node);double volume=pipe.volume();
-        var kept=sideCurves.computeIfAbsent(pipe.id(),id->new SideCurve[2]);var old=kept[end];var law=pipe.heat();
-        if(keeps(old,start,port,volume,law)) {
+        var kept=sideCurves.computeIfAbsent(pipe.id(),id->new SideCurve[2]);var old=kept[end];var law=pipe.heat();double pressure=curvePressure(graph,pipe,node);
+        if(keeps(old,start,pressure,port,volume,law)) {
             if(old.films().equals(law.films())||old.curve()==null)return old.curve();
-            var curve=old.curve().withFilms(law.films());kept[end]=new SideCurve(old.coldest(),old.hottest(),law.films(),port,volume,start,curve);return curve;
+            var curve=old.curve().withFilms(law.films());kept[end]=new SideCurve(old.coldest(),old.hottest(),law.films(),port,volume,start,pressure,curve);return curve;
         }
         double[] amounts=PortStreams.endMoles(model,start,port,volume);double total=0;for(double n:amounts)total+=n;
         HeatCurve curve=null;
@@ -1348,20 +1348,33 @@ public final class PassiveStepSolver {
             double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(start.temperature(),law.coldest())-10);
             double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(start.temperature(),law.hottest())+10);
             heatCurveSamples++;if(inResidual)heatCurvesInResidual++;
-            curve=HeatCurve.sample(model,amounts,start.pressure(),low,high,law.films(),checkpoint);
+            curve=HeatCurve.sample(model,amounts,pressure,low,high,law.films(),checkpoint);
         }
-        kept[end]=new SideCurve(law.coldest(),law.hottest(),law.films(),port,volume,start,curve);
+        kept[end]=new SideCurve(law.coldest(),law.hottest(),law.films(),port,volume,start,pressure,curve);
         return curve;
     }
-    private static boolean keeps(SideCurve old,FluidThermodynamics.State start,PassiveNetwork.PhasePort port,double volume,HeatLaw law) {
-        return old!=null&&old.start()==start&&old.port()==port&&old.volume()==volume&&old.coldest()==law.coldest()&&old.hottest()==law.hottest();
+    /**
+     * The pressure {@code pipe}'s curve from {@code node} is sampled at: the node's, except a fired coil's, whose set point is
+     * its outlet's temperature (owner, 2026-11-18: the controller reads the coil outlet). There the stream leaves at the
+     * pressure of the end it delivers to, below its inlet's by the coil's drop, and the same enthalpy at that lower pressure
+     * flashes colder: on the inlet's curve the review plant's coil read 620 K at full firing against its 638 K set point,
+     * 300 kPa in and 262 kPa out. An outlet with no pressure yet takes the inlet's.
+     */
+    static double curvePressure(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node) {
+        double inlet=graph.reservoirs().get(node).state().pressure();
+        if(!(pipe.heat() instanceof FiredCoil))return inlet;
+        double outlet=graph.reservoirs().get(node==pipe.first()?pipe.second():pipe.first()).state().pressure();
+        return outlet>0&&Double.isFinite(outlet)?outlet:inlet;
+    }
+    private static boolean keeps(SideCurve old,FluidThermodynamics.State start,double pressure,PassiveNetwork.PhasePort port,double volume,HeatLaw law) {
+        return old!=null&&old.start()==start&&old.pressure()==pressure&&old.port()==port&&old.volume()==volume&&old.coldest()==law.coldest()&&old.hottest()==law.hottest();
     }
     /** Whether {@link #sideCurve} gives {@code node}'s end of {@code pipe} without a flash march: a curve kept for its
      * stream and span (new films are applied without one), or an end that draws nothing. */
     boolean curveKept(PassiveNetwork graph,PassiveNetwork.Pipe pipe,int node) {
         var start=graph.reservoirs().get(node).state();int end=node==pipe.first()?0:1;var port=pipe.portAt(node);double volume=pipe.volume();
         var kept=sideCurves.get(pipe.id());
-        if(keeps(kept==null?null:kept[end],start,port,volume,pipe.heat()))return true;
+        if(keeps(kept==null?null:kept[end],start,curvePressure(graph,pipe,node),port,volume,pipe.heat()))return true;
         double[] amounts=PortStreams.endMoles(model,start,port,volume);double total=0;for(double n:amounts)total+=n;
         return !(total>0&&PortStreams.endMass(model,start,port,volume)>0);
     }
