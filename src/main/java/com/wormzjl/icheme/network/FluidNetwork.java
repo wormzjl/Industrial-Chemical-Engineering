@@ -504,8 +504,9 @@ public final class FluidNetwork {
                         }else control=new FlowControl.PressureValve(controls.pressure);
                     }
                     // A gas intake is the atmosphere (batch 2026-11-15-fluid-interfaces, W2): nothing on it is the player's to set.
-                    case GENERATOR->{if(spec.ambient())throw new IllegalArgumentException("A gas intake draws the ambient air; it has no settings.");if(d.converterFill())throw new IllegalArgumentException("A liquid hopper gives what its rule makes of its fluid; it has no settings.");spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);}
-                    case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
+                    case GENERATOR->{if(spec.ambient())throw new IllegalArgumentException(com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.waterIntake(old)?"A water intake draws from the water body it touches; it has no settings.":"A gas intake draws the ambient air; it has no settings.");if(d.converterFill())throw new IllegalArgumentException("A liquid hopper gives what its rule makes of its fluid; it has no settings.");spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);}
+                    // A waste outfall is open to the air (batch 2026-11-18-water-intake-outfall): it discharges at the ambient pressure, nothing to set.
+                    case VOID->{if(spec.ambient())throw new IllegalArgumentException("A waste outfall discharges to the open air; it has no settings.");spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());}
                     case RESERVOIR->{
                         // A batch still's pot (W6): its firing and reflux valve, a fact its islands read at their next slice.
                         if(d.stillPot()&&controls.still!=null){

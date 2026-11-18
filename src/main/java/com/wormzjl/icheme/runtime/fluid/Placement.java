@@ -121,6 +121,64 @@ final class Placement {
     /** A gas intake's entry loss, velocity heads at the pipe's bore (D8: a louvred box and a rain hood, K = 3). */
     static final double INTAKE_LOSS=3;
     /**
+     * Registers a water intake at {@code position} (batch 2026-11-18-water-intake-outfall): a generator that is the water
+     * body ({@link #waterIntake}), on when {@code supplying} (its block found a water body at placement).
+     */
+    WorldTopologyLedger.Registration placeWaterIntake(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,boolean supplying) {
+        authority.owned();long id=authority.topology.nextIdentity();
+        var record=waterIntake(id,position,facing,placedPipeDiameter(position),authority.catalog,supplying);
+        authority.submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
+    }
+    /**
+     * A water intake's registration: a generator whose spec is the world outside ({@code ambient}), holding the catalog's
+     * pure water at {@link com.wormzjl.icheme.science.fluid.network.CoolingTower#AIR_TEMPERATURE} and the game's ambient
+     * pressure (the water body's surface; a large body is unchanged by what a pump draws from it); 1 m at the joined
+     * pipe's bore {@code bore}, its strainer an entry loss of {@link #INTAKE_LOSS} velocity heads, as the gas intake's.
+     * Switched on ({@code generatorEnabled}) while its block touches a water body ({@code WaterBody}); off, it is a closed
+     * boundary. It is told from a gas intake by its charge, pure water ({@link #waterCharge}).
+     */
+    static WorldTopologyLedger.Registration waterIntake(long id,PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,double bore,MaterialCatalog catalog,boolean supplying) {
+        var device=PhysicalFluidTopology.Device.builder(id,position,TopologyCompiler.Kind.GENERATOR,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,INTAKE_LOSS),new FlowControl.Passive()).generatorEnabled(supplying).build();
+        double height=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT;
+        var spec=new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,
+                FluidDeviceSpec.water(catalog).composition(),SlurryFeed.NONE,height,false,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(1,height),null,0,0,null,false,true);
+        return new WorldTopologyLedger.Registration(device,spec,0);
+    }
+    /**
+     * Whether an ambient generator's charge is a water body's, not the air's: its water holds more than half of it (the
+     * air's water is under 4 mol % at any humidity the game uses; a water intake's is 1).
+     */
+    static boolean waterCharge(FluidDeviceSpec spec) {
+        var n=spec.composition();int water=n.length-1;
+        // The network's conserved order ends with water (MaterialAxis); a list without water at its end holds no water body.
+        return water>=0&&n[water]>.5;
+    }
+    /**
+     * Registers a waste outfall at {@code position} (batch 2026-11-18-water-intake-outfall): a one-block sink open to the
+     * air ({@link #outfall}).
+     */
+    WorldTopologyLedger.Registration placeOutfall(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing) {
+        authority.owned();long id=authority.topology.nextIdentity();
+        var record=outfall(id,position,facing,placedPipeDiameter(position),authority.catalog);
+        authority.submit(List.of(new WorldTopologyLedger.Edit(id,record)),Math.addExact(id,1));return record;
+    }
+    /**
+     * A waste outfall's registration: a void whose spec is the world outside ({@code ambient}): what reaches it leaves the
+     * plant at the game's ambient pressure, 101 325 Pa, and nothing enters through it (a void never supplies). 1 m at the
+     * joined pipe's bore {@code bore}; its open end an exit loss of {@link #OUTFALL_LOSS} velocity head (a pipe's free
+     * discharge), added to its link as the intake's entry loss is ({@code PhysicalFluidTopology.boundaryHalf}). What it
+     * receives goes to the pollution field at its cube ({@code Releases}).
+     */
+    static WorldTopologyLedger.Registration outfall(long id,PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,double bore,MaterialCatalog catalog) {
+        var device=PhysicalFluidTopology.Device.builder(id,position,TopologyCompiler.Kind.VOID,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,OUTFALL_LOSS),new FlowControl.Passive()).build();
+        double height=com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.LEVEL_HEAD_HEIGHT;
+        var spec=new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,
+                FluidDeviceSpec.nitrogen(catalog).composition(),SlurryFeed.NONE,height,false,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(1,height),null,0,0,null,false,true);
+        return new WorldTopologyLedger.Registration(device,spec,0);
+    }
+    /** A waste outfall's exit loss, velocity heads at the pipe's bore: a pipe's free discharge, K = 1. */
+    static final double OUTFALL_LOSS=1;
+    /**
      * A liquid hopper's registration (batch 2026-11-15-fluid-interfaces, W4, decision D5): a generator, on, its valve its
      * converter's ({@link FlowControl.ValveSource#CONVERTER}), 1 m at the joined pipe's bore {@code bore}, standing at
      * {@link #HOPPER_PRESSURE} with nitrogen until its first plan gives its rule's stream.

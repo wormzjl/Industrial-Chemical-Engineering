@@ -461,6 +461,16 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(c==null||!(c.exitVelocity()>0)||!(c.massFlow()>0))continue;
             Noise.add(out,cell(r).above(1),Noise.Kind.VENT,Noise.vent(c.massFlow(),c.massFlow()/(c.exitVelocity()*area),area),.8);
         }
+        // Waste outfalls (batch 2026-11-18-water-intake-outfall): the liquid they let fall, as a tower's falling water, at the outfall.
+        if(result.advancedSeconds()>0) {
+            var weights=model.molecularWeights();var fallen=new HashMap<Long,Double>();
+            for(var b:result.boundaries()) {
+                if(b.kind()!=ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE||!outfall(registrations().get(b.nodeId())))continue;
+                var n=b.moles();double m=0;for(int c=0;c<Math.min(n.length,weights.length);c++)if(n[c]<0)m-=n[c]*weights[c];
+                fallen.merge(b.nodeId(),m,Double::sum);
+            }
+            for(var e:fallen.entrySet())Noise.add(out,cell(registrations().get(e.getKey())),Noise.Kind.WATER_FALL,Noise.water(e.getValue()/result.advancedSeconds()),1);
+        }
         var heats=new HashMap<Long,Double>();
         if(result.advancedSeconds()>0)for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heats.merge(b.nodeId(),Math.abs(b.totalEnergyJoule())/result.advancedSeconds(),Double::sum);
         for(long id:registry.members(island)) {
@@ -519,6 +529,28 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Registration placeIntake(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeIntake(position,facing);}
     /** Registers a liquid hopper (batch 2026-11-15-fluid-interfaces, W4): a converter's fill port on its own, with its facts. */
     public WorldTopologyLedger.Registration placeHopper(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeHopper(position,facing);}
+    /** Registers a water intake (batch 2026-11-18-water-intake-outfall): the water body as a generator, on when {@code supplying}, as one queued event. */
+    public WorldTopologyLedger.Registration placeWaterIntake(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,boolean supplying){return placement.placeWaterIntake(position,facing,supplying);}
+    /** Registers a waste outfall (batch 2026-11-18-water-intake-outfall): a one-block sink open to the air, as one queued event. */
+    public WorldTopologyLedger.Registration placeOutfall(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeOutfall(position,facing);}
+    /** The status clause of a water intake whose block finds no water body: its boundary is closed until it does. */
+    public static final String NO_WATER_BODY="NO WATER BODY";
+    /** Whether registration {@code r} is a water intake: a generator that is the world outside holding a water body's charge. */
+    public static boolean waterIntake(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.GENERATOR&&r.spec().ambient()&&Placement.waterCharge(r.spec());}
+    /** Whether registration {@code r} is a gas intake: a generator that is the atmosphere. */
+    public static boolean gasIntake(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.GENERATOR&&r.spec().ambient()&&!Placement.waterCharge(r.spec());}
+    /** Whether registration {@code r} is a waste outfall: a sink that is the world outside. */
+    public static boolean outfall(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.VOID&&r.spec().ambient();}
+    /**
+     * A water intake's block found its water body, or lost it (batch 2026-11-18-water-intake-outfall, {@code WaterBody}): a
+     * fact about the world its block counted, queued as an edit of the generator's switch, as a player's input is; its island
+     * recompiles on the engine's schedule. Whether an edit was queued: none for an unknown identity, a device that is no water
+     * intake, or a switch already so.
+     */
+    public boolean waterBody(long id,boolean supplying){
+        owned();var r=topology.latest().get(id);if(!waterIntake(r)||r.device().generatorEnabled()==supplying||topology.pending(id))return false;
+        return placement.edit(id,r.revision(),r.device().withGeneratorEnabled(supplying),r.spec())!=null;
+    }
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing) {
         return placement.place(position,kind,facing,List.of());
     }

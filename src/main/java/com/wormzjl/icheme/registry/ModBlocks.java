@@ -26,6 +26,10 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> GAS_INTAKE=fluid("gas_intake",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::intake);
     /** A liquid hopper (batch 2026-11-15-fluid-interfaces, W4): Forge fluid in, the network's out. */
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> LIQUID_HOPPER=fluid("liquid_hopper",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::hopper);
+    /** A water intake (batch 2026-11-18-water-intake-outfall): a water body as a generator. */
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> WATER_INTAKE=fluid("water_intake",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::waterIntake);
+    /** A waste outfall (batch 2026-11-18-water-intake-outfall): a sink open to the air. */
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.FluidDeviceBlock> WASTE_OUTFALL=fluid("waste_outfall",com.wormzjl.icheme.world.level.block.FluidDeviceBlock::outfall);
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.LinePieceBlock> LINE_PIECE=BLOCKS.registerBlock("line_piece",
             com.wormzjl.icheme.world.level.block.LinePieceBlock::new,BlockBehaviour.Properties.of().strength(.5F).sound(SoundType.METAL).pushReaction(net.minecraft.world.level.material.PushReaction.BLOCK).noOcclusion().dynamicShape().noLootTable());
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.ConduitBlock> DATA_CABLE=BLOCKS.registerBlock("data_cable",

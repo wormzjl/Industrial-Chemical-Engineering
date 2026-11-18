@@ -28,7 +28,7 @@ public final class ModBlockEntities {
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.CreativeMotorBlockEntity>> CREATIVE_MOTOR=BLOCK_ENTITY_TYPES.register("creative_motor",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.CreativeMotorBlockEntity::new,ModBlocks.CREATIVE_MOTOR.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity>> FLUID_DEVICE=BLOCK_ENTITY_TYPES.register("fluid_device",()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity::new,
-            ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get(),ModBlocks.DIVERTER_VALVE.get(),ModBlocks.GAS_INTAKE.get(),ModBlocks.LIQUID_HOPPER.get()).build(null));
+            ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get(),ModBlocks.DIVERTER_VALVE.get(),ModBlocks.GAS_INTAKE.get(),ModBlocks.LIQUID_HOPPER.get(),ModBlocks.WATER_INTAKE.get(),ModBlocks.WASTE_OUTFALL.get()).build(null));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ProcessSimulatorBlockEntity>>
             PROCESS_SIMULATOR = BLOCK_ENTITY_TYPES.register(
