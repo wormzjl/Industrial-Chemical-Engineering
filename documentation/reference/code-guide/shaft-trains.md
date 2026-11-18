@@ -105,17 +105,20 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 - 1 FE carries `energy.joulesPerFE` × the time factor J of process energy (`ElectricStores.feJoules`), so a machine draws
   the same FE per tick at any factor; stores keep joules, so a config change keeps the energy they hold. Draws and
   bookings integrate `ticks × time.tickSeconds()`. `energy.machinesNeedPower` false books nothing and stops nothing.
-- Powered units: a motor or generator (shaft unit), an air cooler's process side (its `HeatUnit.fanCount` fans, one
-  `FAN_POLES` motor each), an induced-draft tower's basin (one store for every cell's fan). Terminal cells:
-  `ProcessUnit.terminal` (a motor's terminal box; the air cooler's and the tower's basin rim).
+- Powered units include a motor or generator (shaft unit), an air cooler's process side (its `HeatUnit.fanCount` fans,
+  one `FAN_POLES` motor each), an induced-draft tower's basin, a fired heater's combustion-air fans, an electric
+  still's pot and an in-line mover. `PowerTerminals` maps `ShapeRasterizer.terminal` or the mover's pipe to that
+  unit's store. The equipment transfer path works with the terminal chunks unloaded.
 - Store windows are counts of cycles (`ElectricStore`), the same play time at any factor; a motor's store keeps its own
   buffer and restart share (`MOTOR_BUFFER_PERIODS`, `MOTOR_RESTART_PERIODS`). A motor also needs a live FE source:
-  losing its cable or source stops it at the next engine decision even if stored joules remain (`PowerNetwork`,
-  `PowerGrid` check the source without moving power). A non-motor unit saved without a store keeps `UNMETERED`.
+  breaking its cable or losing its source stops it at the next engine decision and preserves its stored joules.
+  `PowerNetwork` checks its saved circuit and neighbours without moving FE. Foreign sources require a loaded
+  capability. A non-motor unit saved without a store keeps `UNMETERED`.
 - An empty store stops a motor (`TRIPPED: NO POWER`, not latched) and holds a fan unit's fans at `fanLimit` 0
   (`AirCooled.withFanLimit`, `CoolingTower.withFanLimit`): the louvers stay open and the air falls to natural draught.
   The fan limit is a dispatch input, never a fact.
-- A generator's load is the room its store has left (`generatorLoad`), so a full store sheds load.
+- A generator's load is the room its store has left (`generatorLoad`), so a full store sheds load. Charged
+  generators supply adjacent terminals and wired circuits at the store's FE output rate.
 - A new in-line mover takes a metered, empty store and stands closed with NO POWER until it receives FE.
 
 **Health and repair** (`MachineHealth`).

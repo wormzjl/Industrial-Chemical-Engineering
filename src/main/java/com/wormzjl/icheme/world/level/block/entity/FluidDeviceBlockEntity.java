@@ -39,7 +39,7 @@ public final class FluidDeviceBlockEntity extends ModelledBlockEntity implements
     public net.neoforged.neoforge.energy.IEnergyStorage energy() {
         if(!(level instanceof net.minecraft.server.level.ServerLevel server))return null;
         var world=com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(server.getServer()).orElse(null);
-        return world==null||world.electric().generator(fluidIdentity())==null?null:new InlineEnergy(world.electric(),fluidIdentity());
+        return world==null?null:world.electric().port(fluidIdentity());
     }
     /**
      * A liquid hopper's Forge tank (batch 2026-11-15-fluid-interfaces, W4), fill only, on every face no line joins (an

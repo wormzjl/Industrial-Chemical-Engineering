@@ -196,6 +196,25 @@ class ControlSystemTest {
     }
 
     @Test
+    void onlyAnExplicitCreativePlacementCanProvideCreativeFe() throws Exception {
+        var current = ControlFacts.load(TagParser.parseTag(Files.readString(
+                Path.of("src/test/resources/compat/control/control-6-power.snbt"))));
+        var source = new DataBus.Site("minecraft:overworld", BlockPos.ZERO, 0);
+        assertTrue(current.powerReady());
+        assertEquals(Set.of(source), current.creativePower());
+        assertEquals(7, current.port(new UUID(0, 2)).host());
+        assertEquals(7, current.port(new UUID(0, 3)).host());
+        current.creativePower(source, false);
+        assertTrue(ControlFacts.load(current.save(new CompoundTag(), null)).creativePower().isEmpty());
+
+        var legacy = ControlFacts.load(TagParser.parseTag(Files.readString(
+                Path.of("src/test/resources/compat/control/control-3-omni-power.snbt"))));
+        assertFalse(legacy.powerReady());
+        assertTrue(legacy.creativePower().isEmpty());
+        assertFalse(ControlFacts.load(legacy.save(new CompoundTag(), null)).powerReady());
+    }
+
+    @Test
     void sensorIdsSurviveHostChangesAndAreNeverReused() throws Exception {
         var facts =
                 ControlFacts.load(

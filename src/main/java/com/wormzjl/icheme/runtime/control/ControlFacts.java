@@ -14,8 +14,8 @@ import java.util.*;
  * Connectivity is rebuilt.
  */
 public final class ControlFacts extends SavedData {
-    /** 5: the alarm beacons (batch 2026-11-15-fluid-interfaces, W9); 4 a rack lane's frame (W5c C2), read with no beacons; 3 and 2 read as before, their lanes with no frame. */
-    public static final int FORMAT = 5;
+    /** 6 records creative FE sources and allows store IDs on physical power sockets. */
+    public static final int FORMAT = 6;
     public static final String NAME = "icheme_control";
 
     public record Panel(
@@ -135,6 +135,8 @@ public final class ControlFacts extends SavedData {
 
     private final Map<DataBus.Site, DataBus.Cable> cables = new HashMap<>();
     private final Map<UUID, DataPort> ports = new HashMap<>();
+    private final Set<DataBus.Site> creativePower = new HashSet<>();
+    private boolean powerReady;
     private final Map<UUID, Panel> panels = new HashMap<>();
     /** The alarm beacons (W9), by identity. */
     private final Map<UUID, Alarm> alarms = new HashMap<>();
@@ -270,6 +272,24 @@ public final class ControlFacts extends SavedData {
 
     public Map<UUID, DataPort> ports() {
         return Map.copyOf(ports);
+    }
+
+    public Set<DataBus.Site> creativePower() {
+        return Set.copyOf(creativePower);
+    }
+
+    public void creativePower(DataBus.Site site, boolean placed) {
+        if (site.lane() != 0) throw new IllegalArgumentException("Creative power belongs to a block");
+        if (placed ? creativePower.add(site) : creativePower.remove(site)) changed();
+    }
+
+    public boolean powerReady() {
+        return powerReady;
+    }
+
+    public void finishPowerMigration() {
+        powerReady = true;
+        setDirty();
     }
 
     public Collection<Panel> panels() {
@@ -433,33 +453,35 @@ public final class ControlFacts extends SavedData {
                 .sorted(Comparator.comparing(a -> a.id().toString()))
                 .forEach(a -> beacons.add(a.save()));
         tag.put("alarms", beacons);
+        var sources = new ListTag();
+        creativePower.stream()
+                .sorted(Comparator.comparing(DataBus.Site::dimension).thenComparing(DataBus.Site::cell))
+                .forEach(site -> {
+                    var source = new CompoundTag();
+                    source.putString("dimension", site.dimension());
+                    source.putLong("owner", site.cell().asLong());
+                    sources.add(source);
+                });
+        tag.put("creativePower", sources);
+        tag.putBoolean("powerReady", powerReady);
         return tag;
     }
 
     public static ControlFacts load(CompoundTag tag) {
-        boolean legacy = tag.contains("format", 3) && tag.getInt("format") == 1;
+        int format = tag.getInt("format");
+        boolean legacy = format == 1;
         // Format 5 (W9) adds the alarm beacons' list; formats 1 to 4 read with none.
-        boolean beacons = tag.contains("format", 3) && tag.getInt("format") >= 5;
-        if (!tag.getAllKeys()
-                        .equals(
-                                legacy
-                                        ? Set.of("format", "cables", "ports", "panels")
-                                        : beacons
-                                                ? Set.of("format", "cables", "ports", "panels", "sensorIds", "nextSensorId", "alarms")
-                                                : Set.of(
-                                                "format",
-                                                "cables",
-                                                "ports",
-                                                "panels",
-                                                "sensorIds",
-                                                "nextSensorId"))
+        boolean beacons = format >= 5;
+        boolean power = format >= 6;
+        var fields = new HashSet<>(Set.of("format", "cables", "ports", "panels"));
+        if (!legacy) fields.addAll(Set.of("sensorIds", "nextSensorId"));
+        if (beacons) fields.add("alarms");
+        if (power) fields.addAll(Set.of("creativePower", "powerReady"));
+        if (!tag.getAllKeys().equals(fields)
                 || !tag.contains("format", 3)
-                || !legacy
-                        && tag.getInt("format") != 2
-                        && tag.getInt("format") != 3
-                        && tag.getInt("format") != 4
-                        && tag.getInt("format") != FORMAT
+                || format < 1 || format > FORMAT
                 || beacons && !tag.contains("alarms", 9)
+                || power && (!tag.contains("creativePower", 9) || !tag.contains("powerReady", 1))
                 || !tag.contains("cables", 9)
                 || !tag.contains("ports", 9)
                 || !tag.contains("panels", 9))
@@ -505,7 +527,7 @@ public final class ControlFacts extends SavedData {
         for (var value : sockets) {
             var port = DataPort.load((CompoundTag) value);
             if (facts.ports.put(port.id(), port) != null
-                    || port.host() > 0 && !hosts.add(port.host()))
+                    || port.host() > 0 && (port.kind().power() ? !power : !hosts.add(port.host())))
                 throw new IllegalArgumentException("Duplicate data port facts");
         }
         var positions = new HashSet<String>();
@@ -540,6 +562,22 @@ public final class ControlFacts extends SavedData {
                         || !port.dimension().equals(alarm.dimension()))
                     throw new IllegalArgumentException("Missing or mismatched alarm beacon socket");
             }
+        }
+        if (power) {
+            var sources = (ListTag) tag.get("creativePower");
+            if (!sources.isEmpty() && sources.getElementType() != 10 || sources.size() > 100_000)
+                throw new IllegalArgumentException("Invalid creative power facts");
+            for (var value : sources) {
+                var source = (CompoundTag) value;
+                if (!source.getAllKeys().equals(Set.of("dimension", "owner"))
+                        || !source.contains("dimension", 8) || !source.contains("owner", 4)
+                        || !facts.creativePower.add(new DataBus.Site(source.getString("dimension"),
+                                BlockPos.of(source.getLong("owner")), 0)))
+                    throw new IllegalArgumentException("Invalid creative power source");
+            }
+            if (tag.getByte("powerReady") != 0 && tag.getByte("powerReady") != 1)
+                throw new IllegalArgumentException("Invalid power migration flag");
+            facts.powerReady = tag.getBoolean("powerReady");
         }
         return facts;
     }

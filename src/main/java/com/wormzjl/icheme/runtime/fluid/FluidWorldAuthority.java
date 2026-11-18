@@ -726,6 +726,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The shaft trains (W3): queue their parts' events here; their views are reads. */
     public ShaftTrains shafts(){owned();return shafts;}
     /** The electric stores (W5): the FE ports' side and their views are reads and the FE protocol only. */
+    public WorldTopologyLedger powerTopology(){owned();return topology;}
     /** A legacy cell's saved facts, including cells outside the active chunk set. */
     public net.minecraft.nbt.CompoundTag savedBlockEntity(String dimension, BlockPos pos) {
         owned();
@@ -1687,35 +1688,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system), by watcher: reads only.
         if(topology.onlineTick()%100==0){publishSilhouettes();publishNoise();}
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){health.cadence();integrity.cadence();}
-        // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
-        pushGenerators();
         com.wormzjl.icheme.network.AssemblyNetwork.presentationTick(server, topology.onlineTick());
         // The machine pages' views (W7, reading A85): on the same 100-tick buckets, only to the open pages.
         com.wormzjl.icheme.network.MachineNetwork.presentationTick(server, topology.onlineTick());
         data.setDirty();
-    }
-    /**
-     * Each charged generator's port pushes FE to the receivers on the six faces of its terminal cell (W5, reading A65): the
-     * FE protocol, moving stored FE only, where the terminal cell is loaded. The terminal is found through the cell of the
-     * generator's first shaft end, which is its structure's.
-     */
-    private void pushGenerators() {
-        var charged=electric.charged();if(charged.isEmpty())return;
-        for(long id:charged) {
-            var u=topology.shaft(id);if(u==null||u.ends().isEmpty())continue;
-            var end=u.ends().getFirst().cell();var level=server.getLevel(dimension(end.dimension()));if(level==null)continue;
-            var at=new BlockPos(end.x(),end.y(),end.z());
-            if(!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||shell.shape()==null||shell.origin()==null)continue;
-            var t=com.wormzjl.icheme.science.equipment.ShapeRasterizer.terminal(shell.shape());if(t==null)continue;
-            var terminal=shell.origin().offset(t.x(),t.y(),t.z());
-            for(var face:net.minecraft.core.Direction.values()) {
-                var beside=terminal.relative(face);if(!level.isLoaded(beside))continue;
-                var sink=level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,beside,face.getOpposite());
-                if(sink==null||!sink.canReceive())continue;
-                int offer=electric.extract(id,Integer.MAX_VALUE,true);if(offer<=0)break;
-                int taken=sink.receiveEnergy(offer,false);if(taken>0)electric.extract(id,taken,false);
-            }
-        }
     }
     /** Attempted when a recovery is queued and on its retry deadline, never polled; delivery stays exactly-once. */
     private void deliverRecoveries(){

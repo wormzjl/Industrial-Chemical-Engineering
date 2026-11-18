@@ -4,7 +4,9 @@ import com.mojang.authlib.GameProfile;
 import com.wormzjl.icheme.registry.*;
 import com.wormzjl.icheme.runtime.control.*;
 import com.wormzjl.icheme.runtime.fluid.*;
+import com.wormzjl.icheme.runtime.power.PowerNetwork;
 import com.wormzjl.icheme.science.equipment.*;
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.world.level.block.*;
 import com.wormzjl.icheme.world.level.block.entity.*;
 
@@ -167,7 +169,7 @@ public final class ConduitLayingGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = "empty", timeoutTicks = 500, batch = "power-direct")
+    @GameTest(template = "empty", timeoutTicks = 3000, batch = "power-direct")
     public static void powerLayingSelectsAndSuppliesALargeMotor(GameTestHelper helper) {
         exercise(helper, CableMedium.POWER, false);
     }
@@ -728,7 +730,13 @@ public final class ConduitLayingGameTests {
     private static void exercise(GameTestHelper helper, CableMedium medium, boolean stub) {
         var level = helper.getLevel();
         var world = FluidWorldAuthority.find(level.getServer()).orElseThrow();
-        var origin = helper.absolutePos(new BlockPos(8, 2, 8));
+        var test = helper.absolutePos(new BlockPos(8, 2, 8));
+        var remote = new BlockPos(((test.getX() >> 4) + 64) * 16 + 8, 80, (test.getZ() >> 4) * 16 + 8);
+        PlantBuilder unloaded = medium == CableMedium.POWER && !stub
+                ? AssemblyGameTests.plant(helper, remote, new BlockPos(-12, -2, -12), new BlockPos(12, 12, 12))
+                : null;
+        if (unloaded != null) unloaded.hold();
+        var origin = unloaded == null ? test : unloaded.base;
         var shape =
                 EquipmentShape.unit(
                         EquipmentShape.Kind.MOTOR, 1000, 1, EquipmentShape.Heading.NORTH, 0);
@@ -772,6 +780,8 @@ public final class ConduitLayingGameTests {
         player.setItemInHand(InteractionHand.MAIN_HAND, tool);
         var placed = new ArrayList<BlockPos>();
         boolean[] laid = {false}, broken = {false};
+        boolean[] released = {false}, verified = {false};
+        long[] unloadedAt = {-1};
         long[] breakTick = {0};
         int[] retained = {0};
         DataPort[] selected = new DataPort[2];
@@ -784,6 +794,7 @@ public final class ConduitLayingGameTests {
                                         .filter(
                                                 p ->
                                                         p.kind().medium() == medium
+                                                                && level.hasChunkAt(p.owner())
                                                                 && level.getBlockEntity(p.owner())
                                                                         instanceof
                                                                         EquipmentShellBlockEntity
@@ -910,21 +921,27 @@ public final class ConduitLayingGameTests {
                     }
                     if (medium == CableMedium.POWER) {
                         var motor = selected[1];
+                        var unit = world.shafts().unitAt(Positions.of(level, origin));
+                        helper.assertTrue(unit != null, "Waiting for the motor shaft unit");
+                        if (unloaded != null && released[0] && !verified[0]) {
+                            helper.assertTrue(!level.hasChunkAt(station) && !level.hasChunkAt(motor.owner())
+                                            && placed.stream().noneMatch(level::hasChunkAt),
+                                    "Waiting for the source, cable and motor chunks to unload");
+                            if (unloadedAt[0] < 0) unloadedAt[0] = world.onlineTick();
+                            helper.assertTrue(world.onlineTick() >= unloadedAt[0] + 2 * ElectricStores.CADENCE,
+                                    "Waiting past two unloaded power decisions");
+                            helper.assertTrue(PowerNetwork.of(level.getServer()).supplied(unit)
+                                            && world.shafts().view(unit.id()).speed() > 0,
+                                    "The unloaded wired motor lost its creative source");
+                            unloaded.hold();
+                            verified[0] = true;
+                        }
                         var terminal =
                                 (EquipmentShellBlockEntity) level.getBlockEntity(motor.owner());
                         var energy = terminal.energy();
                         helper.assertTrue(
                                 energy != null && energy.getEnergyStored() > 0,
                                 "Waiting for FE through the actual placed cable");
-                        var unit =
-                                world.shafts()
-                                        .unitAt(
-                                                new PhysicalFluidTopology.Position(
-                                                        level.dimension().location().toString(),
-                                                        origin.getX(),
-                                                        origin.getY(),
-                                                        origin.getZ()));
-                        helper.assertTrue(unit != null, "Waiting for the motor shaft unit");
                         if (broken[0]) {
                             helper.assertTrue(
                                     level.getGameTime() - breakTick[0] >= 120,
@@ -949,6 +966,7 @@ public final class ConduitLayingGameTests {
                             EquipmentTestCleanup.remove(
                                     level,
                                     new EquipmentStructure.Vessel(origin, shape).controller());
+                            if (unloaded != null) unloaded.release();
                             return;
                         }
                         helper.assertTrue(
@@ -961,6 +979,11 @@ public final class ConduitLayingGameTests {
                                         .supplied(unit),
                                 "The full motor cannot see its connected source without receiving"
                                     + " FE");
+                        if (unloaded != null && !released[0]) {
+                            unloaded.release();
+                            released[0] = true;
+                            helper.assertTrue(false, "Waiting for the wired plant to unload");
+                        }
                         retained[0] = energy.getEnergyStored();
                     }
                     var removed = placed.get(placed.size() / 2);

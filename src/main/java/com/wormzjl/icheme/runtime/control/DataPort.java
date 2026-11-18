@@ -89,8 +89,15 @@ public record DataPort(
                 || !Double.isFinite(centre.z)
                 || centre.distanceToSqr(cell.getCenter()) > 25)
             throw new IllegalArgumentException("Invalid data port");
-        if (kind.power() ? host != 0 : (kind == Kind.SENSOR || kind == Kind.ACTUATOR) != (host > 0))
+        if (kind.power() ? kind == Kind.POWER_BOTH && host != 0
+                : (kind == Kind.SENSOR || kind == Kind.ACTUATOR) != (host > 0))
             throw new IllegalArgumentException("Invalid port host");
+    }
+
+    /** Links a saved physical FE socket to its store without moving the cable or replacing its ID. */
+    public DataPort withPowerHost(long unit) {
+        if (!kind.power()) throw new IllegalStateException("Not a power port");
+        return unit == host ? this : new DataPort(id, kind, unit, dimension, owner, centre, cell, face, u, v);
     }
 
     /**
