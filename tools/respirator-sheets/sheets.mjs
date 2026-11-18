@@ -1,8 +1,7 @@
 // The respirator's look options (batch 2026-11-18-respirator): three worn masks on a plain head form, software rendered,
-// with their item icons; and the placeholder textures the mod ships until the owner picks.
+// with their item icons. The pick (C) is built by model.mjs: its worn model, texture and item icons.
 //
 //   node tools/respirator-sheets/sheets.mjs <output folder>              option sheet and icon previews
-//   node tools/respirator-sheets/sheets.mjs <output folder> --textures   also writes the placeholder textures into src/main/resources
 //
 // No people: the mask sits on a grey head form (owner rule, 2026-11-18).
 import fs from 'node:fs';
@@ -276,29 +275,6 @@ const ICONS = {
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The worn texture: the outer armour layer, 64 x 32, head box at (0, 0): front face (8..16, 8..16). Placeholder of
-// option B, flat on the head until the owner's pick is built as a model.
-
-function wornTexture() {
-  const c = new Canvas(64, 32);
-  const face = (x, y, colour) => c.set(8 + x, 8 + y, colour);
-  for (let y = 1; y < 8; y++) for (let x = 0; x < 8; x++) face(x, y, C.rubber);
-  for (let x = 1; x < 7; x++) for (let y = 1; y < 4; y++) face(x, y, C.lens);
-  face(1, 1, [220, 240, 250]);
-  face(2, 1, [220, 240, 250]);
-  for (let x = 2; x < 6; x++) for (let y = 4; y < 6; y++) face(x, y, C.grey);
-  for (let x = 3; x < 5; x++) for (let y = 5; y < 8; y++) face(x, y, C.cartridge);
-  face(3, 6, C.band); face(4, 6, C.band);
-  // The harness strap round the sides and the back, at the eyes' height.
-  for (let x = 0; x < 8; x++) {
-    c.set(0 + x, 10, C.strap); // right side
-    c.set(16 + x, 10, C.strap); // left side
-    c.set(24 + x, 10, C.strap); // back
-  }
-  return c;
-}
-
-// ---------------------------------------------------------------------------------------------------------------------
 
 const out = process.argv[2];
 if (!out) {
@@ -338,15 +314,3 @@ OPTIONS.forEach((option, i) => {
 });
 sheet.save(path.join(out, 'respirator_options.png'));
 console.log('wrote', path.join(out, 'respirator_options.png'));
-
-if (process.argv.includes('--textures')) {
-  const assets = 'src/main/resources/assets/icheme/textures';
-  fs.mkdirSync(path.join(assets, 'models/armor'), { recursive: true });
-  ICONS.B.respirator().save(path.join(assets, 'item/respirator.png'));
-  ICONS.B.filter().save(path.join(assets, 'item/respirator_filter.png'));
-  wornTexture().save(path.join(assets, 'models/armor/respirator_layer_1.png'));
-  const preview = new Canvas(64 * 6, 32 * 6, [255, 255, 255, 255]);
-  preview.blit(wornTexture(), 0, 0, 6);
-  preview.save(path.join(out, 'placeholder_worn_texture_x6.png'));
-  console.log('wrote the placeholder textures (option B)');
-}
