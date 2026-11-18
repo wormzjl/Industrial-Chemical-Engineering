@@ -129,7 +129,7 @@ class GasIntakeTest {
         }
     }
 
-    /** The air: the dry fractions of D7 times 1 - y_w, y_w = 0.5 p_sat(25 °C) / 101 325 Pa, and nothing else. */
+    /** The air: the standard atmosphere's dry fractions times 1 - y_w, y_w = 0.5 p_sat(25 °C) / 101 325 Pa, and nothing else. */
     @Test void theAirIsDampDryAirWithItsRareGases() {
         var model = MODEL;
         double[] y = Air.wet(model);
@@ -145,10 +145,11 @@ class GasIntakeTest {
         assertEquals(5.24e-6 * dry, y[ids.indexOf("Helium")], 1e-18);
         assertEquals(1.14e-6 * dry, y[ids.indexOf("Krypton")], 1e-18);
         assertEquals(.087e-6 * dry, y[ids.indexOf("Xenon")], 1e-19);
-        assertEquals(0, y[ids.indexOf("CarbonDioxide")], "no carbon dioxide (D7)");
+        assertEquals(314e-6 * dry, y[ids.indexOf("CarbonDioxide")], 1e-18, "314 ppm of dry air (U.S. Standard Atmosphere 1976)");
+        assertEquals((1 - .20946 - .00934 - 314e-6 - 18.18e-6 - 5.24e-6 - 1.14e-6 - .087e-6) * dry, y[ids.indexOf("Nitrogen")], 1e-15, "nitrogen the balance");
         int nonzero = 0;
         for (double v : y) if (v > 0) nonzero++;
-        assertEquals(8, nonzero, "nitrogen, oxygen, five rare gases and water");
+        assertEquals(9, nonzero, "nitrogen, oxygen, carbon dioxide, five rare gases and water");
     }
 
     /** (a) Behind a set-flow compressor of ratio 3 the drum rises to three atmospheres of air and stops; the account closes. */
@@ -163,7 +164,7 @@ class GasIntakeTest {
         assertTrue(air.lastFlow() < .01 * air.given().values().stream().mapToDouble(Math::abs).sum(), "and the flow has stopped: " + air.lastFlow());
         var y = Air.wet(MODEL);
         var ids = MODEL.components();
-        for (var id : List.of("Nitrogen", "Oxygen", "Argon", "Neon", "Helium", "Krypton", "Xenon", "Water"))
+        for (var id : List.of("Nitrogen", "Oxygen", "Argon", "CarbonDioxide", "Neon", "Helium", "Krypton", "Xenon", "Water"))
             assertEquals(y[ids.indexOf(id)], air.drum().getOrDefault(id, 0.), 1e-9, "the drum holds the air: " + id);
         assertCloses(air, "air");
     }

@@ -1,0 +1,24 @@
+// Offline software renders of the equipment reflection pass. No production or test source set or client run is changed.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def tool = p.sourceSets.create('reflectionRenderTool') {
+        java.srcDir p.file('tools/reflection-render')
+        java.include 'ReflectionRender.java'
+        compileClasspath += p.sourceSets.main.output + p.sourceSets.main.compileClasspath
+        runtimeClasspath += output + p.sourceSets.main.runtimeClasspath
+    }
+    p.tasks.named(tool.compileJavaTaskName) {
+        dependsOn p.tasks.named('classes')
+        options.compilerArgs.add('-proc:none')
+    }
+    p.tasks.register('renderReflections', JavaExec) {
+        group = 'documentation'
+        description = 'Software renders of the reflection law on a drum, a column, an exchanger and a pump; never starts a client.'
+        dependsOn p.tasks.named(tool.classesTaskName)
+        classpath = tool.runtimeClasspath
+        mainClass = 'com.wormzjl.icheme.client.model.ReflectionRender'
+        args p.file(p.providers.gradleProperty('reflectionRenderOut').getOrElse('tmp/reflection-render')).absolutePath
+        workingDir = p.projectDir
+        jvmArgs '-Djava.awt.headless=true'
+    }
+}

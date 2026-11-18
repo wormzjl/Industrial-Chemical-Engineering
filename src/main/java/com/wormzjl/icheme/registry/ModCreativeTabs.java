@@ -28,6 +28,8 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.PRESSURE_GAUGE.get());
                 output.accept(ModItems.TEMPERATURE_GAUGE.get());
                 output.accept(ModItems.POLLUTION_METER.get());
+                output.accept(ModItems.RESPIRATOR.get());
+                output.accept(ModItems.RESPIRATOR_FILTER_ITEM.get());
                 output.accept(ModItems.LIQUID_LEVEL_GAUGE.get());
                 output.accept(ModItems.GAS_BLANKETING_VALVE.get());
                 output.accept(ModItems.PRESSURE_SAFETY_VALVE.get());
@@ -40,6 +42,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.LOCAL_CONTROLLER.get());
                 output.accept(ModItems.DCS.get());
                 output.accept(ModItems.POLLUTION_MONITOR.get());
+                output.accept(ModItems.POLLUTED_SOIL.get());
                 output.accept(ModItems.PIPE_RACK.get());
                 output.accept(ModItems.PIPELINE_SIGHT_GLASS.get());
                 output.accept(ModItems.PIPELINE_SHUTOFF_VALVE.get());
@@ -57,6 +60,8 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.FLUID_GENERATOR.get());
                 output.accept(ModItems.GAS_INTAKE.get());
                 output.accept(ModItems.LIQUID_HOPPER.get());
+                output.accept(ModItems.WATER_INTAKE.get());
+                output.accept(ModItems.WASTE_OUTFALL.get());
                 output.accept(ModItems.DIVERTER_VALVE.get());
                 output.accept(ModItems.FLUID_VOID.get());
                 output.accept(ModItems.INLINE_FILTER.get());

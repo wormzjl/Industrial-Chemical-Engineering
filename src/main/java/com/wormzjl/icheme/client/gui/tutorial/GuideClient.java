@@ -36,6 +36,14 @@ public final class GuideClient {
         return pages;
     }
 
+    private static com.wormzjl.icheme.science.tutorial.guide.Photos photos;
+
+    /** The chapters' photographs (batch 2026-11-18-tutorial-photos), read once from the mod's assets. */
+    public static com.wormzjl.icheme.science.tutorial.guide.Photos photos() {
+        if (photos == null) photos = com.wormzjl.icheme.science.tutorial.guide.PhotoFile.load();
+        return photos;
+    }
+
     /** P5: opens the guide at the equipment page {@code id} (an item id: the reference item's use); its Back closes the guide. */
     public static void openPage(String id) {
         var mc = net.minecraft.client.Minecraft.getInstance();
@@ -49,6 +57,7 @@ public final class GuideClient {
     public static void reloaded() {
         guide = null;
         pages = null;
+        photos = null;
         HelpTour.forget();
         generation++;
     }

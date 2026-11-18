@@ -2,6 +2,8 @@ package com.wormzjl.icheme.runtime.pollution;
 
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.pollution.Channel;
+import com.wormzjl.icheme.science.pollution.GroundField;
+import com.wormzjl.icheme.science.pollution.GroundLedger;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import com.wormzjl.icheme.science.pollution.PollutionLedger;
 import com.wormzjl.icheme.science.pollution.Release;
@@ -44,26 +46,51 @@ import java.util.function.Supplier;
  * {@code amounts} (long array of {@link Double#doubleToRawLongBits}, four per key in channel order), {@code ledger} (long
  * array of 20 double bits, channel-major), {@code pending_keys} (long array), {@code pending_channels} (list of channel
  * names), {@code pending_amounts} (long array of double bits).</p>
+ *
+ * <p>Schema 2 (batch 2026-11-18-ground-pollution), append-only, each key absent for a dimension with no ground (and in
+ * every schema-1 store, which reads with an empty ground): {@code ground_columns} (long array of chunk columns,
+ * {@code MapColumns.column}), {@code ground_amounts} (long array of double bits, one per column: the ground has one amount,
+ * owner 2026-11-18), {@code ground_ledger} (long array of 4 double bits, {@link GroundLedger.Total} order),
+ * {@code ground_ledger_compounds} (list of {@code {n: name, t: long array of 4 double bits}}), {@code ground_compounds}
+ * (list of {@code {c: column, n: compound name, m: moles bits}}), {@code ground_pending} (list of {@code {c: column, a:
+ * amount bits, k: list of {n, m}}}). Damaged ground arrays drop that dimension's ground alone, with a note; a compound name
+ * is kept as saved even when no package holds it (a fact).</p>
  */
 public final class PollutionStore extends SavedData {
     public static final String DATA_NAME = "icheme_pollution";
     /** Facts schema of this store (documentation/reference/FORMATS.md). */
-    public static final int SCHEMA = 1;
+    public static final int SCHEMA = 2;
     /** The largest amount a saved cube channel may hold: index 10^6 in an open cube. */
     public static final double MAXIMUM_AMOUNT = 1e6 * PollutionField.CUBE_AIR_MOLES;
     private static final int CHANNELS = Channel.values().length;
     private static final int TOTALS = PollutionLedger.Total.values().length;
 
-    /** One dimension's saved facts. */
-    public record Saved(PollutionField field, PollutionLedger ledger, List<Release> pending) {
+    /** The largest amount a saved ground column may hold: index 10^6. */
+    public static final double MAXIMUM_GROUND_AMOUNT = 1e6 * GroundField.GROUND_REFERENCE;
+
+    /** One dimension's saved facts: the air field, its ledger and pending releases; the ground, its ledger and pending deposits. */
+    public record Saved(PollutionField field, PollutionLedger ledger, List<Release> pending, GroundField ground,
+            GroundLedger groundLedger, List<GroundField.Deposit> groundPending) {
         public Saved {
             Objects.requireNonNull(field, "field");
             Objects.requireNonNull(ledger, "ledger");
             pending = List.copyOf(pending);
+            Objects.requireNonNull(ground, "ground");
+            Objects.requireNonNull(groundLedger, "groundLedger");
+            groundPending = List.copyOf(groundPending);
+        }
+
+        /** A dimension with no ground (as a schema-1 store reads). */
+        public Saved(PollutionField field, PollutionLedger ledger, List<Release> pending) {
+            this(field, ledger, pending, GroundField.EMPTY, GroundLedger.EMPTY, List.of());
         }
 
         boolean empty() {
-            return field.size() == 0 && pending.isEmpty();
+            return field.size() == 0 && pending.isEmpty() && !hasGround();
+        }
+
+        boolean hasGround() {
+            return ground.size() > 0 || !groundPending.isEmpty() || !groundLedger.equals(GroundLedger.EMPTY);
         }
     }
 
@@ -169,6 +196,9 @@ public final class PollutionStore extends SavedData {
             d.putLongArray("pending_keys", keys);
             d.put("pending_channels", channels);
             d.putLongArray("pending_amounts", amounts);
+            if (saved.hasGround()) {
+                writeGround(d, saved);
+            }
             all.put(entry.getKey(), d);
         }
         root.put("dimensions", all);
@@ -292,7 +322,158 @@ public final class PollutionStore extends SavedData {
         var field = PollutionField.of(Arrays.copyOf(keptKeys, kept), Arrays.copyOf(keptAmounts, kept * CHANNELS));
         var ledger = ledger(id, d.get("ledger"), field, dissipated, notes);
         var pending = pending(id, d, notes);
-        return new Saved(field, ledger, pending);
+        GroundField ground = GroundField.EMPTY;
+        GroundLedger groundLedger = GroundLedger.EMPTY;
+        List<GroundField.Deposit> groundPending = List.of();
+        if (d.contains("ground_columns") || d.contains("ground_amounts") || d.contains("ground_ledger")
+                || d.contains("ground_compounds") || d.contains("ground_ledger_compounds") || d.contains("ground_pending")) {
+            try {
+                ground = ground(d);
+                groundLedger = groundLedger(id, d, ground, notes);
+            } catch (RuntimeException damaged) {
+                notes.add("dimension " + id + ": ground dropped: " + damaged.getMessage());
+                ground = GroundField.EMPTY;
+                groundLedger = GroundLedger.EMPTY;
+            }
+            try {
+                groundPending = groundPending(d);
+            } catch (RuntimeException damaged) {
+                notes.add("dimension " + id + ": pending ground deposits dropped: " + damaged.getMessage());
+                groundPending = List.of();
+            }
+        }
+        return new Saved(field, ledger, pending, ground, groundLedger, groundPending);
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // The ground (schema 2).
+
+    private static void writeGround(CompoundTag d, Saved saved) {
+        var ground = saved.ground();
+        d.putLongArray("ground_columns", ground.columns());
+        d.putLongArray("ground_amounts", bits(ground.amounts()));
+        d.putLongArray("ground_ledger", bits(saved.groundLedger().totals()));
+        var ledgerCompounds = new ListTag();
+        for (var e : saved.groundLedger().compounds().entrySet()) {
+            var c = new CompoundTag();
+            c.putString("n", e.getKey());
+            c.putLongArray("t", bits(e.getValue()));
+            ledgerCompounds.add(c);
+        }
+        d.put("ground_ledger_compounds", ledgerCompounds);
+        var compounds = new ListTag();
+        for (var e : ground.entries()) {
+            var c = new CompoundTag();
+            c.putLong("c", e.column());
+            c.putString("n", e.name());
+            c.putLong("m", Double.doubleToRawLongBits(e.moles()));
+            compounds.add(c);
+        }
+        d.put("ground_compounds", compounds);
+        var pending = new ListTag();
+        for (var deposit : saved.groundPending()) {
+            var p = new CompoundTag();
+            p.putLong("c", deposit.column());
+            p.putLong("a", Double.doubleToRawLongBits(deposit.amount()));
+            var k = new ListTag();
+            for (var compound : deposit.compounds()) {
+                var c = new CompoundTag();
+                c.putString("n", compound.name());
+                c.putLong("m", Double.doubleToRawLongBits(compound.moles()));
+                k.add(c);
+            }
+            p.put("k", k);
+            pending.add(p);
+        }
+        d.put("ground_pending", pending);
+    }
+
+    private static GroundField ground(CompoundTag d) {
+        if (!(d.get("ground_columns") instanceof LongArrayTag columnsTag) || !(d.get("ground_amounts") instanceof LongArrayTag amountsTag)) {
+            throw new IllegalArgumentException("ground_columns or ground_amounts missing or not long arrays");
+        }
+        double[] amounts = doubles(amountsTag.getAsLongArray());
+        for (double a : amounts) {
+            if (!(a <= MAXIMUM_GROUND_AMOUNT)) {
+                throw new IllegalArgumentException("a ground amount above the cap: " + a);
+            }
+        }
+        var entries = new ArrayList<GroundField.Entry>();
+        if (d.contains("ground_compounds")) {
+            if (!(d.get("ground_compounds") instanceof ListTag list)) {
+                throw new IllegalArgumentException("ground_compounds is not a list");
+            }
+            for (Tag t : list) {
+                if (!(t instanceof CompoundTag c)) {
+                    throw new IllegalArgumentException("a ground compound is not a compound");
+                }
+                entries.add(new GroundField.Entry(c.getLong("c"), c.getString("n"), Double.longBitsToDouble(c.getLong("m"))));
+            }
+        }
+        return GroundField.of(columnsTag.getAsLongArray(), amounts, entries);
+    }
+
+    private static GroundLedger groundLedger(String id, CompoundTag d, GroundField ground, List<String> notes) {
+        try {
+            if (!(d.get("ground_ledger") instanceof LongArrayTag ledgerTag)) {
+                throw new IllegalArgumentException("ground_ledger missing");
+            }
+            var compounds = new TreeMap<String, double[]>();
+            if (d.get("ground_ledger_compounds") instanceof ListTag list) {
+                for (Tag t : list) {
+                    if (!(t instanceof CompoundTag c) || !(c.get("t") instanceof LongArrayTag totals)) {
+                        throw new IllegalArgumentException("a ground ledger compound is damaged");
+                    }
+                    compounds.put(c.getString("n"), doubles(totals.getAsLongArray()));
+                }
+            } else if (d.contains("ground_ledger_compounds")) {
+                throw new IllegalArgumentException("ground_ledger_compounds is not a list");
+            }
+            return GroundLedger.of(doubles(ledgerTag.getAsLongArray()), compounds);
+        } catch (RuntimeException damaged) {
+            // As the air ledger: rebuilt from what the ground holds, deposited = stored.
+            notes.add("dimension " + id + ": ground ledger rebuilt from the kept columns");
+            int totals = GroundLedger.LENGTH;
+            double[] book = new double[GroundLedger.LENGTH];
+            book[GroundLedger.Total.DEPOSITED.ordinal()] = ground.stored();
+            var compounds = new TreeMap<String, double[]>();
+            for (var e : ground.entries()) {
+                compounds.computeIfAbsent(e.name(), k -> new double[totals])[GroundLedger.Total.DEPOSITED.ordinal()] += e.moles();
+            }
+            return GroundLedger.of(book, compounds);
+        }
+    }
+
+    private static List<GroundField.Deposit> groundPending(CompoundTag d) {
+        if (!d.contains("ground_pending")) {
+            return List.of();
+        }
+        if (!(d.get("ground_pending") instanceof ListTag list)) {
+            throw new IllegalArgumentException("ground_pending is not a list");
+        }
+        var out = new ArrayList<GroundField.Deposit>(list.size());
+        for (Tag t : list) {
+            if (!(t instanceof CompoundTag p) || !(p.get("a") instanceof net.minecraft.nbt.LongTag a) || !(p.get("k") instanceof ListTag k)) {
+                throw new IllegalArgumentException("a pending ground deposit is damaged");
+            }
+            var compounds = new ArrayList<GroundField.Compound>(k.size());
+            for (Tag x : k) {
+                if (!(x instanceof CompoundTag c)) {
+                    throw new IllegalArgumentException("a pending compound is not a compound");
+                }
+                compounds.add(new GroundField.Compound(c.getString("n"), Double.longBitsToDouble(c.getLong("m"))));
+            }
+            out.add(new GroundField.Deposit(p.getLong("c"), Double.longBitsToDouble(a.getAsLong()), compounds));
+        }
+        return out;
+    }
+
+    private static double[] doubles(long[] bits) {
+        double[] out = new double[bits.length];
+        for (int i = 0; i < bits.length; i++) {
+            out[i] = Double.longBitsToDouble(bits[i]);
+        }
+        return out;
     }
 
     private static PollutionLedger ledger(String id, Tag value, PollutionField field, double[] dissipated, List<String> notes) {

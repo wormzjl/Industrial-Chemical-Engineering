@@ -35,11 +35,13 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 | `RenderDetail` | `NORMAL` or `LOW`: drawing only | 19 |
 | `HeatSides` | A unit's heat sides: `unit(kind)` (`Unit`), `of(shape)` (`Definition`, `Side`), `pool`, `kettleShell`, `kettleBundle`, the passages, the air (`AIR`, `NATURAL_DRAUGHT`, `fanPower`), the shared cooling numbers (`AIR_SPLIT_TEMPERATURE`, `airSplit`, `TOWER_WATER_TEMPERATURE`, `WATER_RANGE`, `WATER_APPROACH`, `coolingWaterOutlet`), `coilDuty`, `CONVECTION_U`, `heatSide` (with a deposit, `fouling`), `airFilms` (clean or fouled) | 265 |
 | `DeviceName` | A placed device's name rule: `clean`, `MAX`, `NONE`, `valid`, `titled` | 50 |
+| `PlantTag` | A built structure's default name: `prefix(kind)` (an exhaustive switch, ISA / PFD letters), `next(prefix, taken)` (the lowest free number from `FIRST` = 101), `tag` | 59 |
 | `Nameplate` | Where a named structure's plate sits (`of`) and a one-block device's tag (`tag`); `EYE`, `SIZES`, `STAND_OFF`, `CLEAR`, `LIFT` | 141 |
 | **Pipes, fittings, instruments** | | |
 | `LineGeometry` | One fluid-device block's drawn shape: runs, elbows, tees (off-centre with fitted sweeps), reducers, flanges with a seam, valve, strainer (`filterPolygons`), `fittingEnd`, `overhanging`, `SPOOL`; transition pipes (`Key.offsets`, `OFFSET`, `transition`) | 846 |
 | `ValveGeometry` | Check, shutoff (with `shutoffLever`, `shutoffStem`, `shutoffPivot`), pressure valve castings; the diverter's actuator apart (`diverterActuator`, `diverterAxis`) | 235 |
 | `InlineMoverGeometry` | In-line pump and geared compressor; `supports`, `boundaryJoints` | 249 |
+| `WaterIntakeGeometry`, `OutfallGeometry` | A water intake's strainer (`BASKET` drawn; `BELL`, `TEE` for the option sheets); a waste outfall's open end (`GOOSENECK` drawn; `APRON`, `HEADWALL`); placeholders until the owner picks (batch 2026-11-18-water-intake-outfall) | 103, 92 |
 | `IntakeGeometry`, `HopperGeometry` | A gas intake's louvred filter house under a rain hood; a liquid hopper's square funnel on a short body; each with flanged stubs to its joined faces (`FluidDeviceModel`, `"body"`) | 55, 75 |
 | `SightGlassGeometry` | Round-window housing by bore; `supports`, `towards`, `window`, `bubbles` | 168 |
 | `BlanketValveGeometry` | A drum's gas blanketing valve on its reservation: `of`, `bounds`, `face` | 114 |
@@ -80,7 +82,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src
 - **Determinism.** All trigonometry goes through `DeterministicMath`, so layouts, stamps and solids are bitwise equal on client and server and on every JDK (`DeterministicMathSourceTest` scans this package).
 - **Server only.** `serverOnly()` (dedicated server) drops facets once laid out; layout, keys, ports, solids and revisions stay; `surface`, `fixedSurface` and `moving` throw.
 - **Low detail** (`RenderDetail.LOW`) changes drawing only: facts, collision, layout, nozzle and shaft positions are those of Normal.
-- **Names.** `DeviceName.clean` drops formatting codes and control characters, trims and cuts to `MAX` code points; empty is no name; two devices may share one. A nameplate fits where its corners stand within `STAND_OFF` of the surface and `CLEAR` before it holds no solid or climb zone; drawn, never a cell.
+- **Names.** `DeviceName.clean` drops formatting codes and control characters, trims and cuts to `MAX` code points; empty is no name; two devices may share one. `PlantTag` gives a new whole structure a default name (`V-101`, `P-102`): only names exactly `prefix-n` count as taken. A nameplate fits where its corners stand within `STAND_OFF` of the surface and `CLEAR` before it holds no solid or climb zone; drawn, never a cell.
 - **Valves on drums** have no cells: they are drawn, and the host's registration takes their inlet and outlet as its `BLANKET` and `RELIEF` ports ([instrument-accessories.md](instrument-accessories.md)).
 
 ## Laws and constants
@@ -106,6 +108,7 @@ In `equipmentGates` (`src/test/java/com/wormzjl/icheme/science/equipment/`; run 
 | `LineGeometryTest` | Pipe pieces in their cell, watertight, outer faces only; reducers, flanges, blind flanges; sight-glass necks; transition pipes and their rims |
 | `PortMarkingsTest` | Flow per role, pass-through partners, every arrow on its neck pointing with the stream |
 | `PaintTest`, `VesselPlacementTest`, `BoundedCacheTest` | Paint and tint; where a build lands; eviction keeps a used entry |
+| `PlantTagTest` | Every kind has a prefix; 101 first, gaps filled, near misses ignored; a tag passes the name rule and the registry's record |
 | `DeviceNameTest`, `NameplateTest` | The name rule; plates clear of nozzles and ladders, turning with the structure, a tag towards the eye |
 | `HeatSidesTest` | Each unit's sides, surfaces and passages |
 | `EquipmentServicesTest`, `InstrumentWiringTest`, `EffectMarksTest`, `RenderDetailTest` | Service housings reach their sockets; wiring; effect marks; Low detail keeps the facts |

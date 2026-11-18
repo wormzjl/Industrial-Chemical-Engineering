@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.Environment;
 import com.wormzjl.icheme.science.pollution.Exposure;
 import com.wormzjl.icheme.science.pollution.Reading;
+import com.wormzjl.icheme.world.item.RespiratorItem;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -125,12 +126,13 @@ public final class PollutionMeters {
     }
 
     private static void show(ServerPlayer player, PollutionService service) {
+        var mask = respirator(RespiratorGear.worn(player));
         if (!on(service)) {
-            player.displayClientMessage(off(), true);
+            player.displayClientMessage(withMask(off(), mask), true);
             return;
         }
         double[] indices = indices(service, player);
-        player.displayClientMessage(actionBar(indices[0], indices[1], indices[2], indices[3]), true);
+        player.displayClientMessage(withMask(actionBar(indices[0], indices[1], indices[2], indices[3]), mask), true);
         var sound = tickSound(Reading.worst(indices[0], indices[1], indices[2], indices[3]));
         if (sound != null) {
             player.playNotifySound(sound, SoundSource.PLAYERS, TICK_VOLUME, 1f);
@@ -150,8 +152,16 @@ public final class PollutionMeters {
             }
             double[] indices = indices(service, player);
             var cell = service.cell(player.level().dimension(), PollutionService.cube(pos));
-            for (var line : fullReading(pos, indices[0], indices[1], indices[2], indices[3], cell)) {
+            // The ground of the column underfoot (batch 2026-11-18-ground-pollution, G3), from the published snapshot.
+            var snapshot = service.groundSnapshot(player.level().dimension());
+            long column = com.wormzjl.icheme.science.pollution.MapColumns.column(pos.getX() >> 4, pos.getZ() >> 4);
+            double ground = snapshot.index(column);
+            for (var line : fullReading(pos, indices[0], indices[1], indices[2], indices[3], cell, ground)) {
                 player.displayClientMessage(line, false);
+            }
+            var mask = respirator(RespiratorGear.worn(player));
+            if (mask != null) {
+                player.displayClientMessage(mask, false);
             }
         } catch (RuntimeException failure) {
             IChemE.LOGGER.warn("pollution status=METER_REPORT_FAILED detail={}", String.valueOf(failure));
@@ -192,6 +202,30 @@ public final class PollutionMeters {
         return out;
     }
 
+    /**
+     * The worn respirator's segment (batch 2026-11-18-respirator): "Mask 73% protected", "Mask 0% filter spent" or
+     * "Mask 0% no filter"; null when none is worn.
+     */
+    public static Component respirator(net.minecraft.world.item.ItemStack worn) {
+        if (worn == null || worn.isEmpty()) {
+            return null;
+        }
+        boolean fitted = RespiratorItem.fitted(worn);
+        double remaining = RespiratorItem.filter(worn);
+        boolean working = com.wormzjl.icheme.science.pollution.Respirator.protects(remaining);
+        String word = !fitted ? "pollution.icheme.meter.respirator.none"
+                : working ? "pollution.icheme.meter.respirator.protected" : "pollution.icheme.meter.respirator.spent";
+        return Component.translatable("pollution.icheme.meter.respirator", RespiratorItem.percent(remaining), Component.translatable(word))
+                .withStyle(working ? ChatFormatting.AQUA : ChatFormatting.RED);
+    }
+
+    private static Component withMask(Component line, Component mask) {
+        if (mask == null) {
+            return line;
+        }
+        return Component.empty().append(line).append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY)).append(mask);
+    }
+
     /** The one segment shown while pollution is disabled or absent. */
     public static Component off() {
         return Component.translatable("pollution.icheme.meter.off").withStyle(ChatFormatting.GRAY);
@@ -200,8 +234,30 @@ public final class PollutionMeters {
     /** The chat lines of a full reading: the cube, the four channels, and the cube's air. */
     public static List<Component> fullReading(BlockPos pos, double toxic, double combustible, double corrosive, double particulate,
             Environment.Cell cell) {
+        return fullReading(pos, toxic, combustible, corrosive, particulate, cell, 0.0);
+    }
+
+    /**
+     * {@link #fullReading(BlockPos, double, double, double, double, Environment.Cell)} and then, when {@code ground} is above
+     * 0, the ground of the chunk column underfoot in one line, its word and colour on the toxic scale
+     * ({@link Reading#groundWord}; batch 2026-11-18-ground-pollution, one amount).
+     */
+    public static List<Component> fullReading(BlockPos pos, double toxic, double combustible, double corrosive, double particulate,
+            Environment.Cell cell, double ground) {
+        var out = airReading(pos, toxic, combustible, corrosive, particulate, cell);
+        if (!(ground > 0)) {
+            return out;
+        }
+        var word = Reading.groundWord(ground);
+        out.add(Component.translatable("pollution.icheme.meter.ground", Integer.toString(pos.getX() >> 4), Integer.toString(pos.getZ() >> 4),
+                Reading.number(ground), Component.translatable(wordKey(word))).withStyle(colour(word)));
+        return out;
+    }
+
+    private static List<Component> airReading(BlockPos pos, double toxic, double combustible, double corrosive, double particulate,
+            Environment.Cell cell) {
         double[] indices = {toxic, combustible, corrosive, particulate};
-        var out = new ArrayList<Component>(6);
+        var out = new ArrayList<Component>(11);
         out.add(header(pos));
         for (var channel : CHANNELS) {
             double index = indices[channel.ordinal()];

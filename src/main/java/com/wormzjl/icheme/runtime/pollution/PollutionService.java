@@ -7,7 +7,13 @@ import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.CubeKey;
 import com.wormzjl.icheme.science.pollution.Environment;
-import com.wormzjl.icheme.science.pollution.MapEnvironment;
+import com.wormzjl.icheme.science.pollution.GroundEnvironment;
+import com.wormzjl.icheme.science.pollution.GroundField;
+import com.wormzjl.icheme.science.pollution.GroundLedger;
+import com.wormzjl.icheme.science.pollution.GroundSettings;
+import com.wormzjl.icheme.science.pollution.GroundSnapshot;
+import com.wormzjl.icheme.science.pollution.MapColumns;
+import com.wormzjl.icheme.science.pollution.KeySets;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import com.wormzjl.icheme.science.pollution.PollutionLedger;
 import com.wormzjl.icheme.science.pollution.PollutionSettings;
@@ -26,8 +32,8 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -56,14 +62,12 @@ public final class PollutionService {
 
     private static final Map<MinecraftServer, PollutionService> SERVERS = new IdentityHashMap<>();
 
-    private record Cached(Environment.Cell cell, int tick) {
-    }
-
     /** One dimension: its engine, its cells, its next deadline. */
     private static final class Dimension {
         final ResourceKey<Level> key;
         final PollutionEngine engine = new PollutionEngine();
-        final Map<Long, Cached> cells = new HashMap<>();
+        final CellCache cells = new CellCache();
+        final WaterCache water = new WaterCache();
         int next;
 
         Dimension(ResourceKey<Level> key) {
@@ -73,6 +77,7 @@ public final class PollutionService {
 
     private final MinecraftServer server;
     private final PollutionSettings settings;
+    private final GroundSettings groundSettings = GroundSettings.DEFAULT;
     private final double passSeconds;
     private final PollutionStore store;
     private final Map<ResourceKey<Level>, Dimension> dimensions = new LinkedHashMap<>();
@@ -217,6 +222,29 @@ public final class PollutionService {
         }
     }
 
+    /**
+     * Puts what the spill law left at {@code position} on the ground of its chunk column (batch
+     * 2026-11-18-ground-pollution): four channel amounts, which the ground adds into one, and the compounds ({@link PollutionEngine#deposit}). The air
+     * ledger books the amounts {@code RELEASED} and {@code GROUND} at once; the next pass lands the deposit. A position
+     * outside the world's height is dropped, as a release is.
+     */
+    public void deposit(ResourceKey<Level> dimension, BlockPos position, double[] amounts, List<GroundField.Compound> compounds) {
+        try {
+            if (disabled || dimension == null || position == null || amounts == null || compounds == null) {
+                return;
+            }
+            if (!inside(dimension, cube(position))) {
+                return;
+            }
+            dimension(dimension).engine.deposit(MapColumns.column(position.getX() >> 4, position.getZ() >> 4), amounts, compounds);
+            if (store != null) {
+                store.setDirty();
+            }
+        } catch (RuntimeException failure) {
+            IChemE.LOGGER.error("pollution status=DEPOSIT_FAILED dimension={} detail={}", dimension, String.valueOf(failure));
+        }
+    }
+
     /** {@link #release(ResourceKey, long, Channel, double)} at the cube that holds {@code position}. */
     public void release(ResourceKey<Level> dimension, BlockPos position, Channel channel, double amount) {
         if (position == null) {
@@ -257,6 +285,30 @@ public final class PollutionService {
         return d == null ? PollutionField.EMPTY : d.engine.field();
     }
 
+    /** The installed ground of a dimension; EMPTY when it has none. */
+    public GroundField ground(ResourceKey<Level> dimension) {
+        var d = dimensions.get(dimension);
+        return d == null ? GroundField.EMPTY : d.engine.ground();
+    }
+
+    public GroundLedger groundLedger(ResourceKey<Level> dimension) {
+        var d = dimensions.get(dimension);
+        return d == null ? GroundLedger.EMPTY : d.engine.groundLedger();
+    }
+
+    /** The ground's published bytes of a dimension (G2): what the map, the meter and the world effects read. EMPTY when disabled. */
+    public GroundSnapshot groundSnapshot(ResourceKey<Level> dimension) {
+        if (disabled) {
+            return GroundSnapshot.EMPTY;
+        }
+        var d = dimensions.get(dimension);
+        return d == null ? GroundSnapshot.EMPTY : d.engine.groundSnapshot();
+    }
+
+    public GroundSettings groundSettings() {
+        return groundSettings;
+    }
+
     public PollutionLedger ledger(ResourceKey<Level> dimension) {
         var d = disabled ? null : dimensions.get(dimension);
         return d == null ? PollutionLedger.EMPTY : d.engine.ledger();
@@ -266,7 +318,7 @@ public final class PollutionService {
     public Environment.Cell cell(ResourceKey<Level> dimension, long cube) {
         var d = dimensions.get(dimension);
         var cached = d == null ? null : d.cells.get(cube);
-        return cached == null ? Environment.Cell.UNLOADED : cached.cell();
+        return cached == null ? Environment.Cell.UNLOADED : cached;
     }
 
     public boolean enabled() {
@@ -341,7 +393,7 @@ public final class PollutionService {
 
     private static double airShare(Dimension d, long cube) {
         var cached = d.cells.get(cube);
-        return cached == null ? 1.0 : cached.cell().airShare();
+        return cached == null ? 1.0 : cached.airShare();
     }
 
     /** The dimension's runtime, made on first use from what the store carried for it, if anything. */
@@ -378,7 +430,7 @@ public final class PollutionService {
                 ledger = capped.ledger();
                 pending = kept;
             }
-            d.engine.restore(field, ledger, pending);
+            d.engine.restore(field, ledger, pending, saved.ground(), saved.groundLedger(), saved.groundPending());
         }
         dimensions.put(key, d);
         return d;
@@ -394,7 +446,8 @@ public final class PollutionService {
     private Map<String, PollutionStore.Saved> saved() {
         var out = new TreeMap<String, PollutionStore.Saved>();
         for (var d : dimensions.values()) {
-            out.put(d.key.location().toString(), new PollutionStore.Saved(d.engine.field(), d.engine.ledger(), d.engine.pendingForSave()));
+            out.put(d.key.location().toString(), new PollutionStore.Saved(d.engine.field(), d.engine.ledger(), d.engine.pendingForSave(),
+                    d.engine.ground(), d.engine.groundLedger(), d.engine.pendingDepositsForSave()));
         }
         return out;
     }
@@ -460,14 +513,16 @@ public final class PollutionService {
             return;
         }
         Environment environment;
+        GroundEnvironment groundEnvironment;
         try {
             environment = environment(level, d, now);
+            groundEnvironment = groundEnvironment(level, d, now);
         } catch (RuntimeException failure) {
             engine.failed("snapshot: " + failure);
             failed(d, "snapshot", engine.lastFailure());
             return;
         }
-        var pass = engine.begin(environment, passSeconds, settings);
+        var pass = engine.begin(environment, groundEnvironment, passSeconds, settings, groundSettings);
         if (pass.isEmpty()) {
             return;
         }
@@ -550,62 +605,93 @@ public final class PollutionService {
      * this pass.
      */
     private Environment environment(ServerLevel level, Dimension d, int now) {
-        var core = d.engine.core();
-        var wanted = d.engine.wanted();
-        int minimumY = level.getMinSection();
-        int maximumY = level.getMaxSection() - 1;
-        var chunks = new HashMap<Long, LevelChunk>();
-        var cells = new HashMap<Long, Environment.Cell>();
-        int[] budget = {CELL_BUDGET};
-        for (long cube : core) {
-            cells.put(cube, cell(level, d, cube, now, chunks, budget, minimumY, maximumY));
-        }
-        for (long cube : wanted) {
-            if (!cells.containsKey(cube)) {
-                cells.put(cube, cell(level, d, cube, now, chunks, budget, minimumY, maximumY));
+        long[] core = d.engine.core();
+        long[] wanted = KeySets.cubeFaces(core);
+        var chunks = new Chunks(level);
+        return d.cells.snapshot(core, wanted, now, CELL_TICKS, CELL_BUDGET, new CellCache.World() {
+            @Override
+            public boolean chunkLoaded(long cube) {
+                return chunks.get(CubeKey.x(cube), CubeKey.z(cube)) != null;
             }
-        }
-        // Bounded memory: forget the cells of cubes no longer wanted.
-        for (Iterator<Long> it = d.cells.keySet().iterator(); it.hasNext(); ) {
-            if (!wanted.contains(it.next())) {
-                it.remove();
+
+            @Override
+            public Environment.Cell read(long cube) {
+                return PollutionService.read(chunks.get(CubeKey.x(cube), CubeKey.z(cube)), CubeKey.y(cube));
             }
-        }
-        return new MapEnvironment(cells, Environment.Cell.UNLOADED, level.isRaining(), minimumY, maximumY);
+        }, level.isRaining(), level.getMinSection(), level.getMaxSection() - 1);
     }
 
-    private static Environment.Cell cell(ServerLevel level, Dimension d, long cube, int now, Map<Long, LevelChunk> chunks,
-            int[] budget, int minimumY, int maximumY) {
-        int y = CubeKey.y(cube);
-        if (y < minimumY || y > maximumY) {
-            return Environment.Cell.UNLOADED;
+    /** The chunks a snapshot looked up, by column: a chunk is looked up once a pass, loaded or not. */
+    private static final class Chunks {
+        private final ServerLevel level;
+        private final HashMap<Long, LevelChunk> seen = new HashMap<>();
+        private long lastColumn;
+        private LevelChunk last;
+        private boolean any;
+
+        Chunks(ServerLevel level) {
+            this.level = level;
         }
-        int x = CubeKey.x(cube);
-        int z = CubeKey.z(cube);
-        long column = (long) x << 32 | (z & 0xFFFFFFFFL);
-        LevelChunk chunk;
-        if (chunks.containsKey(column)) {
-            chunk = chunks.get(column);
-        } else {
-            chunk = loaded(level, x, z);
-            chunks.put(column, chunk);
+
+        LevelChunk get(int x, int z) {
+            long column = (long) x << 32 | (z & 0xFFFFFFFFL);
+            if (any && column == lastColumn) {
+                return last;
+            }
+            LevelChunk chunk;
+            if (seen.containsKey(column)) {
+                chunk = seen.get(column);
+            } else {
+                chunk = loaded(level, x, z);
+                seen.put(column, chunk);
+            }
+            any = true;
+            lastColumn = column;
+            last = chunk;
+            return chunk;
         }
-        if (chunk == null) {
-            return Environment.Cell.UNLOADED;
+    }
+
+    /**
+     * The ground's view of the world for the next pass (G2): which of the wanted columns are loaded now, and which have a
+     * surface that is mostly water (at least 9 of 16 sampled surface blocks hold water), read at most {@link #CELL_BUDGET}
+     * columns per pass and kept {@link #CELL_TICKS}; a column over the budget uses its older read, or counts as land.
+     */
+    private GroundEnvironment groundEnvironment(ServerLevel level, Dimension d, int now) {
+        var chunks = new Chunks(level);
+        return d.water.snapshot(d.engine.groundWanted(), now, CELL_TICKS, CELL_BUDGET, new WaterCache.World() {
+            @Override
+            public boolean chunkLoaded(long column) {
+                return chunks.get(MapColumns.x(column), MapColumns.z(column)) != null;
+            }
+
+            @Override
+            public boolean water(long column) {
+                return surfaceWater(chunks.get(MapColumns.x(column), MapColumns.z(column)));
+            }
+        }, level.isRaining());
+    }
+
+    /** Whether at least 9 of 16 surface blocks (a 4 × 4 grid) of the chunk hold water; any failure answers land. */
+    static boolean surfaceWater(LevelChunk chunk) {
+        try {
+            int wet = 0;
+            var position = new BlockPos.MutableBlockPos();
+            int baseX = chunk.getPos().getMinBlockX(), baseZ = chunk.getPos().getMinBlockZ();
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    int x = 2 + 4 * i, z = 2 + 4 * j;
+                    int top = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
+                    position.set(baseX + x, top, baseZ + z);
+                    if (chunk.getFluidState(position).is(net.minecraft.tags.FluidTags.WATER)) {
+                        wet++;
+                    }
+                }
+            }
+            return wet >= 9;
+        } catch (RuntimeException failure) {
+            return false;
         }
-        var cached = d.cells.get(cube);
-        if (cached != null && now - cached.tick() < CELL_TICKS) {
-            return cached.cell();
-        }
-        if (budget[0] <= 0) {
-            return cached != null ? cached.cell() : Environment.Cell.UNLOADED;
-        }
-        budget[0]--;
-        var read = read(chunk, y);
-        if (read.loaded()) {
-            d.cells.put(cube, new Cached(read, now));
-        }
-        return read;
     }
 
     /** The chunk if it is loaded now; never loads or generates one. */
@@ -642,7 +728,7 @@ public final class PollutionService {
                 air = Math.max(0, Math.min(SECTION_BLOCKS, count[0]));
             }
             boolean open = (sectionY << 4) + 15 >= chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8);
-            return new Environment.Cell(air / (double) SECTION_BLOCKS, open, true);
+            return CellCache.cell(air, open);
         } catch (RuntimeException failure) {
             return Environment.Cell.UNLOADED;
         }

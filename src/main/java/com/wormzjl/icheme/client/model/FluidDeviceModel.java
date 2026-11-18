@@ -59,7 +59,7 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
     private final boolean checkAccessory;
     private final boolean pressureAccessory;
     private final boolean moverAccessory;
-    /** A generator's own body (batch 2026-11-15-fluid-interfaces): {@code "body": "intake"} a gas intake's filter house, {@code "hopper"} a liquid hopper's funnel; "" none. */
+    /** A generator's own body (batch 2026-11-15-fluid-interfaces): {@code "body": "intake"} a gas intake's filter house, {@code "hopper"} a liquid hopper's funnel, {@code "water_intake"} a water intake's strainer, {@code "outfall"} a waste outfall's open end (batch 2026-11-18-water-intake-outfall); "" none. */
     private final String body;
     /** An orifice plate item (batch 2026-11-15-fluid-interfaces, W6). */
     private final boolean orificeAccessory;
@@ -112,6 +112,9 @@ public final class FluidDeviceModel implements IDynamicBakedModel {
     private Baked bake(Look look) {
         if(body.equals("intake"))return new Baked(quads(look,com.wormzjl.icheme.science.equipment.IntakeGeometry.polygons(look.geometry.pipe(),detail)),List.of());
         if(body.equals("hopper"))return new Baked(quads(look,com.wormzjl.icheme.science.equipment.HopperGeometry.polygons(look.geometry.pipe(),detail)),List.of());
+        // Batch 2026-11-18-water-intake-outfall: the placeholder looks (the owner picks from the option sheets).
+        if(body.equals("water_intake"))return new Baked(quads(look,com.wormzjl.icheme.science.equipment.WaterIntakeGeometry.polygons(look.geometry.pipe(),detail)),List.of());
+        if(body.equals("outfall"))return new Baked(quads(look,com.wormzjl.icheme.science.equipment.OutfallGeometry.polygons(look.geometry.pipe(),detail)),List.of());
         if(look.mover!=TopologyCompiler.Kind.PIPE)return new Baked(quads(look,com.wormzjl.icheme.science.equipment.InlineMoverGeometry.polygons(look.geometry.pipe(),look.mover==TopologyCompiler.Kind.COMPRESSOR,moverAccessory,detail)),List.of());
         if(look.filter)return new Baked(quads(look,LineGeometry.filterPolygons(look.geometry.pipe(),detail)),List.of());
         if(look.pressureValve)return new Baked(quads(look,ValveGeometry.pressure(look.geometry.pipe(),pressureAccessory,detail)),List.of());

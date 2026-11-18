@@ -232,6 +232,10 @@ final class ViewBuilder {
         // words (THIN WALL, WEEPING, LEAKING, WRECKED, and a heat side's FOULED, WP5) come first.
         String wall=authority.integrity.status(id);
         boolean heatSide=registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE;
+        // A water intake with no water body (batch 2026-11-18-water-intake-outfall): its switch is off, its boundary closed.
+        if(FluidWorldAuthority.waterIntake(registration)&&!registration.device().generatorEnabled())status=FluidWorldAuthority.NO_WATER_BODY+": the strainer touches no water body of "+WaterBody.WATER_BODY+" blocks / "+status;
+        // Its column's ground water (batch 2026-11-18-ground-pollution, G5): named, never delivered.
+        else{String ground=authority.groundWater(registration);if(!ground.isEmpty())status=ground+" / "+status;}
         if(registration.spec().breached()&&!heatSide)status="BREACHED: open to the air, repair with the Equipment Constructor / "+status;
         else if(registration.spec().breached()&&wall.isEmpty())status="LEAKING: tube leak / "+status;
         if(authority.integrity.fouled(id))status="FOULED / "+status;

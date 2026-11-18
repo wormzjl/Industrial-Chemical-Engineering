@@ -33,7 +33,8 @@ class PollutionMapNetworkCodecTest {
     void theAnswerRoundTrips() {
         long[] columns = {MapColumns.column(0, 0), MapColumns.column(-3, 17), MapColumns.column(31, -32)};
         int[] values = {0x0000_0032, 0xFF00_0A05, 0x0119_0000};
-        var answer = new PollutionMapNetwork.Answer("minecraft:the_nether", false, columns, values);
+        int[] ground = {0, 5, 255};
+        var answer = new PollutionMapNetwork.Answer("minecraft:the_nether", false, columns, values, ground);
         var buffer = buffer();
         PollutionMapNetwork.Answer.STREAM_CODEC.encode(buffer, answer);
         var back = PollutionMapNetwork.Answer.STREAM_CODEC.decode(buffer);
@@ -42,6 +43,7 @@ class PollutionMapNetworkCodecTest {
         assertFalse(back.denied());
         assertArrayEquals(columns, back.columns(), "the order is kept: nearest first");
         assertArrayEquals(values, back.values());
+        assertArrayEquals(ground, back.ground(), "the ground's one byte rides beside the air (batch 2026-11-18-ground-pollution)");
 
         var refused = PollutionMapNetwork.Answer.refused("minecraft:overworld");
         var again = buffer();

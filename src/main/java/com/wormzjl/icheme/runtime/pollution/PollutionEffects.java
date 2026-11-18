@@ -4,6 +4,8 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.CubeKey;
 import com.wormzjl.icheme.science.pollution.Exposure;
+import com.wormzjl.icheme.science.pollution.GroundEffects;
+import com.wormzjl.icheme.science.pollution.MapColumns;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import net.minecraft.core.Holder;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -65,6 +67,8 @@ public final class PollutionEffects {
     private final boolean particles;
     private final Map<ResourceKey<Level>, Integer> starts = new HashMap<>();
     private final Exposure.Level[] levels = new Exposure.Level[CHANNELS.length];
+    /** The cube's real indices beside {@link #levels}: a worn respirator's filter load (batch 2026-11-18-respirator). */
+    private final double[] indices = new double[CHANNELS.length];
     private int pass;
     private int failures;
     private boolean off;
@@ -94,6 +98,8 @@ public final class PollutionEffects {
             entityFailureLogged = false;
             for (ServerLevel level : server.getAllLevels()) {
                 dimension(level, service);
+                water(level, service);
+                GroundSoil.spoil(level, service, CUBE_BUDGET);
             }
             failures = 0;
         } catch (RuntimeException failure) {
@@ -129,7 +135,9 @@ public final class PollutionEffects {
             }
             boolean any = false;
             for (var channel : CHANNELS) {
-                var l = Exposure.level(PollutionField.index(field.amount(i, channel), cell.airShare(), settings));
+                double index = PollutionField.index(field.amount(i, channel), cell.airShare(), settings);
+                var l = Exposure.level(index);
+                indices[channel.ordinal()] = index;
                 levels[channel.ordinal()] = l;
                 any |= l != Exposure.Level.NONE;
             }
@@ -155,7 +163,9 @@ public final class PollutionEffects {
                 var box = new AABB(x * 16.0, y * 16.0, z * 16.0, x * 16.0 + 16, y * 16.0 + 16, z * 16.0 + 16);
                 for (var entity : level.getEntitiesOfClass(LivingEntity.class, box, AFFECTED)) {
                     try {
-                        treat(entity, levels, sources, pass);
+                        // A worn respirator lowers what is breathed; the armour still sees the cube's air.
+                        boolean here = PollutionService.cube(entity.blockPosition()) == cube;
+                        treat(entity, levels, RespiratorGear.protect(entity, here, indices, levels), sources, pass);
                     } catch (RuntimeException failure) {
                         if (!entityFailureLogged) {
                             entityFailureLogged = true;
@@ -166,6 +176,47 @@ public final class PollutionEffects {
             }
         }
         starts.put(key, next);
+    }
+
+    /**
+     * Water over polluted ground (batch 2026-11-18-ground-pollution, G4; config {@code pollution.groundWater}): every living
+     * thing in water in a chunk column whose ground index reaches {@link Exposure#LOW} is treated as the air treats a toxic
+     * cube at that index ({@link GroundEffects#water}). Reads the published ground snapshot; at most
+     * {@link #CUBE_BUDGET} columns a pass, loaded chunks only.
+     */
+    private void water(ServerLevel level, PollutionService service) {
+        if (!effects || !IChemE.pollutionGroundWater()) {
+            return;
+        }
+        var snapshot = service.groundSnapshot(level.dimension());
+        if (snapshot.size() == 0) {
+            return;
+        }
+        DamageSource[] sources = sources(level);
+        int served = 0;
+        for (int i = 0; i < snapshot.size() && served < CUBE_BUDGET; i++) {
+            var exposure = GroundEffects.water(snapshot.value(i));
+            if (exposure == null) {
+                continue;
+            }
+            long column = snapshot.column(i);
+            int x = MapColumns.x(column), z = MapColumns.z(column);
+            if (level.getChunkSource().getChunkNow(x, z) == null) {
+                continue;
+            }
+            served++;
+            var box = new AABB(x * 16.0, level.getMinBuildHeight(), z * 16.0, x * 16.0 + 16, level.getMaxBuildHeight(), z * 16.0 + 16);
+            for (var entity : level.getEntitiesOfClass(LivingEntity.class, box, e -> AFFECTED.test(e) && e.isInWater())) {
+                try {
+                    treat(entity, exposure, sources, pass);
+                } catch (RuntimeException failure) {
+                    if (!entityFailureLogged) {
+                        entityFailureLogged = true;
+                        IChemE.LOGGER.warn("pollution status=EFFECT_FAILED dimension={} entity={} detail={}", level.dimension().location(), entity.getType(), String.valueOf(failure));
+                    }
+                }
+            }
+        }
     }
 
     /** The damage sources by channel ordinal (null for a channel with no damage, or a type the data does not hold). */
@@ -212,12 +263,20 @@ public final class PollutionEffects {
      * dealt as 1 HP every few passes, by {@code pass}; {@code sources} may be null (no damage) or hold nulls.
      */
     public static void treat(LivingEntity entity, Exposure.Level[] levels, DamageSource[] sources, int pass) {
+        treat(entity, levels, levels, sources, pass);
+    }
+
+    /**
+     * As {@link #treat(LivingEntity, Exposure.Level[], DamageSource[], int)}, with the effects and damage at {@code breathed}
+     * (a worn respirator's, {@link RespiratorGear#protect}) and the armour corroded by the cube's own {@code levels}.
+     */
+    public static void treat(LivingEntity entity, Exposure.Level[] levels, Exposure.Level[] breathed, DamageSource[] sources, int pass) {
         if (!affected(entity)) {
             return;
         }
         boolean player = entity instanceof Player;
         for (var channel : CHANNELS) {
-            var level = levels[channel.ordinal()];
+            var level = breathed[channel.ordinal()];
             if (level == null || level == Exposure.Level.NONE) {
                 continue;
             }
@@ -230,7 +289,7 @@ public final class PollutionEffects {
         }
         if (sources != null) {
             for (var channel : CHANNELS) {
-                var level = levels[channel.ordinal()];
+                var level = breathed[channel.ordinal()];
                 double perSecond = Exposure.damagePerSecond(channel, level);
                 var source = sources[channel.ordinal()];
                 if (!(perSecond > 0) || source == null || !entity.isAlive()) {

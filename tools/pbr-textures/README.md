@@ -63,6 +63,24 @@ cp tmp/relief-sprites/sprites/*.png src/main/resources/assets/icheme/textures/bl
 ```
 
 `EquipmentTexturesTest` (client/fx) checks sizes, channel ranges, the absent `_n` beside a baked sprite, the mean
-colours, the neutral painted sprites and the shell model's `<material>_flat` keys. The shell seams are gone from
+colours, the neutral painted sprites and the shell model's `<material>_flat` keys.
+
+### Plain sprites (batch 2026-11-18-equipment-reflections)
+
+The same run also writes, for the 21 plain painted body and bare steel sprites the reflection pass draws (`PLAIN`:
+`painted_shell`, `painted_head`, `painted_support`, `painted_machine`, `equipment_motor`, `ac_header`, `pump_casting`,
+`pump_volute`, `pump_fins`, `pump_joint`, `motor_frame`, `motor_plain`, `painted_heater`, `equipment_handrail`;
+`equipment_pipe`, `equipment_flange`, `equipment_bolt`, `shaft_steel`, `still_stainless`, `still_carbon_steel`,
+`equipment_grating`), read from `src/main/resources/assets/icheme/textures/block/`: `<name>_flat.png` (the sprite itself:
+it has no relief), a flat `<name>_flat_n.png` (128, 128, AO 255, height 255) and a uniform `<name>_flat_s.png` with the
+class's numbers of `ReflectionClass`: paint smoothness 115 (roughness 0.30) and F0 13 (0.05); steel smoothness 104
+(roughness 0.35) and the iron id 230. Copy them with the relief sprites:
+
+```
+cp tmp/relief-sprites/sprites/*.png src/main/resources/assets/icheme/textures/block/
+```
+
+`ReflectionClassTest` (client/model) checks every plain `_flat_s` against the table and every `_flat` against its sprite.
+The shell model JSON names each as `<material>_flat`, so a shader pack (with `pbr_textures` on) lights them from the maps. The shell seams are gone from
 `vessel_shell`, `painted_shell`, `vessel_head` and `painted_head` (`VesselTextures`, owner 2026-11-15: no weld seams);
 those sprites have no relief and no flat variant.

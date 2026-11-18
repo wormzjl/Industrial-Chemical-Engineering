@@ -42,6 +42,19 @@ public final class PollutionLedger {
     }
 
     /** Reads saved totals; refuses a wrong length, a non-finite or a negative value. */
+    /**
+     * This ledger with {@code amount} of {@code channel} released straight to the ground (batch
+     * 2026-11-18-water-intake-outfall: what a waste outfall leaves on the ground): booked {@code RELEASED} and {@code GROUND}
+     * at once, never in the field, so the closure is unchanged. A non-finite or non-positive amount changes nothing.
+     */
+    public PollutionLedger grounded(Channel channel, double amount) {
+        if (!(amount > 0.0) || !Double.isFinite(amount)) return this;
+        double[] book = values();
+        book[slot(channel.ordinal(), Total.RELEASED)] += amount;
+        book[slot(channel.ordinal(), Total.GROUND)] += amount;
+        return of(book);
+    }
+
     public static PollutionLedger of(double[] values) {
         Objects.requireNonNull(values, "values");
         if (values.length != LENGTH) {

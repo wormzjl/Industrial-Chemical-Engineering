@@ -74,7 +74,9 @@ public final class GuiPrototypes {
             valveSensorSheets(out);
             return;
         }
-        for (var p : prototypes()) {
+        // The pollution map sheets alone need no material catalog either.
+        var all = System.getProperty("only", "").startsWith("pollution-map") ? pollutionMap() : prototypes();
+        for (var p : all) {
             if (!p.file().startsWith(System.getProperty("only", ""))) continue;
             var titles = new ArrayList<>(List.of("Light panel (3a)", "Dark panel (3c)"));
             var pages = new ArrayList<>(List.of(render(p, PanelSkin.LIGHT, false), render(p, PanelSkin.DARK, false)));
@@ -113,7 +115,66 @@ public final class GuiPrototypes {
         out.addAll(blanketValve());
         out.addAll(reliefValve());
         out.addAll(integrity());
+        out.addAll(pollutionMap());
         return out;
+    }
+
+    /**
+     * The pollution map's layers (batch 2026-11-18-ground-pollution, G3, option A): a 7 by 5 chunk patch of the FTB Chunks
+     * large map with an air plume to the east and polluted ground to the west, its squares in each layer
+     * ({@link com.wormzjl.icheme.client.pollution.MapLayer#argb}: the air's worst colour, the ground's brown, or the higher of the two),
+     * and the tooltip of the middle chunk ({@link com.wormzjl.icheme.client.pollution.MapLayer#tooltip}) in the game's colours.
+     * The map and the tooltip are FTB's and vanilla's, not the panel's: the light and dark doors only frame them.
+     */
+    static List<Prototype> pollutionMap() {
+        var out = new ArrayList<Prototype>();
+        for (var layer : com.wormzjl.icheme.client.pollution.MapLayer.values()) {
+            out.add(new Prototype("pollution-map-" + layer.name().toLowerCase(java.util.Locale.ROOT), 464, 254, (d, s) -> {
+                int cell = 30, ox = 10, oy = 34;
+                d.skin.title(d.c, 10, 10, "Pollution map, layer " + layer.name());
+                for (int cz = 0; cz < 5; cz++) for (int cx = 0; cx < 7; cx++) {
+                    int x = ox + cx * cell, y = oy + cz * cell;
+                    d.c.fill(x, y, x + cell, y + cell, ((cx + cz) & 1) == 0 ? 0xFF5E8C3A : 0xFF6A9442);
+                    int air = mapAir(cx, cz), ground = mapGround(cx, cz);
+                    int argb = layer.argb(air, ground);
+                    if (argb != 0) d.c.fill(x, y, x + cell, y + cell, argb);
+                }
+                d.c.outline(ox + 3 * cell, oy + 2 * cell, cell, cell, 0xFFFFFFFF);
+                var lines = layer.tooltip(com.wormzjl.icheme.science.pollution.MapColumns.column(3, 2), mapAir(3, 2), mapGround(3, 2));
+                var texts = new ArrayList<String>();
+                var colours = new ArrayList<Integer>();
+                for (var line : lines) {
+                    var args = new Object[line.args().size()];
+                    for (int i = 0; i < args.length; i++) args[i] = line.args().get(i) instanceof com.wormzjl.icheme.client.pollution.MapLayer.Key k ? Door.tr(k.key()) : line.args().get(i);
+                    texts.add(Door.tr(line.key(), args));
+                    colours.add(line.word() == null ? (line.args().isEmpty() ? 0xFF55FFFF : 0xFFFFFFFF) : switch (line.word()) {
+                        case SAFE -> 0xFF55FF55;
+                        case WARNING -> 0xFFFFFF55;
+                        case DANGER -> 0xFFFFAA00;
+                        case LETHAL, FLAMMABLE -> 0xFFFF5555;
+                    });
+                }
+                int tw = 0;
+                for (var t : texts) tw = Math.max(tw, d.m.width(t));
+                int tx = ox + 7 * cell + 10, ty = oy + 4, th = texts.size() * 10 + 6;
+                d.c.fill(tx - 3, ty - 4, tx + tw + 3, ty + th - 2, 0xF0100010);
+                d.c.outline(tx - 3, ty - 4, tw + 6, th + 2, 0xFF5000FF);
+                for (int i = 0; i < texts.size(); i++) d.c.text(texts.get(i), tx, ty + i * 10, colours.get(i));
+            }));
+        }
+        return out;
+    }
+
+    /** The air plume of the map sheets: east of the middle, toxic, falling off with distance. */
+    static int mapAir(int cx, int cz) {
+        double d = Math.hypot(cx - 4.5, cz - 2), index = 1.4 / (1 + d * d);
+        return com.wormzjl.icheme.science.pollution.MapColumns.quantise(index < 0.1 ? 0 : index) << 8 * com.wormzjl.icheme.science.pollution.Channel.TOXIC.ordinal();
+    }
+
+    /** The polluted ground of the map sheets: west of the middle, one byte. */
+    static int mapGround(int cx, int cz) {
+        double d = Math.hypot(cx - 1.5, cz - 2), index = 2.0 / (1 + d * d);
+        return index < 0.1 ? 0 : com.wormzjl.icheme.science.pollution.MapColumns.quantise(index);
     }
 
     /**
@@ -861,7 +922,9 @@ public final class GuiPrototypes {
     }
 
     static CalculatorColumn.PumpDuty sampleDuty(String name, double flow, double head, double density) {
-        var duty = com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.duty(new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Load(flow, head, 0, null, density));
+        var load = new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Load(flow, head, 0, null, density);
+        // The duty at the size the calculator picks for it (PumpSizing.duty takes the size since the sized pump speed).
+        var duty = com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.duty(load, com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.auto(load).size());
         return new CalculatorColumn.PumpDuty(name, duty.flow(), duty.head(), duty.shaft(), duty.npsh(), duty.motor());
     }
 

@@ -24,6 +24,9 @@ public final class PollutionMapStore {
     /** The columns of the last answer, ascending (for {@link Arrays#binarySearch}), and their four bytes. */
     private static long[] columns = NONE;
     private static int[] values = NO_VALUES;
+    /** The ground's byte of each column (batch 2026-11-18-ground-pollution, G3), in the order of {@link #columns}. */
+    private static int[] groundValues = NO_VALUES;
+
     private static Runnable changed = () -> {
     };
 
@@ -56,6 +59,7 @@ public final class PollutionMapStore {
         // The answer is nearest first; the store keeps the columns ascending.
         long[] given = answer.columns();
         int[] givenValues = answer.values();
+        int[] givenGround = answer.ground();
         Integer[] order = new Integer[given.length];
         for (int i = 0; i < order.length; i++) {
             order[i] = i;
@@ -63,15 +67,18 @@ public final class PollutionMapStore {
         Arrays.sort(order, (a, b) -> Long.compare(given[a], given[b]));
         long[] sortedColumns = new long[order.length];
         int[] sortedValues = new int[order.length];
+        int[] sortedGround = new int[order.length];
         for (int k = 0; k < order.length; k++) {
             sortedColumns[k] = given[order[k]];
             sortedValues[k] = givenValues[order[k]];
+            sortedGround[k] = givenGround[order[k]];
         }
         boolean newSet = answer.denied() != denied || !answer.dimension().equals(dimension) || !Arrays.equals(sortedColumns, columns);
         dimension = answer.dimension();
         denied = answer.denied();
         columns = sortedColumns;
         values = sortedValues;
+        groundValues = sortedGround;
         if (newSet) {
             try {
                 changed.run();
@@ -100,6 +107,35 @@ public final class PollutionMapStore {
         return i < 0 ? 0 : values[i];
     }
 
+    /** The ground's byte of {@code column} in {@code dimensionId}; 0 when the store has none (no allocation). */
+    public static int ground(String dimensionId, long column) {
+        if (!shows(dimensionId)) {
+            return 0;
+        }
+        int i = Arrays.binarySearch(columns, column);
+        return i < 0 ? 0 : groundValues[i];
+    }
+
+    /** The square's ARGB in the current {@link #layer}; 0 when it is not drawn. */
+    public static int shown(String dimensionId, long column) {
+        return layer().argb(value(dimensionId, column), ground(dimensionId, column));
+    }
+
+    /** The layer the squares show (G3, option A): the client's, kept in {@code icheme-client.toml}. */
+    public static MapLayer layer() {
+        return com.wormzjl.icheme.client.ClientConfig.pollutionMapLayer();
+    }
+
+    /** Whether the map is open and asking. */
+    public static boolean watching() {
+        return watching;
+    }
+
+    /** Shows {@code next} on the squares from the next draw, and saves it. */
+    public static void layer(MapLayer next) {
+        com.wormzjl.icheme.client.ClientConfig.pollutionMapLayer(next == null ? MapLayer.BOTH : next);
+    }
+
     /** Run when an answer brings another set of columns (the map gathers its squares again); one listener. */
     public static void onChange(Runnable listener) {
         changed = listener == null ? () -> {
@@ -123,5 +159,6 @@ public final class PollutionMapStore {
         denied = false;
         columns = NONE;
         values = NO_VALUES;
+        groundValues = NO_VALUES;
     }
 }

@@ -121,12 +121,12 @@ class PipePresentationTest {
         for(double gas:new double[]{.01,.1,1,9,99}){
             var sample=display(new double[]{.4,.6,gas},SolidInventory.EMPTY,1);
             assertTrue(sample.bubbles()>previous,"gas-rich flow must not lose bubbles as haze declines");previous=sample.bubbles();
-            int count=SightGlassGeometry.bubbles(100,9,sample.bubbles(),UP).size();assertTrue(count>=previousCount);previousCount=count;
+            int count=count(sample.bubbles());assertTrue(count>=previousCount);previousCount=count;
             assertEquals(sample.bubbles(),display(new double[]{4,6,10*gas},SolidInventory.EMPTY,1).bubbles(),"ratio is independent of total volume");
             assertEquals(sample.bubbles(),display(new double[]{.4,.6,gas},solids,1).bubbles(),"solids do not dilute the gas/liquid ratio");
         }
-        assertEquals(4,SightGlassGeometry.bubbles(100,9,display(new double[]{1,0,1},SolidInventory.EMPTY,1).bubbles(),UP).size());
-        assertEquals(8,SightGlassGeometry.bubbles(100,9,display(new double[]{1,0,99},SolidInventory.EMPTY,1).bubbles(),UP).size());
+        assertEquals(4,count(display(new double[]{1,0,1},SolidInventory.EMPTY,1).bubbles()));
+        assertEquals(8,count(display(new double[]{1,0,99},SolidInventory.EMPTY,1).bubbles()));
         assertEquals(PipePresentation.SightGlass.CLEAR,display(new double[]{.5,0,.5},SolidInventory.EMPTY,0),"old stream with stopped speed clears");
         assertEquals(PipePresentation.SightGlass.CLEAR,display(new double[]{0,0,1},SolidInventory.EMPTY,1));
         assertEquals(PipePresentation.SightGlass.CLEAR,display(new double[3],SolidInventory.EMPTY,1));
@@ -139,31 +139,40 @@ class PipePresentationTest {
         try{
             var samples=new ArrayList<PipePresentation.SightGlass>();
             samples.add(PipePresentation.SightGlass.CLEAR);samples.add(new PipePresentation.SightGlass(0xC8A17A40,0,null));
-            for(var direction:PhysicalFluidTopology.Direction.values())samples.add(new PipePresentation.SightGlass(0xFF9E9987,255,direction));
+            for(var direction:PhysicalFluidTopology.Direction.values())for(double speed:new double[]{0,.02,1.5,5.1})samples.add(new PipePresentation.SightGlass(0xFF9E9987,255,direction,speed));
             for(var sample:samples){
                 var payload=new FluidNetwork.SightGlassPayload(target,sample);FluidNetwork.SightGlassPayload.STREAM_CODEC.encode(buffer,payload);
                 assertEquals(payload,FluidNetwork.SightGlassPayload.STREAM_CODEC.decode(buffer));
             }
-            buffer.clear();buffer.writeBlockPos(target.position());buffer.writeLong(target.identity());buffer.writeInt(0);buffer.writeByte(1);buffer.writeByte(0);
+            buffer.clear();buffer.writeBlockPos(target.position());buffer.writeLong(target.identity());buffer.writeInt(0);buffer.writeByte(1);buffer.writeByte(0);buffer.writeByte(0);
             assertThrows(IllegalArgumentException.class,()->FluidNetwork.SightGlassPayload.STREAM_CODEC.decode(buffer));
             for(int code:new int[]{7,255}){
-                buffer.clear();buffer.writeBlockPos(target.position());buffer.writeLong(target.identity());buffer.writeInt(0xFF123456);buffer.writeByte(1);buffer.writeByte(code);
+                buffer.clear();buffer.writeBlockPos(target.position());buffer.writeLong(target.identity());buffer.writeInt(0xFF123456);buffer.writeByte(1);buffer.writeByte(code);buffer.writeByte(0);
                 assertThrows(IllegalArgumentException.class,()->FluidNetwork.SightGlassPayload.STREAM_CODEC.decode(buffer));
             }
             assertThrows(IllegalArgumentException.class,()->new PipePresentation.SightGlass(0xFF123456,-1,null));
             assertThrows(IllegalArgumentException.class,()->new PipePresentation.SightGlass(0xFF123456,256,PhysicalFluidTopology.Direction.EAST));
             assertThrows(IllegalArgumentException.class,()->new PipePresentation.SightGlass(0xFF123456,1,null));
+            buffer.clear();buffer.writeBlockPos(target.position());buffer.writeLong(target.identity());buffer.writeInt(0xFF123456);buffer.writeByte(0);buffer.writeByte(0);buffer.writeByte(5);
+            assertThrows(IllegalArgumentException.class,()->FluidNetwork.SightGlassPayload.STREAM_CODEC.decode(buffer),"a speed with no direction");
+            assertThrows(IllegalArgumentException.class,()->new PipePresentation.SightGlass(0xFF123456,0,PhysicalFluidTopology.Direction.EAST,Double.NaN));
+            assertThrows(IllegalArgumentException.class,()->new PipePresentation.SightGlass(0xFF123456,0,PhysicalFluidTopology.Direction.EAST,-.1));
+            // One unsigned byte in steps of 0.02 m/s: rounded to the nearest step, faster than 5.1 m/s reads as 5.1.
+            assertEquals(1.24,new PipePresentation.SightGlass(0xFF123456,0,PhysicalFluidTopology.Direction.EAST,1.234).speed(),1e-12);
+            assertEquals(5.1,new PipePresentation.SightGlass(0xFF123456,0,PhysicalFluidTopology.Direction.EAST,40).speed(),1e-12);
+            assertEquals(.02,new PipePresentation.SightGlass(0xFF123456,0,PhysicalFluidTopology.Direction.EAST,.011).speed(),1e-12);
         }finally{buffer.release();}
     }
 
     @Test void motionIsStableContainedAndBetweenTheLiquidAndGlass(){
-        assertEquals(List.of(),SightGlassGeometry.bubbles(100,9,0,UP));
-        assertEquals(SightGlassGeometry.bubbles(100,9,255,UP),SightGlassGeometry.bubbles(100,9,255,UP));
-        assertNotEquals(SightGlassGeometry.bubbles(100,9,255,UP),SightGlassGeometry.bubbles(110,9,255,UP));
-        for(int strength:new int[]{1,100,255})for(long seed:new long[]{0,9,Long.MAX_VALUE})for(int tick=0;tick<400;tick+=13)
-            for(var bubble:SightGlassGeometry.bubbles(tick,seed,strength,UP)){
-                assertTrue(bubble.radius()>=0&&Double.isFinite(bubble.radius()));
-                assertTrue(Math.hypot(bubble.x(),bubble.y())+bubble.radius()<=.971,"entire ring fits inside the aperture");
+        assertEquals(List.of(),SightGlassGeometry.bubbles(.05,9,0,UP,.1,.1,false));
+        assertEquals(SightGlassGeometry.bubbles(.05,9,255,UP,.1,.1,false),SightGlassGeometry.bubbles(.05,9,255,UP,.1,.1,false));
+        assertNotEquals(SightGlassGeometry.bubbles(.05,9,255,UP,.1,.1,false),SightGlassGeometry.bubbles(.06,9,255,UP,.1,.1,false));
+        for(int strength:new int[]{1,100,255})for(long seed:new long[]{0,9,Long.MAX_VALUE})for(double distance=0;distance<.4;distance+=.013)
+            for(var bubble:SightGlassGeometry.bubbles(distance,seed,strength,UP,.1,.1,false)){
+                assertTrue(bubble.radius()>0&&Double.isFinite(bubble.radius()));
+                double extent=bubble.radius()*bubble.stretch()*SightGlassGeometry.fallbackScale(bubble);
+                assertTrue(extent==0||Math.hypot(bubble.x(),bubble.y())+extent<=.971,"entire fallback ring fits inside the aperture (0: not drawn)");
             }
         for(var axis:SightGlassGeometry.Axis.values())for(double bore:new double[]{.001,.05,1}){
             int face=axis==SightGlassGeometry.Axis.X?2:5;
@@ -174,6 +183,20 @@ class PipePresentationTest {
             for(var p:geometry.glass())for(int i=c;i<p.positions().length;i+=3)glass=Math.min(glass,Math.abs(p.positions()[i]-.5));
             assertTrue(window.plane()>liquid&&window.plane()<glass,"rings have distinct depth behind the window");
         }
+    }
+
+    /** The sample's speed is the speed of the connection its direction comes from: the fastest mapped one. */
+    @Test void theSampleCarriesTheSpeedOfThePickedConnection(){
+        var sample=display(new double[]{.5,0,.5},SolidInventory.EMPTY,1.234);
+        assertEquals(PhysicalFluidTopology.Direction.EAST,sample.flowDirection());assertEquals(1.24,sample.speed(),1e-12);
+        var stream=new PipeTransfer.Stream(0,new double[3][3],new double[3]);
+        var info=new FluidView.PipeInfo(stream,List.of(new FluidView.PipeConnection(7,1,.3,0,false),new FluidView.PipeConnection(8,1,2,0,false),new FluidView.PipeConnection(9,1,.7,0,true)),false,false);
+        var mappings=List.of(new PhysicalFluidTopology.View(0,7,true,.5,PhysicalFluidTopology.Direction.EAST),new PhysicalFluidTopology.View(0,9,true,.5,PhysicalFluidTopology.Direction.UP));
+        var flow=PipePresentation.flow(info,mappings);
+        assertEquals(PhysicalFluidTopology.Direction.DOWN,flow.direction(),"the fastest mapped connection, reversed");
+        assertEquals(.7,flow.speed(),0,"its velocity, not the unmapped faster one's");
+        assertEquals(flow.direction(),PipePresentation.flowDirection(info,mappings));
+        assertEquals(new PipePresentation.Flow(null,0),PipePresentation.flow(info,List.of()));
     }
 
     @Test void acceptedDirectionReversesAndMissingLocalMappingsDoNotInventMotion(){
@@ -190,12 +213,12 @@ class PipePresentationTest {
         for(var window:SightGlassGeometry.Axis.values())for(var run:SightGlassGeometry.Axis.values())if(run!=window)
             for(boolean positive:new boolean[]{false,true}){
                 var motion=SightGlassGeometry.Motion.along(window,run,positive);
-                var before=SightGlassGeometry.bubbles(50,9,255,motion);var after=SightGlassGeometry.bubbles(50.001,9,255,motion);
+                var before=SightGlassGeometry.bubbles(.05,9,255,motion,.1,.1,false);var after=SightGlassGeometry.bubbles(.05001,9,255,motion,.1,.1,false);
                 for(int i=0;i<before.size();i++){
                     double[] front=world(window,before.get(i),false),back=world(window,before.get(i),true),next=world(window,after.get(i),false);
                     assertArrayEquals(front,back,1e-12,"paired windows show the same physical bubble path");
                     assertTrue((next[run.ordinal()]-front[run.ordinal()])*(positive?1:-1)>0,"bubble advances in accepted flow direction");
-                    assertTrue(Math.hypot(after.get(i).x(),after.get(i).y())+after.get(i).radius()<=.971);
+                    assertEquals(motion.x(),after.get(i).ax(),0);assertEquals(motion.y(),after.get(i).ay(),0);
                 }
             }
     }
@@ -212,6 +235,7 @@ class PipePresentationTest {
         var info=new FluidView.PipeInfo(stream,List.of(new FluidView.PipeConnection(7,1,speed,0,false)),false,false);
         return PipePresentation.sightGlass(base().withPipeInfo(info,1),COMPONENTS,WEIGHTS,CATALOG,PACKAGE,List.of(new PhysicalFluidTopology.View(0,7,true,.5,PhysicalFluidTopology.Direction.EAST)));
     }
+    private static int count(int strength){return SightGlassGeometry.bubbles(.05,9,strength,UP,.1,.1,false).size();}
     private static FluidView base(){return new FluidView(1,0,0,0,"FULL",null,0,List.of(),null,1,List.of(),null);}
 
     // ---- Pump status and mover sound -------------------------------------------------------------------------------

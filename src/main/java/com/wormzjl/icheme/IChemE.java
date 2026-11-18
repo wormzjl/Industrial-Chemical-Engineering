@@ -60,7 +60,8 @@ public final class IChemE {
     private static final ModConfigSpec.BooleanValue CORROSION_ENABLED, CORROSION_EXTERNAL, EROSION_ENABLED, FOULING_ENABLED;
     private static final ModConfigSpec.DoubleValue CORROSION_YEAR_HOURS, FOULING_TIME_HOURS;
     private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED, POLLUTION_EFFECTS, POLLUTION_PARTICLES;
-    private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF;
+    private static final ModConfigSpec.BooleanValue POLLUTION_GROUND_GROWTH, POLLUTION_GROUND_WATER, POLLUTION_GROUND_BLOCKS;
+    private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF, POLLUTION_RISE_SHARE;
     private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
     private static final ModConfigSpec.BooleanValue POLLUTION_EXPLOSIONS, POLLUTION_BLOCK_DAMAGE, POLLUTION_EQUIPMENT_BREACH;
     private static final ModConfigSpec.DoubleValue POLLUTION_EXPLOSION_POWER_CAP;
@@ -105,7 +106,7 @@ public final class IChemE {
                 .defineInRange("timeScale",com.wormzjl.icheme.science.fluid.SimulationTime.DEFAULT_FACTOR,com.wormzjl.icheme.science.fluid.SimulationTime.MINIMUM_FACTOR,com.wormzjl.icheme.science.fluid.SimulationTime.MAXIMUM_FACTOR);
         FLUID_INITIAL_INTERVAL_SECONDS=builder.comment("Starting hydraulic cadence for newly created islands, in play seconds. Existing saved clocks retain their cadence; adaptation uses 1-20 s.").defineInRange("initialIntervalSeconds",5,1,20);
         FLUID_ADAPTIVE_CADENCE=builder.comment("Adapt island cadence to measured CPU load. Disable for reproducible fixed-cadence qualification; saved simulation debt is retained.").define("adaptiveCadence",true);
-        FLUID_WALL_BUDGET_MILLISECONDS=builder.comment("Hard worker budget per island interval, in real milliseconds: a solve past it counts as failed, and the adaptive cadence reads 75% of it as its slow-solve threshold. Applied on server start.").defineInRange("wallBudgetMilliseconds",2000,100,60000);
+        FLUID_WALL_BUDGET_MILLISECONDS=builder.comment("Hard worker budget per island interval, in real milliseconds: a solve past it counts as failed, and the adaptive cadence reads 75% of it as its slow-solve threshold. Applied on server start.").defineInRange("wallBudgetMilliseconds",(int)(com.wormzjl.icheme.runtime.fluid.IslandCoordinator.Settings.DEFAULT_HARD_BUDGET_NANOS/1_000_000L),100,60000);
         FLUID_MAXIMUM_VELOCITY=builder.comment("Maximum bulk pipe velocity in m/s, also limited by the current fluid's acoustic bound. Caps mass transfer inside the coupled equations; does not set temperature. Captured on server start.").defineInRange("maximumVelocityMetresPerSecond",100.0,.01,100000.0);
         FLUID_INITIAL_VOLUME=builder.comment("Volume of newly placed reservoirs in cubic metres. Applied on server start.").defineInRange("reservoirVolumeCubicMetres",1.0,.001,1000.0);
         FLUID_TRACE_CUTOFF=builder
@@ -232,6 +233,8 @@ public final class IChemE {
                 .defineInRange("cutoff", 1e-3, 1e-6, 0.05);
         POLLUTION_MAX_ACTIVE_CUBES = builder.comment("The most 16 m cubes a dimension's field holds; above it the faintest are dropped first. Captured on server start.")
                 .defineInRange("maxActiveCubes", 8192, 64, 262_144);
+        POLLUTION_RISE_SHARE = builder.comment("Share of a cube's pollution carried to the cube above every 20 process seconds, on top of the spread to its six faces: polluted air tends to rise. 0 spreads it the same way in every direction. Captured on server start.")
+                .defineInRange("riseShare", 0.12, 0.0, 0.5);
         // WP5: what the field does to living things, and the clouds players see.
         POLLUTION_EFFECTS = builder.comment("Whether pollution gives status effects and damage to players and mobs. Captured on server start.")
                 .define("effects", true);
@@ -250,6 +253,13 @@ public final class IChemE {
         // WP9: the pollution overlay on the FTB Chunks map (a client with FTB Chunks asks while its map is open).
         POLLUTION_MAP_OVERLAY = builder.comment("Who sees pollution on the FTB Chunks map (one square per polluted chunk): METER, only a player who carries a pollution meter anywhere in the inventory; ALL, every player; OFF, no one. Read at each answer.")
                 .defineInList("mapOverlay", "METER", java.util.Arrays.asList("METER", "ALL", "OFF"));
+        // Batch 2026-11-18-ground-pollution, G4: what polluted ground does; G4b: the blocks it changes.
+        POLLUTION_GROUND_GROWTH = builder.comment("Whether polluted ground stops growth: where a chunk's ground index is at least 0.3, crops, saplings and bonemeal do not grow. Read at each event.")
+                .define("groundGrowth", true);
+        POLLUTION_GROUND_WATER = builder.comment("Whether water over polluted ground harms what swims in it: its toxic and corrosive ground indices act as the air's do (effects and damage). Read at each world pass.")
+                .define("groundWater", true);
+        POLLUTION_GROUND_BLOCKS = builder.comment("Whether polluted ground changes blocks: where a chunk's ground index is at least 0.3, random picks remove vegetation (tag icheme:pollution_kills, no drops) and turn soil (tag icheme:pollution_spoils) into polluted soil, which turns back to dirt below 0.1. Read at each world pass.")
+                .define("groundBlocks", true);
         builder.pop();
         CONFIG_SPEC = builder.build();
     }
@@ -416,6 +426,21 @@ public final class IChemE {
         return CONFIG_SPEC.isLoaded() ? POLLUTION_MAP_OVERLAY.get() : "METER";
     }
 
+    /** Whether polluted ground stops growth (batch 2026-11-18-ground-pollution, G4; true before the config loads). */
+    public static boolean pollutionGroundGrowth() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_GROUND_GROWTH.get();
+    }
+
+    /** Whether polluted ground changes blocks (G4b; true before the config loads). */
+    public static boolean pollutionGroundBlocks() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_GROUND_BLOCKS.get();
+    }
+
+    /** Whether water over polluted ground harms swimmers (G4; true before the config loads). */
+    public static boolean pollutionGroundWater() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_GROUND_WATER.get();
+    }
+
     /** Whether polluted cubes show particles to players nearby (WP5; true before the config loads). */
     public static boolean pollutionParticles() {
         return !CONFIG_SPEC.isLoaded() || POLLUTION_PARTICLES.get();
@@ -426,7 +451,8 @@ public final class IChemE {
         var d = com.wormzjl.icheme.science.pollution.PollutionSettings.DEFAULT;
         if (!CONFIG_SPEC.isLoaded()) return d;
         return new com.wormzjl.icheme.science.pollution.PollutionSettings(d.faceShare(), d.nominalSeconds(), 60.0 * POLLUTION_HALF_LIFE_OPEN_MINUTES.get(),
-                60.0 * POLLUTION_HALF_LIFE_ENCLOSED_MINUTES.get(), d.washout(), d.settlingShare(), POLLUTION_CUTOFF.get(), POLLUTION_MAX_ACTIVE_CUBES.get(), d.closedAirShare());
+                60.0 * POLLUTION_HALF_LIFE_ENCLOSED_MINUTES.get(), d.washout(), d.settlingShare(), POLLUTION_CUTOFF.get(), POLLUTION_MAX_ACTIVE_CUBES.get(), d.closedAirShare(),
+                POLLUTION_RISE_SHARE.get());
     }
 
     /** Create stress units per FE per tick (W6b; default 34.13 before the config loads). */

@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    " P ",
+    "SBS",
+    "SBS"
+  ],
+  "key": {
+    "S": {
+      "item": "minecraft:iron_ingot"
+    },
+    "B": {
+      "item": "minecraft:iron_bars"
+    },
+    "P": {
+      "item": "icheme:fluid_pipe"
+    }
+  },
+  "result": {
+    "id": "icheme:water_intake",
+    "count": 1
+  }
+}

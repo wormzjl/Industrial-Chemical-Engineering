@@ -25,8 +25,8 @@ import java.util.Objects;
 public final class PollutionMapNetwork {
     /** The longest dimension id on the wire. */
     public static final int DIMENSION_MAX = 256;
-    /** Bytes of one column on the wire: chunk x, chunk z, the four bytes. */
-    static final int ENTRY_BYTES = 12;
+    /** Bytes of one column on the wire: chunk x, chunk z, the air's four bytes, the ground's byte. */
+    static final int ENTRY_BYTES = 13;
 
     private PollutionMapNetwork() {
     }
@@ -52,10 +52,12 @@ public final class PollutionMapNetwork {
 
     /**
      * The polluted chunk columns around the player, the nearest first, at most {@link MapColumns#MAXIMUM_ENTRIES}: each
-     * column ({@link MapColumns#column}) with its four bytes ({@link MapColumns#value}). {@code denied}: the player may not
-     * see the overlay ({@code pollution.mapOverlay}); then there are no columns.
+     * column ({@link MapColumns#column}) with its air's four bytes ({@link MapColumns#value}, the worst cube) and its
+     * ground's one byte ({@code ground}, 0 to 255, batch 2026-11-18-ground-pollution; a display-only change, so no protocol number,
+     * owner rule 2026-11-18). {@code denied}: the player may not see the overlay ({@code pollution.mapOverlay}); then there
+     * are no columns.
      */
-    public record Answer(String dimension, boolean denied, long[] columns, int[] values) implements CustomPacketPayload {
+    public record Answer(String dimension, boolean denied, long[] columns, int[] values, int[] ground) implements CustomPacketPayload {
         public static final Type<Answer> TYPE = new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "pollution_map_answer"));
         public static final StreamCodec<RegistryFriendlyByteBuf, Answer> STREAM_CODEC = new StreamCodec<>() {
             public Answer decode(RegistryFriendlyByteBuf b) {
@@ -67,13 +69,15 @@ public final class PollutionMapNetwork {
                 }
                 long[] columns = new long[count];
                 int[] values = new int[count];
+                int[] ground = new int[count];
                 for (int i = 0; i < count; i++) {
                     int x = b.readInt();
                     int z = b.readInt();
                     columns[i] = MapColumns.column(x, z);
                     values[i] = b.readInt();
+                    ground[i] = b.readUnsignedByte();
                 }
-                return new Answer(dimension, denied, columns, values);
+                return new Answer(dimension, denied, columns, values, ground);
             }
 
             public void encode(RegistryFriendlyByteBuf b, Answer p) {
@@ -84,6 +88,7 @@ public final class PollutionMapNetwork {
                     b.writeInt(MapColumns.x(p.columns[i]));
                     b.writeInt(MapColumns.z(p.columns[i]));
                     b.writeInt(p.values[i]);
+                    b.writeByte(p.ground[i]);
                 }
             }
         };
@@ -92,15 +97,24 @@ public final class PollutionMapNetwork {
             Objects.requireNonNull(dimension, "dimension");
             Objects.requireNonNull(columns, "columns");
             Objects.requireNonNull(values, "values");
-            if (columns.length != values.length || columns.length > MapColumns.MAXIMUM_ENTRIES || denied && columns.length != 0) {
+            Objects.requireNonNull(ground, "ground");
+            boolean bytes = true;
+            for (int g : ground) bytes &= g >= 0 && g <= MapColumns.SATURATED;
+            if (columns.length != values.length || columns.length != ground.length || columns.length > MapColumns.MAXIMUM_ENTRIES
+                    || denied && columns.length != 0 || !bytes) {
                 throw new IllegalArgumentException("Invalid pollution map answer: " + columns.length + " columns, " + values.length
-                        + " values, denied " + denied);
+                        + " values, " + ground.length + " ground, denied " + denied);
             }
+        }
+
+        /** An answer with no ground. */
+        public Answer(String dimension, boolean denied, long[] columns, int[] values) {
+            this(dimension, denied, columns, values, new int[columns.length]);
         }
 
         /** The answer to a player who may not see the overlay. */
         public static Answer refused(String dimension) {
-            return new Answer(dimension, true, new long[0], new int[0]);
+            return new Answer(dimension, true, new long[0], new int[0], new int[0]);
         }
 
         @Override

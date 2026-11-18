@@ -41,6 +41,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<Basis> BASIS;
     public static final ModConfigSpec.BooleanValue STREAM_CONDITIONS;
     public static final ModConfigSpec.BooleanValue GUIDE_HUD;
+    public static final ModConfigSpec.EnumValue<com.wormzjl.icheme.client.pollution.MapLayer> POLLUTION_MAP_LAYER;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_PAINTS;
     public static final ModConfigSpec.BooleanValue LOW_POLYGON_MODE;
     public static final ModConfigSpec.DoubleValue LOD_SCALE;
@@ -48,6 +49,15 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue PBR_TEXTURES;
     public static final ModConfigSpec.BooleanValue HEAT_HAZE;
     public static final ModConfigSpec.BooleanValue DH_SILHOUETTES;
+    public static final ModConfigSpec.BooleanValue FLAME_SHADER;
+    public static final ModConfigSpec.BooleanValue SMOKE_SHADER;
+    public static final ModConfigSpec.BooleanValue WIRING_SHADER;
+    public static final ModConfigSpec.BooleanValue REFLECTIONS;
+    public static final ModConfigSpec.BooleanValue SIGHT_GLASS_SHADER;
+    public static final ModConfigSpec.DoubleValue REFLECTION_STRENGTH;
+    public static final ModConfigSpec.IntValue REFLECTION_RANGE;
+    /** The reflection pass's range, blocks: its bounds and default. */
+    public static final int LEAST_REFLECTION_RANGE = 16, MOST_REFLECTION_RANGE = 256, REFLECTION_RANGE_DEFAULT = 96;
 
     static {
         var builder = new ModConfigSpec.Builder();
@@ -58,6 +68,8 @@ public final class ClientConfig {
                 .define("stream_conditions", false);
         GUIDE_HUD = builder.comment("Whether the Field Guide's current step stands on one line at the top left while no screen is open.")
                 .define("guide_hud", true);
+        POLLUTION_MAP_LAYER = builder.comment("The pollution layer the FTB Chunks map shows: BOTH (the worse of air and ground), AIR or GROUND. The pollution map layer key (unbound by default) switches it too.")
+                .defineEnum("pollution_map_layer", com.wormzjl.icheme.client.pollution.MapLayer.BOTH);
         builder.pop();
         builder.comment("The units every process screen shows; the unit keys at a screen's foot switch them too. Display only: the server keeps SI.").push("units");
         TEMPERATURE = builder.comment("CELSIUS or KELVIN.").defineEnum("temperature", TemperatureUnit.CELSIUS);
@@ -73,12 +85,26 @@ public final class ClientConfig {
                 .defineListAllowEmpty("paint_schemes", List.<String>of(),
                         () -> new UUID(0, 0) + ":#A1A1A0:#5B686D", EquipmentPaints::valid);
         builder.pop();
-        builder.comment("Flames, smoke, plumes and the instrument wiring's relief (batch 2026-11-10-custom-shader-system). Drawing only: the server's process calculations never read these. Changes take effect on the next frame.").push("effects");
-        EFFECTS_MODE = builder.comment("AUTO picks the path each frame: the mod's own shaders without a shader pack, vanilla render types under one. COMPATIBLE never uses the mod's own shaders (use it if another mod conflicts with them). OFF draws no flames, smoke or plumes; sounds stay.")
+        builder.comment("Flames, smoke, plumes, the instrument wiring's relief and the equipment's reflections, and every shader of the mod: each shader has its own switch below (batches 2026-11-10-custom-shader-system, 2026-11-18-equipment-reflections). A shader switched off, or under a shader pack, gives its effect the compatible drawing, never nothing. Drawing only: the server's process calculations never read these. Changes take effect on the next frame unless a line says otherwise.").push("effects");
+        EFFECTS_MODE = builder.comment("The master switch. AUTO picks the path each frame: the mod's own shaders without a shader pack (each where its switch below is on), vanilla render types under one. COMPATIBLE never uses the mod's own shaders (use it if another mod conflicts with them). OFF draws no flames, smoke or plumes, and no reflections or wiring relief; sounds stay.")
                 .defineEnum("mode", FxMode.AUTO);
+        FLAME_SHADER = builder.comment("Shader fx_flame: flames animated on the graphics card. Off: the vanilla emissive render type with the flame flipbook, as under a shader pack.")
+                .define("flame_shader", true);
+        SMOKE_SHADER = builder.comment("Shader fx_plume: smoke and white plumes lit by the sun. Off: the vanilla translucent render type with the smoke and plume sprites, as under a shader pack.")
+                .define("smoke_shader", true);
+        WIRING_SHADER = builder.comment("Shader rendertype_wiring: the instrument wiring lit through its normal map (pbr_textures must be on too). Off: the same textures, lit flat by the vanilla entity shader.")
+                .define("wiring_shader", true);
+        REFLECTIONS = builder.comment("Shader equipment_reflection: the sky, the ground and the sun mirrored on equipment bodies, pipes and steel within reflection_range, faded out towards its edge. Off, or under a shader pack: the baked fixed sheen (metallicSheen in icheme-common.toml). Moves the chunks to the other look when changed (a re-mesh, as pbr_textures).")
+                .define("reflections", true);
+        REFLECTION_STRENGTH = builder.comment("How strong the reflections are: 1 is the physical law, 0 draws none (and keeps the baked sheen), 2 doubles them.")
+                .defineInRange("reflection_strength", 1.0, 0.0, 2.0);
+        REFLECTION_RANGE = builder.comment("How far from the camera equipment reflects, blocks; the last quarter fades out. Beyond it equipment shows its plain baked shade.")
+                .defineInRange("reflection_range", REFLECTION_RANGE_DEFAULT, LEAST_REFLECTION_RANGE, MOST_REFLECTION_RANGE);
+        SIGHT_GLASS_SHADER = builder.comment("Shader sight_glass: the bubbles in a sight glass, round, clipped to the glass, with a soft rim and a highlight. Off, or under a shader pack: the same bubbles drawn as rings.")
+                .define("sight_glass_shader", true);
         PBR_TEXTURES = builder.comment("The instrument wiring lit through its normal map, by the mod's shader without a shader pack or by the pack; under a pack, the equipment's relief sprites (nuts, louvres, straps) lit by the pack from their normal maps. Off: the same textures, lit flat, and the equipment keeps its baked relief. Reloads the chunks when changed, as low_polygon_mode does.")
                 .define("pbr_textures", true);
-        HEAT_HAZE = builder.comment("A heat shimmer over flames and hot stacks: one screen copy and a distortion. Only without a shader pack.")
+        HEAT_HAZE = builder.comment("Shader fx_haze: a heat shimmer over flames and hot stacks, one screen copy and a distortion. Only without a shader pack; it has no compatible drawing, so off (or under a pack) there is no shimmer.")
                 .define("heat_haze", false);
         DH_SILHOUETTES = builder.comment("With Distant Horizons: painted equipment silhouettes in its far terrain. No effect without Distant Horizons.")
                 .define("dh_silhouettes", true);
@@ -135,6 +161,16 @@ public final class ClientConfig {
         return new com.wormzjl.icheme.client.gui.common.OperationColumn.Units(temperature(), pressure(), flowTime());
     }
 
+    /** The pollution map's layer (batch 2026-11-18-ground-pollution, G3), BOTH before the config has loaded. */
+    public static com.wormzjl.icheme.client.pollution.MapLayer pollutionMapLayer() {
+        return get(POLLUTION_MAP_LAYER, com.wormzjl.icheme.client.pollution.MapLayer.BOTH);
+    }
+
+    /** Sets the pollution map's layer and saves it to the file. */
+    public static void pollutionMapLayer(com.wormzjl.icheme.client.pollution.MapLayer layer) {
+        set(POLLUTION_MAP_LAYER, layer);
+    }
+
     public static Basis basis() {
         return get(BASIS, Basis.MOLE);
     }
@@ -184,6 +220,31 @@ public final class ClientConfig {
     /** Whether the heat shimmer is drawn (SHADER path only); off before the config has loaded. */
     public static boolean heatHaze() {
         return get(HEAT_HAZE, false);
+    }
+
+    /**
+     * Whether the switch of {@code program} is on (on before the config has loaded): the one place every shader's switch
+     * is read. {@code fx_haze}'s switch is {@code heat_haze}, off by default.
+     */
+    public static boolean shader(com.wormzjl.icheme.client.fx.FxShaderProgram program) {
+        return switch (program) {
+            case FLAME -> get(FLAME_SHADER, true);
+            case PLUME -> get(SMOKE_SHADER, true);
+            case HAZE -> heatHaze();
+            case WIRING -> get(WIRING_SHADER, true);
+            case REFLECTION -> get(REFLECTIONS, true);
+            case SIGHT_GLASS -> get(SIGHT_GLASS_SHADER, true);
+        };
+    }
+
+    /** The reflections' strength, 0 to 2; 1 before the config has loaded. */
+    public static double reflectionStrength() {
+        return get(REFLECTION_STRENGTH, 1.0);
+    }
+
+    /** The reflections' range, blocks; {@link #REFLECTION_RANGE_DEFAULT} before the config has loaded. */
+    public static int reflectionRange() {
+        return get(REFLECTION_RANGE, REFLECTION_RANGE_DEFAULT);
     }
 
     /** Whether Distant Horizons shows painted equipment silhouettes; on before the config has loaded. */

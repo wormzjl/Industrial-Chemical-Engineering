@@ -75,7 +75,7 @@ A due deadline to a published round:
 
 ## Laws and constants
 
-**Adaptive cadence** (`adaptiveCadence`): 3 CPU-bound samples (CPU/wall ≥ 0.75 and wall ≥ the soft budget) give ×1.25, up to 400 ticks; 10 light samples give ×0.9, down to 20 ticks. **Budgets**: hard = `fluid.wallBudgetMilliseconds`, every attempt the full solve on it; soft = 75 % of it, the cadence's load threshold only.
+**Adaptive cadence** (`adaptiveCadence`): 3 CPU-bound samples (CPU/wall ≥ 0.75 and wall ≥ the soft budget) give ×1.25, up to 400 ticks; 10 light samples give ×0.9, down to 20 ticks. **Budgets**: hard = `fluid.wallBudgetMilliseconds` (default 3000, `IslandCoordinator.Settings.DEFAULT_HARD_BUDGET_NANOS`; the test rigs read the same constant), every attempt the full solve on it; soft = 75 % of it, the cadence's load threshold only.
 
 **Hold policy** (`hold`): every hold gets a fresh `RetainedSolver`. A slice longer than one tick is halved; at one tick the retry waits cadence × 2^k, k ≤ 6. Each accepted interval doubles the slice cap back, lifted once it reaches cadence/2. A phase hold whose fresh-solver retry meets the same hold (`ThermoHold.sameAs`) parks the island (`holdUntilInputsChange`): `HELD (phases): …; the retry failed the same way, so the island waits for a change to its network`, its WARN at most every `PHASE_HOLD_WARNING_TICKS`. The park ends at `inputsChanged`: a fence, a released fence or a property resume. A completion without a result names why in `HELD: …` (`MinecraftFluidRuntime.failure`: a worker failure, its terminal status, an abandoned solve, the round deadline).
 

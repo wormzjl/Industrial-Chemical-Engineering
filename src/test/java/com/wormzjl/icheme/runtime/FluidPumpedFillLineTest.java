@@ -83,7 +83,7 @@ class FluidPumpedFillLineTest {
                 public long nextRequestId(){return ++requests;}
                 public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){}
-            },changed->{},()->0L,new IslandCoordinator.Settings(2_000_000_000L,1_500_000_000L,64,false,100,CertificatePolicy.defaults()));
+            },changed->{},()->0L,new IslandCoordinator.Settings(IslandCoordinator.Settings.DEFAULT_HARD_BUDGET_NANOS,IslandCoordinator.Settings.DEFAULT_SOFT_BUDGET_NANOS,64,false,100,CertificatePolicy.defaults()));
             coordinator.register(new IslandCoordinator.Snapshot(1,0,line(layout),new IslandClock.Snapshot(0,0,0,100),Optional.empty(),"READY"),model);
         }
         /** Online ticks, each: advance, run what was admitted, deliver, pump. Stops early when {@code done} holds. */

@@ -29,7 +29,7 @@ snapshot. "pp" = package-private.
 | Class | Role | Lines |
 |---|---|---|
 | [`ColumnUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnUnit.java) | The column as one block: its ports a pure function of its door (`FEED`, `OVERHEAD`, `DISTILLATE`, `WATER`, `BOTTOMS`, the draw, steam and pumparound ports: `drawPort`, `steamPort`, `pumparoundIn`, `pumparoundOut`), `add` (a mole fraction onto the axis; an id the axis lacks fails the column), `catalogFor(thermo, waterOnAxis)`, `SCREEN` (the liquid-supply screen ratio the sheet's column solves at: V3's default) | 194 |
-| `ColumnBlockSolve` (pp) | The block's own solve: the feed flashed to the feed tray's solved pressure (`FEED_ROUNDS`), water by `ColumnWater.onAxis`, the products back through the world's flash, the condenser duty as the closure on its own streams (`ColumnSolve.closure`), the steam CHECK; the inlets' solids (particles to the bottoms, crystals melted), the frozen test; keeps the last state and leaves it on its report | 515 |
+| `ColumnBlockSolve` (pp) | The block's own solve: the feed flashed to the feed tray's solved pressure (`FEED_ROUNDS`), water by `ColumnWater.onAxis`, the products back through the world's flash, the condenser duty as the closure on its own streams (`ColumnSolve.closure`), the steam CHECK; the inlets' solids (particles to the bottoms, crystals melted), the frozen test; keeps the last state and leaves it on its report | 528 |
 | [`ColumnDoor`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ColumnDoor.java) | The column's door as a sheet holds it (record; `of`): the calculator's Column page less the feed; nested `Draw`, `Steam`, `Pumparound`, the vacuum choice | 305 |
 | `ColumnSides` (pp) | The sheet sides of the column's heat pairs: the condenser's, the kettle's and each pumparound cooler's utility side, a regulated side's feed and its rules | 148 |
 | [`ExchangerUnit`](../../../src/main/java/com/wormzjl/icheme/science/flowsheet/unit/ExchangerUnit.java) | An exchanger or a kettle reboiler, target Outlet, Duty or Area; an outlet or a duty names a side | 184 |
@@ -70,7 +70,8 @@ The column block, the one unit with more than one calculation:
    display. The duty reaches its side by a link. The held particles leave with the bottoms at its state; the heat that
    takes them there from their inlets' is the reboiler's (its duty, or the kettle's link `reboiler heat`). A column with
    particles and no bottoms fails `column.solids.no_bottoms`. A product that holds a crystal at its state
-   (`ColumnSolve.frozen`, the crystal equilibrium at its flash's enthalpy) fails `column.frozen`.
+   (`ColumnSolve.frozen`, the crystal equilibrium at its flash's enthalpy), or a coldest tray colder than every product that
+   does (`ColumnSolve.coldestTray`), fails `column.frozen` (the compound, the port or tray, the temperature, the crystal).
 5. The block leaves its seed on its report (`Report.Warm`), so the next run from this steady one starts there.
 
 ## Contracts

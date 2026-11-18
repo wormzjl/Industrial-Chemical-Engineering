@@ -5,7 +5,6 @@ import com.wormzjl.icheme.science.pollution.Environment.Cell;
 import com.wormzjl.icheme.science.pollution.PollutionLedger.Total;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 
@@ -32,6 +31,8 @@ public final class PollutionField {
     private static final int[] DX = {-1, 1, 0, 0, 0, 0};
     private static final int[] DY = {0, 0, -1, 1, 0, 0};
     private static final int[] DZ = {0, 0, 0, 0, -1, 1};
+    /** The face toward the cube above. */
+    private static final int UP = 3;
     private static final Comparator<Release> RELEASE_ORDER = Comparator.comparingLong(Release::key)
             .thenComparingInt((Release release) -> release.channel().ordinal())
             .thenComparingLong((Release release) -> Double.doubleToLongBits(release.amount()));
@@ -222,6 +223,7 @@ public final class PollutionField {
      * <ol>
      *   <li>releases land in their cubes (loaded or not) and are booked {@code released};</li>
      *   <li>loaded, open-to-air cubes exchange with their six faces, simultaneously, from the higher index to the lower;
+     *       each also drifts a share of its amount to the cube above ({@code riseShare}), whatever the index there;
      *       the dimension's top and bottom are sinks ({@code dissipated}); a cube not yet in the field takes a channel
      *       only when the sum of its inflows gives it an index of at least {@code cutoff};</li>
      *   <li>particulate settles to the cube below (to {@code ground} over a closed cube or the bottom);</li>
@@ -287,12 +289,16 @@ public final class PollutionField {
         int n = work.keys.length;
         double closed = settings.closedAirShare();
         double k = Math.min(1.0 / 7.0, settings.faceShare() * seconds / settings.nominalSeconds());
+        // The upward drift: U = r min(φa, φb) A_a / φa toward the cube above, on top of the face exchange.
+        double r = Math.min(1.0 / 7.0, settings.riseShare() * seconds / settings.nominalSeconds());
         int minimumY = environment.minimumY();
         int maximumY = environment.maximumY();
         long[] keys = work.keys;
         double[] a = work.amounts;
         double[] delta = new double[n * CHANNELS];
-        Front front = new Front();
+        Front front = new Front(n);
+        // Where each face's last neighbour stood: the keys are sorted, so the next cube's neighbour is near it.
+        int[] hint = new int[6];
         for (int i = 0; i < n; i++) {
             double phiA = work.phi[i];
             if (!work.loaded[i] || phiA < closed) {
@@ -303,17 +309,29 @@ public final class PollutionField {
             int base = i * CHANNELS;
             for (int d = 0; d < 6; d++) {
                 int ny = y + DY[d];
+                boolean up = d == UP && r > 0.0;
                 if (ny < minimumY || ny > maximumY) {
+                    double share = up ? k + r : k;
                     for (int c = 0; c < CHANNELS; c++) {
-                        double f = k * a[base + c];
+                        double f = share * a[base + c];
                         delta[base + c] -= f;
                         book[PollutionLedger.slot(c, Total.DISSIPATED)] += f;
                     }
                     continue;
                 }
                 long neighbour = CubeKey.offset(key, DX[d], DY[d], DZ[d]);
-                int j = Arrays.binarySearch(keys, neighbour);
+                int j = search(keys, neighbour, hint[d]);
+                hint[d] = j >= 0 ? j : -(j + 1);
                 if (j >= 0) {
+                    if (up && work.loaded[j] && work.phi[j] >= closed) {
+                        double u = r * Math.min(phiA, work.phi[j]) / phiA;
+                        int above = j * CHANNELS;
+                        for (int c = 0; c < CHANNELS; c++) {
+                            double f = u * a[base + c];
+                            delta[base + c] -= f;
+                            delta[above + c] += f;
+                        }
+                    }
                     // Each face between two present cubes is computed once, from the cube with the smaller key.
                     if (neighbour < key || !work.loaded[j] || work.phi[j] < closed) {
                         continue;
@@ -328,7 +346,8 @@ public final class PollutionField {
                         delta[other + c] += f;
                     }
                 } else {
-                    front.offer(neighbour, i, a, base, phiA, k, closed, environment);
+                    // A new cube above takes the face share and the drift as one inflow, accepted or refused together.
+                    front.offer(neighbour, i, a, base, phiA, up ? k + r : k, closed, environment);
                 }
             }
         }
@@ -421,7 +440,7 @@ public final class PollutionField {
                 continue;
             }
             long below = CubeKey.offset(key, 0, -1, 0);
-            int j = Arrays.binarySearch(keys, below);
+            int j = search(keys, below, i);
             if (j >= 0) {
                 if (!work.loaded[j]) {
                     continue;
@@ -545,21 +564,24 @@ public final class PollutionField {
             peak[i] = max;
             loaded++;
         }
-        Integer[] order = new Integer[loaded];
+        int[] order = new int[loaded];
+        double[] peaks = new double[loaded];
+        long[] orderKeys = new long[loaded];
         int o = 0;
         for (int i = 0; i < n; i++) {
             if (work.loaded[i]) {
-                order[o++] = i;
+                order[o] = i;
+                peaks[o] = peak[i];
+                orderKeys[o] = keys[i];
+                o++;
             }
         }
-        Arrays.sort(order, (Integer p, Integer q) -> {
-            int byPeak = Double.compare(peak[p], peak[q]);
-            return byPeak != 0 ? byPeak : Long.compare(keys[p], keys[q]);
-        });
+        // Lowest peak first, then the smaller key: a total order (the keys are distinct), so any sort gives it.
+        CapOrder.sort(peaks, orderKeys, order);
         boolean[] keep = new boolean[n];
         Arrays.fill(keep, true);
         int remaining = n;
-        for (Integer i : order) {
+        for (int i : order) {
             if (remaining <= maximum) {
                 break;
             }
@@ -594,6 +616,46 @@ public final class PollutionField {
             }
         }
         return new Result(new PollutionField(keys, amounts), new PollutionLedger(book));
+    }
+
+    /**
+     * The position of {@code key} in the sorted, distinct {@code keys}, or {@code -(insertion point) - 1}, searched
+     * outward from {@code from} and then by halves: the same answer as {@link Arrays#binarySearch}, in a few steps
+     * when the key stands near {@code from}.
+     */
+    static int search(long[] keys, long key, int from) {
+        int n = keys.length;
+        if (n == 0) {
+            return -1;
+        }
+        int at = Math.min(Math.max(from, 0), n - 1);
+        long here = keys[at];
+        if (here == key) {
+            return at;
+        }
+        int lo;
+        int hi;
+        int step = 1;
+        if (here < key) {
+            lo = at + 1;
+            hi = lo;
+            while (hi < n && keys[hi] < key) {
+                lo = hi + 1;
+                step <<= 1;
+                hi = at + step;
+            }
+            hi = Math.min(hi, n - 1);
+        } else {
+            hi = at - 1;
+            lo = hi;
+            while (lo >= 0 && keys[lo] > key) {
+                hi = lo - 1;
+                step <<= 1;
+                lo = at - step;
+            }
+            lo = Math.max(lo, 0);
+        }
+        return Arrays.binarySearch(keys, lo, hi + 1, key);
     }
 
     private static double factor(double seconds, double halfLife) {
@@ -653,11 +715,13 @@ public final class PollutionField {
             if (count == 0) {
                 return;
             }
-            Integer[] order = new Integer[count];
+            // The added keys in ascending order: order[r] is the added cube of rank r (the keys are distinct).
+            long[] sorted = Arrays.copyOf(addKeys, count);
+            Arrays.sort(sorted);
+            int[] order = new int[count];
             for (int t = 0; t < count; t++) {
-                order[t] = t;
+                order[Arrays.binarySearch(sorted, addKeys[t])] = t;
             }
-            Arrays.sort(order, (Integer p, Integer q) -> Long.compare(addKeys[p], addKeys[q]));
             int size = keys.length;
             int n = size + count;
             long[] mergedKeys = new long[n];
@@ -740,26 +804,40 @@ public final class PollutionField {
      * slot and never orders anything.
      */
     private static final class Front {
-        final HashMap<Long, Integer> slots = new HashMap<>();
-        long[] keys = new long[16];
-        Cell[] cells = new Cell[16];
-        double[] sums = new double[16 * CHANNELS];
+        final LongIntMap slots;
+        long[] keys;
+        Cell[] cells;
+        double[] sums;
         int size;
-        int[] slotOf = new int[64];
-        int[] donor = new int[64];
-        int[] channel = new int[64];
-        double[] amount = new double[64];
+        int[] slotOf;
+        int[] donor;
+        int[] channel;
+        double[] amount;
         int entries;
+
+        /** Sized for a field of {@code cubes} cubes: its front is of the same order, and growing is the exception. */
+        Front(int cubes) {
+            int slots = Math.max(16, cubes);
+            this.slots = new LongIntMap(slots);
+            keys = new long[slots];
+            cells = new Cell[slots];
+            sums = new double[slots * CHANNELS];
+            int records = Math.max(64, 2 * cubes);
+            slotOf = new int[records];
+            donor = new int[records];
+            channel = new int[records];
+            amount = new double[records];
+        }
 
         void offer(long key, int donorIndex, double[] a, int base, double phiA, double k, double closed,
                 Environment environment) {
-            Integer known = slots.get(key);
-            Cell cell = known != null ? cells[known] : cell(environment, key);
+            int known = slots.get(key);
+            Cell cell = known >= 0 ? cells[known] : cell(environment, key);
             if (!cell.loaded() || cell.airShare() < closed) {
                 return;
             }
             double m = k * Math.min(phiA, cell.airShare());
-            int slot = known != null ? known : -1;
+            int slot = known;
             for (int c = 0; c < CHANNELS; c++) {
                 double f = m * (a[base + c] / phiA);
                 if (!(f > 0.0)) {
@@ -798,6 +876,49 @@ public final class PollutionField {
             channel[entries] = c;
             amount[entries] = f;
             entries++;
+        }
+    }
+
+    /** The cap's order: a merge sort of parallel arrays by peak, then key, carrying the cube positions along. */
+    static final class CapOrder {
+        private CapOrder() {
+        }
+
+        static void sort(double[] peaks, long[] keys, int[] cubes) {
+            int n = cubes.length;
+            double[] p2 = new double[n];
+            long[] k2 = new long[n];
+            int[] c2 = new int[n];
+            double[] ps = peaks;
+            long[] ks = keys;
+            int[] cs = cubes;
+            for (int width = 1; width < n; width <<= 1) {
+                for (int from = 0; from < n; from += 2 * width) {
+                    int middle = Math.min(from + width, n);
+                    int to = Math.min(from + 2 * width, n);
+                    int i = from;
+                    int j = middle;
+                    for (int k = from; k < to; k++) {
+                        boolean left = j >= to || i < middle && (ps[i] < ps[j] || ps[i] == ps[j] && ks[i] < ks[j]);
+                        int from2 = left ? i++ : j++;
+                        p2[k] = ps[from2];
+                        k2[k] = ks[from2];
+                        c2[k] = cs[from2];
+                    }
+                }
+                double[] pt = ps;
+                ps = p2;
+                p2 = pt;
+                long[] kt = ks;
+                ks = k2;
+                k2 = kt;
+                int[] ct = cs;
+                cs = c2;
+                c2 = ct;
+            }
+            if (cs != cubes) {
+                System.arraycopy(cs, 0, cubes, 0, n);
+            }
         }
     }
 }

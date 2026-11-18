@@ -1,0 +1,9 @@
+{
+  "parent": "icheme:block/fluid_device",
+  "loader": "icheme:fluid_device",
+  "kind": "void",
+  "body": "outfall",
+  "textures": {
+    "concrete": "icheme:block/equipment_concrete"
+  }
+}

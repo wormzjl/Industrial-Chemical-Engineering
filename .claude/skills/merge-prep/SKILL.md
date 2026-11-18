@@ -1,6 +1,6 @@
 ---
 name: merge-prep
-description: The IChemE merge-to-main checklist - CHANGELOG entry, mod_version proposal, translation commit, code guide update and tooling cleanup. Use when the owner says to prepare, review or perform a merge of a batch branch into main, and before calling a batch ready to merge. Not for documentation-only merges.
+description: The IChemE merge-to-main checklist - CHANGELOG entry, mod_version proposal, translation commit, code guide update, tutorial update and tooling cleanup. Use when the owner says to prepare, review or perform a merge of a batch branch into main, and before calling a batch ready to merge. Not for documentation-only merges.
 ---
 
 # Merge preparation (IChemE)
@@ -20,6 +20,7 @@ Every merge to `main` includes, in the same merge:
   - Propose the version and let the owner choose. Do not jump versions fast.
 - The translation commit, when the batch changed `en_us.json`: follow `.claude/skills/translation-commit/SKILL.md`.
 - A code guide update (see below).
+- A tutorial update (see below).
 - The tooling cleanup (see below).
 
 A documentation-only merge changes only `documentation/`, `tools/`, `AGENTS.md`, `.gitignore`, `.claude/skills/`, `.agents/skills/` or the agent hook files (`.claude/settings.json`, `.codex/hooks.json`). It needs none of these.
@@ -29,6 +30,17 @@ A documentation-only merge changes only `documentation/`, `tools/`, `AGENTS.md`,
 - The code guide is at `documentation/reference/code-guide/`. `README.md` gives what the mod calculates and the code map. There is one chapter per subsystem.
 - Before every merge, update the chapters whose code the batch changed: classes, flows, contracts, defaults, formats and versions, Gradle tasks and gates. Set each touched chapter's snapshot line to the last code commit it describes, and the date. A file cannot name the commit that contains it. Add a chapter and a README row for a new subsystem. Take facts from the code on the merging branch, not from plans.
 - A batch that changes no code the guide covers records "code guide: no change" in its review.
+
+## Tutorial
+
+- The in-game tutorial is the guide of `documentation/reference/code-guide/tutorial.md`: `guide.json`, its steps' advancements, its films and its English lines.
+- Before every merge, update it for what the batch changed that a player meets:
+  - a new equipment kind, block, screen, page or tool gets its step (or its own chapter where it is a subject of its own), with its film or picture where the chapter has them;
+  - a step whose instruction, screen, key, number or picture the batch changed says what is now true;
+  - a term the batch introduced on a screen joins the glossary.
+- Do it before the translation commit, so that commit carries the guide's new lines.
+- Run the guide's own tests for what changed (`GuideFileTest`, `GuideCoverageTest` and the tests the chapter names), as `AGENTS.md` selects tests.
+- A batch that changes nothing a player meets records "tutorial: no change" in its review.
 
 ## Tooling cleanup
 

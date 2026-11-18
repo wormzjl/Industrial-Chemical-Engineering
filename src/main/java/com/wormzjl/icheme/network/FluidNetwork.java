@@ -504,8 +504,9 @@ public final class FluidNetwork {
                         }else control=new FlowControl.PressureValve(controls.pressure);
                     }
                     // A gas intake is the atmosphere (batch 2026-11-15-fluid-interfaces, W2): nothing on it is the player's to set.
-                    case GENERATOR->{if(spec.ambient())throw new IllegalArgumentException("A gas intake draws the ambient air; it has no settings.");if(d.converterFill())throw new IllegalArgumentException("A liquid hopper gives what its rule makes of its fluid; it has no settings.");spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);}
-                    case VOID->spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());
+                    case GENERATOR->{if(spec.ambient())throw new IllegalArgumentException(com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.waterIntake(old)?"A water intake draws from the water body it touches; it has no settings.":"A gas intake draws the ambient air; it has no settings.");if(d.converterFill())throw new IllegalArgumentException("A liquid hopper gives what its rule makes of its fluid; it has no settings.");spec=new FluidDeviceSpec(spec.volume(),controls.temperature,controls.pressure,controls.composition,controls.solids);}
+                    // A waste outfall is open to the air (batch 2026-11-18-water-intake-outfall): it discharges at the ambient pressure, nothing to set.
+                    case VOID->{if(spec.ambient())throw new IllegalArgumentException("A waste outfall discharges to the open air; it has no settings.");spec=new FluidDeviceSpec(spec.volume(),spec.temperature(),controls.pressure,spec.composition());}
                     case RESERVOIR->{
                         // A batch still's pot (W6): its firing and reflux valve, a fact its islands read at their next slice.
                         if(d.stillPot()&&controls.still!=null){
@@ -644,11 +645,12 @@ public final class FluidNetwork {
         };}
     }
     /** Server to client: a sight glass's colour, bubble strength and flow direction, never process or menu contents. */
+    /** The speed byte (batch 2026-11-18-equipment-reflections) came without a protocol number: display-only data (owner). */
     public record SightGlassPayload(Target target,PipePresentation.SightGlass sample) implements CustomPacketPayload {
         public static final Type<SightGlassPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"sight_glass_display"));
         public static final StreamCodec<RegistryFriendlyByteBuf,SightGlassPayload> STREAM_CODEC=new StreamCodec<>() {
-            public SightGlassPayload decode(RegistryFriendlyByteBuf b){return new SightGlassPayload(readTarget(b),new PipePresentation.SightGlass(b.readInt(),b.readUnsignedByte(),direction(b.readUnsignedByte())));}
-            public void encode(RegistryFriendlyByteBuf b,SightGlassPayload p){writeTarget(b,p.target);b.writeInt(p.sample.argb());b.writeByte(p.sample.bubbles());b.writeByte(direction(p.sample.flowDirection()));}
+            public SightGlassPayload decode(RegistryFriendlyByteBuf b){return new SightGlassPayload(readTarget(b),new PipePresentation.SightGlass(b.readInt(),b.readUnsignedByte(),direction(b.readUnsignedByte()),PipePresentation.SightGlass.speedOf(b.readUnsignedByte())));}
+            public void encode(RegistryFriendlyByteBuf b,SightGlassPayload p){writeTarget(b,p.target);b.writeInt(p.sample.argb());b.writeByte(p.sample.bubbles());b.writeByte(direction(p.sample.flowDirection()));b.writeByte(PipePresentation.SightGlass.speedByte(p.sample.speed()));}
         };
         public SightGlassPayload{Objects.requireNonNull(target);Objects.requireNonNull(sample);}
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}

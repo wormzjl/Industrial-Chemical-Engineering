@@ -1,0 +1,27 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:short_grass",
+    "minecraft:tall_grass",
+    "minecraft:fern",
+    "minecraft:large_fern",
+    "#minecraft:flowers",
+    "#minecraft:saplings",
+    "#minecraft:crops",
+    "#minecraft:leaves",
+    "minecraft:vine",
+    "minecraft:sugar_cane",
+    "minecraft:bamboo",
+    "minecraft:bamboo_sapling",
+    "minecraft:brown_mushroom",
+    "minecraft:red_mushroom",
+    "minecraft:sweet_berry_bush",
+    "minecraft:moss_carpet",
+    "minecraft:lily_pad",
+    "minecraft:kelp",
+    "minecraft:kelp_plant",
+    "minecraft:seagrass",
+    "minecraft:tall_seagrass",
+    "minecraft:dead_bush"
+  ]
+}

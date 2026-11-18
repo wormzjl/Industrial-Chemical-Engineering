@@ -212,6 +212,39 @@ class FluidFactsCompatTest {
         for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG)))
             assertEquals(expected,plungerPumps(restored.world().orElseThrow()),restored.route()+": the plunger pumps as saved");
     }
+    /**
+     * Batch 2026-11-18-water-intake-outfall, option A: a saved gas intake (wet air) and a saved water intake each stand again
+     * as their own block, chosen by {@code FluidWorldAuthority.waterIntake} from their stored contents alone, and no saved
+     * byte of a gas intake moves: the gas intake of an image written before this batch (schema 30) re-encodes to the same
+     * bytes. The gas intake placed today draws the air with carbon dioxide (batch 2026-11-18-co2-column-input): the saved one
+     * keeps its own air, a fact, and the new one differs from it only by the carbon dioxide its nitrogen gave up.
+     */
+    @Test void aSavedGasIntakeAndASavedWaterIntakeStandAgainAsTheirOwnBlocks() throws IOException {
+        var older=load(read(CORPUS.resolve("schema-30")),key->key.on(model),CATALOG).world().orElseThrow();
+        var gas=older.active().values().stream().filter(FluidWorldAuthority::gasIntake).toList();
+        assertEquals(1,gas.size(),"the schema-30 corpus world has one gas intake");
+        var saved=gas.getFirst();
+        assertFalse(FluidWorldAuthority.waterIntake(saved),"wet air stands as the gas intake");
+        var bytes=FluidFacts.section(f->FluidFacts.registration(f,saved));
+        var reread=FluidFacts.read(bytes,0,bytes.length,"a gas intake",r->FluidFacts.registration(r,null));
+        assertArrayEquals(bytes,FluidFacts.section(f->FluidFacts.registration(f,reread)),"a gas intake's record re-encodes byte for byte");
+        var today=Placement.intake(saved.device().id(),saved.device().position(),saved.device().facing(),saved.device().geometry().diameter(),model);
+        assertEquals(saved.device(),today.device(),"the gas intake placed today is the same device");
+        var ids=model.components();double[] was=saved.spec().composition(),now=today.spec().composition();
+        int co2=ids.indexOf("CarbonDioxide"),nitrogen=ids.indexOf("Nitrogen");
+        assertEquals(0,was[co2],"the saved air holds no carbon dioxide");
+        assertTrue(now[co2]>0,"the new air holds carbon dioxide");
+        for(int i=0;i<ids.size();i++)if(i!=co2&&i!=nitrogen)assertEquals(was[i],now[i],"only nitrogen and carbon dioxide move: "+ids.get(i));
+        assertEquals(was[nitrogen],now[nitrogen]+now[co2],1e-15,"the carbon dioxide is nitrogen's");
+        assertTrue(FluidWorldAuthority.gasIntake(today),"the new air stands as the gas intake");
+        var water=Placement.waterIntake(9,saved.device().position(),saved.device().facing(),.05,CATALOG,false);
+        var section=FluidFacts.section(f->FluidFacts.registration(f,water));
+        var back=FluidFacts.read(section,0,section.length,"a water intake",r->FluidFacts.registration(r,null));
+        assertEquals(water.spec(),back.spec());assertEquals(water.device(),back.device());
+        assertTrue(FluidWorldAuthority.waterIntake(back),"stored water stands as the water intake");
+        assertFalse(FluidWorldAuthority.gasIntake(back));
+        assertFalse(back.device().generatorEnabled(),"its switch is a saved fact");
+    }
     /** Facts schema 27 (batch 2026-11-15-fluid-interfaces, W2): a gas intake, the atmosphere as a generator ({@code ambient}), on a dead-end pipe. */
     private static void intake(EventPathWorld world) {
         long id=world.ledger.nextIdentity();

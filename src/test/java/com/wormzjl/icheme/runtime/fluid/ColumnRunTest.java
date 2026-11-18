@@ -688,7 +688,7 @@ class ColumnRunTest {
             if(now>=refuseFrom&&now<refuseUntil){refused++;return false;}
             jobs.add(job);asked.add(now);
             var taken=job.taken();var ratios=new double[taken.steam().size()];for(int j=0;j<ratios.length;j++)ratios[j]=taken.feedRate()>0?taken.steam().get(j).rate()/taken.feedRate():job.setpoints().steamPerFeed()[j];
-            ColumnSolve.Outcome o=frozen.test(job)?new ColumnSolve.Frozen("distillate","Water"):fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios,port);
+            ColumnSolve.Outcome o=frozen.test(job)?new ColumnSolve.Frozen("distillate",new ColumnSolve.Solid("Water","icheme:crystal_ice_ih"),270):fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios,port);
             if(o instanceof ColumnSolve.Solved s&&flood.apply(job).known())o=new ColumnSolve.Solved(s.table().withFlood(flood.apply(job)),s.enthalpy(),null,s.solvedCondenser(),"test","");
             if(o instanceof ColumnSolve.Solved s&&duties!=null)o=new ColumnSolve.Solved(duties.apply(s.table()),s.enthalpy(),null,s.solvedCondenser(),"test","");
             if(o instanceof ColumnSolve.Solved s&&atDuties!=null)o=new ColumnSolve.Solved(atDuties.apply(job,s.table()),s.enthalpy(),null,s.solvedCondenser(),"test","");

@@ -383,6 +383,12 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   boxes follow it through `HorizontalShapes.byFacing`. The shaft end keeps its place. Judged on the software views of
   the tool, not in a client. The 43 classes of `affected.mjs select` ran: 287 tests, no failure. The data gland's place
   is the terminal box lid's centre (north model 8, 16, 8.5, outward up); the socket itself is the pump thread's part C.
+- 2026-11-18, after 0.35.1 (main thread; owner, on the final lane's three wall-deadline holds: "make it configurable and 3s
+  default"): the budget was already the config value `fluid.wallBudgetMilliseconds`; its default goes from 2000 to 3000
+  through one constant, `IslandCoordinator.Settings.DEFAULT_HARD_BUDGET_NANOS` (soft 75 %), read by the config, by
+  `Settings.defaults()` and by the test rigs with real workers (`EventPathWorld`, `FluidDataRangeIslandTest`,
+  `FluidPumpedFillLineTest`, `TimeFactorElectricTest`). The scheduler tests on a fake clock and the budget GameTests keep
+  their own 2 s. A config file already written keeps 2000.
 - Pump speed and the shut valve, 2026-11-18 (owner: "fix it"; main thread: options A and (ii)): a sized pump is built
   at its design speed (`PumpSizing.builtSpeed`, D21: the charge pump at 900 rpm, NPSH3_r 3.24 m instead of 15.8 m) and
   the NPSH rows read that law; a creative motor with no set speed turns at its train's design speed; a flow-regulating
@@ -393,3 +399,4 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   of its machine's design speed; a drive idling on a shut valve says RUNNING / VALVE SHUT; Send to block sends a pump with
   its duty and speed; the machine page shows a default creative motor's engine speed; REGULATE_PRESSURE against a shut
   valve is a defined state; the heater trace finds no defect (same review).
+- Translation commit for 0.35.2, 2026-11-18: zh_cn, fr_fr, es_es and ja_jp brought up to en_us (58 keys added, 3 rewritten, 1 removed in each): the guide photo captions and the View button, the water intake, waste outfall and polluted soil, the ground-water status lines, the respirator and its filter, the pollution map layer key and map lines, the ground meter line, `column.frozen` with its temperature and crystal, the still's cooling-water step and the plant-tag datasheet tour line; `pollution.icheme.map.header` removed. Offline checks: `check.js` OK 4909 keys, `stale-translations.js` none missing or stale, `status-words.js` no new loss.

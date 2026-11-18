@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.column.v3.thermo;
 
-import com.wormzjl.icheme.science.material.CrystalPhasesUnavailable;
 import com.wormzjl.icheme.science.material.DerivedPairs;
 import com.wormzjl.icheme.science.material.IdealGasFitUnavailable;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -29,10 +28,8 @@ final class V3CatalogPropertyPackage implements V3PropertyPackage {
         this.catalog=catalog;
         data=catalog.requirePackage(id);
         if(!data.model().equals("pr78")) throw new IllegalArgumentException("Thermodynamic solver unavailable: " + data.model());
-        // A package that admits crystals (P6): the column is a vapour-liquid algorithm without crystal equations.
-        // Water's ice is the network's (W3b): the column's own water code has none, as it had none of the free water's ice.
-        var crystals=data.crystals().stream().filter(crystal->{var reference=catalog.crystals().get(crystal);return reference==null||!"Water".equals(reference.component());}).toList();
-        if(!crystals.isEmpty()) throw new CrystalPhasesUnavailable(data.id(),crystals,"the V3 column");
+        // A package that admits crystals builds: the column is a vapour-liquid algorithm, and whether a crystal forms is the
+        // equilibrium of its solved products on the network's thermo (ColumnSolve.frozen), not a property of the compound list.
         // A spine package's records carry no shifted_polynomial_5 fits (D6); the column reads them.
         if(!data.spine().isEmpty()) throw new IdealGasFitUnavailable(data.id(),"the V3 column");
         basis=new V3ComponentBasis(data.components());

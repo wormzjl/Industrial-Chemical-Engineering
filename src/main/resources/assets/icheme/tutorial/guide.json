@@ -24,6 +24,7 @@
   "chapters": [
     {
       "id": "welcome",
+      "photos": [ "welcome" ],
       "steps": [
         { "id": "guide" },
         { "id": "units", "media": "units" },
@@ -32,6 +33,7 @@
     },
     {
       "id": "crude",
+      "photos": [ "crude", "crude_gas", "crude_naphtha", "crude_kerosene", "crude_diesel", "crude_gas_oil", "crude_residue" ],
       "steps": [
         { "id": "what", "media": "card:chain" },
         { "id": "barrel", "media": "card:barrel" },
@@ -43,6 +45,7 @@
     },
     {
       "id": "still",
+      "photos": [ "still" ],
       "steps": [
         { "id": "build", "media": "film:still_build", "check": "server", "criterion": "equipment_built" },
         { "id": "charge", "check": "server", "criterion": "still_state" },
@@ -57,6 +60,7 @@
     },
     {
       "id": "tower",
+      "photos": [ "tower" ],
       "steps": [
         { "id": "tray", "media": "film:still_tray" },
         { "id": "build", "check": "server", "criterion": "equipment_built" },
@@ -67,6 +71,7 @@
     },
     {
       "id": "simulator",
+      "photos": [ "simulator" ],
       "steps": [
         { "id": "open" },
         { "id": "sheet", "media": "read" },
@@ -80,6 +85,7 @@
     },
     {
       "id": "unit",
+      "photos": [ "unit" ],
       "steps": [
         { "id": "whole", "media": "film:crude_unit" },
         { "id": "map", "media": "card:unit_map" },
@@ -89,6 +95,7 @@
     },
     {
       "id": "building",
+      "photos": [ "building" ],
       "steps": [
         { "id": "site", "media": "film:unit_build" },
         { "id": "tower", "check": "server", "criterion": "equipment_built" },
@@ -101,6 +108,7 @@
     },
     {
       "id": "start",
+      "photos": [ "start" ],
       "steps": [
         { "id": "crude", "media": "page:equipment_fluid_converter" },
         { "id": "fuel", "media": "page:equipment_vertical_heater" },

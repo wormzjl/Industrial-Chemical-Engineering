@@ -112,6 +112,105 @@ class GuidePageTest {
             }
     }
 
+    static GuidePage.Page photoPage(int w, int h, String open, String photo) {
+        var in = new GuidePage.Input(GuideFile.load(), Progress.NONE, open, null)
+                .withPhotos(com.wormzjl.icheme.science.tutorial.guide.PhotoFile.load(), photo);
+        return GuidePage.place(in, w, h, M, english(), "Light panel");
+    }
+
+    /**
+     * Batch 2026-11-18-tutorial-photos, option B: at both sizes, for every chapter, the photo row inside the glass over the
+     * steps (the thumbnail, its caption lines within their room and off the thumbnail and View, View's word whole), the first
+     * step 8 px under it, the steps otherwise as without photos, and the press on the thumbnail or View is View.
+     */
+    @Test
+    void thePhotoRowStandsOverTheStepsInsideTheGlass() {
+        for (var size : SIZES)
+            for (var open : CHAPTERS) {
+                String at = size[0] + " by " + size[1] + ", " + open;
+                var p = photoPage(size[0], size[1], open, null);
+                var row = p.photoRow();
+                assertNotNull(row, at + ": a row");
+                assertNull(p.photo(), at);
+                int right = p.bar() ? p.barTrack().x() : p.view().right();
+                assertTrue(row.rect().x() >= p.view().x() && row.rect().right() <= right && row.rect().y() >= p.view().y(), at + ": the row in the glass " + row.rect());
+                assertEquals(new Rect(p.view().x() + 3, p.view().y() + 3, GuidePage.THUMB_W, GuidePage.THUMB_H), row.thumb(), at + ": the thumbnail");
+                var view = row.view().rect();
+                assertTrue(view.inside(row.rect()) && view.right() <= right, at + ": View in the row");
+                assertTrue(M.width(row.view().text()) <= view.w() - 6 && view.w() >= 48, at + ": View's word whole");
+                assertFalse(view.overlaps(row.thumb()), at + ": View off the thumbnail");
+                for (var line : row.caption()) {
+                    var box = new Rect(line.x(), line.y(), M.width(line.text()), 9);
+                    assertTrue(line.x() >= row.thumb().right() + 6 && box.right() <= view.x() - 6, at + ": a caption line within its room: " + line.text());
+                    assertTrue(box.y() >= row.rect().y() && box.bottom() <= row.rect().bottom(), at + ": a caption line in the row");
+                }
+                // The sprite cut round the focus keeps the thumbnail's shape, inside the photo.
+                var s = row.sprite();
+                assertTrue(s.u() >= 0 && s.v() >= 0 && s.u() + s.w() <= s.atlasWidth() && s.v() + s.h() <= s.atlasHeight(), at + ": the cut inside the photo");
+                assertEquals(GuidePage.THUMB_W / (double) GuidePage.THUMB_H, s.w() / (double) s.h(), .05, at + ": the cut keeps the thumbnail's shape");
+                var firstStep = p.rows().getFirst().rect();
+                assertEquals(row.rect().bottom() + GuidePage.PHOTO_GAP, firstStep.y() + 2, at + ": the first step 8 px under the row (its band 2 px over its top)");
+                assertTrue(firstStep.y() >= row.rect().bottom(), at + ": the first step under the row");
+                assertEquals(GuidePage.PHOTO_VIEW, p.action(row.thumb().x() + 2, row.thumb().y() + 2, 0), at + ": the thumbnail is View");
+                assertEquals(GuidePage.PHOTO_VIEW, p.action(view.x() + 2, view.y() + 2, 0), at + ": View");
+                // The tour's anchor "step" follows the rows down.
+                assertEquals(p.rows().getFirst().rect(), p.anchors().get("step"), at + ": the step anchor on the first row");
+                assertTrue(p.scrolls("photo") && p.scrolls(GuidePage.PHOTO_VIEW), at + ": the row scrolls");
+                // Without photos the chapter lays out as before.
+                var plain = page(Progress.NONE, size[0], size[1], open, null);
+                assertNull(plain.photoRow(), at);
+                assertEquals(plain.rows().size(), p.rows().size(), at);
+            }
+    }
+
+    /**
+     * The viewer at both sizes for every photo of every chapter: the option keys (several photos) across the top, apart, each
+     * word whole, the shown one latched; the photo whole, its aspect kept, between the keys and the caption; the caption at
+     * the foot left within its width; Back at the foot right; all inside the glass and apart. No scroll bar.
+     */
+    @Test
+    void theViewerShowsEachPhotoWholeInsideTheGlass() {
+        var guide = GuideFile.load();
+        var photos = com.wormzjl.icheme.science.tutorial.guide.PhotoFile.load();
+        for (var size : SIZES)
+            for (var open : CHAPTERS)
+                for (var id : guide.chapter(open).photos()) {
+                    String at = size[0] + " by " + size[1] + ", " + open + ", " + id;
+                    var p = photoPage(size[0], size[1], open, id);
+                    var v = p.photo();
+                    assertNotNull(v, at + ": the viewer");
+                    assertFalse(p.bar(), at + ": no scroll bar");
+                    assertTrue(p.rows().isEmpty() && p.photoRow() == null, at + ": in place of the steps");
+                    var glass = p.view();
+                    assertEquals(guide.chapter(open).photos().size() > 1 ? guide.chapter(open).photos().size() : 0, v.options().size(), at + ": an option a photo");
+                    for (int i = 0; i < v.options().size(); i++) {
+                        var key = v.options().get(i);
+                        assertTrue(key.rect().inside(glass), at + ": an option in the glass");
+                        assertTrue(M.width(key.text()) <= key.rect().w() - 6, at + ": its word whole: " + key.text());
+                        assertEquals(key.key().equals(GuidePage.PHOTO_SHOW + id), key.latched(), at + ": the shown one latched");
+                        for (int j = 0; j < i; j++) assertFalse(key.rect().overlaps(v.options().get(j).rect()), at + ": options apart");
+                        assertTrue(v.image().y() > key.rect().bottom(), at + ": the photo under the options");
+                    }
+                    var frame = new Rect(v.image().x() - 1, v.image().y() - 1, v.image().w() + 2, v.image().h() + 2);
+                    assertTrue(frame.inside(glass), at + ": the photo and its outline in the glass " + frame);
+                    var photo = photos.photo(id);
+                    assertEquals(photo.w() / (double) photo.h(), v.image().w() / (double) v.image().h(), 2.0 / Math.min(v.image().w(), v.image().h()) * photo.w() / photo.h() + .01,
+                            at + ": the aspect kept");
+                    assertTrue(v.image().h() >= 40, at + ": the photo large enough to see: " + v.image());
+                    var back = v.back().rect();
+                    assertTrue(back.inside(glass) && M.width(v.back().text()) <= back.w() - 6, at + ": Back in the glass, whole");
+                    assertFalse(frame.overlaps(back), at + ": the photo off Back");
+                    for (var line : v.caption()) {
+                        var box = new Rect(line.x(), line.y(), M.width(line.text()), 9);
+                        assertTrue(box.inside(glass), at + ": a caption line in the glass: " + line.text());
+                        assertFalse(box.overlaps(back) || box.overlaps(frame), at + ": a caption line off Back and the photo: " + line.text());
+                    }
+                    assertEquals(GuidePage.PHOTO_BACK, p.action(back.x() + 2, back.y() + 2, 0), at);
+                    assertTrue(p.anchors().containsKey("photo") && p.anchors().containsKey(GuidePage.PHOTO_BACK), at + ": its anchors");
+                    assertFalse(p.scrolls("photo"), at + ": the viewer stands still");
+                }
+    }
+
     /**
      * P5: every equipment page at both sizes: its icon (a kind's) and its texts inside the glass, above its keys and never wider
      * than its text area (a long name wraps, never shortened); Back always, Watch where it has a film, Tour where a tour,

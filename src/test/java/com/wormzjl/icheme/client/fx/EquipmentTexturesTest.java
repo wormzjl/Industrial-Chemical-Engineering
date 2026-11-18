@@ -110,6 +110,6 @@ class EquipmentTexturesTest {
             assertTrue(Files.isRegularFile(DIR.resolve(matcher.group(2) + ".png")), matcher.group(2) + " is missing");
             assertTrue(Files.isRegularFile(DIR.resolve(matcher.group(2) + "_n.png")), matcher.group(2) + " has no normal map");
         }
-        assertEquals(3, found, "bolt_face, cladding and motor_louvre take flat sprites");
+        assertEquals(24, found, "bolt_face, cladding and motor_louvre take relief flat sprites; the 21 plain ones of the reflection pass (ReflectionClassTest) plain flat sprites");
     }
 }

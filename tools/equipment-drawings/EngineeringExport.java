@@ -51,6 +51,15 @@ public class EngineeringExport {
   var generator=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR,2,1,PipeSizes.code(PipeSizes.outside(.05)),0,0,false);
   extra("GAS_INTAKE",IntakeGeometry.polygons(generator,RenderDetail.NORMAL),false,false);
   extra("LIQUID_HOPPER",HopperGeometry.polygons(generator,RenderDetail.NORMAL),false,false);
+  // Batch 2026-11-18-water-intake-outfall: the option sheets of the water intake (a pipe joined above, 100 mm) and the waste outfall (a pipe joined from the north, 100 mm).
+  var riser=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.GENERATOR,2,2,PipeSizes.code(PipeSizes.outside(.1)),0,0,false);
+  var discharge=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.VOID,2,4,PipeSizes.code(PipeSizes.outside(.1)),0,0,false);
+  extra("WATER_INTAKE_BASKET",WaterIntakeGeometry.polygons(riser,RenderDetail.NORMAL,WaterIntakeGeometry.BASKET),false,false);
+  extra("WATER_INTAKE_BELL",WaterIntakeGeometry.polygons(riser,RenderDetail.NORMAL,WaterIntakeGeometry.BELL),false,false);
+  extra("WATER_INTAKE_TEE",WaterIntakeGeometry.polygons(riser,RenderDetail.NORMAL,WaterIntakeGeometry.TEE),false,false);
+  extra("WASTE_OUTFALL_GOOSENECK",OutfallGeometry.polygons(discharge,RenderDetail.NORMAL,OutfallGeometry.GOOSENECK),false,false);
+  extra("WASTE_OUTFALL_APRON",OutfallGeometry.polygons(discharge,RenderDetail.NORMAL,OutfallGeometry.APRON),false,false);
+  extra("WASTE_OUTFALL_HEADWALL",OutfallGeometry.polygons(discharge,RenderDetail.NORMAL,OutfallGeometry.HEADWALL),false,false);
   // Batch 2026-11-15-fluid-interfaces, pipe fittings (W6, W7): the orifice plate and the automated shutoff valve, on a 150 mm and a 50 mm line.
   var narrow=new LineGeometry.Key(com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind.PIPE,5,48,PipeSizes.code(PipeSizes.outside(.05)),0,0,false);
   extra("ORIFICE_PLATE",OrificeGeometry.polygons(line,false),false,false);

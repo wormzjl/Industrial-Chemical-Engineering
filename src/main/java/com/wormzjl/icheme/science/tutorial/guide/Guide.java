@@ -82,13 +82,25 @@ public record Guide(List<Chapter> chapters, Map<String, String> terms) {
         }
     }
 
-    public record Chapter(String id, List<Step> steps) {
+    /** A chapter: its id, its steps, and its photographs' ids in the order the viewer offers them (batch 2026-11-18-tutorial-photos; may be empty). */
+    public record Chapter(String id, List<Step> steps, List<String> photos) {
         public Chapter {
             if (!ID.matcher(id).matches()) throw new IllegalArgumentException("Bad chapter id: " + id);
             steps = List.copyOf(steps);
             if (steps.isEmpty()) throw new IllegalArgumentException("A chapter needs a step: " + id);
             var ids = new HashSet<String>();
             for (var step : steps) if (!ids.add(step.id())) throw new IllegalArgumentException("Step twice: " + id + "/" + step.id());
+            photos = List.copyOf(photos);
+            var seen = new HashSet<String>();
+            for (var photo : photos) {
+                if (!ID.matcher(photo).matches()) throw new IllegalArgumentException("Bad photo id: " + photo);
+                if (!seen.add(photo)) throw new IllegalArgumentException("Photo twice: " + id + "/" + photo);
+            }
+        }
+
+        /** A chapter with no photograph. */
+        public Chapter(String id, List<Step> steps) {
+            this(id, steps, List.of());
         }
 
         /** The chapter title's language key. */

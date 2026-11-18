@@ -173,7 +173,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         try {
             var hazards=hazardColumns(catalog,model);var atoms=formulas(catalog,model);
             releases=new Releases(topology,model.components(),new com.wormzjl.icheme.science.pollution.HazardStandard(hazards[0],hazards[1],hazards[2],hazards[3],hazards[4],hazards[5]),
-                    atoms,Releases.so2Reference(hazards[1],atoms),flares,id->runtime.coordinator().model(id).components(),runtime.coordinator()::time,this::releasePollution);
+                    atoms,Releases.so2Reference(hazards[1],atoms),flares,id->runtime.coordinator().model(id).components(),runtime.coordinator()::time,new Releases.Sink(){
+                        @Override public void release(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount){releasePollution(at,channel,amount);}
+                        @Override public void deposit(PhysicalFluidTopology.Position at,double[] amounts,List<com.wormzjl.icheme.science.pollution.GroundField.Compound> compounds){depositPollution(at,amounts,compounds);}});
             shafts.releases(releases);
         } catch(RuntimeException failure) {
             IChemE.LOGGER.error("pollution status=RELEASES_OFF detail={}",String.valueOf(failure));
@@ -338,6 +340,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var s=topology.structure(origin);if(s!=null)into.accept(new Silhouettes.Placement(new BlockPos(origin.x(),origin.y(),origin.z()),s.shape(),s.paint()));
         }
     }
+    /** The non-empty names of the registry's structures of {@code dimension} (a plant tag's taken names). */
+    public java.util.Set<String> structureNames(String dimension) {
+        owned();var out=new HashSet<String>();
+        for(var origins:chunks.structureChunks.getOrDefault(dimension,Map.of()).values())for(var origin:origins) {
+            var s=topology.structure(origin);if(s!=null&&!s.name().isEmpty())out.add(s.name());
+        }
+        return out;
+    }
     /**
      * A client's far silhouette subscription (W10): within {@code radius} blocks ({@link Silhouettes#MAXIMUM_RADIUS} at most) of
      * where it stands ({@code on}), or none. A subscription is answered at once with the registry's records, as stored, at
@@ -461,6 +471,16 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(c==null||!(c.exitVelocity()>0)||!(c.massFlow()>0))continue;
             Noise.add(out,cell(r).above(1),Noise.Kind.VENT,Noise.vent(c.massFlow(),c.massFlow()/(c.exitVelocity()*area),area),.8);
         }
+        // Waste outfalls (batch 2026-11-18-water-intake-outfall): the liquid they let fall, as a tower's falling water, at the outfall.
+        if(result.advancedSeconds()>0) {
+            var weights=model.molecularWeights();var fallen=new HashMap<Long,Double>();
+            for(var b:result.boundaries()) {
+                if(b.kind()!=ConservativeTransport.BoundaryTransfer.Kind.EXCHANGE||!outfall(registrations().get(b.nodeId())))continue;
+                var n=b.moles();double m=0;for(int c=0;c<Math.min(n.length,weights.length);c++)if(n[c]<0)m-=n[c]*weights[c];
+                fallen.merge(b.nodeId(),m,Double::sum);
+            }
+            for(var e:fallen.entrySet())Noise.add(out,cell(registrations().get(e.getKey())),Noise.Kind.WATER_FALL,Noise.water(e.getValue()/result.advancedSeconds()),1);
+        }
         var heats=new HashMap<Long,Double>();
         if(result.advancedSeconds()>0)for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heats.merge(b.nodeId(),Math.abs(b.totalEnergyJoule())/result.advancedSeconds(),Double::sum);
         for(long id:registry.members(island)) {
@@ -519,6 +539,43 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Registration placeIntake(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeIntake(position,facing);}
     /** Registers a liquid hopper (batch 2026-11-15-fluid-interfaces, W4): a converter's fill port on its own, with its facts. */
     public WorldTopologyLedger.Registration placeHopper(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeHopper(position,facing);}
+    /** Registers a water intake (batch 2026-11-18-water-intake-outfall): the water body as a generator, on when {@code supplying}, as one queued event. */
+    public WorldTopologyLedger.Registration placeWaterIntake(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,boolean supplying){return placement.placeWaterIntake(position,facing,supplying);}
+    /** Registers a waste outfall (batch 2026-11-18-water-intake-outfall): a one-block sink open to the air, as one queued event. */
+    public WorldTopologyLedger.Registration placeOutfall(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeOutfall(position,facing);}
+    /** The status clause of a water intake whose block finds no water body: its boundary is closed until it does. */
+    public static final String NO_WATER_BODY="NO WATER BODY";
+    /** A water intake's ground clause (batch 2026-11-18-ground-pollution, G5 display): {@code GROUND WATER: name=x;name=x (and n more)}. */
+    public static final String GROUND_WATER="GROUND WATER: ";
+    /** The most compounds the ground clause names. */
+    public static final int GROUND_WATER_NAMED=3;
+    /**
+     * Whether registration {@code r} stands as the water intake block, not the gas intake block. The one place that tells
+     * the two apart (batch 2026-11-18-water-intake-outfall, option A): it reads stored facts only, an ambient generator
+     * whose stored contents are water (its water mole fraction above 0.5; the air's is under 4 %, a water intake's 1), and
+     * selects a block. It is never physics: both intakes give their spec's own contents at 298.15 K and 101 325 Pa. The
+     * block {@code FluidDeviceBlock.stateFor} stands, the NO WATER BODY status clause ({@code ViewBuilder}), the water body
+     * edit's target ({@link #waterBody}) and the edit refusal's words all call it.
+     */
+    public static boolean waterIntake(WorldTopologyLedger.Registration r){
+        if(r==null||r.device().kind()!=TopologyCompiler.Kind.GENERATOR||!r.spec().ambient())return false;
+        // The network's conserved order ends with water (MaterialAxis).
+        var n=r.spec().composition();return n.length>0&&n[n.length-1]>.5;
+    }
+    /** Whether registration {@code r} is a gas intake: an ambient generator that is not a water intake ({@link #waterIntake}). */
+    public static boolean gasIntake(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.GENERATOR&&r.spec().ambient()&&!waterIntake(r);}
+    /** Whether registration {@code r} is a waste outfall: a sink that is the world outside. */
+    public static boolean outfall(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.VOID&&r.spec().ambient();}
+    /**
+     * A water intake's block found its water body, or lost it (batch 2026-11-18-water-intake-outfall, {@code WaterBody}): a
+     * fact about the world its block counted, queued as an edit of the generator's switch, as a player's input is; its island
+     * recompiles on the engine's schedule. Whether an edit was queued: none for an unknown identity, a device that is no water
+     * intake, or a switch already so.
+     */
+    public boolean waterBody(long id,boolean supplying){
+        owned();var r=topology.latest().get(id);if(!waterIntake(r)||r.device().generatorEnabled()==supplying||topology.pending(id))return false;
+        return placement.edit(id,r.revision(),r.device().withGeneratorEnabled(supplying),r.spec())!=null;
+    }
     public WorldTopologyLedger.Registration place(PhysicalFluidTopology.Position position,TopologyCompiler.Kind kind,PhysicalFluidTopology.Direction facing) {
         return placement.place(position,kind,facing,List.of());
     }
@@ -1013,6 +1070,25 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var pos=new BlockPos(p.x(),p.y(),p.z());if(!level.hasChunkAt(pos))return;
             if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)shell.weeping(id,on);
         }
+    }
+    /** What the spill law leaves on the ground (batch 2026-11-18-ground-pollution): a deposit on the pollution service's ground, never the air field. */
+    /**
+     * The ground clause of a water intake (batch 2026-11-18-ground-pollution, G5, display only): the compounds the ground of
+     * its chunk column holds, as mole fractions in the column's reference water ({@link com.wormzjl.icheme.science.pollution.GroundField#waterShares}),
+     * read from the installed ground; nothing is drawn or delivered. Empty for a clean column, another device, or pollution off.
+     */
+    String groundWater(WorldTopologyLedger.Registration r){
+        if(!waterIntake(r))return "";
+        var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);if(service.isEmpty()||!service.get().enabled())return "";
+        var p=r.device().position();long column=com.wormzjl.icheme.science.pollution.MapColumns.column(p.x()>>4,p.z()>>4);
+        var shares=service.get().ground(dimension(p.dimension())).waterShares(column);if(shares.isEmpty())return "";
+        var named=new ArrayList<String>();
+        for(int i=0;i<Math.min(GROUND_WATER_NAMED,shares.size());i++)named.add(shares.get(i).name()+"="+String.format(java.util.Locale.ROOT,"%.3g",shares.get(i).fraction()));
+        return GROUND_WATER+String.join(";",named)+(shares.size()>GROUND_WATER_NAMED?" (and "+(shares.size()-GROUND_WATER_NAMED)+" more)":"");
+    }
+    private void depositPollution(PhysicalFluidTopology.Position at,double[] amounts,List<com.wormzjl.icheme.science.pollution.GroundField.Compound> compounds) {
+        var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
+        if(service.isPresent())service.get().deposit(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),amounts,compounds);
     }
     /** A pollution release (WP4) to the pollution service of this server; nothing while the service is off. */
     private void releasePollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {
