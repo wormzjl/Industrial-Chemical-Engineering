@@ -8,6 +8,8 @@ import net.neoforged.fml.common.Mod;
 public final class FluidTestMod {
     public FluidTestMod(IEventBus modBus) {
         modBus.addListener(ElectricGameTests::registerForeignEnergy);
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(
+                net.neoforged.bus.api.EventPriority.LOWEST, ExchangerRestartReviewWorld::beforeFirstDecision);
         if(Boolean.getBoolean("icheme.fluid.benchmark")) {
             var bus=net.neoforged.neoforge.common.NeoForge.EVENT_BUS;
             bus.addListener(net.neoforged.bus.api.EventPriority.HIGHEST,FluidServerBenchmark::installFixture);

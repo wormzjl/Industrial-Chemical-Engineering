@@ -238,6 +238,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var early=EARLY_CHUNKS.remove(server);
         if(early!=null)for(var loaded:early)world.loadedChunk(loaded.dimension(),loaded.chunk());
         world.chunks.holdWithoutLevel();
+        world.controls().restoreSavedBindings();
+        com.wormzjl.icheme.runtime.assembly.AssemblyService.restoreExchangerLines(server,world);
     }
     /** Retain early chunk loads as well as normal ones; called only on this server's thread. */
     public static void loadedChunk(MinecraftServer server,ResourceKey<Level> dimension,long chunk) {
@@ -1642,6 +1644,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             WaterIntakes.recheck(this);
             nextWaterCheck = topology.onlineTick() + WaterIntakes.RECHECK_TICKS;
         }
+        com.wormzjl.icheme.runtime.assembly.AssemblyService.refreshExchangerSignals(server,this,controlFacts.topologyRevision());
         holdValves();
         // Sample electrical supply before this cadence's shaft decisions and presentation, including idle trains.
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();}
@@ -1745,6 +1748,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         operate();
     }
     /** Heat side {@code side}'s lines as last reported, or null for none. */
+    public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation exchangerOperation(long side) {
+        owned();return runtime.coordinator().operation(PhysicalFluidTopology.sideIdentity(side));
+    }
     public @org.jetbrains.annotations.Nullable Lines lines(long side){owned();return lines.get(side);}
     /** The mass flow target the valve at node {@code valve} drives its connection at in its island as last committed, or null. */
     private @org.jetbrains.annotations.Nullable Double plannedTarget(long valve) {

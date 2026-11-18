@@ -38,7 +38,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | [`runtime/assembly/AssemblyPresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/AssemblyPresentation.java) | The column screens' sessions on a `PresentationMailbox`: `open`, `validate`, `act` (Start, Stop or Apply, queued as Validate is), `close` (a command queued before still runs), `tick`; `Host` | 101 |
 | [`runtime/assembly/AssemblyWatch`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/AssemblyWatch.java) | The laying tool's watch within `RANGE`: `start`, `stop`, `tick`; `Host` | 81 |
 | `runtime/assembly/ColumnStarts` (pp) | `build(level, world, origin)` gives a `Built(request, refusal)`: the boundary valves of a complete report as `FluidWorldAuthority.PortSpot`s, the design's set points, the nozzles, the condenser's water sides, the air condenser's bare tube, the members (`ColumnUnit.Members`) and the shape's material of construction | 151 |
-| `runtime/assembly/ExchangerLines` (pp) | `design(level, world, vessel)` reads the lines each side's registered control asks for (`HeatUnit.lines()`, through `EquipmentStructure.sideIdentities`); `publish(level, world, vessel, entry)` sets each such side's `FluidWorldAuthority.Lines` | 94 |
+| `runtime/assembly/ExchangerLines` (pp) | `design(world, origin)` reads each side's registered control. `publish(world, origin, entry)` resolves the valve and its signal and sets each side's `FluidWorldAuthority.Lines`. | |
 | [`network/AssemblyNetwork`](../../../src/main/java/com/wormzjl/icheme/network/AssemblyNetwork.java) | The packets on `NetworkProtocol.VERSION` (main thread); `open(player, vessel, cell)`, `target`, `closed`, `datasheet`, `presentationTick`, `forget`; the `VIEW` codec, `encodeOperation`/`decodeOperation` (also read by the DCS's column page); `Action` START, STOP, APPLY, CLEAN (a stopped column's trays, answered by a chat line); `REFUSALS` (each server's last refused Start per master, until the next press, not saved) | 612 |
 | [`world/inventory/AssemblyMenu`](../../../src/main/java/com/wormzjl/icheme/world/inventory/AssemblyMenu.java) | Menu `assembly`: origin, cell (a shell cell of the column), anchor, reach (`REACH` plus the clicked structure's largest size), selected member; client `view()`/`accept`; `removed` ends the session | 102 |
 | [`client/gui/screens/inventory/AssemblyScreen`](../../../src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/AssemblyScreen.java) | The column's screen on the kit's door and glass: the drawing beside the parts list, Check parts, Open unit, Datasheet, the column's name in the title strip (saved by `EquipmentNetwork.rename`); tabs Structure and Operation (`OperationColumn`, when the report is complete and the view has an operation); its help tours (`LINES_STEP`) | 685 |
@@ -90,12 +90,10 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 - A dropped store is marked `rebuild`: each designed column's controller cell queues one validation when it loads
   (`controllerLoaded`), only for a column with no entry yet.
 
-**The exchanger's lines** (`ExchangerLines.publish`). After every validation, revert and chunk check, each asking side's
-`FluidWorldAuthority.Lines`: NOT_VALIDATED, CHECKED (parts not in place counted), UNMETERED (complete, but the operated
-valve carries no flowmeter, so it stands open) or COMPLETE (the valve carries its flowmeter), with the operated valve's
-identity and the slot states the side's screen colours its parts by. A side asking for no lines gets none. The fluid
-world keeps lines only while the server runs; a chunk check publishes them again. A COMPLETE side's control sets the real
-valve's flow target and its internal bypass stays shut ([heat-units.md](heat-units.md)).
+**The exchanger's lines** (`ExchangerLines.publish`). The engine derives each side's `FluidWorldAuthority.Lines` from
+the saved shape, report and valve signal. Startup, validation, report invalidation and relevant topology changes use the
+same resolver. The engine can assign a valve and release it while both exchanger nodes are unloaded. A COMPLETE side's
+control sets the real valve's flow target and closes its internal bypass. [Heat units](heat-units.md)
 
 **Start** (`ColumnStarts.build`, refusals in order, texts from `Refusal`): `NO_DESIGN`, `NO_SAVED_POINT`, `VACUUM` (a
 design with a vacuum top, `ColumnComponents.ejector`, whether an ejector or a vacuum pump draws it), `INCOMPLETE`, `VALVE_UNREGISTERED`; the tab shows the text as a NOT_READY
@@ -218,9 +216,9 @@ saves. The same run builds `HeatExchangerReviewWorld` (batch `review-heat`, [hea
 - Should two reports hold one unit (one validated while the other was reverted), a click opens the least master's
   screen (`holder`). `cellOf` looks for a loaded shell cell among the report's coded nozzles: a member whose cells are
   not loaded cannot be opened from the list.
-- **An exchanger's lines are state twice over.** Its entry is in the store; the sides' `Lines` are in the fluid world and
-  last only while the server runs. Every path that changes an exchanger's entry calls `published` or
-  `ExchangerLines.publish`; a new path must too, or a side keeps working a valve its report no longer holds.
+- **An exchanger's lines are derived state.** `AssemblyService.publishExchanger` updates the runtime binding and
+  records which reports depend on the data bus. `refreshExchangerSignals` revisits those reports when the topology
+  revision changes.
 - **A vacuum column does not start** in the world (`Refusal.VACUUM`), though its assembly checks.
 
 **Snapshot:** `c004a4c57`, 2026-11-16.

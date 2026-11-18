@@ -44,9 +44,13 @@ public final class AssemblyService {
     private record LoadedChunk(ResourceKey<Level> dimension, long chunk) {
     }
 
+    private record Master(ResourceKey<Level> dimension, long origin) {}
+
     private static final class Queue {
         final LinkedHashMap<BlockPos, Request> requests = new LinkedHashMap<>();
         final LinkedHashSet<LoadedChunk> chunks = new LinkedHashSet<>();
+        final Set<Master> exchangerSignals = new LinkedHashSet<>();
+        long busRevision = -1;
         long walks;
     }
 
@@ -163,13 +167,14 @@ public final class AssemblyService {
         if (world == null) return null;
         var store = AssemblyStore.of(level);
         long master = vessel.origin().asLong();
+        var origin = position(level, master);
         Blueprint blueprint;
         if (designed(vessel.shape())) blueprint = ColumnBlueprint.of(vessel.shape().trays());
         else {
-            var design = ExchangerLines.design(level, world, vessel);
+            var design = ExchangerLines.design(world, origin);
             if (!design.any()) {
                 if (store.entry(master) != null) store.forget(master);
-                ExchangerLines.publish(level, world, vessel, null);
+                publishExchanger(level, world, master, null);
                 return null;
             }
             blueprint = ExchangerBlueprint.of(design);
@@ -178,12 +183,41 @@ public final class AssemblyService {
         var report = AssemblyMatcher.match(blueprint, walker, walker.unit(vessel.origin(), vessel.shape()), store.taken(master));
         var entry = Entry.of(report, walker.codes());
         store.put(master, entry);
-        ExchangerLines.publish(level, world, vessel, entry);
+        publishExchanger(level, world, master, entry);
         queue(level.getServer()).walks++;
         if (walker.exhausted())
             IChemE.LOGGER.warn("assembly status=WALK_LIMIT master={} visited={} detail=the walk stopped at {} blocks; lines beyond read as not checked",
                     vessel.origin().toShortString(), walker.visited(), AssemblyWalker.MAX_WALK);
         return entry;
+    }
+
+    /** Restores checked exchanger lines before the engine makes its first decision. */
+    public static void restoreExchangerLines(MinecraftServer server, FluidWorldAuthority world) {
+        for (var level : server.getAllLevels())
+            AssemblyStore.of(level).entries().forEach((master, entry) ->
+                    publishExchanger(level, world, master, entry));
+    }
+
+    /** Reconciles checked external-sensor valves when the saved data-bus topology changes. */
+    public static void refreshExchangerSignals(MinecraftServer server, FluidWorldAuthority world, long busRevision) {
+        var q = QUEUES.get(server);
+        if (q == null || q.busRevision == busRevision) return;
+        q.busRevision = busRevision;
+        for (var master : List.copyOf(q.exchangerSignals)) {
+            var level = server.getLevel(master.dimension());
+            if (level != null)
+                publishExchanger(level, world, master.origin(), AssemblyStore.of(level).entry(master.origin()));
+        }
+    }
+
+    private static void publishExchanger(ServerLevel level, FluidWorldAuthority world, long master, @Nullable Entry entry) {
+        var key = new Master(level.dimension(), master);
+        if (ExchangerLines.publish(world, position(level, master), entry)) {
+            queue(level.getServer()).exchangerSignals.add(key);
+        } else {
+            var q = QUEUES.get(level.getServer());
+            if (q != null) q.exchangerSignals.remove(key);
+        }
     }
 
     /** Runs the queued chunk checks and validations; nothing when none is queued. */
@@ -251,9 +285,20 @@ public final class AssemblyService {
             // An exchanger side whose control now asks for other lines (W8): its exchanger's report was for another design.
             var was = change.before() == null ? null : change.before().heat();
             var now = change.after() == null ? null : change.after().heat();
-            if (was != null && now != null && was.lines() != now.lines()) redesigned(level, at);
+            if (was != null && now == null) {
+                FluidWorldAuthority.find(server).ifPresent(world -> world.lines(change.before().id(), null));
+                redesigned(level, at);
+            } else if (was != null && was.lines() != now.lines()) redesigned(level, at);
             Integer before = code(change.before()), after = code(change.after());
-            if (Objects.equals(before, after)) continue;
+            if (Objects.equals(before, after)) {
+                // A valve can gain or lose its selected signal without changing the checked fitting.
+                if (change.before() != null && change.after() != null
+                        && change.after().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.ControlValve
+                        && (!Objects.equals(change.before().control(), change.after().control())
+                                || change.before().held() != change.after().held()))
+                    for (long master : coded(store, at.asLong())) published(level, store, master);
+                continue;
+            }
             for (long master : coded(store, at.asLong())) revert(level, store, master, at, "changed");
             if (before == null)
                 for (var d : Direction.values())
@@ -283,7 +328,7 @@ public final class AssemblyService {
         long origin = vessel.origin().asLong();
         stopColumn(level, origin);
         store.forget(origin);
-        FluidWorldAuthority.find(level.getServer()).ifPresent(world -> ExchangerLines.publish(level, world, vessel, null));
+        published(level, store, origin);
         for (long master : store.mastersAt(origin))
             if (store.entry(master) != null && store.entry(master).holds(origin)) revert(level, store, master, vessel.origin(), "removed");
         for (var position : around(vessel)) for (long master : coded(store, position)) revert(level, store, master, BlockPos.of(position), "removed");
@@ -426,36 +471,29 @@ public final class AssemblyService {
      * the old design, leaves, and its sides' lines with it. A check validates the new design.
      */
     private static void redesigned(ServerLevel level, BlockPos at) {
-        var vessel = EquipmentStructure.find(level, at);
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
-        if (vessel == null || world == null || vessel.shape().kind() != EquipmentShape.Kind.EXCHANGER) return;
+        if (world == null) return;
+        var vessel = SavedEquipment.ownedBy(world, level.dimension().location().toString(), at);
+        if (vessel == null || !ExchangerLines.lined(vessel.shape())) return;
         var store = AssemblyStore.of(level);
-        if (store.entry(vessel.origin().asLong()) != null) store.forget(vessel.origin().asLong());
-        ExchangerLines.publish(level, world, vessel, null);
+        long master = vessel.origin().asLong();
+        store.forget(master);
+        publishExchanger(level, world, master, null);
         IChemE.LOGGER.info("assembly status=REDESIGNED master={} detail=an exchanger side's control asks for other lines", vessel.origin().toShortString());
     }
 
-    /** {@code master}'s stored entry as its exchanger's sides' lines (W8), where its exchanger is loaded; nothing for a column. */
-    private static void published(ServerLevel level, long master) {
-        published(level, master, cellOf(level, master, master));
-    }
-
-    /** {@link #published(ServerLevel, long)} with the exchanger found from {@code cell}, one of its loaded cells (null: none). */
-    private static void published(ServerLevel level, long master, @Nullable BlockPos cell) {
-        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
-        var vessel = cell == null ? null : EquipmentStructure.find(level, cell);
-        if (world == null || vessel == null || vessel.shape().kind() != EquipmentShape.Kind.EXCHANGER) return;
-        ExchangerLines.publish(level, world, vessel, AssemblyStore.of(level).entry(master));
+    /** Publishes the saved report through the same registry path used during startup. */
+    private static void published(ServerLevel level, AssemblyStore store, long master) {
+        FluidWorldAuthority.find(level.getServer()).ifPresent(world ->
+                publishExchanger(level, world, master, store.entry(master)));
     }
 
     private static void revert(ServerLevel level, AssemblyStore store, long master, BlockPos at, String why) {
         var status = status(store, master);
         if (status == null || status == Status.NOT_VALIDATED) return;
-        // Its cell first: a reverted entry codes nothing to find it by.
-        var cell = cellOf(level, master, master);
         store.revert(master, at.asLong());
         stopColumn(level, master);
-        published(level, master, cell);
+        published(level, store, master);
         IChemE.LOGGER.info("assembly status=REVERTED master={} was={} at={} reason={}", BlockPos.of(master).toShortString(), status, at.toShortString(), why);
     }
 
@@ -484,6 +522,7 @@ public final class AssemblyService {
         var ground = new LevelGround(level, world);
         var store = AssemblyStore.of(level);
         var pos = new ChunkPos(chunk);
+        if (level.getChunkSource().getChunkNow(pos.x, pos.z) == null) return;
         for (long master : store.mastersInChunk(chunk)) {
             var entry = store.entry(master);
             if (entry == null || entry.status() == Status.NOT_VALIDATED) continue;
@@ -495,8 +534,7 @@ public final class AssemblyService {
                     break;
                 }
             }
-            // An exchanger's sides take its lines again (W8): the fluid world keeps them only while the server runs.
-            published(level, master);
+            published(level, store, master);
         }
     }
 

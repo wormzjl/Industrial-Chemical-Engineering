@@ -41,7 +41,7 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | `runtime/fluid/FluidWorldAuthority` (heat parts) | `placeUnit(sides, vessel)` and `removeUnit(ids)` (one ledger event each, the pair whole; `UnitSide`, `UnitVessel`); a fired heater's coil edit moves its partner in the same event; `Lines` (`Status` NOT_VALIDATED, CHECKED, UNMETERED, COMPLETE), `lines`, `operate`, `holdValves`; `controlStatus`, `linesStatus`; the transit loaded from and written to the facts ([runtime-saves.md](runtime-saves.md)) | |
 | `runtime/fluid/IslandCoordinator` | Holds the relay states and the side index; calls `ExchangerCoupling` from its steps (`sameControl` accepts a planned valve target) ([runtime-engine.md](runtime-engine.md)) | |
 | [`science/assembly/ExchangerBlueprint`](../../../src/main/java/com/wormzjl/icheme/science/assembly/ExchangerBlueprint.java) | `Lines` NONE, BYPASS, RATIO, FEED; `Design(tube, shell)`; slots `<side>_inlet_tee`, `_bypass_valve`, `_outlet_tee`, `_feed_valve`, `_meter`, `_feed_meter`; `operated(side, lines)`; `of(design)` | 148 |
-| [`runtime/assembly/ExchangerLines`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ExchangerLines.java) | `design` (from the sides' registered controls), `publish` (a report as each side's `Lines`, with the valve its control works) | 94 |
+| [`runtime/assembly/ExchangerLines`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ExchangerLines.java) | Resolves the sides from the saved shape and registry. Derives each side's lines and valve from the validation report and the valve's selected signal. | |
 | [`client/gui/common/HeatControlColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatControlColumn.java), [`HeatDiagram`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatDiagram.java), [`HeatFlowsheet`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/HeatFlowsheet.java) | The Control tab (`targets`, `columnTexts`, `deposit`: the Deposit group with its fouling, UA left and Clean), the unit's flowsheet on a design grid with its lines' slots, the stream switch ([client-screens.md](client-screens.md)) | 277, 380, 358 |
 
 ## Main flow
@@ -118,9 +118,10 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
   RATIO for a feed valve and a flowmeter on the other side's feed, COLUMN (`Lines.FEED`) for a feed valve and a
   flowmeter beyond it on the same feed (`<side>_feed_meter`). Check lines sends `fluid_check_lines`
   (`FluidNetwork.LinesPayload`); the exchanger is validated at the next server tick (`AssemblyService.validate`);
-  `ExchangerLines.publish` hands each side its `FluidWorldAuthority.Lines`: NOT_VALIDATED, CHECKED (with the parts not in
-  place), UNMETERED (complete, but the valve carries no flowmeter, so it stands open as a bare valve), COMPLETE (with the
-  valve's registration).
+  `ExchangerLines.publish` hands each side its `FluidWorldAuthority.Lines`. NOT_VALIDATED and CHECKED reflect the
+  assembly report. A complete report yields COMPLETE when its valve has a regulating signal and UNMETERED when the
+  signal is missing. Startup restores these assignments before the first engine decision using the saved shape and
+  report, registration identities, instrument selections and data cables.
 - **Operation** (`FluidWorldAuthority.operate` → `ExchangerCoupling.operations`): a complete side's read carries its
   `Operation`. At the slice start `couple` plans the valve's mass flow target: a bypass valve takes the controller's
   bypass share of the side's and the bypass's flows together (the side's own bypass stays shut); a feed valve takes the
@@ -128,9 +129,10 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
   (heatRate/(h(T_out) − h(T_in)), [column-run.md](column-run.md)). A target within `VALVE_DEADBAND` of the valve's stands,
   so a steady plant keeps its graph and certifies. A side whose operation changed wakes its island. Not complete: a
   bypass control works the internal bypass; a ratio holds nothing; a COLUMN side's water flows as its line lets it. A
-  report that reverts leaves its valve at its last planned target (`holdValves`). A flowmeter installed or removed
-  reverts a report that read it (`AssemblyService.metered`); a side whose control asks for other lines drops its
-  exchanger's report (`AssemblyService.redesigned`). A chunk load's check of a stored report publishes the lines again.
+  report that reverts leaves its valve at its last planned target (`holdValves`). Piping edits revert dependent
+  reports even with both exchanger nodes unloaded. A flowmeter edit reverts a report that read it
+  (`AssemblyService.metered`). Changing the type of lines a side needs drops its report (`AssemblyService.redesigned`).
+  Data-bus topology changes recheck reports whose valves rely on a remote sensor.
 - **Status lines**, prefixed to the island's status in this order: the lines (`LINES NOT CHECKED: …`,
   `LINES NOT COMPLETE: n parts not in place; …`, `LINES NOT COMPLETE: the bypass (feed) valve needs its flowmeter to
   regulate; …`, `LINES COMPLETE: …`, with the fallback after `;`), then `LIMITED: the bypass is fully open` / `closed`,
@@ -174,7 +176,7 @@ The heat laws and their constants: [heat-exchangers.md](heat-exchangers.md). Her
 |---|---|---|
 | The coupling: fence, reads, booking, wake, transit, loads, certify, the kettle, the real valves, coils across islands | `ExchangerCoupling`, `PassiveStepSolver.couple`, `RetainedSolver`, `FluidIslandCommand` | `ExchangerCouplingTest` (a test rig with the real coordinator, solver and codec; the wall's cost is gated here, not in the campaign) |
 | A side's registration, compile, outlet junction; the air cooler and the coils in the world | `PhysicalFluidTopology` (`HEAT_SIDE`, `sideIdentity`), `placeUnit`, `removeUnit` | `HeatSideTopologyTest`, `HeatUnitPowerTest`, GameTest `ElectricGameTests.anAirCoolerWithoutPowerHoldsNaturalDraughtUntilItsPortIsFilled` |
-| The lines | `ExchangerBlueprint`, `ExchangerLines`, `AssemblyMatcher`, `lines`, `operate` | `ExchangerBlueprintTest`, GameTest `AssemblyGameTests.anExchangersBypassValidatesAndARemovedPipeReverts` |
+| The lines | `ExchangerBlueprint`, `ExchangerLines`, `AssemblyMatcher`, `lines`, `operate` | `ExchangerBlueprintTest`, `ExchangerChunkGameTests`, `ExchangerRestartReviewWorld` |
 | A running column's condenser and utilities | `ColumnOperation.heatRead`, `owe`; `ExchangerCoupling.owe` | `ColumnRunTest` ([column-run.md](column-run.md)) |
 | Facts, state | `HeatUnit`, `FluidFacts`, `FluidCheckpointCodec` | `FluidFactsCompatTest`, `FluidCheckpointCodecTest` |
 | What the screen receives and shows | `HeatPresentation`, `FluidView.Heat`, `HeatControlColumn`, `HeatDiagram` | `HeatPresentationTest`, `FluidPacketCodecTest`, `HeatControlColumnTest` (`theColumnsModeSetsNothingAndShowsTheFlowItsColumnSets`, `aKettlesTubesOfferTheColumnsModeAsAReboilersUtility`), `HeatDiagramTest` |
