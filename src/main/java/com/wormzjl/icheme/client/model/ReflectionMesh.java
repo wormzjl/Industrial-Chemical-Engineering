@@ -10,8 +10,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * One structure's mesh for the reflection pass (batch 2026-11-18-equipment-reflections): the whole fixed facets of its
- * drawn body that take a {@link ReflectionClass} ({@link ShapeRasterizer#reflectionBody}), as triangles from its origin
+ * One structure's mesh for the reflection pass (batch 2026-11-18-equipment-reflections): the fixed facets of its drawn
+ * body that take a {@link ReflectionClass} ({@link ShapeRasterizer#renderBody}: no glass, no moving parts, no nozzles; each
+ * on the plane of the chunk mesh's own pieces of it, tiled by its sprite's period, not cut per cell), as triangles from its origin
  * with their smooth normals, each vertex's class and reflection colour. No texture: the sky is the image. Built once
  * per shape, paint and detail; {@code EquipmentReflectionRenderer} packs it into the GPU format. No Minecraft class.
  *
@@ -45,7 +46,7 @@ public record ReflectionMesh(float[] positions, float[] normals, byte[] classes,
 
     /** The polygons the pass draws on {@code shape}. */
     public static List<Mesh.Polygon> polygons(EquipmentShape shape, RenderDetail detail) {
-        return ShapeRasterizer.reflectionBody(shape, detail, m -> ReflectionClass.of(m) != null);
+        return ShapeRasterizer.renderBody(shape, detail).stream().filter(p -> ReflectionClass.of(p.material()) != null).toList();
     }
 
     /** Fans of {@code polygons} (convex) as triangles. */

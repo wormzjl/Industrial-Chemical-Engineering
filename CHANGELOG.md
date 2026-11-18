@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- Equipment reflections (`2026-11-18-equipment-reflections`): the shader `equipment_reflection` adds the mirrored sky, ground and sun to equipment bodies, pipes and steel within `reflection_range` (Fresnel by surface class: paint, bare steel, jacketing), faded at the range edge, with the fog, at night and in rain; the baked sheen steps aside while it draws; LabPBR maps for 21 more sprites so shader packs mirror them too. Every custom shader has its own switch in `[effects]` (`flame_shader`, `smoke_shader`, `heat_haze`, `wiring_shader`, `reflections`, `reflection_strength`, `reflection_range`), each falling back to its compatible drawing; `tools/reflection-render/`.
+
 ## [0.35.1] - 2026-11-18
 
 ### Changed
