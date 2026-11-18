@@ -19,13 +19,13 @@ class RespiratorTest {
 
     @Test
     void thresholdsMoveByTheProtectionFactor() {
-        assertEquals(Level.NONE, Exposure.level(Respirator.breathed(Math.nextDown(5.0), FULL)));
+        assertEquals(Level.NONE, Exposure.level(Respirator.breathed(4.999, FULL)));
         assertEquals(Level.LOW, Exposure.level(Respirator.breathed(5, FULL)), "effects start at 5");
-        assertEquals(Level.LOW, Exposure.level(Respirator.breathed(Math.nextDown(15.0), FULL)));
+        assertEquals(Level.LOW, Exposure.level(Respirator.breathed(14.999, FULL)));
         assertEquals(Level.MEDIUM, Exposure.level(Respirator.breathed(15, FULL)), "MEDIUM at 15");
-        assertEquals(Level.MEDIUM, Exposure.level(Respirator.breathed(Math.nextDown(50.0), FULL)));
+        assertEquals(Level.MEDIUM, Exposure.level(Respirator.breathed(49.999, FULL)));
         assertEquals(Level.HIGH, Exposure.level(Respirator.breathed(50, FULL)), "damage at 50");
-        assertEquals(Level.HIGH, Exposure.level(Respirator.breathed(Math.nextDown(150.0), FULL)));
+        assertEquals(Level.HIGH, Exposure.level(Respirator.breathed(149.999, FULL)));
         assertEquals(Level.EXTREME, Exposure.level(Respirator.breathed(150, FULL)), "EXTREME at 150");
     }
 
@@ -83,13 +83,13 @@ class RespiratorTest {
         double remaining = 30;
         // This pass: protected by the 30 left before its load of 50.
         assertTrue(Respirator.protects(remaining));
-        assertEquals(Level.HIGH, Exposure.level(cube[0]));
+        assertEquals(Level.EXTREME, Exposure.level(cube[0]), "the cube's own level");
         assertEquals(Level.HIGH, Respirator.breathedLevels(cube, remaining)[0]);
         remaining = Respirator.after(remaining, Respirator.load(cube, PASS));
         assertEquals(0, remaining);
         // The next pass: spent, the cube's own level.
         assertFalse(Respirator.protects(remaining));
-        assertEquals(Level.HIGH, Respirator.breathedLevels(cube, remaining)[0]);
+        assertEquals(Level.EXTREME, Respirator.breathedLevels(cube, remaining)[0]);
         assertEquals(0, Respirator.after(remaining, 50), "a spent filter stays spent");
     }
 

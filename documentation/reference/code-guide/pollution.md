@@ -8,6 +8,7 @@ Up: [code guide](README.md)
 - A cube's index, its spread, its decay or the ledger looks wrong; `/icheme pollution` answers oddly.
 - A player or mob gets no effect or the wrong one; a cloud does not ignite, a blast is too strong, a chain does not follow.
 - The handheld meter or the fixed monitor reads wrong; a breached vessel will not repair.
+- A respirator protects wrongly or its filter lasts too long or too short.
 - The FTB Chunks map shows no pollution squares, or the wrong ones.
 - A log line starts with `pollution status=` or `pollution_store status=`.
 
@@ -32,6 +33,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `ExplosionLaw` | `flammable` (index ≥ 1), `burntIndex` (at most 2), `energy`, `tntKilograms`, `power`, `strengthAt(power, distance)`, `reach`. |
 | `Exposure` | Levels at 0.1, 0.3, 1 and 3; the effects and damage of each kind. |
 | `Reading` | The meter's words and numbers. |
+| `Respirator` | The respirator's law: breathed index = index / 50 while the filter has capacity; the filter load of a pass, Σ of the channels' indices at or above 0.1 × pass seconds, from 600 index-seconds; `protect` returns the cube's levels array itself when no working gear is worn. |
 | `MapColumns` | The map overlay's summary: per chunk column the largest index of each kind, one byte each (steps of 0.02, 255 = 5.1 or more); the 32-chunk radius, the cap of 4096 columns (nearest first), the square's colour and alpha. |
 | **Runtime (`runtime/pollution/`)** | |
 | `PollutionService` | One per server, server thread. `tick` (pass every 100 ticks, effects every 20, ignition every 10, blasts every tick), `release`, `burn`, `index`, `field`, `cell`. Cells are read with `getChunkNow` only. |
@@ -42,13 +44,16 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `Ignition`, `Blasts` | Ignition sources in flammable cubes; the burn, `Level.explode`, the chain queue. |
 | `BurstPipes` | A one-block device a blast destroys: the mark, the release, one sound per cube and tick. |
 | `Breaches` | Constructed equipment in a blast: a `Detonate` listener, one breach per structure. |
-| `PollutionMeters`, `MonitorSignals` | The handheld meter's server side; the fixed monitor's lamp and alarm levels. |
+| `PollutionMeters`, `MonitorSignals` | The handheld meter's server side (with the worn respirator's segment); the fixed monitor's lamp and alarm levels. |
+| `RespiratorGear` | `worn(Player)`: the helmet slot's respirator, else a Curios slot's; `protect`: the levels a pass uses for effects and damage, and the filter load, booked by the cube the player stands in. |
 | `PollutionMaps` | The map overlay's server side: subscriptions by player, one answer on request and one per pass, access by `pollution.mapOverlay`. |
 | **Hooks elsewhere** | |
 | `runtime/fluid/Releases` | On `ShaftTrains.booked`: turns what an island let out into releases. |
 | `FluidWorldAuthority` | `releasePollution` (the sink), `flames` (the plant's own ignition sources), `releaseContents` (a burst device), `breach`, `repair`. |
 | `ProcessSolveJobs.PollutionCommand` | The pass as the fourth job family ([runtime-engine.md](runtime-engine.md)). |
 | `world/item/PollutionMeterItem`, `world/level/block/PollutionMonitorBlock` | The meter; the monitor, a data host `AT-nnnn` ([wired-control-power.md](wired-control-power.md)). |
+| `world/item/RespiratorItem`, `RespiratorFilterItem`, `RespiratorFilterCodec` | The respirator (an `ArmorItem` of the material `icheme:respirator`: no armour, no durability) and its filter; the fitted filter's capacity is the item component `icheme:respirator_filter` (absent: no filter). |
+| `compat/curios/CuriosGear`, `CuriosRespiratorClient`; `client/RespiratorClient` | The only classes that name Curios types: the Curios slot lookup and the worn look from a Curios slot, reached only after `ModList.isLoaded("curios")`. |
 | `network/PollutionMapNetwork` | `Request(watching)` and `Answer(dimension, denied, columns, values)`. |
 | `client/pollution/PollutionMapClient`, `PollutionMapStore` | Finds the map integration once; asks while the map is open; holds the last answer. |
 | `client/pollution/ftbchunks/FtbChunksOverlay`, `ColumnIcon` | The only classes that name FTB Chunks, FTB Library or Architectury types. |
@@ -75,6 +80,13 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | A breached vessel | It stands open, so the first row applies | |
 
 Not sources: the blanketing vent, a still pot, a relief run, a device a player breaks, a plain fluid void (only a void whose spec is `ambient`, the waste outfall, books), clean water at an outfall (water has no reference).
+
+## The respirator
+
+- Worn in the helmet slot, or Curios' `head` slot when Curios is installed (`data/icheme/curios/entities/respirator.json`, `data/curios/tags/item/head.json`), with a filter that has capacity: the effects and damage of every channel use the breathed index, the cube's over 50 (effects from index 5, MEDIUM 15, damage 50, EXTREME 150).
+- `PollutionEffects.dimension` keeps each cube's indices beside its levels and calls `treat(entity, levels, RespiratorGear.protect(...), sources, pass)`. Armour corrosion still reads the cube's own corrosive level; ignition and blasts never look at the gear. Without working gear `protect` returns the same array, so the pass is the one before.
+- Each pass takes Σ (index of each channel at or above 0.1) × 1 s from the filter. The pass is protected by the capacity before its own load. Only the cube that holds the player's block position books the load, so a player whose box touches two cubes pays once.
+- Players only; creative and spectator players take neither protection nor load. A filter is fitted by using the respirator with a filter in the inventory (only when none works), or by using a filter while wearing one (a part-used filter is lost).
 
 ## Ignition, blasts and breaches
 
@@ -117,6 +129,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 | Releases from the network | `ReleasesTest`, `OutfallReleasesTest` |
 | Breach and repair, schema 26 | `VesselBreachTest`, `FluidFactsCompatTest`, `MachineHealthTest` |
 | Levels, readings, monitor signals, data files | `ExposureTest`, `ReadingTest`, `MonitorSignalsTest`, `PollutionDataTest` |
+| The respirator's law, its data, its component | `RespiratorTest`, `RespiratorDataTest`, `RespiratorFilterCodecTest` |
 | The monitor on a bus | `ControlSystemTest` |
 | The map summary, its payloads, access | `MapColumnsTest`, `PollutionMapNetworkCodecTest`, `PollutionMapsTest` |
 | In a server | `Pollution*GameTests` in `src/fluidGameTest` (batches `pollution…`) |
@@ -131,6 +144,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - Pollution code never loads a chunk and never throws to its caller. A new entry point gets its own guard and log line.
 - `Math.log10` and its like are banned here as everywhere (`DeterministicMathSourceTest`).
 - No class outside `client/pollution/ftbchunks/` may name an FTB or Architectury type: the mod must load without FTB Chunks. No test or GameTest loads those two classes; only a dev client with FTB Chunks proves the overlay's look.
+- No class outside `compat/curios/` may name a Curios type (`RespiratorDataTest`). Curios is compile-only; no test loads it, and only a dev client with Curios proves the Curios slot and its look.
 - `LargeMapScreen` and `refreshIconsIfOpen` are FTB internals, not its API. A new FTB version that moves them turns the overlay off, not the game.
 
 **Snapshot:** `c004a4c57`, 2026-11-16.
