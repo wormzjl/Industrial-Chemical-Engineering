@@ -34,14 +34,16 @@ final class StillFacts implements FactsSection {
                 .f64(u.volume()).name(u.heater()).bool(u.condenser()).count(u.stages())
                 .record(a->account(a,u.head())).record(a->account(a,u.venting()))
                 .f64(u.burning()).f64(u.firing()).f64(u.closedValve()?StillUnit.DEFAULT_REFLUX:u.reflux()).bool(u.closedValve()).f64(u.heated()).f64(u.condensed());
+        if(u.fuelStack()!=null)f.text(u.fuelStack());
     }
     private static StillUnit still(Record f) {
         long id=f.count(0),water=f.count(0),distillate=f.count(0),vent=f.count(0),burners=f.count(0);
         double volume=f.f64(0);var heater=f.name(com.wormzjl.icheme.science.plant.still.BatchStill.Heater.class,null);boolean condenser=f.bool(false);long stages=f.count(0);
         var head=f.record(null,FluidFacts::account);var venting=f.record(null,FluidFacts::account);
         double burning=f.f64(0),firing=f.f64(StillUnit.DEFAULT_FIRING),valve=f.f64(StillUnit.DEFAULT_REFLUX);double reflux=f.bool(false)?Double.POSITIVE_INFINITY:valve;double heated=f.f64(0),condensed=f.f64(0);
+        String fuel=f.text(null);
         required(heater,f,"still heater");required(head,f,"still head account");required(venting,f,"still vent account");
         if(stages>com.wormzjl.icheme.science.column.still.StillColumn.MAX_STAGES)throw f.invalid("still trays "+stages);
-        return valid(f,"batch still "+id,()->new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,(int)stages,head,venting,burning,firing,reflux,heated,condensed));
+        return valid(f,"batch still "+id,()->new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,(int)stages,head,venting,burning,firing,reflux,heated,condensed,fuel));
     }
 }

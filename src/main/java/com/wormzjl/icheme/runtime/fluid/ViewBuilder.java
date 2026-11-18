@@ -77,13 +77,9 @@ final class ViewBuilder {
     /** A temperature, K, or null where unknown (NaN before the first slice or column answer). */
     private static Double positive(double value){return Double.isFinite(value)&&value>0?value:null;}
     private static double finiteOr(double value){return Double.isFinite(value)?value:0;}
-    /** What a solid still's fuel slot holds (a read of its pot's cell), or an empty stack when the cell is not loaded. */
     private net.minecraft.world.item.ItemStack stillFuel(long pot) {
-        var r=authority.registrations().get(pot);if(r==null)return net.minecraft.world.item.ItemStack.EMPTY;
-        var p=r.device().position();var level=authority.server.getLevel(FluidWorldAuthority.dimension(p.dimension()));
-        var at=new BlockPos(p.x(),p.y(),p.z());
-        if(level==null||!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell)||shell.fluidIdentity()!=pot)return net.minecraft.world.item.ItemStack.EMPTY;
-        var slot=shell.fuel();return slot==null?net.minecraft.world.item.ItemStack.EMPTY:slot.getStackInSlot(0);
+        var slot = authority.stillFuel(pot);
+        return slot == null ? net.minecraft.world.item.ItemStack.EMPTY : slot.getStackInSlot(0);
     }
     /**
      * The stream pipe {@code id} carries: a junction its own node, another pipe the observation its gauge reads (the donor's

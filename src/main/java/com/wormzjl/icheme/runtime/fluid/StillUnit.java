@@ -21,7 +21,13 @@ import java.util.Objects;
  */
 public record StillUnit(long id,long water,long distillate,long vent,long burners,
                         double volume,BatchStill.Heater heater,boolean condenser,int stages,
-                        Account head,Account venting,double burning,double firing,double reflux,double heated,double condensed) {
+                        Account head,Account venting,double burning,double firing,double reflux,double heated,double condensed,String fuelStack) {
+    /** Older saved records lack the fuel field. Their pot cell owns the inventory until migration. */
+    public StillUnit(long id,long water,long distillate,long vent,long burners,double volume,BatchStill.Heater heater,
+                     boolean condenser,int stages,Account head,Account venting,double burning,double firing,double reflux,
+                     double heated,double condensed) {
+        this(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,firing,reflux,heated,condensed,null);
+    }
     /** The reflux ratio a still is built with. */
     public static final double DEFAULT_REFLUX=2;
     /** The firing a still is built with: its fire or power off until the player sets it. */
@@ -40,13 +46,14 @@ public record StillUnit(long id,long water,long distillate,long vent,long burner
     /** A still as built: empty accounts, its fire out, the valve at {@link #DEFAULT_REFLUX}. */
     public static StillUnit built(long id,long water,long distillate,long vent,long burners,BatchStill.Design design,int components) {
         return new StillUnit(id,water,distillate,vent,burners,design.volume(),design.heater(),design.condenser(),design.stages(),
-                Account.empty(components),Account.empty(components),0,DEFAULT_FIRING,DEFAULT_REFLUX,0,0);
+                Account.empty(components),Account.empty(components),0,DEFAULT_FIRING,DEFAULT_REFLUX,0,0,design.heater()==BatchStill.Heater.SOLID?"":null);
     }
     public BatchStill.Design design(){return new BatchStill.Design(volume,heater,condenser,stages);}
     public boolean closedValve(){return reflux==Double.POSITIVE_INFINITY;}
-    public StillUnit withAccounts(Account head,Account venting){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,firing,reflux,heated,condensed);}
-    public StillUnit withBurning(double value){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,value,firing,reflux,heated,condensed);}
-    public StillUnit withFiring(double value){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,value,reflux,heated,condensed);}
-    public StillUnit withReflux(double value){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,firing,value,heated,condensed);}
-    public StillUnit withTotals(double heated,double condensed){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,firing,reflux,heated,condensed);}
+    public StillUnit withAccounts(Account head,Account venting){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,firing,reflux,heated,condensed,fuelStack);}
+    public StillUnit withBurning(double value){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,value,firing,reflux,heated,condensed,fuelStack);}
+    public StillUnit withFiring(double value){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,value,reflux,heated,condensed,fuelStack);}
+    public StillUnit withReflux(double value){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,firing,value,heated,condensed,fuelStack);}
+    public StillUnit withTotals(double heated,double condensed){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,firing,reflux,heated,condensed,fuelStack);}
+    public StillUnit withFuelStack(String stack){return new StillUnit(id,water,distillate,vent,burners,volume,heater,condenser,stages,head,venting,burning,firing,reflux,heated,condensed,stack);}
 }

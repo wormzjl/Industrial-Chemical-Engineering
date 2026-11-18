@@ -669,7 +669,7 @@ class FluidFactsCompatTest {
         var held=new double[m];held[0]=1.25;held[m-1]=.5;var vented=new double[m];vented[1]=.125;
         world.ledger.still(new StillUnit(pot,water,distillate,vent,0,design.volume(),design.heater(),true,4,
                 new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(held,-4.5e4),new com.wormzjl.icheme.science.plant.column.ColumnCycle.Account(vented,1.5e3),
-                1.75e6,.65,Double.POSITIVE_INFINITY,3.2e7,2.9e7));
+                1.75e6,.65,Double.POSITIVE_INFINITY,3.2e7,2.9e7,"{id:\"minecraft:coal\",count:17}"));
         long diverter=world.ledger.nextIdentity();
         var valve=PhysicalFluidTopology.Device.builder(diverter,new PhysicalFluidTopology.Position(EventPathWorld.DIM,94,64,0),Kind.DIVERTER_VALVE,Direction.WEST,
                 new PipeResistance.Geometry(1,.05,PipeResistance.DEFAULT_ROUGHNESS_METRES,0),new FlowControl.Passive())
@@ -1622,6 +1622,7 @@ class FluidFactsCompatTest {
                     .append(",").append(u.volume()).append("/").append(u.heater()).append("/").append(u.condenser()).append("/").append(u.stages())
                     .append(",").append(Arrays.toString(onto(u.head().moles(),from,axis))).append("@").append(u.head().energy()).append(",").append(Arrays.toString(onto(u.venting().moles(),from,axis))).append("@").append(u.venting().energy())
                     .append(",").append(u.burning()).append("/").append(u.firing()).append("/").append(u.reflux()).append("/").append(u.heated()).append("/").append(u.condensed());
+            if(u.fuelStack()!=null)text.append(",fuel=").append(u.fuelStack());
         }
         return text.toString();
     }

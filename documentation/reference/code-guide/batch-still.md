@@ -135,7 +135,7 @@ moles. The flood check's F-factor is per watt of the condenser's duty.
   the pot at an answer's apply tick and at a fire lit or put out, the outlets at an arrival, an answer or a share change,
   the burners at an answer or a cut change. A certified still island is materialised only at its wakes, its horizon, a
   fence or a save.
-- **Fuel.** Solid fuel burns from the slot (`SolidFuelCatalog`), liquid fuel through the burners of the FUEL void, power
+- **Fuel.** The solid heater draws from the pot's engine inventory (`StillFuelInventory`). A shell face, the still menu and the fire all access that same slot. The pot checkpoint stores the full item stack beside its remaining fire energy. A pre-schema-32 pot adopts its saved shell slot before its first slice, even when that chunk has no ticket. Liquid fuel comes through the burners of the FUEL void, power
   from the terminal's store (`electricPerTick`). The fuel's heating value is on no energy account: the pot's HEAT
   boundary books what it took, the burners' void the fuel's mass and fluid energy.
 

@@ -95,7 +95,9 @@ final class FluidFacts {
      *  material of construction by name, after its members (absent: a clean, new carbon steel column).
      *  30 (batch 2026-11-17-three-phase-separator): a vessel geometry's {@code demister} after its boot length (absent:
      *  none). */
-    static final int SCHEMA=30;
+    static final int SCHEMA=32;
+    // Schema 31 belongs to the unmerged solute batch. Its additional facts cannot be read on this branch.
+    static boolean readsSchema(int schema){return schema>=1 && schema<=SCHEMA && schema!=31;}
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 30. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;

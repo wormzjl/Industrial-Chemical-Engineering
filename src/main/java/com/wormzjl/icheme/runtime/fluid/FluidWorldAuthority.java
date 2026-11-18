@@ -60,6 +60,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     final Chimneys chimneys;
     /** The batch stills (batch 2026-11-09-batch-distiller, W3 to W5). */
     final Stills stills;
+    private final StillFuelInventory stillFuel = new StillFuelInventory(this);
     private final SavedChunkData chunkData = new SavedChunkData();
     private final SavedEquipment savedEquipment = new SavedEquipment();
     SavedEquipment savedEquipment(){return savedEquipment;}
@@ -199,7 +200,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var request=new com.wormzjl.icheme.runtime.ProcessSolveServices.StillRequest(com.wormzjl.icheme.runtime.ProcessSolveServices.nextRequestId(),new com.wormzjl.icheme.runtime.ProcessSolveServices.StillTarget(dimension,pot),0,done);
             return com.wormzjl.icheme.runtime.ProcessSolveServices.submitStill(server,request,new com.wormzjl.icheme.runtime.ProcessSolveJobs.StillCommand(job,runtime.coordinator().model(island))).accepted();
         });
-        stills.fuel(this::takeStillFuel);
+        stillFuel.restore();
+        stills.fuel(stillFuel::burn);
         // The data network's firing and reflux setpoints (owner decision O1): the control service's last cadence.
         stills.plans(new Stills.Plans(){
             public double firing(long pot){return controls==null?Double.NaN:controls.stillFiring(pot);}
@@ -816,17 +818,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         owned();var u=converters.unit(id);if(u==null||u.hopper())return java.util.Set.of();
         return Converters.alarms(converters.status(id),u.thresholds(),converterFill(id),u.forgeFill());
     }
-    /**
-     * A solid still's next item (W4): one taken from the fuel slot its pot's cell holds, its heat (J); 0 when the slot is
-     * empty or the pot's chunk is not loaded (the fire then burns out: NO FUEL).
-     */
-    private double takeStillFuel(long pot) {
-        var r=registrations().get(pot);if(r==null)return 0;
-        var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));
-        var at=new BlockPos(p.x(),p.y(),p.z());
-        if(level==null||!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||shell.fluidIdentity()!=pot)return 0;
-        return shell.takeFuel();
-    }
+    /** Shared by hoppers, the still menu, dismantling and the engine's fire. */
+    public net.neoforged.neoforge.items.IItemHandler stillFuel(long pot){owned();return stillFuel.slot(pot);}
+
     /** The pressure a still's DISTILLATE and VENT generators stand at, Pa: a short liquid head over the atmosphere (an owner option, BATCH_STILL_ENGINE.md). */
     public static final double STILL_OUTLET_PRESSURE=150000;
     /**
@@ -1017,14 +1011,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
             placed.add(moved);if(moved!=record)edits.add(new WorldTopologyLedger.Edit(ids[k],moved));
         }
         if(!edits.isEmpty())submit(edits,next);
-        topology.still(new StillUnit(pot,water,ids[0],ids[1],ids[2],design.volume(),design.heater(),design.condenser(),design.stages(),u.head(),u.venting(),u.burning(),u.firing(),u.reflux(),u.heated(),u.condensed()));
+        topology.still(new StillUnit(pot,water,ids[0],ids[1],ids[2],design.volume(),design.heater(),design.condenser(),design.stages(),u.head(),u.venting(),u.burning(),u.firing(),u.reflux(),u.heated(),u.condensed(),u.fuelStack()));
         stills.refresh();
         return placed;
     }
     /** The player's settings for the still whose pot is {@code pot} (W5): firing 0 to 1, reflux ratio (+Infinity closed). Null, or why not. */
     public @org.jetbrains.annotations.Nullable String stillSettings(long pot,double firing,double reflux){owned();if(closed)return "the fluid world is closed";return stills.settings(pot,firing,reflux);}
     /** A solid still's slot changed: its pot's island reads the fire again at its next slice (a wake, no solve). */
-    public void stillFuelChanged(long pot){owned();Long island=registry.owner(pot);if(island!=null)runtime.coordinator().controlsMoved(List.of(island));}
+    void stillFuelChanged(long pot){owned();data.setDirty();Long island=registry.owner(pot);if(island!=null)runtime.coordinator().controlsMoved(List.of(island));}
     /** The network package's formulas (atoms of C, H, N, O, S) in {@code model}'s conserved order, by component name. */
     static double[][] formulas(MaterialCatalog catalog,FluidThermodynamics model) {
         String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
@@ -1804,6 +1798,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         if (closed) return;
         String name = dimension.location().toString();
         savedEquipment.invalidate(name, chunk);
+        stillFuel.chunkLoaded(name, chunk);
         chunks.loadedChunk(dimension,chunk);
     }
     /**
@@ -2216,7 +2211,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             unboundBindings.removeAll(removed);publishedMenuData.keySet().removeAll(removed);for(long device:removed)displays.removed(device);
             columns.committed();
             // A batch still whose pot left takes its head's accounts along, booked as destroyed (batch 2026-11-09-batch-distiller).
-            for(long device:removed)if(topology.still(device)!=null){topology.removeStill(device);stills.removed(device);}
+            for(long device:removed)if(topology.still(device)!=null){topology.removeStill(device);stills.removed(device);stillFuel.removed(device);}
             // A converter whose vessel left leaves with it (W3); its Forge tank goes with the block. Swept against the registry,
             // not the batch's removals: a converter placed and broken before its registration applied never had an active vessel.
             if(!topology.converters().isEmpty())for(long id:List.copyOf(topology.converters().keySet()))if(!registrations().containsKey(id))converters.remove(id);
