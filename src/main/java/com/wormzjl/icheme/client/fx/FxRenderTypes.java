@@ -47,6 +47,21 @@ public final class FxRenderTypes {
     /** The heat shimmer (W8): {@code Sampler0} is the screen copy, which {@link FxBatch} binds before it draws. */
     private static final RenderType SHADER_HAZE = effect("icheme_fx_haze", new RenderStateShard.ShaderStateShard(FxShaders::haze));
     private static final Map<ResourceLocation, RenderType> WIRING = new ConcurrentHashMap<>();
+    /**
+     * A sight glass's bubbles on the SHADER path ({@code icheme:sight_glass}, batch 2026-11-18-equipment-reflections part 3):
+     * translucent over the liquid already drawn, depth test without depth write, both faces, lightmap; no texture.
+     */
+    public static final RenderType SIGHT_GLASS = RenderType.create("icheme_sight_glass", DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS, 1536, false, true,
+            RenderType.CompositeState.builder()
+                    .setShaderState(new RenderStateShard.ShaderStateShard(FxShaders::sightGlass))
+                    .setTextureState(RenderStateShard.NO_TEXTURE)
+                    .setTransparencyState(RenderStateShard.TRANSLUCENT_TRANSPARENCY)
+                    .setDepthTestState(RenderStateShard.LEQUAL_DEPTH_TEST)
+                    .setCullState(RenderStateShard.NO_CULL)
+                    .setLightmapState(RenderStateShard.LIGHTMAP)
+                    .setOverlayState(RenderStateShard.NO_OVERLAY)
+                    .setWriteMaskState(RenderStateShard.COLOR_WRITE)
+                    .createCompositeState(false));
 
     private FxRenderTypes() {
     }

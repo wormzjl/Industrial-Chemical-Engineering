@@ -165,12 +165,13 @@ All in `[effects]` of `icheme-client.toml`; no key renamed; `mode` stays the mas
 | `fx_haze` | heat shimmer over a screen copy | `heat_haze` (false, existing key) | none drawn: no compatible shimmer exists (as before) |
 | `rendertype_wiring` | instrument wiring lit through its normal map | `wiring_shader` (true), with `pbr_textures` | `entityCutoutNoCull`, lit flat |
 | `equipment_reflection` | sky, ground and sun mirrored on equipment | `reflections` (true), `reflection_strength` 0 to 2 (1), `reflection_range` 16 to 256 (96) | the baked sheen in the chunk mesh |
+| `sight_glass` | a sight glass's bubbles, round, clipped to the glass (section 12) | `sight_glass_shader` (true) | elliptic rings on `entityTranslucentCull`, shrunk at the rim |
 
 - `mode = OFF`: no flames, smoke, plumes or haze; wiring flat; reflections off (sheen). `COMPATIBLE`: every program on
   its fallback.
 - A shader that failed to load now demotes only its own effect (before: any failure put every effect on COMPATIBLE).
   `FxPath.of(kind)` gives the frame's path per kind; `FxBatch` draws a demoted kind's run on the compatible path.
-- Without a restart: all five switches, strength and range on the next frame; `reflections`, `mode` and a strength
+- Without a restart: all six switches, strength and range on the next frame; `reflections`, `mode` and a strength
   crossing 0 also re-mesh the chunks once (the sheen comes or goes). No switch needs a resource reload.
 - No options screen: the mod registers no config screen (`IConfigScreenFactory`), so the keys are only in the file; no
   `en_us.json` lines were needed. Owner option O5.
@@ -208,3 +209,92 @@ each shape from azimuth 35 / 22 up and 215 / 8 up, today's sheen beside the pass
 - **O4 Metal highlight colour.** A: white (as the preview, built). B: tinted by the metal.
 - **O5 Options screen.** A: keys in the file only (built). B: register NeoForge's config screen for the client config
   (every client key would appear, with `en_us.json` lines for each).
+
+## 12. Part 3: sight glass bubbles carried by the flow
+
+Owner, 2026-11-18: "Improve sight glass bubble animation, it should be moving with the fluid direction. Use shader as
+well if necessary".
+
+**Expected behaviour.** Gas bubbles of a few millimetres are carried at about the liquid's speed and rise through it at
+about 0.25 m/s. In a horizontal run at low speed the gas rides the top of the pipe (stratified); at high speed it is
+dispersed across it. In a vertical run the bubbles spread evenly; flowing up they go faster than the liquid, flowing
+down slower, and in slow downward liquid they still rise. Fast bubbles look stretched along the flow.
+
+**Before.** Bubbles grew and shrank in place along a fixed path at a fixed period (65 to 120 ticks), whatever the speed:
+only the direction followed the flow.
+
+**The sample (server).** `PipePresentation.SightGlass` gains `speed`, m/s: the `velocityMetresPerSecond` of the very
+connection `flowDirection` picks (`PipePresentation.flow` returns both; `flowDirection` reads it), 0 with no direction.
+Display data only, on the existing publication. On the wire: one unsigned byte after the direction, in steps of
+0.02 m/s, 0 to 5.1 m/s (faster reads 5.1; the fastest crossing is reached at 0.25 m/s in a 0.1 m window and 0.75 m/s in
+a 0.3 m one). The record holds the speed already rounded, so a sample equals its round trip. (My first note to the
+parent said 0.05 m/s steps to 12.75 m/s; 0.02 m/s keeps the slow end, where the crossing time changes most.)
+**Protocol number: not changed.** The rules (FORMATS.md, COLLABORATION.md) give this batch `icheme-9` (`icheme-8` is
+reserved by the solute batch), reserved by a documentation-only commit on main. `NetworkProtocol#VERSION` stays
+`icheme-7` and FORMATS.md is unchanged until the parent's word.
+
+**The law (`SightGlassGeometry`, Minecraft-free).** Bubble speed along the flow
+v = max(0, u) + 0.25·rise (rise +1 up, -1 down, 0 horizontal), held between a crossing of the window diameter D in
+6 s (in the rise's direction where flow and rise cancel) and one in 0.4 s. Crossing times, s (negative: rising against
+the flow):
+
+| Window | Run | 0.02 m/s | 0.2 m/s | 1 m/s | 3 m/s |
+|---|---|---|---|---|---|
+| 0.1 m | horizontal | 5.0 | 0.50 | 0.40 | 0.40 |
+| 0.3 m | horizontal | 6.0 (floor) | 1.50 | 0.40 | 0.40 |
+| 0.1 m | vertical up | 0.40 | 0.40 | 0.40 | 0.40 |
+| 0.3 m | vertical up | 1.11 | 0.67 | 0.40 | 0.40 |
+| 0.1 m | vertical down | -0.43 | -2.0 | 0.40 | 0.40 |
+| 0.3 m | vertical down | -1.30 | -6.0 | 0.40 | 0.40 |
+
+In a 0.1 m window every speed from 0.25 m/s up reads the same: the 0.4 s clamp of the brief. Each bubble keeps its
+radius (0.08 to 0.14 window radii), enters fully outside one edge and leaves past the other, then waits a gap of its
+own (0 to 1.6 radii) before it comes again. Across the flow: in a horizontal run seen from the side, from 0.45 radii
+above the axis to the top at the slowest crossing, from -0.40 at the fastest (stratified to dispersed); otherwise even
+across the window. Stretch along the flow 1 at the slowest crossing to 2.5 at the fastest, linear in 1/T. Count from the
+gas share, at most 8, as before.
+
+**Phase.** Integration, not a blend: `SightGlassGeometry.Travel` holds the distance travelled at a game tick and the
+speed since; a new speed continues from where the bubbles are (`retarget`), so no bubble jumps. A blend of two phases
+would slide every bubble backwards or forwards during the blend. Each cycle's path length is fixed (it uses the
+longest stretch), so a new speed never rescales the phase. Only the look (stretch, the stratified band) eases over 20
+ticks. Game ticks plus the partial tick: a paused game stops it. A first sight starts as if the glass had always run at
+its speed, so two clients that see the same sample draw the same bubbles; after a speed step each continues its own.
+A reversed direction starts again.
+
+**Drawing.** Stage unchanged (AFTER_BLOCK_ENTITIES); bubbles only in LOD tier 0, as before.
+- SHADER path, `icheme:sight_glass` (`NEW_ENTITY`): one quad per bubble and window, at most 8 per window, drawn after
+  the liquid's batch (a second render type from the shared buffer would end the liquid's mid-way). UV0 the offset in
+  the bubble's radius, UV1 the window position ×10000, the raw normal the flow and the stretch. The fragment discards
+  outside the ellipse and outside the round glass (0.97 radii, soft over 0.02); a soft pale rim, a white highlight up
+  and to the left in the window's axes, 10 % of the rim colour through the centre so the liquid shows. Translucent
+  blend, depth test, no depth write, both faces, lightmap and fog.
+- Compatible path (switch off, COMPATIBLE, OFF, a pack, a failed compile): today's 12-segment rings, now elliptic along
+  the flow and moved by the same law, shrunk only within their own extent of the rim (`fallbackScale`).
+- Found in passing and fixed: the rear window's rings were wound clockwise (its mirrored x), so the cull state of
+  `entityTranslucentCull` dropped them seen from outside; the rear window now emits its corners in the reverse order.
+  Not checked in a client.
+- Switch: `sight_glass_shader` in `[effects]`, default true (table of section 8).
+
+**Tests.** New `SightGlassMotionTest` (equipmentGates): the crossing table above; the floor, the clamp and the rise
+bound for 4 diameters × 3 runs × 0–5 m/s; constant radius and edge-to-edge crossing; the stratified band slow and fast
+and the vertical spread; stretch 1 to 2.5; a 0.2 → 2 m/s step keeps every bubble within 0.01 radii and eases the look
+in one second; fallback rings inside the glass for 3 diameters, 4 speeds, both bands. `PipePresentationTest`: the round
+trip with speeds 0, 0.02, 1.5, 5.1 in every direction, the speed byte's rounding and clamp, a speed with no direction
+rejected; the sample's speed is the picked connection's (the fastest mapped one, reversed, not an unmapped faster one);
+the six directions through the three window axes on the new law (both windows agree, each bubble advances along the
+run); fallback containment. `FxShaderProgramTest`: the new program, key and shipped shader. Runs:
+- `affected.mjs select --since cdff6f8f2` (the parts 1–2 commit): 183 `test`, 5 `holdGates`, 2 `equipmentGates`
+  classes (`PipePresentation` reaches most of `runtime/fluid`). Run once: 1045 tests with 1 failure and 18 with 2,
+  all three in the new assertions (a zero-size ring hidden outside the glass, a stretch case not at the 6 s floor);
+  hold gates 87 tests, 0 failures.
+- After the fix: the two fixed classes and the 32 classes that read the shader folder (its `.fsh` changed during the
+  first run): 33 + 1 classes, 244 + 7 tests, 0 failures.
+
+**Frame strip.** `tools/sight-glass-frames/` (production law; the shading a stated copy of the GLSL):
+`tmp/sight-glass-frames/sheet.png`, a 0.1 m window at gas share 200/255, horizontal 0.05, 0.5 and 2 m/s, vertical up
+and down 0.5 m/s, 8 frames 2 ticks apart. It shows the slow horizontal bubbles in the top half and round, the fast ones
+stretched and lower, the vertical ones stretched upright; the 0.5 and 2 m/s rows are the same (the clamp).
+
+**Not verified.** No client: the GLSL is compiled by no test; the highlight's size, the rim's softness and the depth
+against the baked glass are unseen.

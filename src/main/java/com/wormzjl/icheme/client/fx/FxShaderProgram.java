@@ -17,7 +17,9 @@ public enum FxShaderProgram {
     /** {@code rendertype_wiring}: the instrument wiring lit through its normal map. Compatible: {@code entityCutoutNoCull}, lit flat. */
     WIRING(false, "wiring_shader"),
     /** {@code equipment_reflection}: sky, ground and sun mirrored on equipment. Compatible: the baked sheen in the chunk mesh. */
-    REFLECTION(false, "reflections");
+    REFLECTION(false, "reflections"),
+    /** {@code sight_glass}: a sight glass's bubbles, round and clipped to the glass. Compatible: the same bubbles as rings on {@code entityTranslucentCull}. */
+    SIGHT_GLASS(false, "sight_glass_shader");
 
     /** Whether the effect is one of the flames, smoke, plumes or haze that {@link FxMode#OFF} takes away; the rest fall back. */
     public final boolean effect;

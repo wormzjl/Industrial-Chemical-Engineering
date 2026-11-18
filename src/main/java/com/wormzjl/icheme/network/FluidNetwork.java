@@ -647,8 +647,8 @@ public final class FluidNetwork {
     public record SightGlassPayload(Target target,PipePresentation.SightGlass sample) implements CustomPacketPayload {
         public static final Type<SightGlassPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"sight_glass_display"));
         public static final StreamCodec<RegistryFriendlyByteBuf,SightGlassPayload> STREAM_CODEC=new StreamCodec<>() {
-            public SightGlassPayload decode(RegistryFriendlyByteBuf b){return new SightGlassPayload(readTarget(b),new PipePresentation.SightGlass(b.readInt(),b.readUnsignedByte(),direction(b.readUnsignedByte())));}
-            public void encode(RegistryFriendlyByteBuf b,SightGlassPayload p){writeTarget(b,p.target);b.writeInt(p.sample.argb());b.writeByte(p.sample.bubbles());b.writeByte(direction(p.sample.flowDirection()));}
+            public SightGlassPayload decode(RegistryFriendlyByteBuf b){return new SightGlassPayload(readTarget(b),new PipePresentation.SightGlass(b.readInt(),b.readUnsignedByte(),direction(b.readUnsignedByte()),PipePresentation.SightGlass.speedOf(b.readUnsignedByte())));}
+            public void encode(RegistryFriendlyByteBuf b,SightGlassPayload p){writeTarget(b,p.target);b.writeInt(p.sample.argb());b.writeByte(p.sample.bubbles());b.writeByte(direction(p.sample.flowDirection()));b.writeByte(PipePresentation.SightGlass.speedByte(p.sample.speed()));}
         };
         public SightGlassPayload{Objects.requireNonNull(target);Objects.requireNonNull(sample);}
         @Override public Type<? extends CustomPacketPayload> type(){return TYPE;}

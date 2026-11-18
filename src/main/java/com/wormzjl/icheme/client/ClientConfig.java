@@ -52,6 +52,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.BooleanValue SMOKE_SHADER;
     public static final ModConfigSpec.BooleanValue WIRING_SHADER;
     public static final ModConfigSpec.BooleanValue REFLECTIONS;
+    public static final ModConfigSpec.BooleanValue SIGHT_GLASS_SHADER;
     public static final ModConfigSpec.DoubleValue REFLECTION_STRENGTH;
     public static final ModConfigSpec.IntValue REFLECTION_RANGE;
     /** The reflection pass's range, blocks: its bounds and default. */
@@ -96,6 +97,8 @@ public final class ClientConfig {
                 .defineInRange("reflection_strength", 1.0, 0.0, 2.0);
         REFLECTION_RANGE = builder.comment("How far from the camera equipment reflects, blocks; the last quarter fades out. Beyond it equipment shows its plain baked shade.")
                 .defineInRange("reflection_range", REFLECTION_RANGE_DEFAULT, LEAST_REFLECTION_RANGE, MOST_REFLECTION_RANGE);
+        SIGHT_GLASS_SHADER = builder.comment("Shader sight_glass: the bubbles in a sight glass, round, clipped to the glass, with a soft rim and a highlight. Off, or under a shader pack: the same bubbles drawn as rings.")
+                .define("sight_glass_shader", true);
         PBR_TEXTURES = builder.comment("The instrument wiring lit through its normal map, by the mod's shader without a shader pack or by the pack; under a pack, the equipment's relief sprites (nuts, louvres, straps) lit by the pack from their normal maps. Off: the same textures, lit flat, and the equipment keeps its baked relief. Reloads the chunks when changed, as low_polygon_mode does.")
                 .define("pbr_textures", true);
         HEAT_HAZE = builder.comment("Shader fx_haze: a heat shimmer over flames and hot stacks, one screen copy and a distortion. Only without a shader pack; it has no compatible drawing, so off (or under a pack) there is no shimmer.")
@@ -217,6 +220,7 @@ public final class ClientConfig {
             case HAZE -> heatHaze();
             case WIRING -> get(WIRING_SHADER, true);
             case REFLECTION -> get(REFLECTIONS, true);
+            case SIGHT_GLASS -> get(SIGHT_GLASS_SHADER, true);
         };
     }
 

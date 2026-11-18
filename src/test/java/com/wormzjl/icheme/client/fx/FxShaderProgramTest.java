@@ -33,6 +33,7 @@ class FxShaderProgramTest {
         }
         assertFalse(FxShaderProgram.WIRING.effect, "the wiring is drawn flat under OFF");
         assertFalse(FxShaderProgram.REFLECTION.effect, "the shells keep their sheen under OFF");
+        assertFalse(FxShaderProgram.SIGHT_GLASS.effect, "a sight glass keeps its ring bubbles under OFF");
     }
 
     @Test
@@ -43,14 +44,14 @@ class FxShaderProgramTest {
         assertEquals(FxShaderProgram.HAZE, FxShaderProgram.of(FxKind.HAZE));
         var keys = Arrays.stream(FxShaderProgram.values()).map(p -> p.key).collect(Collectors.toSet());
         assertEquals(FxShaderProgram.values().length, keys.size(), "one switch per program");
-        assertEquals(new HashSet<>(java.util.List.of("flame_shader", "smoke_shader", "heat_haze", "wiring_shader", "reflections")), keys);
+        assertEquals(new HashSet<>(java.util.List.of("flame_shader", "smoke_shader", "heat_haze", "wiring_shader", "reflections", "sight_glass_shader")), keys);
     }
 
     @Test
     void everyShaderTheModShipsHasAProgram() throws java.io.IOException {
         try (var files = java.nio.file.Files.list(java.nio.file.Path.of("src/main/resources/assets/icheme/shaders/core"))) {
             var shipped = files.map(p -> p.getFileName().toString()).filter(n -> n.endsWith(".json")).map(n -> n.substring(0, n.length() - 5)).collect(Collectors.toSet());
-            assertEquals(java.util.Set.of("fx_flame", "fx_plume", "fx_haze", "rendertype_wiring", "equipment_reflection"), shipped,
+            assertEquals(java.util.Set.of("fx_flame", "fx_plume", "fx_haze", "rendertype_wiring", "equipment_reflection", "sight_glass"), shipped,
                     "a new core shader needs its FxShaderProgram, its switch in ClientConfig and its fallback");
         }
     }

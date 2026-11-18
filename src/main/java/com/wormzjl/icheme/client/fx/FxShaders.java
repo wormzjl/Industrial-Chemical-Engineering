@@ -29,19 +29,20 @@ import java.util.function.Consumer;
  * {@code SpecularMap} (W2 writes its lighting).</li>
  * <li>{@code icheme:equipment_reflection}: the sky, ground and sun mirrored on equipment, added over the chunk mesh
  * ({@code EquipmentReflectionRenderer}; batch 2026-11-18-equipment-reflections).</li>
+ * <li>{@code icheme:sight_glass}: a sight glass's bubbles, one quad each, clipped to the glass ({@code SightGlassRenderer}; same batch, part 3).</li>
  * </ul>
  * The three effect shaders take {@link FxPackedSink}'s packed {@code NEW_ENTITY} layout; the wiring takes plain
- * {@code NEW_ENTITY}; the reflection takes {@code BLOCK} with its own packing. Reloaded with the resources: each reload
- * clears all five and registers them again. A shader that fails to compile or link is logged once and puts only its own
+ * {@code NEW_ENTITY}; the reflection takes {@code BLOCK} with its own packing, the sight glass {@code NEW_ENTITY} with its own. Reloaded with the
+ * resources: each reload clears all six and registers them again. A shader that fails to compile or link is logged once and puts only its own
  * effect on its compatible path ({@link #path}); each has its own switch ({@link FxShaderProgram}).
  */
 @EventBusSubscriber(modid = IChemE.MOD_ID, value = Dist.CLIENT)
 public final class FxShaders {
     private static final Logger LOGGER = LoggerFactory.getLogger("icheme/fx");
     public static final ResourceLocation FLAME = id("fx_flame"), PLUME = id("fx_plume"), HAZE = id("fx_haze"), WIRING = id("rendertype_wiring"),
-            REFLECTION = id("equipment_reflection");
+            REFLECTION = id("equipment_reflection"), SIGHT_GLASS = id("sight_glass");
 
-    private static volatile @Nullable ShaderInstance flame, plume, haze, wiring, reflection;
+    private static volatile @Nullable ShaderInstance flame, plume, haze, wiring, reflection, sightGlass;
 
     private FxShaders() {
     }
@@ -52,12 +53,13 @@ public final class FxShaders {
 
     @SubscribeEvent
     public static void register(RegisterShadersEvent event) {
-        flame = plume = haze = wiring = reflection = null;
+        flame = plume = haze = wiring = reflection = sightGlass = null;
         register(event, FLAME, FxPackedSink.FORMAT, s -> flame = s);
         register(event, PLUME, FxPackedSink.FORMAT, s -> plume = s);
         register(event, HAZE, FxPackedSink.FORMAT, s -> haze = s);
         register(event, WIRING, DefaultVertexFormat.NEW_ENTITY, s -> wiring = s);
         register(event, REFLECTION, DefaultVertexFormat.BLOCK, s -> reflection = s);
+        register(event, SIGHT_GLASS, DefaultVertexFormat.NEW_ENTITY, s -> sightGlass = s);
     }
 
     private static void register(RegisterShadersEvent event, ResourceLocation name, VertexFormat format, Consumer<ShaderInstance> loaded) {
@@ -70,7 +72,7 @@ public final class FxShaders {
 
     /** True until every shader has loaded, and after any of them failed (the F3 line; each effect asks {@link #path}). */
     public static boolean failed() {
-        return flame == null || plume == null || haze == null || wiring == null || reflection == null;
+        return flame == null || plume == null || haze == null || wiring == null || reflection == null || sightGlass == null;
     }
 
     /** The program's shader once it compiled and linked, else null. */
@@ -81,6 +83,7 @@ public final class FxShaders {
             case HAZE -> haze;
             case WIRING -> wiring;
             case REFLECTION -> reflection;
+            case SIGHT_GLASS -> sightGlass;
         };
     }
 
@@ -112,6 +115,10 @@ public final class FxShaders {
 
     public static @Nullable ShaderInstance reflection() {
         return reflection;
+    }
+
+    public static @Nullable ShaderInstance sightGlass() {
+        return sightGlass;
     }
 
     private static final String[] SAMPLERS = new String[12];

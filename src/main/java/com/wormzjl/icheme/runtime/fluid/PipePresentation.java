@@ -157,9 +157,20 @@ public final class PipePresentation {
     }
 
     // ---- a sight glass: a display-only reduction of accepted transport; no inventory, equilibrium or optical model is calculated ----
-    public record SightGlass(int argb,int bubbles,PhysicalFluidTopology.Direction flowDirection) {
+    /**
+     * {@code speed}: the liquid's speed along {@code flowDirection}, m/s, held as the wire carries it: one unsigned byte in
+     * steps of {@link #SPEED_STEP} (0 to 5.1 m/s, faster reads as 5.1; the bubbles' fastest crossing is reached well below).
+     */
+    public record SightGlass(int argb,int bubbles,PhysicalFluidTopology.Direction flowDirection,double speed) {
+        public static final double SPEED_STEP=.02;
         public static final SightGlass CLEAR=new SightGlass(0,0,null);
-        public SightGlass{if(bubbles<0||bubbles>255||(argb>>>24==0&&(bubbles!=0||flowDirection!=null))||(bubbles>0&&flowDirection==null))throw new IllegalArgumentException("Invalid sight glass display");}
+        public SightGlass{
+            if(bubbles<0||bubbles>255||(argb>>>24==0&&(bubbles!=0||flowDirection!=null))||(bubbles>0&&flowDirection==null)||!(speed>=0)||(flowDirection==null&&speed!=0))throw new IllegalArgumentException("Invalid sight glass display");
+            speed=speedOf(speedByte(speed));
+        }
+        public SightGlass(int argb,int bubbles,PhysicalFluidTopology.Direction flowDirection){this(argb,bubbles,flowDirection,0);}
+        public static int speedByte(double speed){return (int)Math.min(255,Math.round(speed/SPEED_STEP));}
+        public static double speedOf(int value){if(value<0||value>255)throw new IllegalArgumentException("Invalid sight glass speed");return value/50.0;}
     }
 
     /** Colour and illustrative multiphase motion; speed uses the existing five-online-second window. */
@@ -183,18 +194,22 @@ public final class PipePresentation {
             for(int c=0;c<fluid.length;c++)fluid[c]=phases[0][c]+phases[1][c]+phases[2][c];
             int full=turbid(TankDisplay.mix(fluid,components,weights,catalog,packageId),new double[]{all,0,0},moved.solids().volume());
             int alpha=(int)Math.round((full>>>24)*Math.min(1,dense));
-            return alpha==0?SightGlass.CLEAR:new SightGlass(alpha<<24|full&0xFFFFFF,0,flowDirection(info,mappings));
+            var flow=flow(info,mappings);
+            return alpha==0?SightGlass.CLEAR:new SightGlass(alpha<<24|full&0xFFFFFF,0,flow.direction(),flow.speed());
         }
         if(!(volumes[0]+volumes[1]>0))return SightGlass.CLEAR;
         var phases=moved.phaseMoles();double[] liquid=new double[components.size()];
         for(int c=0;c<liquid.length;c++)liquid[c]=phases[0][c]+phases[1][c];
         // Bubble density follows gas occupancy, r/(1+r) for gas/liquid ratio r; haze remains independent.
-        var direction=flowDirection(info,mappings);
-        int bubbles=direction==null?0:bubbleStrength(volumes);
-        return new SightGlass(turbid(TankDisplay.mix(liquid,components,weights,catalog,packageId),volumes,moved.solids().volume()),bubbles,direction);
+        var flow=flow(info,mappings);
+        int bubbles=flow.direction()==null?0:bubbleStrength(volumes);
+        return new SightGlass(turbid(TankDisplay.mix(liquid,components,weights,catalog,packageId),volumes,moved.solids().volume()),bubbles,flow.direction(),flow.speed());
     }
     /** Accepted graph direction, resolved at this physical section rather than between distant graph endpoints. */
-    static PhysicalFluidTopology.Direction flowDirection(FluidView.PipeInfo info,List<PhysicalFluidTopology.View> mappings){
+    static PhysicalFluidTopology.Direction flowDirection(FluidView.PipeInfo info,List<PhysicalFluidTopology.View> mappings){return flow(info,mappings).direction();}
+    /** The section's flow: the direction above and the speed of the same connection, m/s (0 with no direction). */
+    record Flow(PhysicalFluidTopology.Direction direction,double speed){}
+    static Flow flow(FluidView.PipeInfo info,List<PhysicalFluidTopology.View> mappings){
         double speed=0;PhysicalFluidTopology.Direction direction=null;
         for(var connection:info.connections())if(connection.velocityMetresPerSecond()>speed)
             for(var mapping:mappings)if(mapping.pipeId()==connection.pipeId()&&Double.isFinite(mapping.tap())&&mapping.flowDirection()!=null){
@@ -202,7 +217,7 @@ public final class PipePresentation {
                 direction=connection.reverse()?PhysicalFluidTopology.opposite(mapping.flowDirection()):mapping.flowDirection();
                 break;
             }
-        return direction;
+        return new Flow(direction,direction==null?0:speed);
     }
     static int bubbleStrength(double[] volumes){
         double liquid=volumes[0]+volumes[1];

@@ -122,8 +122,24 @@ public final class SightGlassGeometry {
         return half*Math.min(1/Math.max(c,s),1.68/(c+s));
     }
 
-    // ---- illustrative bubble/droplet rings inside a unit aperture, not a particle or flow simulation ----
-    public record Bubble(double x,double y,double radius){}
+    // ---- bubbles carried by the flow inside a unit aperture: an illustration of the published speed, not a simulation ----
+    // (batch 2026-11-18-equipment-reflections, part 3). Coordinates are in window radii; the window is the unit circle.
+
+    /** Bubbles of a few millimetres rise through still liquid at about this speed, m/s. */
+    public static final double RISE=.25;
+    /** The slowest and fastest crossing of a window, s. */
+    public static final double SLOWEST=6,FASTEST=.4;
+    /** The stretch along the flow at the fastest crossing (1 at the slowest). */
+    public static final double MOST_STRETCH=2.5;
+    /** Where a ring may reach, in window radii (the glass's bore). */
+    public static final double APERTURE=.97;
+
+    /**
+     * A bubble: centre (x, y), radius across the flow, stretch along it ({@code stretch} x radius), and the unit direction
+     * of the flow in the window's plane (ax, ay), all in window radii.
+     */
+    public record Bubble(double x,double y,double radius,double stretch,double ax,double ay){
+    }
     /** Unit travel direction in the front window's local plane. The rear window mirrors its horizontal coordinate. */
     public record Motion(int x,int y){
         public Motion{if(Math.abs(x)+Math.abs(y)!=1)throw new IllegalArgumentException("Invalid bubble motion");}
@@ -139,6 +155,43 @@ public final class SightGlassGeometry {
         }
     }
 
+    /**
+     * The bubbles' speed along the flow direction, m/s (negative: against it): the published liquid speed {@code speed}
+     * plus the rise, {@code rise} +1 on a vertical run flowing up, -1 flowing down, 0 on a horizontal one. Never slower
+     * than a crossing in {@link #SLOWEST} s (where flow and rise cancel, in the rise's direction: bubbles in slow downward
+     * liquid rise slowly), never faster than one in {@link #FASTEST} s. {@code diameter}: the window's, m.
+     */
+    public static double velocity(double speed,double diameter,int rise){
+        if(!(diameter>0)||!Double.isFinite(speed)||Math.abs(rise)>1)throw new IllegalArgumentException("Invalid bubble speed");
+        double u=Math.max(0,speed)+RISE*rise,slow=diameter/SLOWEST,fast=diameter/FASTEST;
+        if(Math.abs(u)<slow)u=rise<0&&u<=0?-slow:slow;
+        return Math.copySign(Math.min(Math.abs(u),fast),u);
+    }
+
+    /** The time a bubble takes to cross a window of {@code diameter} m at {@code velocity} ({@link #velocity}), s. */
+    public static double crossing(double velocity,double diameter){return diameter/Math.abs(velocity);}
+
+    /** How fast the flow reads, 0 at the slowest crossing to 1 at the fastest. */
+    public static double pace(double velocity,double diameter){
+        double t=SLOWEST/crossing(velocity,diameter);
+        return Math.max(0,Math.min(1,(t-1)/(SLOWEST/FASTEST-1)));
+    }
+
+    /**
+     * The distance a glass's bubbles have travelled along the flow, m, from game ticks: carried at {@code velocity} since
+     * {@code tick}, where they had travelled {@code distance}. A new published speed continues from where they are
+     * ({@link #retarget}), so their phase never jumps; the look (stretch, stratification) eases from {@code before} over
+     * one second ({@link #eased}). A paused game stops the ticks, and the bubbles.
+     */
+    public record Travel(double tick,double distance,double velocity,double before){
+        /** As if it had always moved at {@code velocity}: what every client that sees the same sample draws. */
+        public static Travel start(double ticks,double velocity){return new Travel(ticks,velocity*ticks/20,velocity,velocity);}
+        public double at(double ticks){return distance+velocity*(ticks-tick)/20;}
+        public Travel retarget(double ticks,double next){return next==velocity?this:new Travel(ticks,at(ticks),next,eased(ticks));}
+        /** The velocity the look follows: from {@code before} to {@code velocity} over 20 ticks. */
+        public double eased(double ticks){double s=Math.max(0,Math.min(1,(ticks-tick)/20));return before+(velocity-before)*s*s*(3-2*s);}
+    }
+
     /** Pale translucent rim; the liquid behind its empty centre retains the published colour. */
     public static int bubbleColour(int base,int strength){
         if(strength<0||strength>255)throw new IllegalArgumentException("Invalid bubble strength");
@@ -146,21 +199,43 @@ public final class SightGlassGeometry {
         return (150+80*strength/255)<<24|brighten(base>>16&255)<<16|brighten(base>>8&255)<<8|brighten(base&255);
     }
 
-    /** Game ticks animate a stable device seed; all rings remain completely inside the circular window. */
-    public static List<Bubble> bubbles(double ticks,long seed,int strength,Motion motion){
-        if(!Double.isFinite(ticks)||strength<0||strength>255)throw new IllegalArgumentException("Invalid bubble display");
+    /**
+     * The bubbles of a glass whose bubbles have travelled {@code distance} m along {@code motion}, at most 8 by the gas share
+     * {@code strength}. Each keeps its size; it enters at one edge and leaves at the other, then waits a gap of its own
+     * before it comes again. {@code look}: the eased velocity (stretch; on a horizontal run the bias to the top).
+     * {@code stratified}: a horizontal run seen from the side, where gas rides the upper part of the window, more at low
+     * speed; else bubbles spread evenly across. Positions run past the rim: the shader clips them to the glass, the
+     * fallback shrinks them at the edge ({@link #fallbackScale}).
+     */
+    public static List<Bubble> bubbles(double distance,long seed,int strength,Motion motion,double diameter,double look,boolean stratified){
+        if(!Double.isFinite(distance)||strength<0||strength>255||!(diameter>0)||!Double.isFinite(look))throw new IllegalArgumentException("Invalid bubble display");
         java.util.Objects.requireNonNull(motion);
         if(strength==0)return List.of();
+        double t=look==0?0:pace(look,diameter),stretch=1+(MOST_STRETCH-1)*t;
+        double ax=motion.x(),ay=motion.y(),cx,cy;
+        if(stratified){cx=0;cy=1;}else{cx=-ay;cy=ax;}
         var result=new java.util.ArrayList<Bubble>();int count=Math.max(1,(8*strength+127)/255);
         for(int i=0;i<count;i++){
-            double first=fraction(seed+0x9E3779B97F4A7C15L*i),second=fraction(seed+0x632BE59BD9B4E019L*(i+1));
-            double period=65+55*second,phase=ticks/period+first;phase-=Math.floor(phase);
-            double maximum=.10+.07*second,radius=maximum*DeterministicMath.sin(Math.PI*phase);
-            double x=(2*first-1)*.62+.05*DeterministicMath.sin(2*Math.PI*phase+first*6);
-            double room=.97-maximum,y=(2*phase-1)*Math.sqrt(room*room-x*x);
-            result.add(new Bubble(motion.y()*x+motion.x()*y,-motion.x()*x+motion.y()*y,radius));
+            double first=fraction(seed+0x9E3779B97F4A7C15L*i),second=fraction(seed+0x632BE59BD9B4E019L*(i+1)),third=fraction(seed^0x5851F42D4C957F2DL*(i+3));
+            double radius=.08+.06*second,gap=1.6*third;
+            // One cycle's path in window radii, independent of the speed (the longest stretch), so a new speed keeps the phase.
+            double reach=1+radius*MOST_STRETCH,path=2*reach+gap,phase=distance/(diameter/2*path)+first;phase-=Math.floor(phase);
+            double along=-reach+path*phase,cross,spread=fraction(seed+31L*i+7);
+            if(stratified){double lo=.45-.85*t,hi=APERTURE-radius-.05;cross=lo+(hi-lo)*spread;}
+            else cross=(2*spread-1)*(APERTURE-radius-.05);
+            cross+=.03*DeterministicMath.sin(2*Math.PI*2*phase+first*6);
+            result.add(new Bubble(ax*along+cx*cross,ay*along+cy*cross,radius,stretch,ax,ay));
         }
         return List.copyOf(result);
+    }
+
+    /**
+     * The ring's scale on the fallback path, which cannot clip to the round glass: full size across the middle, shrunk only
+     * within its own extent of the rim so the whole ring stays inside {@link #APERTURE}, 0 outside.
+     */
+    public static double fallbackScale(Bubble bubble){
+        double extent=bubble.radius()*Math.max(1,bubble.stretch()),room=APERTURE-Math.hypot(bubble.x(),bubble.y());
+        return room>=extent?1:Math.max(0,room/extent);
     }
 
     private static double fraction(long value){value=(value^(value>>>30))*0xBF58476D1CE4E5B9L;value=(value^(value>>>27))*0x94D049BB133111EBL;return ((value^(value>>>31))>>>11)*0x1.0p-53;}
