@@ -13,7 +13,7 @@ import com.wormzjl.icheme.science.pollution.GroundLedger;
 import com.wormzjl.icheme.science.pollution.GroundSettings;
 import com.wormzjl.icheme.science.pollution.GroundSnapshot;
 import com.wormzjl.icheme.science.pollution.MapColumns;
-import com.wormzjl.icheme.science.pollution.MapEnvironment;
+import com.wormzjl.icheme.science.pollution.KeySets;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import com.wormzjl.icheme.science.pollution.PollutionLedger;
 import com.wormzjl.icheme.science.pollution.PollutionSettings;
@@ -32,7 +32,6 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.HashMap;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,19 +62,12 @@ public final class PollutionService {
 
     private static final Map<MinecraftServer, PollutionService> SERVERS = new IdentityHashMap<>();
 
-    private record Cached(Environment.Cell cell, int tick) {
-    }
-
-    /** A column's last surface read (G2). */
-    private record CachedWater(boolean water, int tick) {
-    }
-
     /** One dimension: its engine, its cells, its next deadline. */
     private static final class Dimension {
         final ResourceKey<Level> key;
         final PollutionEngine engine = new PollutionEngine();
-        final Map<Long, Cached> cells = new HashMap<>();
-        final Map<Long, CachedWater> water = new HashMap<>();
+        final CellCache cells = new CellCache();
+        final WaterCache water = new WaterCache();
         int next;
 
         Dimension(ResourceKey<Level> key) {
@@ -326,7 +318,7 @@ public final class PollutionService {
     public Environment.Cell cell(ResourceKey<Level> dimension, long cube) {
         var d = dimensions.get(dimension);
         var cached = d == null ? null : d.cells.get(cube);
-        return cached == null ? Environment.Cell.UNLOADED : cached.cell();
+        return cached == null ? Environment.Cell.UNLOADED : cached;
     }
 
     public boolean enabled() {
@@ -401,7 +393,7 @@ public final class PollutionService {
 
     private static double airShare(Dimension d, long cube) {
         var cached = d.cells.get(cube);
-        return cached == null ? 1.0 : cached.cell().airShare();
+        return cached == null ? 1.0 : cached.airShare();
     }
 
     /** The dimension's runtime, made on first use from what the store carried for it, if anything. */
@@ -613,28 +605,51 @@ public final class PollutionService {
      * this pass.
      */
     private Environment environment(ServerLevel level, Dimension d, int now) {
-        var core = d.engine.core();
-        var wanted = d.engine.wanted();
-        int minimumY = level.getMinSection();
-        int maximumY = level.getMaxSection() - 1;
-        var chunks = new HashMap<Long, LevelChunk>();
-        var cells = new HashMap<Long, Environment.Cell>();
-        int[] budget = {CELL_BUDGET};
-        for (long cube : core) {
-            cells.put(cube, cell(level, d, cube, now, chunks, budget, minimumY, maximumY));
-        }
-        for (long cube : wanted) {
-            if (!cells.containsKey(cube)) {
-                cells.put(cube, cell(level, d, cube, now, chunks, budget, minimumY, maximumY));
+        long[] core = d.engine.core();
+        long[] wanted = KeySets.cubeFaces(core);
+        var chunks = new Chunks(level);
+        return d.cells.snapshot(core, wanted, now, CELL_TICKS, CELL_BUDGET, new CellCache.World() {
+            @Override
+            public boolean chunkLoaded(long cube) {
+                return chunks.get(CubeKey.x(cube), CubeKey.z(cube)) != null;
             }
-        }
-        // Bounded memory: forget the cells of cubes no longer wanted.
-        for (Iterator<Long> it = d.cells.keySet().iterator(); it.hasNext(); ) {
-            if (!wanted.contains(it.next())) {
-                it.remove();
+
+            @Override
+            public Environment.Cell read(long cube) {
+                return PollutionService.read(chunks.get(CubeKey.x(cube), CubeKey.z(cube)), CubeKey.y(cube));
             }
+        }, level.isRaining(), level.getMinSection(), level.getMaxSection() - 1);
+    }
+
+    /** The chunks a snapshot looked up, by column: a chunk is looked up once a pass, loaded or not. */
+    private static final class Chunks {
+        private final ServerLevel level;
+        private final HashMap<Long, LevelChunk> seen = new HashMap<>();
+        private long lastColumn;
+        private LevelChunk last;
+        private boolean any;
+
+        Chunks(ServerLevel level) {
+            this.level = level;
         }
-        return new MapEnvironment(cells, Environment.Cell.UNLOADED, level.isRaining(), minimumY, maximumY);
+
+        LevelChunk get(int x, int z) {
+            long column = (long) x << 32 | (z & 0xFFFFFFFFL);
+            if (any && column == lastColumn) {
+                return last;
+            }
+            LevelChunk chunk;
+            if (seen.containsKey(column)) {
+                chunk = seen.get(column);
+            } else {
+                chunk = loaded(level, x, z);
+                seen.put(column, chunk);
+            }
+            any = true;
+            lastColumn = column;
+            last = chunk;
+            return chunk;
+        }
     }
 
     /**
@@ -643,33 +658,18 @@ public final class PollutionService {
      * columns per pass and kept {@link #CELL_TICKS}; a column over the budget uses its older read, or counts as land.
      */
     private GroundEnvironment groundEnvironment(ServerLevel level, Dimension d, int now) {
-        var wanted = d.engine.groundWanted();
-        var loaded = new java.util.HashSet<Long>();
-        var water = new java.util.HashSet<Long>();
-        int budget = CELL_BUDGET;
-        for (long column : wanted) {
-            var chunk = loaded(level, MapColumns.x(column), MapColumns.z(column));
-            if (chunk == null) {
-                continue;
+        var chunks = new Chunks(level);
+        return d.water.snapshot(d.engine.groundWanted(), now, CELL_TICKS, CELL_BUDGET, new WaterCache.World() {
+            @Override
+            public boolean chunkLoaded(long column) {
+                return chunks.get(MapColumns.x(column), MapColumns.z(column)) != null;
             }
-            loaded.add(column);
-            var cached = d.water.get(column);
-            boolean wet;
-            if (cached != null && now - cached.tick() < CELL_TICKS) {
-                wet = cached.water();
-            } else if (budget > 0) {
-                budget--;
-                wet = surfaceWater(chunk);
-                d.water.put(column, new CachedWater(wet, now));
-            } else {
-                wet = cached != null && cached.water();
+
+            @Override
+            public boolean water(long column) {
+                return surfaceWater(chunks.get(MapColumns.x(column), MapColumns.z(column)));
             }
-            if (wet) {
-                water.add(column);
-            }
-        }
-        d.water.keySet().retainAll(wanted);
-        return GroundEnvironment.of(loaded, water, level.isRaining());
+        }, level.isRaining());
     }
 
     /** Whether at least 9 of 16 surface blocks (a 4 × 4 grid) of the chunk hold water; any failure answers land. */
@@ -692,40 +692,6 @@ public final class PollutionService {
         } catch (RuntimeException failure) {
             return false;
         }
-    }
-
-    private static Environment.Cell cell(ServerLevel level, Dimension d, long cube, int now, Map<Long, LevelChunk> chunks,
-            int[] budget, int minimumY, int maximumY) {
-        int y = CubeKey.y(cube);
-        if (y < minimumY || y > maximumY) {
-            return Environment.Cell.UNLOADED;
-        }
-        int x = CubeKey.x(cube);
-        int z = CubeKey.z(cube);
-        long column = (long) x << 32 | (z & 0xFFFFFFFFL);
-        LevelChunk chunk;
-        if (chunks.containsKey(column)) {
-            chunk = chunks.get(column);
-        } else {
-            chunk = loaded(level, x, z);
-            chunks.put(column, chunk);
-        }
-        if (chunk == null) {
-            return Environment.Cell.UNLOADED;
-        }
-        var cached = d.cells.get(cube);
-        if (cached != null && now - cached.tick() < CELL_TICKS) {
-            return cached.cell();
-        }
-        if (budget[0] <= 0) {
-            return cached != null ? cached.cell() : Environment.Cell.UNLOADED;
-        }
-        budget[0]--;
-        var read = read(chunk, y);
-        if (read.loaded()) {
-            d.cells.put(cube, new Cached(read, now));
-        }
-        return read;
     }
 
     /** The chunk if it is loaded now; never loads or generates one. */
@@ -762,7 +728,7 @@ public final class PollutionService {
                 air = Math.max(0, Math.min(SECTION_BLOCKS, count[0]));
             }
             boolean open = (sectionY << 4) + 15 >= chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8);
-            return new Environment.Cell(air / (double) SECTION_BLOCKS, open, true);
+            return CellCache.cell(air, open);
         } catch (RuntimeException failure) {
             return Environment.Cell.UNLOADED;
         }

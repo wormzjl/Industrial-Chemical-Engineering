@@ -7,6 +7,9 @@ package com.wormzjl.icheme.science.pollution;
  * straight through. Coordinates are section coordinates (block coordinate {@code >> 4}).
  */
 public final class CubeKey {
+    /** The blocks of one cube (a 16 × 16 × 16 section). */
+    public static final int SECTION_BLOCKS = 4096;
+
     private CubeKey() {
     }
 

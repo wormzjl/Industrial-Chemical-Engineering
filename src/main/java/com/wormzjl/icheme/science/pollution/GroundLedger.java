@@ -108,8 +108,16 @@ public final class GroundLedger {
             totals[total.ordinal()] += amount;
         }
 
+        /** The rows by name, found without the tree's string comparisons; the same arrays as {@link #compounds}' values. */
+        private final java.util.HashMap<String, double[]> rows = new java.util.HashMap<>();
+
         void compound(String name, Total total, double moles) {
-            compounds.computeIfAbsent(name, k -> new double[LENGTH])[total.ordinal()] += moles;
+            double[] row = rows.get(name);
+            if (row == null) {
+                row = compounds.computeIfAbsent(name, k -> new double[LENGTH]);
+                rows.put(name, row);
+            }
+            row[total.ordinal()] += moles;
         }
 
         GroundLedger ledger() {

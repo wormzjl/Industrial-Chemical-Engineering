@@ -112,13 +112,13 @@ class PollutionEngineTest {
     void wantedHoldsEachCubeAndItsSixFaces() {
         var engine = new PollutionEngine();
         engine.release(A, Channel.TOXIC, 1.0);
-        var wanted = engine.wanted();
-        assertEquals(7, wanted.size());
+        long[] wanted = engine.wanted();
+        assertEquals(7, wanted.length);
         for (long key : Set.of(A, CubeKey.of(-1, 4, 0), CubeKey.of(1, 4, 0), CubeKey.of(0, 3, 0), CubeKey.of(0, 5, 0),
                 CubeKey.of(0, 4, -1), CubeKey.of(0, 4, 1))) {
-            assertTrue(wanted.contains(key), "cube " + CubeKey.x(key) + " " + CubeKey.y(key) + " " + CubeKey.z(key));
+            assertTrue(com.wormzjl.icheme.science.pollution.KeySets.contains(wanted, key), "cube " + CubeKey.x(key) + " " + CubeKey.y(key) + " " + CubeKey.z(key));
         }
-        assertEquals(Set.of(A), engine.core());
+        assertArrayEquals(new long[] {A}, engine.core());
     }
 
     @Test

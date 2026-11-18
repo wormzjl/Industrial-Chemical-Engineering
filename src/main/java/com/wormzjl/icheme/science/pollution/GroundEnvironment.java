@@ -24,6 +24,27 @@ public interface GroundEnvironment {
     /**
      * {@code loaded} the loaded columns ({@code null}: every column), {@code water} the water columns.
      */
+    /**
+     * {@code loaded} the loaded columns ({@code null}: every column) and {@code water} the water columns, each a sorted
+     * set ({@link KeySets}); the arrays are kept, not copied.
+     */
+    static GroundEnvironment sorted(long[] loaded, long[] water, boolean raining) {
+        java.util.Objects.requireNonNull(water, "water");
+        return new GroundEnvironment() {
+            @Override public boolean loaded(long column) {
+                return loaded == null || java.util.Arrays.binarySearch(loaded, column) >= 0;
+            }
+
+            @Override public boolean water(long column) {
+                return java.util.Arrays.binarySearch(water, column) >= 0;
+            }
+
+            @Override public boolean raining() {
+                return raining;
+            }
+        };
+    }
+
     static GroundEnvironment of(Set<Long> loaded, Set<Long> water, boolean raining) {
         var loadedCopy = loaded == null ? null : Set.copyOf(loaded);
         var waterCopy = Set.copyOf(water);
