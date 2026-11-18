@@ -2,7 +2,7 @@ package com.wormzjl.icheme.science.pollution;
 
 /**
  * What polluted ground does to the world (batch 2026-11-18-ground-pollution, plan G4), as pure rules on a column's four
- * published bytes ({@link GroundSnapshot#packed(long)}). No block is ever changed.
+ * published bytes ({@link GroundSnapshot#packed(long)}). The block changes are {@link GroundSpoil}'s (G4b).
  */
 public final class GroundEffects {
     /** Where the worst ground index of a column is at least this, crops, saplings and bonemeal do not grow. */

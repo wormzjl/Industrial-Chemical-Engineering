@@ -97,6 +97,7 @@ public final class PollutionEffects {
             for (ServerLevel level : server.getAllLevels()) {
                 dimension(level, service);
                 water(level, service);
+                GroundSoil.spoil(level, service, CUBE_BUDGET);
             }
             failures = 0;
         } catch (RuntimeException failure) {

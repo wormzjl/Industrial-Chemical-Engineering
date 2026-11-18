@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.registry.ModBlocks;
+import com.wormzjl.icheme.runtime.pollution.GroundSoil;
 import com.wormzjl.icheme.runtime.pollution.PollutionService;
 import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.GroundField;
@@ -13,6 +15,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.FarmBlock;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.player.BonemealEvent;
 import net.neoforged.neoforge.event.level.block.CropGrowEvent;
@@ -68,6 +71,61 @@ public final class GroundPollutionGameTests {
                     helper.assertTrue(pre.getResult() == CropGrowEvent.Pre.Result.DEFAULT, "Clean ground: the wheat grows as usual: " + pre.getResult());
                     level.setBlock(crop, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
                     level.setBlock(soil, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+                    service.clear(dimension);
+                })
+                .thenSucceed();
+    }
+    /**
+     * G4b: at index 1 a pick removes a flower and turns its grass into polluted soil, takes a wheat crop and turns its farmland
+     * into polluted soil, and leaves a log and stone alone; once the ground is clean, the soil's random tick makes dirt.
+     */
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "ground-pollution")
+    public static void pollutedGroundSpoilsTheSurfaceAndRecovers(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var dimension = level.dimension();
+        var service = PollutionService.find(level.getServer()).orElseThrow();
+        service.clear(dimension);
+        var grass = helper.absolutePos(new BlockPos(1, 1, 1));
+        var farm = helper.absolutePos(new BlockPos(1, 1, 3));
+        var log = helper.absolutePos(new BlockPos(3, 1, 1));
+        var stone = helper.absolutePos(new BlockPos(3, 1, 3));
+        var placed = List.of(grass, grass.above(), farm, farm.above(), log, stone);
+        level.setBlock(grass, Blocks.GRASS_BLOCK.defaultBlockState(), Block.UPDATE_ALL);
+        level.setBlock(grass.above(), Blocks.POPPY.defaultBlockState(), Block.UPDATE_ALL);
+        level.setBlock(farm, Blocks.FARMLAND.defaultBlockState().setValue(FarmBlock.MOISTURE, FarmBlock.MAX_MOISTURE), Block.UPDATE_ALL);
+        level.setBlock(farm.above(), Blocks.WHEAT.defaultBlockState(), Block.UPDATE_ALL);
+        level.setBlock(log, Blocks.OAK_LOG.defaultBlockState(), Block.UPDATE_ALL);
+        level.setBlock(stone, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+        var amounts = new double[Channel.values().length];
+        amounts[Channel.TOXIC.ordinal()] = GroundField.GROUND_REFERENCE;
+        // The four columns of blocks may fall in up to four chunk columns: each gets the deposit once.
+        var columns = new java.util.TreeSet<Long>();
+        for (var pos : List.of(grass, farm, log, stone)) if (columns.add(MapColumns.column(pos.getX() >> 4, pos.getZ() >> 4))) service.deposit(dimension, pos, amounts, List.of());
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(columns.stream().allMatch(c -> service.groundSnapshot(dimension).index(c, Channel.TOXIC) > .9),
+                        "Waiting for the pass to land the deposit"))
+                .thenExecute(() -> {
+                    for (var pos : List.of(grass, farm, log, stone)) {
+                        int top = level.getHeight(Heightmap.Types.MOTION_BLOCKING, pos.getX(), pos.getZ());
+                        helper.assertTrue(top == pos.getY() + 1, "The placed block is the motion-blocking top at " + pos + ": " + top);
+                        GroundSoil.pick(level, pos.getX(), pos.getZ());
+                    }
+                    helper.assertTrue(level.getBlockState(grass).is(ModBlocks.POLLUTED_SOIL.get()), "Grass becomes polluted soil: " + level.getBlockState(grass));
+                    helper.assertTrue(level.getBlockState(grass.above()).isAir(), "The flower is removed: " + level.getBlockState(grass.above()));
+                    helper.assertTrue(level.getBlockState(farm).is(ModBlocks.POLLUTED_SOIL.get()), "Farmland becomes polluted soil: " + level.getBlockState(farm));
+                    helper.assertTrue(level.getBlockState(farm.above()).isAir(), "The crop is removed: " + level.getBlockState(farm.above()));
+                    helper.assertTrue(level.getBlockState(log).is(Blocks.OAK_LOG), "A log is left alone");
+                    helper.assertTrue(level.getBlockState(stone).is(Blocks.STONE), "Stone is left alone");
+                    var soil = level.getBlockState(grass);
+                    soil.randomTick(level, grass, level.getRandom());
+                    helper.assertTrue(level.getBlockState(grass).is(ModBlocks.POLLUTED_SOIL.get()), "Polluted ground: the soil stays");
+                    service.clear(dimension);
+                })
+                .thenWaitUntil(() -> helper.assertTrue(service.groundSnapshot(dimension).size() == 0, "Waiting for the cleared ground"))
+                .thenExecute(() -> {
+                    level.getBlockState(grass).randomTick(level, grass, level.getRandom());
+                    helper.assertTrue(level.getBlockState(grass).is(Blocks.DIRT), "Clean ground: the soil turns back to dirt: " + level.getBlockState(grass));
+                    for (var pos : placed) level.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
                     service.clear(dimension);
                 })
                 .thenSucceed();

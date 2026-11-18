@@ -1,0 +1,21 @@
+{
+  "variants": {
+    "": [
+      {
+        "model": "icheme:block/polluted_soil"
+      },
+      {
+        "model": "icheme:block/polluted_soil",
+        "y": 90
+      },
+      {
+        "model": "icheme:block/polluted_soil",
+        "y": 180
+      },
+      {
+        "model": "icheme:block/polluted_soil",
+        "y": 270
+      }
+    ]
+  }
+}

@@ -4698,6 +4698,7 @@
   "tutorial.icheme.item.orifice_plate.serves": "A fixed restriction that takes a set share of a line's pressure.",
   "tutorial.icheme.item.automated_shutoff_valve.serves": "An on/off valve that a hand or a control loop opens and closes.",
   "block.icheme.alarm_beacon": "Alarm beacon",
+  "block.icheme.polluted_soil": "Polluted Soil",
   "tutorial.icheme.item.alarm_beacon.serves": "A lamp and horn raised by a data signal or any equipment alarm.",
   "tutorial.icheme.item.alarm_beacon.needs": "A data cable from its socket to the sensors or equipment it watches.",
   "subtitles.icheme.alarm_horn": "Alarm horn sounds",

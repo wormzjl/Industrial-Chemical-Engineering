@@ -40,6 +40,7 @@ public final class ModCreativeTabs {
                 output.accept(ModItems.LOCAL_CONTROLLER.get());
                 output.accept(ModItems.DCS.get());
                 output.accept(ModItems.POLLUTION_MONITOR.get());
+                output.accept(ModItems.POLLUTED_SOIL.get());
                 output.accept(ModItems.PIPE_RACK.get());
                 output.accept(ModItems.PIPELINE_SIGHT_GLASS.get());
                 output.accept(ModItems.PIPELINE_SHUTOFF_VALVE.get());
