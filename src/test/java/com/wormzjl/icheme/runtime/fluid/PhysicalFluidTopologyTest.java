@@ -742,4 +742,21 @@ class PhysicalFluidTopologyTest {
             assertFalse(index.faces(flange,PhysicalFluidTopology.opposite(outward)),"at the opposite step, "+order);
         }
     }
+    /**
+     * boundaryHalf adds a VOID's own minor loss only when it has no heat, a passive control, no ports and lane 0: the waste
+     * outfall (K = 1, batch 2026-11-18-water-intake-outfall). A plain void is placed with K = 0, so its link is its
+     * neighbour's half, bit for bit as before the change; the outfall's link is that half plus its own K.
+     */
+    @Test void aPlainVoidsLinkIsItsNeighboursHalfBitForBitAndTheOutfallAddsItsOwnLoss(){
+        for(boolean outfall:new boolean[]{false,true}){
+            var sink=outfall?Placement.outfall(2,new PhysicalFluidTopology.Position("minecraft:overworld",2,0,0),NORTH,.05,MaterialCatalog.bundled()).device():at(2,2,0,0,Kind.VOID,NORTH);
+            var devices=List.of(at(1,0,0,0,Kind.GENERATOR,NORTH),at(100,1,0,0,Kind.PIPE,NORTH),sink);
+            var compiled=PhysicalFluidTopology.compile(devices,Map.of(1L,nitrogenAt(1,0,PassiveNetwork.NodeKind.GENERATOR,150000),2L,nitrogenAt(2,0,PassiveNetwork.NodeKind.VOID,101325)));
+            var sections=compiled.islands().getFirst().graph().pipes().stream().flatMap(p->p.sections().stream()).toList();
+            if(!outfall){assertEquals(List.of(new PipeResistance.Geometry(1,.05,.000045,0)),sections,"a plain void: the pipe's own geometry, bit for bit");continue;}
+            double length=0,loss=0;for(var g:sections){length+=g.length();loss+=g.minorLoss();}
+            assertEquals(1,length,1e-12,"the same pipe: "+sections);
+            assertEquals(Placement.OUTFALL_LOSS,loss,0,"the outfall adds its own K = 1 and nothing else: "+sections);
+        }
+    }
 }

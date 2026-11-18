@@ -4,7 +4,7 @@ Batch `2026-11-18-water-intake-outfall`, branch `claude/water-intake-outfall-0e9
 
 ## 1. The owner's request (2026-11-18)
 
-"Add in world fluid intake (pumping water) and fluid dump (waste water), hook dump to pollution system." Owner choices: the intake needs **a real water body** (its strainer touches world water joined to at least about 100 water blocks; no blocks removed); the dump's non-evaporating toxic and corrosive parts **pollute at the outfall**; the dump **places no blocks** (an effect only).
+"Add in world fluid intake (pumping water) and fluid dump (waste water), hook dump to pollution system." Owner choices: the intake needs **a real water body** (its strainer touches world water joined to at least about 100 water blocks; no blocks removed); the dump **places no blocks** (an effect only). The dump's non-evaporating part: first "Pollute at the outfall", then, after the hand numbers (O1), **"Ground only"**: it is booked to the pollution ledger's `GROUND` total, never to the air.
 
 ## 2. The water intake
 
@@ -47,7 +47,7 @@ NPSH available = (49 200 − p_v 3 170) / (ρ g) = 4.7 m. The in-line pump's NPS
 
 ### What is saved, and why
 
-Nothing new. The switch is the generator's existing `generatorEnabled` fact, saved with the registration, so a reload keeps the last answer without a recount and the first recheck after the load corrects it. The intake is told from the gas intake by facts that already exist: `FluidDeviceSpec.ambient` (the boundary is the world outside) and its charge, water above half of it (`Placement.waterCharge`; the network's list ends with water, and the air's water is 1.6 %). `FluidDeviceBlock.stateFor` stands it as the water intake block. No fluid facts schema, state format or protocol number is taken; `FORMATS.md` does not change.
+Nothing new. The switch is the generator's existing `generatorEnabled` fact, saved with the registration, so a reload keeps the last answer without a recount and the first recheck after the load corrects it. Both ambient generators follow one rule: the spec's own contents at 298.15 K and 101 325 Pa, whatever they are, and no edit of them (`FluidNetwork` refuses). The gas intake's air is stored in its spec as well (`Placement.intake` writes `Air.wet(model)`), so contents need no code path. Only the block a registration is stood as (`FluidDeviceBlock.stateFor`, the registry rebuilding a world) must still tell the two blocks apart; today it does so by the charge (`Placement.waterCharge`: water above half; the air's water is 1.6 %). Asked of the main thread (open): **A** keep that test for the block choice only; **B** a new spec field naming the block (a fluid facts schema number); **C** one block for both. No fluid facts schema, state format or protocol number is taken; `FORMATS.md` does not change.
 
 ## 3. The waste outfall
 
@@ -58,32 +58,35 @@ A discharge pipe ends open to the air above ground or water: the liquid leaves a
 ### What it is
 
 - One block, `icheme:waste_outfall` (`ModBlocks.WASTE_OUTFALL`, `FluidDeviceBlock.outfall`): a void (receives only; nothing enters through it) registered by `Placement.outfall` with an ambient spec at 101 325 Pa, 1 m at the joined pipe's bore, exit loss K = 1 (`Placement.OUTFALL_LOSS`, a pipe's free discharge). It stands at its spec's pressure, as the brief's void, not at `PhaseLayout.atmosphere` of its height (the chimney's and flare's rule; `atmospheric()` is unchanged).
-- `PhysicalFluidTopology.boundaryHalf` now adds a one-block sink's own minor loss (a passive void without ports or heat, lane 0) to its link, as it did a generator's. Every existing void has a minor loss of 0 (`Placement.place` builds it so; chimneys, flares, burners and converter drains are excluded by their ports or controls), so every other link is bit for bit as before.
+- `PhysicalFluidTopology.boundaryHalf` now adds a one-block sink's own minor loss to its link, as it did a generator's. The exact condition: `kind == VOID && heat == null && control instanceof FlowControl.Passive && ports.isEmpty() && position.lane() == 0`, and the loss is added only when it is above 0 (otherwise the neighbour's half is returned as the same object). Every other void has K = 0: `Placement.place` builds a plain void with 0 and an edit keeps the geometry's minor loss (`FluidNetwork`); the chimney (`STACK_LOSS`) has ports, flares, burners, the engine fuel void and the still drains have ports and control valves. So every existing void's link is bit for bit as before; `PhysicalFluidTopologyTest.aPlainVoidsLinkIsItsNeighboursHalfBitForBitAndTheOutfallAddsItsOwnLoss` compares a plain void's compiled sections with the pipe's own geometry by record equality (bit-level doubles) and shows the outfall adds exactly K = 1.
 - Edits refused ("A waste outfall discharges to the open air; it has no settings."); the screen is a fixed boundary.
 
-### Pollution ("Pollute at the outfall")
+### Pollution ("Ground only")
 
-Booked by `runtime/fluid/Releases` at the outfall's own cube, from its void's `EXCHANGE` transfers (`Releases.outfall`):
+Booked by `runtime/fluid/Releases` from the outfall void's `EXCHANGE` transfers. One law for the whole stream (`Releases.outfall` splits it into `{vapour, rest}`, vapour + rest = the stream exactly):
 
-1. The volatile share to the air: the spill law, `HazardStandard.volatileMoles`, exactly as an open vessel's SPILL.
-2. New: the rest of the liquid (the moles the spill law leaves on the ground) through the same `HazardStandard` references, `toxic` and `corrosive`, into the same cube, times `OUTFALL_YIELD` = 1 (owner decision pending, section 5). Not `combustible`: liquid that did not evaporate makes no flammable cloud.
-3. Gas that reaches the outfall: a boundary transfer carries no phase, so the spill law runs on the whole stream: a compound volatile at 25 °C (share 1: hydrogen sulfide, ammonia above its boiling point, every permanent gas) goes whole, as a vent's gas. A condensable vapour (steam, a hot hydrocarbon vapour) is split by its share at 25 °C; its rest still counts toxic and corrosive. The only difference from "gas whole" is that such a vapour's non-volatile part is not counted combustible.
-4. Solids it carries: particulate (`HazardStandard.particulate`), as the chimney's.
+1. The vapour to the air at the outfall's own cube: the spill law, `HazardStandard.volatileMoles`, on all the moles, exactly as an open vessel's SPILL. A compound volatile at 25 °C (share 1: hydrogen sulfide, every permanent gas) goes whole, as a vent's gas. Toxic, corrosive and combustible of the vapour only.
+2. The rest (what does not evaporate) never enters the air field: its `toxic` and `corrosive` amounts, by the same `HazardStandard` references, are booked to the ledger's `GROUND` total (`Releases.Sink.ground` → `PollutionService.ground` → `PollutionEngine.ground` → `PollutionLedger.grounded`, which adds the amount to `RELEASED` and `GROUND` together, so the closure `released − stored − rest` stays 0). Not combustible: liquid on the ground makes no flammable cloud.
+3. Solids the stream carries: `GROUND` too, as particulate (`HazardStandard.particulate`). A liquid sets its solids down; a chimney's solids are airborne because a gas carries them. Nothing of an outfall is airborne particulate.
 
-This is a stated game simplification, not physics: dissolved or floating waste does not become air pollution. It stands for the outfall's whole harm to its surroundings in the one field the game has. The javadoc of `Releases.OUTFALL_YIELD` and `Releases.outfall` says so.
+`OUTFALL_YIELD` is gone: there is no factor. The engine keeps the grounded amounts of a pass in flight and books them again when the pass completes, as it does burns (`PollutionEngine.groundInFlight`), so a discarded or given-back pass loses nothing and books nothing twice (`PollutionEngineTest.whatGoesToTheGroundIsBookedAndNeverEntersTheField`).
 
-Clean water books nothing: water has no toxic or corrosive reference and no flammability limit in the bundled data (`cubic_water.json` has no `hazard` or `flammability` record; `OutfallReleasesTest.cleanWaterBooksNothing`).
+Clean water books nothing anywhere: water has no toxic or corrosive reference and no flammability limit in the bundled data (`cubic_water.json` has no `hazard` or `flammability` record; `OutfallReleasesTest.cleanWaterBooksNothing` checks both lists empty).
+
+### Can a player see the dumped amount?
+
+What reads `GROUND` today: the ledger's closure (`PollutionLedger`), the field's settling of particulate (`PollutionField`, which writes it), the save (`PollutionStore`, the existing ledger record) and the operator command `/icheme pollution ledger` (`PollutionCommands`, permission level 2), which prints every total per channel. Nothing else: the pollution meter, the pollution map and the monitors read the field only. So a player sees the dumped amount nowhere but in that operator command. Options (not built): **A** leave it there; **B** a "dumped to the ground" line per channel on the pollution map's side panel, from the ledger (the map's packet gains fields: display only, no protocol number by the owner's rule); **C** the outfall's own screen shows what it has grounded (a per-outfall total, new state to keep).
 
 ### Hand numbers (laws verified in planning)
 
-The bundled catalog's own data (`FluidWorldAuthority.hazardColumns`), Wilson's share at 25 °C; the field by the step's own constants (passes of 20 s process time, exchange 0.12 per face, half-life 300 s open), the centre cube's index:
+The bundled catalog's own data (`FluidWorldAuthority.hazardColumns`), Wilson's share at 25 °C:
 
-| Stream, 1 kg/s | mol/s | Volatile toxic | Remaining toxic | Combustible | Index after 60 s | Steady |
-|---|---|---|---|---|---|---|
-| Water + 1 mol % H2S | 55.02 (H2S 0.550) | 5 502 air-mol/s (H2S share 1) | 0 (water: no reference) | 13.75 | 0.33 (1.97 with no exchange) | ≈ 0.5 |
-| Heavy cut `crude_pc08` (358 g/mol, Tb 687 K, 1 100 ppm) | 2.792 | 3.1e-4 (share 1.2e-7) | 2 538 | 1.2e-4 | 0.15 (0.91 with no exchange) | ≈ 0.23 |
+| Stream, 1 kg/s | mol/s | Air toxic | Ground toxic | Air combustible | Air index after 60 s |
+|---|---|---|---|---|---|
+| Water + 1 mol % H2S | 55.02 (H2S 0.550) | 5 502 air-mol/s (H2S share 1) | 0 (water: no reference) | 13.75 | 0.33 (as before) |
+| Heavy cut `crude_pc08` (358 g/mol, Tb 687 K, 1 100 ppm) | 2.792 | 3.1e-4 (share 1.2e-7) | 2 538 | 1.2e-4 | ≈ 0 |
 
-An open tank's spill of the same streams: the first identical, the second about 3e-4 air-mol/s, an index of nothing. The heavy cut's remaining part is about 8e6 times its spill, so the brief's stop rule tripped: the main thread was told at once with options (section 5) and the build carries `OUTFALL_YIELD` = 1 meanwhile. In size it is half of what the H2S stream gives. The unit test reproduces the rates to 1e-9 of the formula (5 501.8 and 2 538.2 air-mol/s printed).
+`OutfallReleasesTest` reproduces these rates to 1e-9 of the formula and checks the four-row case (H2S, the cut, ammonia, water, with sand): air = vapour, ground = rest, particulate on the ground only, a plain void beside it books nothing.
 
 ### Effect and sound
 
@@ -102,15 +105,18 @@ An open tank's spill of the same streams: the first identical, the second about 
 
 | # | Item | Options |
 |---|---|---|
-| O1 | The outfall's remaining liquid (stop rule tripped, heavy cut 8e6 × its spill) | **A** yield 1, as built (heavy oil 0.15 per minute at 1 kg/s, steady 0.2 to 0.3 near the outfall); **B** yield 0.1 (0.015 per minute, steady about 0.02); **C** the rest to the ledger's `GROUND` only, not the air (reverses "Pollute at the outfall") |
+| O1 | The outfall's remaining liquid | DECIDED "Ground only" (built, section 3). Open: where a player sees the grounded amount, options A to C of section 3 |
 | O2 | A falling stream under the outfall | **A** none (as built; the falling-water sound plays); **B** a new fx kind and a watch on the wire protocol, after the solute batch's protocol number, a later batch |
 | O3 | The look of each block | The option sheets (section 6) |
 | O4 | A waterlogged intake (it could stand in a water block, keeping it) | **A** as built: placing it replaces the water block; **B** a `WATERLOGGED` state on the intake block |
 
 ## 6. Option sheets
 
-See the README's history line for the paths under `tmp/`.
+`tools/equipment-drawings/update.ps1 -Only WATER_INTAKE_BASKET,WATER_INTAKE_BELL,WATER_INTAKE_TEE,WASTE_OUTFALL_GOOSENECK,WASTE_OUTFALL_APRON,WASTE_OUTFALL_HEADWALL`, output `tmp/equipment-drawings/water-outfall/sheets/` (PDF of 6 sheets, per-view PNGs). Intake: BASKET (placeholder, a closed drum with a cap), BELL (a bar cage round a bell mouth), TEE (a horizontal screen tee on a riser). Outfall: GOOSENECK (placeholder, a riser and an arm with a flanged mouth), APRON (the gooseneck on a concrete apron), HEADWALL (a pipe through a concrete headwall on an apron).
 
 ## 7. Tests and runs
 
-See the README's history line. Not verified: nothing is seen in a client (look, screen, sound, the recheck in a live world); no dev client was started.
+- Build pass (`476a06b86`): the affected selection (271 classes, without `LanguageFilesTest`, `UnitTextTest`): `test` 1 522 with 2 `TutorialTextTest` word-limit failures, fixed and passing; `holdGates` 89, `equipmentGates` 80 pass.
+- Ground only: `affected.mjs select --since 66a5a2e34` (131 test classes and 1 equipment gate; `LanguageFilesTest` left out): 822 tests, 0 failures. `PhysicalFluidTopologyTest` (38, with the void-link test) and `TutorialTextTest` (6) after the last edits: pass.
+- Fluid GameTests, run id `water-outfall-1`: 3 failures, the intake test (it measured before the closing edit was applied) and two tests that met its leftover blocks. Fixed (it waits for a pass on the closed revision with no flow); run id `water-outfall-2`: all 123 required tests passed.
+- Not verified: nothing is seen in a client (look, screen, sound, the recheck in a live world); no dev client was started.

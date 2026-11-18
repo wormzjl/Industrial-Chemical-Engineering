@@ -217,6 +217,28 @@ public final class PollutionService {
         }
     }
 
+    /**
+     * Books {@code amount} air-mole equivalents of {@code channel} straight to the ground at {@code position} (batch
+     * 2026-11-18-water-intake-outfall, owner: "Ground only"): the dimension's ledger {@code RELEASED} and {@code GROUND},
+     * never the field. A position outside the world's height is dropped, as a release is.
+     */
+    public void ground(ResourceKey<Level> dimension, BlockPos position, Channel channel, double amount) {
+        try {
+            if (disabled || dimension == null || channel == null || position == null) {
+                return;
+            }
+            if (!inside(dimension, cube(position))) {
+                return;
+            }
+            dimension(dimension).engine.ground(channel, amount);
+            if (store != null) {
+                store.setDirty();
+            }
+        } catch (RuntimeException failure) {
+            IChemE.LOGGER.error("pollution status=GROUND_FAILED dimension={} detail={}", dimension, String.valueOf(failure));
+        }
+    }
+
     /** {@link #release(ResourceKey, long, Channel, double)} at the cube that holds {@code position}. */
     public void release(ResourceKey<Level> dimension, BlockPos position, Channel channel, double amount) {
         if (position == null) {

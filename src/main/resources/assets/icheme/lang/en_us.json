@@ -4764,7 +4764,7 @@
   "tutorial.icheme.item.water_intake.serves": "Draws lake or river water; a pump on its line moves it.",
   "tutorial.icheme.item.water_intake.needs": "One face must touch 100 connected water blocks.",
   "block.icheme.waste_outfall": "Waste Outfall",
-  "tutorial.icheme.item.waste_outfall.serves": "Lets a line's liquid out to the air; what it carries pollutes there.",
+  "tutorial.icheme.item.waste_outfall.serves": "Lets a line's liquid out; its vapour pollutes the air, the rest the ground.",
   "gui.icheme.fluid.status.no_water_body": "No water body: touch 100 connected water blocks",
   "block.icheme.crude_oil": "Crude Oil",
   "fluid_type.icheme.crude_oil": "Crude Oil",

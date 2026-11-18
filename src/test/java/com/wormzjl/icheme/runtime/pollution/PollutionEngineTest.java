@@ -234,4 +234,24 @@ class PollutionEngineTest {
         assertEquals(burnt, engine.ledger().get(Channel.COMBUSTIBLE, PollutionLedger.Total.BURNT), 1e-9);
         assertClosed(engine);
     }
+
+    /** A waste outfall's rest (batch 2026-11-18-water-intake-outfall): straight to GROUND, never the field, kept across a pass in flight; the ledger closes. */
+    @Test
+    void whatGoesToTheGroundIsBookedAndNeverEntersTheField() {
+        var engine = new PollutionEngine();
+        engine.ground(Channel.TOXIC, 40);
+        assertEquals(40.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.RELEASED));
+        assertEquals(40.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.GROUND));
+        assertEquals(0, engine.field().size(), "nothing in the air");
+        engine.release(A, Channel.TOXIC, 100);
+        var pass = engine.begin(OPEN, 20, SETTINGS).orElseThrow();
+        engine.ground(Channel.PARTICULATE, 7);
+        engine.ground(Channel.TOXIC, Double.NaN);
+        engine.complete(pass.run());
+        var ledger = engine.ledger();
+        assertEquals(140.0, ledger.get(Channel.TOXIC, PollutionLedger.Total.RELEASED), 1e-9);
+        assertEquals(7.0, ledger.get(Channel.PARTICULATE, PollutionLedger.Total.GROUND), 0, "booked during the pass, kept on its result");
+        assertEquals(7.0, ledger.get(Channel.PARTICULATE, PollutionLedger.Total.RELEASED), 0);
+        for (var channel : Channel.values()) assertEquals(0, ledger.closure(channel, engine.field()), 1e-9, "the ledger closes: " + channel);
+    }
 }

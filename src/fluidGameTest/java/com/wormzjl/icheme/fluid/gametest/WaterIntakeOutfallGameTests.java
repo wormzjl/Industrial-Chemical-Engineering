@@ -109,7 +109,11 @@ public final class WaterIntakeOutfallGameTests {
                 .thenWaitUntil(() -> {
                     var r = world.registrations().get(intakeId);
                     helper.assertTrue(r != null && !r.device().generatorEnabled(), "99 blocks: the intake closes");
-                    helper.assertTrue(world.view(intakeId).status().contains(FluidWorldAuthority.NO_WATER_BODY), "Its status says why: " + world.view(intakeId).status());
+                    var view = world.view(intakeId);
+                    // The close is a queued edit: measure only once a pass has committed the closed revision.
+                    helper.assertTrue(view.inputRevision() == r.revision(), "Waiting for a pass on the closed intake: " + view.inputRevision() + " of " + r.revision());
+                    helper.assertTrue(view.status().contains(FluidWorldAuthority.NO_WATER_BODY), "Its status says why: " + view.status());
+                    helper.assertTrue(Math.abs(view.massFlow()) < 1e-6, "The closed intake passes nothing: " + view.massFlow());
                     filled[0] = moles(world, tankId, "Water");
                 })
                 .thenIdle(600)

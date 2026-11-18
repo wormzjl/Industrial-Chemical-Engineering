@@ -173,7 +173,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         try {
             var hazards=hazardColumns(catalog,model);var atoms=formulas(catalog,model);
             releases=new Releases(topology,model.components(),new com.wormzjl.icheme.science.pollution.HazardStandard(hazards[0],hazards[1],hazards[2],hazards[3],hazards[4],hazards[5]),
-                    atoms,Releases.so2Reference(hazards[1],atoms),flares,id->runtime.coordinator().model(id).components(),runtime.coordinator()::time,this::releasePollution);
+                    atoms,Releases.so2Reference(hazards[1],atoms),flares,id->runtime.coordinator().model(id).components(),runtime.coordinator()::time,new Releases.Sink(){
+                        @Override public void release(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount){releasePollution(at,channel,amount);}
+                        @Override public void ground(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount){groundPollution(at,channel,amount);}});
             shafts.releases(releases);
         } catch(RuntimeException failure) {
             IChemE.LOGGER.error("pollution status=RELEASES_OFF detail={}",String.valueOf(failure));
@@ -1047,6 +1049,11 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
     }
     /** A pollution release (WP4) to the pollution service of this server; nothing while the service is off. */
+    /** What a waste outfall leaves on the ground (batch 2026-11-18-water-intake-outfall): the pollution ledger's {@code GROUND}, never the field. */
+    private void groundPollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {
+        var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
+        if(service.isPresent())service.get().ground(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),channel,amount);
+    }
     private void releasePollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {
         var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
         if(service.isPresent())service.get().release(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),channel,amount);

@@ -33,9 +33,10 @@ import java.util.function.Supplier;
  * <li>A one-time {@code FLUSH} of a node's trace components: its gas, at the node. A certificate is not issued on an interval
  * that flushed ({@code IslandCertificate}), so a replay never carries one and a flush is booked once.</li>
  * <li>A cooling tower's {@code ATMOSPHERE}: what its plume carries, at its top.</li>
- * <li>A waste outfall's void ({@code EXCHANGE}, batch 2026-11-18-water-intake-outfall): the spill law on all it discharged,
- * the liquid it leaves on the ground counted too in the toxic and corrosive channels ({@link #outfall}), its solids as
- * particulate, at its own cube. A stated game simplification ({@link #OUTFALL_YIELD}).</li>
+ * <li>A waste outfall's void ({@code EXCHANGE}, batch 2026-11-18-water-intake-outfall): the spill law on all it discharged
+ * ({@link #outfall}): its vapour to the air at its own cube; the liquid it leaves on the ground (toxic and corrosive) and the
+ * solids it carries (particulate: a liquid sets them down, unlike a chimney's gas) to the ledger's {@code GROUND} there,
+ * never the field.</li>
  * </ul>
  * Each amount is in air-mole equivalents of its channel. Nothing is saved; no fluid fact, state or reference changes. A
  * fault here is caught and logged ({@link #booked}): it never stops the bookings after it.
@@ -45,6 +46,12 @@ public final class Releases {
     @FunctionalInterface
     public interface Sink {
         void release(PhysicalFluidTopology.Position position, Channel channel, double amount);
+
+        /**
+         * {@code amount} of {@code channel} left on the ground at {@code position}: the pollution ledger's {@code GROUND},
+         * never the air (a waste outfall's rest, batch 2026-11-18-water-intake-outfall). None by default.
+         */
+        default void ground(PhysicalFluidTopology.Position position, Channel channel, double amount) {}
     }
 
     /** A flare tip's flame over the span just booked: whether it holds, and its soot index, 0 to 1 ({@code Flare#soot}). */
@@ -66,12 +73,6 @@ public final class Releases {
     public static final double SO2_REFERENCE = 100e-6;
     /** The formula columns ({@code MaterialCatalog.FORMULA_ELEMENTS}: C, H, N, O, S). */
     static final int CARBON = 0, OXYGEN = 3, SULFUR = 4;
-    /**
-     * The share of a waste outfall's non-evaporating liquid that is booked to the air at its cube (owner, 2026-11-18: "Pollute
-     * at the outfall"; 1: all of it). A game simplification, not physics: dissolved or floating waste does not become air
-     * pollution; it stands for the outfall's whole harm to its surroundings in the one field the game has.
-     */
-    public static final double OUTFALL_YIELD = 1;
     /** A failure is logged at its first occurrence and then once per this many. */
     static final int LOG_EVERY = 1000;
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("icheme/pollution");
@@ -238,13 +239,14 @@ public final class Releases {
                             emit(tip, Channel.PARTICULATE, products[1]);
                         } else gas(tip, world);
                     } else if (FluidWorldAuthority.outfall(r)) {
-                        // A waste outfall (batch 2026-11-18-water-intake-outfall): all it discharged, at its own cube.
+                        // A waste outfall (batch 2026-11-18-water-intake-outfall, owner: "Ground only"): what evaporates to
+                        // the air at its own cube; the rest of the liquid and the solids it carries to the ground there.
                         var cube = above(at, 0);
-                        var amounts = outfall(standard, world, OUTFALL_YIELD);
-                        emit(cube, Channel.TOXIC, amounts[0]);
-                        emit(cube, Channel.COMBUSTIBLE, amounts[1]);
-                        emit(cube, Channel.CORROSIVE, amounts[2]);
-                        emit(cube, Channel.PARTICULATE, HazardStandard.particulate(solids));
+                        var split = outfall(standard, world);
+                        gas(cube, split[0]);
+                        grounded(cube, Channel.TOXIC, standard.toxic(split[1]));
+                        grounded(cube, Channel.CORROSIVE, standard.corrosive(split[1]));
+                        grounded(cube, Channel.PARTICULATE, HazardStandard.particulate(solids));
                     } else emit(above(at, 0), Channel.CORROSIVE, sulfur(world, formulas) / so2Reference);
                 }
                 default -> {
@@ -350,19 +352,21 @@ public final class Releases {
     }
 
     /**
-     * What a waste outfall's discharge {@code moles} (world axis, all phases: a boundary transfer carries no phase) gives the
-     * air at its cube, {toxic, combustible, corrosive} air-mole equivalents (batch 2026-11-18-water-intake-outfall). The spill
-     * law on the whole stream ({@link HazardStandard#volatileMoles}): a compound volatile at 25 C (a gas, share 1) goes whole, as
-     * a vent's gas; of a liquid the volatile share. The rest, the liquid the spill law leaves on the ground, counts too, times
-     * {@code yield}, through the same toxic and corrosive references; not as combustible: liquid that did not evaporate makes no
-     * flammable cloud. Clean water books nothing: water has no reference.
+     * A waste outfall's discharge {@code moles} (world axis, all phases: a boundary transfer carries no phase) split by the
+     * spill law on the whole stream ({@link HazardStandard#volatileMoles}; batch 2026-11-18-water-intake-outfall, owner:
+     * "Ground only"): {vapour, rest}. The vapour goes to the air as a vent's gas: a compound volatile at 25 C (a gas, share 1)
+     * whole, of a liquid its volatile share; the rest is the liquid left on the ground, which the ledger books {@code GROUND}
+     * (toxic and corrosive) and the air never sees. Clean water books nothing anywhere: water has no reference.
      */
-    static double[] outfall(HazardStandard standard, double[] moles, double yield) {
+    static double[][] outfall(HazardStandard standard, double[] moles) {
         var vapour = standard.volatileMoles(moles);
         var rest = new double[moles.length];
         for (int c = 0; c < moles.length; c++) rest[c] = Math.max(0, Math.abs(moles[c]) - Math.abs(vapour[c]));
-        double share = Math.clamp(Double.isFinite(yield) ? yield : 0, 0, 1);
-        return new double[]{standard.toxic(vapour) + share * standard.toxic(rest), standard.combustible(vapour), standard.corrosive(vapour) + share * standard.corrosive(rest)};
+        return new double[][]{vapour, rest};
+    }
+
+    private void grounded(PhysicalFluidTopology.Position at, Channel channel, double amount) {
+        if (amount > 0 && Double.isFinite(amount)) sink.ground(at, channel, amount);
     }
 
     /** {@code at} raised by {@code height} blocks, rounded up (a block column), on the block lane. */

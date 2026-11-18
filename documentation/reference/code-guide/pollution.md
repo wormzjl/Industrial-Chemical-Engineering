@@ -70,7 +70,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | Flare | `Releases` | Burning: SO2 and soot (yield 0.01). Flame out: the gas |
 | Flush, cooling tower air | `Releases` | As booked |
 | Burner and engine fuel | `Releases` | The SO2 of the fuel's sulfur |
-| Waste outfall | `Releases` (`outfall`), at its own cube | The spill law on all it discharges (a gas at 25 °C whole); the liquid it leaves on the ground too, toxic and corrosive only, times `OUTFALL_YIELD` (1); solids as particulate. A stated game simplification |
+| Waste outfall | `Releases` (`outfall`), at its own cube | The spill law on all it discharges (a gas at 25 °C whole) to the air; the rest (toxic, corrosive) and its solids (particulate) to the ledger's `GROUND` only (`Sink.ground`, `PollutionService.ground`, `PollutionLedger.grounded`: `RELEASED` and `GROUND` together), never the field |
 | A pipe, valve or one-block tank a blast destroys | `BurstPipes` → `releaseContents` | A vessel node's inventory; a line block's holdup, estimated from its last interval. One dense fluid splits by its liquid-like weight `w` instead of its slot (`DenseReadings.release`, `moved`: a line's side by the node it left), and the volatile share of its liquid-like part counts as the gas heard (`DenseReadings.heard`): dense carbon dioxide reads gas, a dense heavy cut liquid |
 | A breached vessel | It stands open, so the first row applies | |
 
