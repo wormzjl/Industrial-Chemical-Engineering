@@ -19,18 +19,10 @@ class ReflectionLawTest {
     }
 
     @Test
-    void theSkyRunsFromTheHorizonToTheZenithAndTheGroundBelow() {
-        double[] z = ReflectionLaw.ZENITH, h = ReflectionLaw.HORIZON;
-        assertArrayEquals(z, ReflectionLaw.sky(1, .3, z, h, 1), E, "straight up: the zenith");
-        // at the horizon the join is half: (0.93 + 0.42) / 2 = 0.675 in red
-        assertEquals(.675, ReflectionLaw.sky(0, .3, z, h, 1)[0], E);
-        // half way up: 0.5^0.45 = 0.73204 of the way from 0.93 to 0.45 = 0.57862
-        assertEquals(.57862, ReflectionLaw.sky(.5, .3, z, h, 1)[0], E);
-        // straight down at half daylight: the ground 0.25 x 0.5
-        assertEquals(.125, ReflectionLaw.sky(-1, .3, z, h, .5)[0], E);
-        // a sharper horizon: at ry = 0.1 the cladding's (blur 0.18) join is 0.87380, the paint's (0.30) 0.74074
-        assertEquals(.87380, ReflectionLaw.smoothstep(-ReflectionClass.CLADDING.blur, ReflectionClass.CLADDING.blur, .1), E);
-        assertEquals(.74074, ReflectionLaw.smoothstep(-ReflectionClass.PAINT.blur, ReflectionClass.PAINT.blur, .1), E);
+    void theSheenIsTheHorizonsBrightness() {
+        // 0.2126 x 0.93 + 0.7152 x 0.95 + 0.0722 x 0.97 = 0.94719
+        assertEquals(.94719, ReflectionLaw.surround(ReflectionLaw.HORIZON), E);
+        assertEquals(0, ReflectionLaw.surround(new double[3]), E, "a black fog (night, a cave): no sheen");
     }
 
     @Test
@@ -69,21 +61,44 @@ class ReflectionLawTest {
     @Test
     void paintSeenHeadOnGainsAtMostFivePercent() {
         double[] n = {0, 0, 1}, noon = ReflectionLaw.celestial(0, 0);
-        double[] added = ReflectionLaw.added(n, n, ReflectionClass.PAINT, 0xffffff, ReflectionLaw.ZENITH, ReflectionLaw.HORIZON, 1, noon, 1, 1, 1);
-        // R = (0, 0, 1): the horizon; 0.675 x F0 0.05 = 0.03375 in red, no highlight (R.L = 0)
-        assertEquals(.03375, added[0], E);
-        for (double c : added) assertTrue(c <= .05, "under 5 % head-on");
-        double[] indoors = ReflectionLaw.added(n, n, ReflectionClass.PAINT, 0xffffff, ReflectionLaw.ZENITH, ReflectionLaw.HORIZON, 1, noon, 0, 1, 1);
-        assertArrayEquals(new double[3], indoors, 0, "no sky light, no reflection");
+        double added = ReflectionLaw.added(n, n, ReflectionClass.PAINT, ReflectionLaw.HORIZON, noon, 1, 1, 1);
+        // the horizon's brightness 0.94719 x F0 0.05 = 0.04736, no highlight (R.L = 0)
+        assertEquals(.04736, added, E);
+        assertEquals(0, ReflectionLaw.added(n, n, ReflectionClass.PAINT, ReflectionLaw.HORIZON, noon, 0, 1, 1), 0, "no sky light, no sheen");
     }
 
     @Test
-    void steelTakesItsOwnColourAndPaintStaysWhite() {
-        double[] n = {0, 0, 1}, v = {0, 0, 1}, noon = ReflectionLaw.celestial(0, 0);
-        double[] steel = ReflectionLaw.added(n, v, ReflectionClass.STEEL, 0x808080, ReflectionLaw.ZENITH, ReflectionLaw.HORIZON, 1, noon, 1, 1, 1);
-        // 0.675 x 0.55 x 128/255 = 0.18635
-        assertEquals(.18635, steel[0], E);
-        double[] doubled = ReflectionLaw.added(n, v, ReflectionClass.STEEL, 0x808080, ReflectionLaw.ZENITH, ReflectionLaw.HORIZON, 1, noon, 1, 2, 1);
-        assertEquals(2 * steel[0], doubled[0], E, "reflection_strength scales the whole pass");
+    void theBaseKeepsWhatTheSheenTakes() {
+        double[] n = {0, 0, 1};
+        // head-on: F = F0; steel and jacketing keep 0.80 of the chunk mesh's colour, grating 0.90, paint 0.95
+        assertEquals(.80, ReflectionLaw.kept(n, n, ReflectionClass.STEEL, 1, 1, 1), E);
+        assertEquals(.80, ReflectionLaw.kept(n, n, ReflectionClass.CLADDING, 1, 1, 1), E);
+        assertEquals(.90, ReflectionLaw.kept(n, n, ReflectionClass.GALVANISED, 1, 1, 1), E);
+        assertEquals(.95, ReflectionLaw.kept(n, n, ReflectionClass.PAINT, 1, 1, 1), E);
+        // no sky light or the range's edge: the base is kept whole
+        assertEquals(1, ReflectionLaw.kept(n, n, ReflectionClass.CLADDING, 0, 1, 1), E);
+        assertEquals(1, ReflectionLaw.kept(n, n, ReflectionClass.CLADDING, 1, 1, 0), E);
+    }
+
+    @Test
+    void theSheenIsTheSameFromAboveAndBelow() {
+        // a clad wall seen 40 degrees from above and from below, at noon: the same grey either way, under full white
+        double a = Math.toRadians(40), base = 196 / 255.0 * .8;
+        double[] wall = {0, 0, 1}, noon = ReflectionLaw.celestial(0, 0);
+        double[] above = {0, Math.sin(a), Math.cos(a)}, below = {0, -Math.sin(a), Math.cos(a)};
+        double up = base * ReflectionLaw.kept(wall, above, ReflectionClass.CLADDING, 1, 1, 1) + ReflectionLaw.added(wall, above, ReflectionClass.CLADDING, ReflectionLaw.HORIZON, noon, 1, 1, 1);
+        double down = base * ReflectionLaw.kept(wall, below, ReflectionClass.CLADDING, 1, 1, 1) + ReflectionLaw.added(wall, below, ReflectionClass.CLADDING, ReflectionLaw.HORIZON, noon, 1, 1, 1);
+        // 0.61490 x 0.79944 + 0.94719 x 0.20056 = 0.68155 (the highlight from below: R.L = sin 40, ^30 x 0.5 = 9e-7)
+        assertEquals(.68155, down, 1e-4);
+        assertEquals(down, up, 1e-4, "no sky above and ground below any more");
+    }
+
+    @Test
+    void strengthScalesTheWholePass() {
+        double[] n = {0, 0, 1}, noon = ReflectionLaw.celestial(0, 0);
+        double one = ReflectionLaw.added(n, n, ReflectionClass.STEEL, ReflectionLaw.HORIZON, noon, 1, 1, 1);
+        // 0.94719 x 0.20 = 0.18944
+        assertEquals(.18944, one, E);
+        assertEquals(2 * one, ReflectionLaw.added(n, n, ReflectionClass.STEEL, ReflectionLaw.HORIZON, noon, 1, 2, 1), E, "reflection_strength scales the whole pass");
     }
 }

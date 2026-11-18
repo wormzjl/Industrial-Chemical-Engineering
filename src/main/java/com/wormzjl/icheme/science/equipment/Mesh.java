@@ -317,9 +317,10 @@ public final class Mesh {
 
     /**
      * A planar convex facet in box coordinates, counter-clockwise seen from outside, with its texture frame; {@code part}
-     * is the moving part it belongs to ({@link ProcessUnit.Motion}, by index), -1 for the still parts.
+     * is the moving part it belongs to ({@link ProcessUnit.Motion}, by index), -1 for the still parts; {@code run} marks a
+     * pipe run (a line, pipe, elbow or reducer of {@link ProcessUnit}), drawn as laid pipes are: no reflection pass.
      */
-    record Facet(List<double[]> positions, double[] normal, double[] min, double[] max, Shading shading, Material material, Uv u, Uv v, int part) {
+    record Facet(List<double[]> positions, double[] normal, double[] min, double[] max, Shading shading, Material material, Uv u, Uv v, int part, boolean run) {
     }
 
     /** Whole facet for a large static mesh, with one sprite tile per facet and the same smooth normals. */
@@ -374,6 +375,7 @@ public final class Mesh {
     private final List<Facet> facets = new ArrayList<>();
     private Transform transform = Transform.IDENTITY;
     private int part = -1;
+    private boolean run;
 
     private final RenderDetail detail;
 
@@ -393,6 +395,13 @@ public final class Mesh {
     /** The moving part everything added from now on belongs to ({@link ProcessUnit.Motion}, by index); -1: the still parts. */
     void part(int part) {
         this.part = part;
+    }
+
+    /** Whether everything added from now on is a pipe run ({@link Facet#run}); returns the setting it replaces. */
+    boolean run(boolean run) {
+        boolean was = this.run;
+        this.run = run;
+        return was;
     }
 
     List<Facet> facets() {
@@ -436,7 +445,7 @@ public final class Mesh {
             worldU = projection[0];
             worldV = projection[1];
         }
-        facets.add(new Facet(List.copyOf(positions), facing, min, max, shading.map(transform), material, worldU, worldV, part));
+        facets.add(new Facet(List.copyOf(positions), facing, min, max, shading.map(transform), material, worldU, worldV, part, run));
     }
 
     /**
@@ -459,7 +468,7 @@ public final class Mesh {
                 }
             }
             facets.add(new Facet(List.copyOf(positions), transform.direction(f.normal()), min, max, shadings.computeIfAbsent(f.shading(), s -> s.map(transform)), f.material(),
-                    uvs.computeIfAbsent(f.u(), u -> u.map(transform)), uvs.computeIfAbsent(f.v(), v -> v.map(transform)), f.part()));
+                    uvs.computeIfAbsent(f.u(), u -> u.map(transform)), uvs.computeIfAbsent(f.v(), v -> v.map(transform)), f.part(), f.run() || run));
         }
     }
 

@@ -14,9 +14,8 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * The reflection pass's one material table ({@link ReflectionClass}): which materials it draws in which class, the
- * measured albedo of the bare metals against their sprites, and the LabPBR maps {@code tools/pbr-textures} writes from
- * the same numbers (batch 2026-11-18-equipment-reflections).
+ * The gloss pass's one material table ({@link ReflectionClass}): which materials it draws in which class, and the
+ * LabPBR maps {@code tools/pbr-textures} writes from the same numbers (batch 2026-11-18-equipment-reflections).
  */
 class ReflectionClassTest {
     private static final Path DIR = Path.of("src/main/resources/assets/icheme/textures/block");
@@ -25,20 +24,15 @@ class ReflectionClassTest {
     private static final Set<String> RELIEF = Set.of("equipment_bolt_face", "motor_louvre", "equipment_cladding", "painted_cladding");
 
     @Test
-    void theClassesAreTheBriefsTable() {
-        assertEquals(.05, ReflectionClass.PAINT.f0);
-        assertEquals(.30, ReflectionClass.PAINT.blur);
-        assertEquals(120, ReflectionClass.PAINT.exponent);
-        assertEquals(.9, ReflectionClass.PAINT.strength);
-        assertFalse(ReflectionClass.PAINT.tinted);
-        assertEquals(.55, ReflectionClass.STEEL.f0);
-        assertEquals(.35, ReflectionClass.STEEL.blur);
-        assertEquals(60, ReflectionClass.STEEL.exponent);
-        assertEquals(1.6, ReflectionClass.STEEL.strength);
-        assertTrue(ReflectionClass.STEEL.tinted);
-        assertEquals(.55, ReflectionClass.CLADDING.f0);
-        assertEquals(.18, ReflectionClass.CLADDING.blur);
-        assertTrue(ReflectionClass.CLADDING.tinted);
+    void theClassesAreTheGlossTable() {
+        // F0 (the sheen's share head-on), the highlight's power and strength (section 13)
+        double[][] table = {{.05, 120, .9}, {.20, 60, .8}, {.20, 30, .5}, {.10, 15, .2}};
+        var classes = new ReflectionClass[]{ReflectionClass.PAINT, ReflectionClass.STEEL, ReflectionClass.CLADDING, ReflectionClass.GALVANISED};
+        for (int i = 0; i < classes.length; i++) {
+            assertEquals(table[i][0], classes[i].f0, classes[i].name());
+            assertEquals(table[i][1], classes[i].exponent, classes[i].name());
+            assertEquals(table[i][2], classes[i].strength, classes[i].name());
+        }
     }
 
     @Test
@@ -47,32 +41,14 @@ class ReflectionClassTest {
                 Mesh.Material.AC_HEADER, Mesh.Material.PUMP_CASTING, Mesh.Material.PUMP_VOLUTE, Mesh.Material.PUMP_FINS, Mesh.Material.PUMP_JOINT,
                 Mesh.Material.MOTOR_FRAME, Mesh.Material.MOTOR_PLAIN, Mesh.Material.HANDRAIL);
         var steel = EnumSet.of(Mesh.Material.PIPE, Mesh.Material.FLANGE, Mesh.Material.BOLT, Mesh.Material.BOLT_FACE, Mesh.Material.SHAFT,
-                Mesh.Material.STAINLESS, Mesh.Material.CARBON_STEEL, Mesh.Material.GRATING);
+                Mesh.Material.STAINLESS, Mesh.Material.CARBON_STEEL);
         for (var m : Mesh.Material.values()) {
-            var expected = painted.contains(m) ? ReflectionClass.PAINT : steel.contains(m) ? ReflectionClass.STEEL : m == Mesh.Material.CLADDING ? ReflectionClass.CLADDING : null;
+            var expected = painted.contains(m) ? ReflectionClass.PAINT : steel.contains(m) ? ReflectionClass.STEEL : m == Mesh.Material.CLADDING ? ReflectionClass.CLADDING
+                    : m == Mesh.Material.GRATING ? ReflectionClass.GALVANISED : null;
             assertEquals(expected, ReflectionClass.of(m), m.name());
         }
         assertNull(ReflectionClass.of(Mesh.Material.GLASS));
         assertNull(ReflectionClass.of(Mesh.Material.CONCRETE));
-    }
-
-    @Test
-    void aMetalsReflectionTakesItsSpritesColour() throws IOException {
-        for (var e : ReflectionClass.SPRITES.entrySet()) {
-            var image = ImageIO.read(DIR.resolve(e.getValue() + ".png").toFile());
-            double[] sum = new double[3];
-            for (int y = 0; y < image.getHeight(); y++)
-                for (int x = 0; x < image.getWidth(); x++)
-                    for (int c = 0; c < 3; c++) sum[c] += image.getRGB(x, y) >> 16 - 8 * c & 255;
-            int[] albedo = ReflectionClass.albedo(e.getKey());
-            assertNotNull(albedo, e.getKey().name());
-            for (int c = 0; c < 3; c++)
-                assertEquals(sum[c] / (image.getWidth() * image.getHeight()), albedo[c], 1, e.getValue() + " channel " + c);
-        }
-        assertEquals(0xffffff, ReflectionClass.tint(Mesh.Material.SHELL, 0x2050a0), "paint mirrors white");
-        assertEquals(161 << 16 | 161 << 8 | 160, ReflectionClass.tint(Mesh.Material.PIPE, 0x2050a0), "bare pipe: its sprite's grey");
-        assertEquals(0x2050a0, ReflectionClass.tint(Mesh.Material.CLADDING, 0x2050a0), "painted jacketing: its paint");
-        assertEquals(0xffffff, ReflectionClass.tint(Mesh.Material.CONCRETE, 0x2050a0));
     }
 
     @Test
@@ -82,6 +58,8 @@ class ReflectionClassTest {
         assertEquals(104, ReflectionClass.STEEL.labSmoothness());
         assertEquals(230, ReflectionClass.STEEL.labF0());
         assertEquals(232, ReflectionClass.CLADDING.labF0());
+        assertEquals(75, ReflectionClass.GALVANISED.labSmoothness());
+        assertEquals(230, ReflectionClass.GALVANISED.labF0());
         String json = Files.readString(SHELL);
         int checked = 0;
         for (var m : Mesh.Material.values()) {

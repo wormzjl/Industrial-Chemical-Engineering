@@ -15,6 +15,7 @@ B is a view-dependent reflection pass in the mod's own shader over the chunk-mes
   21 plain sprites got LabPBR `_flat` maps. Selected tests on the final code: 52 + 4 classes, 407 tests, 0 failures;
   the seven new or changed classes before them. `REFLECTION_PASS_REVIEW.md`.
 - 2026-11-18, part 3 (owner: "Improve sight glass bubble animation, it should be moving with the fluid direction"): bubbles carried by the published speed with the rise on vertical runs, a stratified horizontal run, stretch with speed, phase kept by integration; the `sight_glass` shader and its switch; the speed byte on the sight glass display (no protocol number: owner, display-only data); `SightGlassMotionTest`; `tools/sight-glass-frames/`; review section 12.
+- 2026-11-18, part 4 (owner, from the client: the large column "very weird from below", "too shiny", the heater crossover, the platforms, "in-line with pipes", "doesn't need to reflect color", "doesn't need to be real reflection"): the pass is a grey gloss (the horizon's brightness by Fresnel plus the sun's highlight, the base kept by 1 - F), no sky image and no colour; STEEL and CLADDING F0 0.20, new GALVANISED for grating; structure pipe runs (`Mesh.Facet.run`) left out as laid pipes are. Review section 13. Branch `claude/large-column-surface-shader-f22680`.
 
 ## Documents
 

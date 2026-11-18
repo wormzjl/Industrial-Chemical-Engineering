@@ -19,6 +19,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 - A new column test world builds its plant in about 5 s instead of 74 s (`2026-11-18-column-test-world-speed`, on `claude/column-test-world-perf-96ee33`): the plant builder's line search runs on a flat grid of the plant's box and lays the same lines, block for block. Its sizing starts in the background once the Create World screen has the column test world type, and is kept for the game's run (`SizingCache`).
 
+### Fixed
+
+- Equipment reflections are a soft grey gloss (`2026-11-18-equipment-reflections`, on `claude/large-column-surface-shader-f22680`): no mirror image of the sky and ground and no colour, the shell keeps 1 - F of its own colour under the sheen, bare steel and jacketing take a fifth head-on, grating a tenth; pipe runs that belong to a structure (a heater's crossover, manifolds) stay plain like laid pipes. Clad columns no longer turn white-blue from below or dark from above, and their rings, heads, the crossovers and the platforms no longer shine.
+
 ### Removed
 
 - Tests that guard no behaviour (`2026-11-18-prune-tests`, on `claude/prune-tests-97440b`, `7b9ba01c4`): four tests and four assertions that read source text for helper, method or field names, or asserted that removed code stays removed. No game change.

@@ -191,9 +191,14 @@ public final class ShapeRasterizer {
 
     /** Separate drawing mesh: coarse facets may cross interior/empty cells, so they are never clipped to the placed shell. */
     public static List<Polygon> renderBody(EquipmentShape shape, RenderDetail detail) {
+        return renderBody(shape, detail, true);
+    }
+
+    /** {@link #renderBody(EquipmentShape, RenderDetail)}, without its pipe runs unless {@code runs} (the reflection pass draws none, as laid pipes). */
+    public static List<Polygon> renderBody(EquipmentShape shape, RenderDetail detail, boolean runs) {
         var g = geometry(shape, detail);
         var out = new ArrayList<Polygon>();
-        for (var facet : g.mesh.facets()) if (facet.part() < 0 && facet.material() != Material.GLASS) out.addAll(Mesh.tiled(facet));
+        for (var facet : g.mesh.facets()) if (facet.part() < 0 && facet.material() != Material.GLASS && (runs || !facet.run())) out.addAll(Mesh.tiled(facet));
         return List.copyOf(out);
     }
 

@@ -296,16 +296,17 @@ SPRITES = {
 
 
 # ---- Plain sprites: no relief, LabPBR maps from their reflection class (ReflectionClass: smoothness = 1 - sqrt(blur),
-# F0 = 0.05 linear for paint, the iron id 230 for steel).
+# F0 = 0.05 linear for paint, the iron id 230 for steel and galvanised grating).
 
 PAINT = (115, 13)   # ReflectionClass.PAINT: blur 0.30, F0 0.05
 STEEL = (104, 230)  # ReflectionClass.STEEL: blur 0.35, a metal (iron)
+GALVANISED = (75, 230)  # ReflectionClass.GALVANISED: blur 0.50, a metal (iron: LabPBR has no zinc)
 PLAIN = {
     "painted_shell": PAINT, "painted_head": PAINT, "painted_support": PAINT, "painted_machine": PAINT, "equipment_motor": PAINT,
     "ac_header": PAINT, "pump_casting": PAINT, "pump_volute": PAINT, "pump_fins": PAINT, "pump_joint": PAINT,
     "motor_frame": PAINT, "motor_plain": PAINT, "painted_heater": PAINT, "equipment_handrail": PAINT,
     "equipment_pipe": STEEL, "equipment_flange": STEEL, "equipment_bolt": STEEL, "shaft_steel": STEEL,
-    "still_stainless": STEEL, "still_carbon_steel": STEEL, "equipment_grating": STEEL,
+    "still_stainless": STEEL, "still_carbon_steel": STEEL, "equipment_grating": GALVANISED,
 }
 SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src", "main", "resources", "assets", "icheme", "textures", "block")
 
