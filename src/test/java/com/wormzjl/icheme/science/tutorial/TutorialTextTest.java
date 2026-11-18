@@ -52,6 +52,17 @@ class TutorialTextTest {
             texts.put(Glossary.wordKey(term), 1);
             texts.put(Glossary.definitionKey(term), 2);
         }
+        // Batch 2026-11-18-tutorial-photos: a caption says what the photo shows, then "Photo: <author>"; an author's
+        // initial ("Carol M. Highsmith") reads as a sentence end, so a caption may count three. A chapter of several photos names each.
+        var photos = com.wormzjl.icheme.science.tutorial.guide.PhotoFile.load();
+        texts.put(com.wormzjl.icheme.science.tutorial.guide.Guide.KEY + "view", 1);
+        for (var chapter : guide.chapters())
+            for (var id : chapter.photos()) {
+                var photo = photos.photo(id);
+                if (photo == null) continue;
+                texts.put(photo.captionKey(), 3);
+                if (chapter.photos().size() > 1) texts.put(photo.nameKey(), 1);
+            }
         return texts;
     }
 

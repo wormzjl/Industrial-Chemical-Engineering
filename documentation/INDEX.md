@@ -15,6 +15,7 @@ Status words:
 | Batch | Purpose | Status |
 |---|---|---|
 | [2026-11-18-equipment-reflections/](2026-11-18-equipment-reflections/README.md) | View-dependent reflections on equipment in the mod's own shader; a switch for every custom shader | In progress since 2026-11-18 (built and tested; not seen in a client) |
+| [2026-11-18-tutorial-photos/](2026-11-18-tutorial-photos/README.md) | Redistributable photographs in the Field Guide: a thumbnail row per chapter and a viewer | In progress since 2026-11-18 |
 | [2026-11-17-rust-solver-archive/](2026-11-17-rust-solver-archive/README.md) | The Rust column library leaves the build for `tools/rust-column-archive/` | In progress since 2026-11-17 |
 | [2026-11-17-three-phase-separator/](2026-11-17-three-phase-separator/README.md) | Drums and the desalter separate gas, oil and water by their size | In progress 2026-11-17 (packages 1 and 2 of 4; package 4's sizer and drum page; the gas space law and the demister) |
 | [2026-11-17-dynamic-settling/](2026-11-17-dynamic-settling/README.md) | A vessel's liquids settle over time; a level of separation on the drum page | In build 2026-11-17 (1a, G built) |

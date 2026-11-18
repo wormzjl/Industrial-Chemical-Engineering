@@ -20,12 +20,12 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`. Every class under `sc
 |---|---|
 | `science/tutorial/scene/` (11) | `Scene` (title key, actors, tracks, stops; `at(t)` pure), `Track` (camera, visible, cut, caption, dots, label, legend, flame, level and the rest; a track acts on (from, to]), `Frame`, `Actor`/`Actors` (polygons from the mod's geometry), `Clip` (cutaways), `DotMotion` (dots by a fixed hash, no `Random`), `Bodies` (fires and liquids), `Projection` (the one orthographic projection), `Series` and `Value` (recorded channels, linear between points) |
 | `science/tutorial/films/` (11) | `Films` (name to builder; built anew on Watch), `StillInside`, `StillBuild`, `StillRun` (+ `StillRunData`), `StillTray`, `SmallTower`, `CrudeUnit` (`crude_unit`, `unit_build`), `EquipmentFilms` (7: the crude unit's kinds), `PageFilms` (29 `page_<kind>`, one stop, nozzles named), `PagePicture` (a page's still picture) |
-| `science/tutorial/guide/` (13) | `Guide` (chapters, steps, media, check, criterion; derived lang keys), `GuideFile`, `Progress`, `Glossary`, `Marked` (`{term:words}`), `Tour`, `TourFile`, `Pages`, `PageFile`, the conditions `StillCondition`, `SheetCondition`, `AssemblyCondition`, `ColumnCondition` |
+| `science/tutorial/guide/` (15) | `Guide` (chapters with their photo ids, steps, media, check, criterion; derived lang keys), `GuideFile`, `Progress`, `Glossary`, `Marked` (`{term:words}`), `Tour`, `TourFile`, `Pages`, `PageFile`, `Photos` and `PhotoFile` (a photo's PNG size and thumbnail focus; caption, name and texture derived from its id), the conditions `StillCondition`, `SheetCondition`, `AssemblyCondition`, `ColumnCondition` |
 | `science/tutorial/cards/` | Recording readers: `BarrelData` (`crude_barrel.json`, also `compute` for the recorder), `StillTraysData`, `SmallUnitData` |
 | `science/tutorial/equipment/` | `EquipmentInfo` (item id `equipment_<kind>`, name key, serves/needs/place/status lines, shape-only kinds), `ReferenceShapes` (each kind at the constructor's default size: icons, pictures, page films) |
 | `runtime/tutorial/TutorialTriggers` | The ten criteria (`DeferredRegister` of `TRIGGER_TYPE`, registered from `IChemE`) |
 | `network/TutorialNetwork` | On the mod's protocol `NetworkProtocol.VERSION`: `StepDone`, `Hello` (to server), `Progress` (to client); `earned` on `AdvancementEarnEvent` |
-| `client/gui/tutorial/` (13) | `GuideClient` (guide, pages, progress, key, reload), `GuideScreen` and `GuidePage` (Minecraft-free layout), `GuideHud`, `FilmScreen`, `FilmLayout`, `FilmOverlay`, `Labels`, `SceneView` (render thread; one vertex buffer per actor list), `CardView`, `HelpTour`, `TourHost`, `TourLayout` |
+| `client/gui/tutorial/` (13) | `GuideClient` (guide, pages, photos, progress, key, reload), `GuideScreen` and `GuidePage` (Minecraft-free layout; a chapter's photo row over its steps, `PhotoRow`, and the photo viewer in place of them, `PhotoPlace`), `GuideHud`, `FilmScreen`, `FilmLayout`, `FilmOverlay`, `Labels`, `SceneView` (render thread; one vertex buffer per actor list), `CardView`, `HelpTour`, `TourHost`, `TourLayout` |
 | `client/gui/tutorial/cards/` (14) | `Card`, `Cards` (name to builder), `Bars`, and the 11 cards: `three_parts`, `chain`, `barrel`, `products`, `road`, `pot_temperature`, `reflux`, `compare`, `balance`, `unit_map`, `limit` |
 | `client/gui/common/` `TourAnchors`, `DeviceTour`, `ScreenTours`, `AssemblyTour`; `client/gui/flowsheet/SimulatorTour` | Minecraft-free anchor maps: where each stop stands on a page, in the screen's own coordinates; the screens resolve the same maps the gates check |
 | `world/item/FieldGuideItem`, `EquipmentInfoItem`; `registry/ModItems`, `ModCreativeTabs.EQUIPMENT_GUIDE` | The Field Guide; one reference item per kind (builds nothing, no recipe, no loot; use opens its page). Client calls stay behind the client-side check |
@@ -64,9 +64,10 @@ Client steps a screen reports: `simulator/open` (the bundled small unit opened) 
 
 All under `src/main/resources/assets/icheme/tutorial/` are client assets: no compatibility work; each reader refuses an unknown field.
 
-- `guide.json` (`GuideFile`): `terms` (term id to its defining step) and `chapters` in order, each `{id, steps}`; a step `{id, media?, check?, criterion?}`. Media: none, `units`, `read`, `card:<name>`, `film:<name>`, `page:<item id>`. `check` is `client` (default) or `server` with a `criterion`. Ids `[a-z0-9_]{1,32}`. Refused: a duplicate id, an unknown film or card, a term whose step is not in the guide. At this snapshot: 20 terms; chapters `welcome` (3), `crude` (6), `still` (9), `tower` (5), `simulator` (7), `unit` (4), `building` (7), `start` (10).
+- `guide.json` (`GuideFile`): `terms` (term id to its defining step) and `chapters` in order, each `{id, photos?, steps}` (`photos`: photo ids, no duplicate, the viewer's order); a step `{id, media?, check?, criterion?}`. Media: none, `units`, `read`, `card:<name>`, `film:<name>`, `page:<item id>`. `check` is `client` (default) or `server` with a `criterion`. Ids `[a-z0-9_]{1,32}`. Refused: a duplicate id, an unknown film or card, a term whose step is not in the guide. At this snapshot: 20 terms; chapters `welcome` (3), `crude` (6), `still` (9), `tower` (5), `simulator` (7), `unit` (4), `building` (7), `start` (10).
 - `tours.json` (`TourFile`): page name (`guide`, `fluid_device.still`, `simulator.sheet`, `constructor.paint`) to `{film?, show?, stops: [{anchor, wait?}]}`, at most 7 stops. Anchors are widget keys, `reading:<meter>`, `tab:<id>`, `status`, `title`, `glass`, `group:<n>` or `group:<plate key>`, never pixels. `show` names a guide step whose media the last stop shows. 41 tours.
 - `pages.json` (`PageFile`): `unit` (the crude unit's chain, 9 pages, in order) and `pages`: item id to `{film?, tour?}`. Every kind's item id must have an entry; other ids only from `PageFile.ITEMS` (`pressure_control_valve`). A page's name and lines are the reference item's own keys (`EquipmentInfo.nameKey`, `pageKeys`). 41 pages, 37 with a film.
+- `photos.json` (`PhotoFile`, written by `tools/tutorial-photos/PhotoAssets.java`): photo id to `{w, h, fx, fy}`, the PNG's size and the thumbnail's focus as shares. The PNGs are `textures/tutorial/photo/<id>.png` (indexed, 256 colours, at most 384 px and 150 KB; `NativeImage` takes PNG only), drawn through `Canvas.sprite`; their credits ship in `tutorial/PHOTO_CREDITS.md`. Keys `tutorial.icheme.photo.<id>` (caption, ending "Photo: <author>") and `.name` (the viewer's key, where a chapter has several); `tutorial.icheme.guide.view`. 14 photos, at least one a chapter.
 - `recordings/*.json`: `crude_barrel.json` (per grade: components in boiling order, six band shares, the boiled-off curve 250 to 900 K every 5 K, sulfur), `still_run.json` (at most 240 points of time, pot and head K, level, distilled and vented shares, rate, part, status; lines `first`, `naphtha`, `kerosene`, `end`), `still_trays.json` (pot still and 4 trays at reflux 1 and 2: two cuts each), `small_unit.json` (the small unit at H-101 390 °C and 370 °C: products and duties). Read once when a film or card is built.
 - `data/icheme/advancement/tutorial/`: `root.json` and one file per step, `<chapter>/<step>.json`, parented to the step before it; display keys `tutorial.icheme.advancement.<chapter>.<step>[.description]`, no toast, no chat.
 - Language keys (all in `en_us.json`): `tutorial.icheme.guide.<chapter>[.<step>]`, `tutorial.icheme.term.<id>[.def]` (definition at most 25 words), `tutorial.icheme.tour.<page>.<n>`, `tutorial.icheme.film.<name>[.s<n>]`, `tutorial.icheme.card.*`, `tutorial.icheme.equipment.<kind>.{serves,needs,place}`, `tutorial.icheme.item.*` (JEI lines of the other items). A text writes a temperature as `{373.15 K}`; `Guide.temperatures` shows it in the client's unit.
@@ -76,7 +77,7 @@ All under `src/main/resources/assets/icheme/tutorial/` are client assets: no com
 
 <details><summary>Client caches and what drops them</summary>
 
-- `GuideClient.guide()` and `pages()` and `HelpTour.of`'s tour map are read once. A resource reload (a language change is one; the listener is registered in `IChemEClient`) calls `GuideClient.reloaded()`: all three drop and `generation` counts up.
+- `GuideClient.guide()`, `pages()`, `photos()` and `HelpTour.of`'s tour map are read once. A resource reload (a language change is one; the listener is registered in `IChemEClient`) calls `GuideClient.reloaded()`: all four drop and `generation` counts up.
 - `GuideScreen`, `GuideHud` and `HelpTour` lay out only when their key changes: generation, language, progress, the open chapter, card or page, the size, the temperature unit (code review finding 4).
 - `GuideClient.progress` is replaced by each server `Progress` and cleared at login.
 - Films and cards are built anew when opened (`Films.build`, `Cards.build`), never at load; a page's picture is built when the page opens. `SceneView` keeps one vertex buffer per actor polygon list (a cut keeps at most the current and the next) and closes them with the view.
@@ -84,7 +85,9 @@ All under `src/main/resources/assets/icheme/tutorial/` are client assets: no com
 
 </details>
 
-<details><summary>How to add a step, a tour, a page, a film or a card</summary>
+<details><summary>How to add a step, a tour, a page, a film, a card or a photo</summary>
+
+- **A photo:** only a redistributable photo with no person in it. Put its original in the tool's originals folder, add its row (id, file, crop, focus) to `PhotoAssets.PHOTOS` and run the tool (`tools/tutorial-photos/README.md`): it writes the PNG and `photos.json`. Name the id in its chapter's `photos` in `guide.json`; add its caption (and `.name` where the chapter has several) to `en_us.json` and its row to `PHOTO_CREDITS.md`. `PhotoCoverageTest` checks all four.
 
 - **A step:** add it to its chapter in `guide.json`; its sentence `tutorial.icheme.guide.<chapter>.<step>` in `en_us.json`; its advancement `data/icheme/advancement/tutorial/<chapter>/<step>.json` parented to the step before (and the next step's parent moved to it). A CLIENT step listens to `icheme:guide_step` with `"step": "<chapter>/<step>"` and needs media or a screen that reports it. A SERVER step names its criterion in the file and the advancement; no two steps share a trigger with the same conditions. A new criterion goes in `TutorialTriggers` with its condition record in `science/tutorial/guide/`, fired only where the server already sends or stores the data.
 - **A tour:** give the screen a `TourHost` with its page name and an anchor resolver (the screen's anchor map in `DeviceTour`, `ScreenTours`, `AssemblyTour` or `SimulatorTour`, door rows through `TourAnchors`), its `?` key placed by `TitleStrip.keys`; add the tour to `tours.json` and its sentences `tutorial.icheme.tour.<page>.<n>`. A screen with no tour is listed as exempt in `HelpCoverageTest` (`FilmScreen` is).
@@ -100,6 +103,7 @@ All under `src/main/resources/assets/icheme/tutorial/` are client assets: no com
 | Change | Owner | Proof |
 |---|---|---|
 | A step's order, media, check or criterion | `guide.json`, the advancement files, `TutorialTriggers` | `GuideFileTest`, `GuideCoverageTest`, `ProgressTest`, `TutorialTextTest` |
+| A chapter's photos, the photo row or the viewer | `guide.json`, `photos.json`, the PNGs, `PHOTO_CREDITS.md`, `GuidePage` | `PhotoCoverageTest`, `GuideFileTest`, `GuidePageTest`, `TutorialTextTest` |
 | What a criterion accepts | `StillCondition`, `SheetCondition`, `AssemblyCondition`, `ColumnCondition` | `StillConditionTest`, `SheetConditionTest`, `ColumnConditionTest` |
 | The wire, Hello's admission, the server side's class loading | `TutorialNetwork` | `TutorialNetworkCodecTest` |
 | A tour's stops or a screen's anchors | `tours.json`, the anchor maps | `HelpCoverageTest`, `DeviceTourTest`, `ScreenToursTest`, `AssemblyTourTest`, `SimulatorTourTest`, `TourLayoutTest` |
@@ -119,6 +123,7 @@ All under `src/main/resources/assets/icheme/tutorial/` are client assets: no com
 ## Tools
 
 - `tools/tutorial-renders/`: software renders of every film stop, the guide pages, tours, cards, equipment pages and the item icons (`renderTutorial`, `renderTutorialGuide`, `renderTutorialIcons` by its init script). The simulator's tours: `tools/heat-gui-renders/SimulatorRender.java -Donly=tours`.
+- `tools/tutorial-photos/`: `PhotoAssets.java` writes the photo PNGs and `photos.json` from the originals (crop, 384 px, 256 colours). The photo renders: `GuideRender <out> photos`.
 - `tools/tutorial-recordings/`: writes the four recordings (`recordCrudeBarrel`, `recordStillRun`, `recordStillTrays`, `recordSmallUnit`).
 - `tools/tutorial-column/`: the small crude tower candidates (P4, D4) and `bundle.js`, which writes the bundled preset, stream and example.
 - Removed: the P0 client command `/icheme-film` (cace5dd6d); re-attach it as `tools/tutorial-renders/README.md` says.
@@ -129,9 +134,6 @@ All under `src/main/resources/assets/icheme/tutorial/` are client assets: no com
 - **Film**: a `Scene`, played to each stop and waiting there. **Card**: an interactive drawing. **Tour**: a screen page's stops, opened by `?`.
 - **Reference item**: `equipment_<kind>`, which builds nothing and opens the kind's page.
 - **Recording**: a JSON file of numbers written offline from the model and held to it by a gate.
-</content>
-</invoke>
-<invoke name="Bash">
-<parameter name="command">cd "D:/Minecraft/Modding/1.21/CreateChemE/.claude/worktrees/chimney-b7484c/src/main/java/com/wormzjl/icheme" && grep -c "ALL.put\|KINDS" science/tutorial/films/Films.java; grep -n "KINDS *=" -A3 science/tutorial/films/EquipmentFilms.java science/tutorial/films/PageFilms.java | head; grep -n "BUILD_NAME\|NAME =" science/tutorial/films/*.java | cut -c1-150
+- **Photo**: a redistributable photograph of a chapter's subject, shown as a thumbnail row over its steps and whole in the viewer.
 
 **Snapshot:** `3063488da`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).

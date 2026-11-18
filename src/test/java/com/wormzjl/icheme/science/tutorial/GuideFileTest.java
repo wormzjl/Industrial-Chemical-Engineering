@@ -21,6 +21,25 @@ class GuideFileTest {
         return GuideFile.read(json(text), "film_a"::equals, "card_a"::equals);
     }
 
+    /** Batch 2026-11-18-tutorial-photos: a chapter's photos read in order; a bad or repeated id refused; none where it names none. */
+    @Test
+    void aChaptersPhotosReadAndABadOrRepeatedIdIsRefused() {
+        var guide = GuideFile.load();
+        assertEquals(List.of("welcome"), guide.chapter("welcome").photos());
+        assertEquals(List.of("crude", "crude_gas", "crude_naphtha", "crude_kerosene", "crude_diesel", "crude_gas_oil", "crude_residue"), guide.chapter("crude").photos());
+        assertEquals(List.of(), read("{'chapters':[{'id':'a','steps':[{'id':'s'}]}]}").chapters().getFirst().photos());
+        assertEquals(List.of("p", "q"), read("{'chapters':[{'id':'a','photos':['p','q'],'steps':[{'id':'s'}]}]}").chapters().getFirst().photos());
+        assertThrows(IllegalArgumentException.class, () -> read("{'chapters':[{'id':'a','photos':['p','p'],'steps':[{'id':'s'}]}]}"));
+        assertThrows(IllegalArgumentException.class, () -> read("{'chapters':[{'id':'a','photos':['Bad id'],'steps':[{'id':'s'}]}]}"));
+        assertThrows(IllegalArgumentException.class, () -> read("{'chapters':[{'id':'a','picture':['p'],'steps':[{'id':'s'}]}]}"));
+        // The manifest: its fields only, a focus inside the photo.
+        var photos = com.wormzjl.icheme.science.tutorial.guide.PhotoFile.read(json("{'p':{'w':512,'h':341,'fx':0.45,'fy':0.55}}"));
+        assertEquals("icheme:textures/tutorial/photo/p.png", photos.photo("p").texture());
+        assertEquals("tutorial.icheme.photo.p.name", photos.photo("p").nameKey());
+        assertThrows(IllegalArgumentException.class, () -> com.wormzjl.icheme.science.tutorial.guide.PhotoFile.read(json("{'p':{'w':512,'h':341,'fx':0.4,'fy':0.5,'x':1}}")));
+        assertThrows(IllegalArgumentException.class, () -> com.wormzjl.icheme.science.tutorial.guide.PhotoFile.read(json("{'p':{'w':512,'h':341,'fx':1.4,'fy':0.5}}")));
+    }
+
     @Test
     void chapterZeroReadsAsWritten() {
         var guide = GuideFile.load();

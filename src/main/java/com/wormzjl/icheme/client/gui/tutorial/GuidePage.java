@@ -16,6 +16,8 @@ import com.wormzjl.icheme.science.tutorial.guide.Glossary;
 import com.wormzjl.icheme.science.tutorial.guide.Guide;
 import com.wormzjl.icheme.science.tutorial.guide.Marked;
 import com.wormzjl.icheme.science.tutorial.guide.Pages;
+import com.wormzjl.icheme.science.tutorial.guide.Photos;
+import com.wormzjl.icheme.client.gui.common.kit.Sprite;
 import com.wormzjl.icheme.science.tutorial.guide.Progress;
 import org.jetbrains.annotations.Nullable;
 
@@ -51,7 +53,18 @@ public final class GuidePage {
      * steps); P4b: the player's temperature format, for a step's {@code {<kelvin> K}}.
      */
     public record Input(Guide guide, Progress progress, String open, @Nullable String card, java.util.function.DoubleFunction<String> temperature, @Nullable Pages pages,
-                        @Nullable String page) {
+                        @Nullable String page, @Nullable Photos photos, @Nullable String photo) {
+        /** With no photograph (batch 2026-11-18-tutorial-photos): no photo row, the steps as before. */
+        public Input(Guide guide, Progress progress, String open, @Nullable String card, java.util.function.DoubleFunction<String> temperature, @Nullable Pages pages,
+                     @Nullable String page) {
+            this(guide, progress, open, card, temperature, pages, page, null, null);
+        }
+
+        /** The same with the chapters' photographs from {@code photos}, and the photo {@code photo} open in the viewer (null: none). */
+        public Input withPhotos(Photos photos, @Nullable String photo) {
+            return new Input(guide, progress, open, card, temperature, pages, page, photos, photo);
+        }
+
         /** In °C: the render tool's and the tests' page. */
         public Input(Guide guide, Progress progress, String open, @Nullable String card) {
             this(guide, progress, open, card, com.wormzjl.icheme.client.gui.tutorial.cards.Card.CELSIUS);
@@ -64,7 +77,7 @@ public final class GuidePage {
 
         /** P5: the same, with the equipment page {@code page} of {@code pages} open in the glass (null: none). */
         public Input withPage(Pages pages, @Nullable String page) {
-            return new Input(guide, progress, open, card, temperature, pages, page);
+            return new Input(guide, progress, open, card, temperature, pages, page, photos, photo);
         }
     }
 
@@ -146,6 +159,34 @@ public final class GuidePage {
         }
     }
 
+    /** The photo actions: the row's View (and its thumbnail), a viewer's choice of photo, the viewer's Back. */
+    public static final String PHOTO_VIEW = "photo:view", PHOTO_SHOW = "photo:show:", PHOTO_BACK = "photo:back";
+    /** The row's thumbnail; the room between the row and the first step. */
+    public static final int THUMB_W = 64, THUMB_H = 48, PHOTO_GAP = 8;
+
+    /**
+     * A chapter's photo row (batch 2026-11-18-tutorial-photos, option B; content coordinates, it scrolls with the steps above
+     * the first): the photo, its thumbnail's box and the texture's rectangle cut round its focus, the caption's lines beside it
+     * (none where the glass is too narrow), View at the glass's right, the row's band.
+     */
+    public record PhotoRow(Photos.Photo photo, Rect thumb, Sprite sprite, List<Text> caption, Key view, Rect rect) {
+        public PhotoRow {
+            caption = List.copyOf(caption);
+        }
+    }
+
+    /**
+     * The open photo viewer in place of the steps (panel coordinates): the photo, the option keys across the top where the
+     * chapter has several photos ({@code photo:show:<id>}, the shown one latched), the photo whole and centred, its caption
+     * at the foot left, Back at the foot right.
+     */
+    public record PhotoPlace(Photos.Photo photo, List<Key> options, Rect image, Sprite sprite, List<Text> caption, Key back) {
+        public PhotoPlace {
+            options = List.copyOf(options);
+            caption = List.copyOf(caption);
+        }
+    }
+
     public static final int KNOB = 8;
     /** An option key's width beyond its word. */
     public static final int OPTION_PAD = 8;
@@ -153,7 +194,8 @@ public final class GuidePage {
     /** The page as placed. */
     public record Page(int width, int height, String title, TitleStrip.Strip strip, Rect help, Rect theme, String themeHint,
                        Column door, Map<String, Key> chapters, Map<String, Boolean> finished, Rect well, Rect view, int content, boolean bar,
-                       List<Row> rows, @Nullable CardPlace card, @Nullable EquipmentPlace equipment, Function<String, String> tr) {
+                       List<Row> rows, @Nullable CardPlace card, @Nullable EquipmentPlace equipment, @Nullable PhotoRow photoRow, @Nullable PhotoPlace photo,
+                       Function<String, String> tr) {
         public Page {
             chapters = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(chapters));
             finished = Map.copyOf(finished);
@@ -205,13 +247,22 @@ public final class GuidePage {
                 out.put("card:back", card.back().rect());
             }
             if (equipment != null) for (var key : equipment.keys()) out.put(key.key(), key.rect());
+            if (photoRow != null) {
+                out.put("photo", photoRow.thumb());
+                out.put(PHOTO_VIEW, photoRow.view().rect());
+            }
+            if (photo != null) {
+                out.put("photo", photo.image());
+                for (var key : photo.options()) out.put(key.key(), key.rect());
+                out.put(PHOTO_BACK, photo.back().rect());
+            }
             return out;
         }
 
-        /** Whether an anchor lies on the scrolling glass. */
+        /** Whether an anchor lies on the scrolling glass: the steps' and the photo row's. */
         public boolean scrolls(String anchor) {
             return anchor.equals("step") || anchor.equals("media") || anchor.startsWith("step:") || anchor.startsWith("mark:") || anchor.startsWith("media:")
-                    || anchor.startsWith("units:");
+                    || anchor.startsWith("units:") || photo == null && (anchor.equals("photo") || anchor.equals(PHOTO_VIEW));
         }
 
         /** {@code content} on the panel at scroll {@code offset}. */
@@ -241,7 +292,12 @@ public final class GuidePage {
                 for (var key : equipment.keys()) if (key.rect().contains(x, y)) return key.key();
                 return null;
             }
+            if (photo != null) {
+                for (var key : photo.options()) if (key.rect().contains(x, y)) return key.key();
+                return photo.back().rect().contains(x, y) ? PHOTO_BACK : null;
+            }
             if (!view.contains(x, y)) return null;
+            if (photoRow != null && (onPanel(photoRow.view().rect(), offset).contains(x, y) || onPanel(photoRow.thumb(), offset).contains(x, y))) return PHOTO_VIEW;
             for (var row : rows) for (var key : row.keys()) if (onPanel(key.rect(), offset).contains(x, y)) return key.key();
             return null;
         }
@@ -255,7 +311,7 @@ public final class GuidePage {
                 for (var key : equipment.keys()) if (key.rect().contains(x, y)) return key.hint();
                 return null;
             }
-            if (card != null || !view.contains(x, y)) return null;
+            if (card != null || photo != null || !view.contains(x, y)) return null;
             for (var row : rows) {
                 for (var key : row.keys()) if (onPanel(key.rect(), offset).contains(x, y)) return key.hint();
                 if (onPanel(row.markRect(), offset).contains(x, y)) return tr.apply(row.mark().hintKey());
@@ -297,6 +353,10 @@ public final class GuidePage {
                 drawCard(c, skin, card, state, hover, tr);
                 return;
             }
+            if (photo != null) {
+                drawPhoto(c, skin, photo, hover);
+                return;
+            }
             if (equipment != null) drawEquipment(c, skin, equipment, offset, hover);
             else drawRows(c, skin, offset, hover);
             if (bar) {
@@ -309,6 +369,15 @@ public final class GuidePage {
 
         private void drawRows(Canvas c, Skin skin, int offset, @Nullable String hover) {
             c.clip(view);
+            if (photoRow != null) {
+                var t = onPanel(photoRow.thumb(), offset);
+                c.sprite(photoRow.sprite(), t.x(), t.y(), t.right(), t.bottom(), 0xFFFFFFFF);
+                c.batch(() -> {
+                    c.outline(t.x() - 1, t.y() - 1, t.w() + 2, t.h() + 2, Palette.MUTED);
+                    for (var line : photoRow.caption()) c.text(line.text(), line.x(), line.y() - offset, line.colour());
+                });
+                skin.button(c, onPanel(photoRow.view().rect(), offset), photoRow.view().text(), Skin.Press.REST, PHOTO_VIEW.equals(hover));
+            }
             c.batch(() -> {
                 for (var row : rows) {
                     var r = onPanel(row.rect(), offset);
@@ -456,6 +525,18 @@ public final class GuidePage {
         });
     }
 
+    /** The open viewer: its option keys, the photo whole in its outline, its caption, Back. */
+    private static void drawPhoto(Canvas c, Skin skin, PhotoPlace p, @Nullable String hover) {
+        for (var key : p.options()) skin.button(c, key.rect(), key.text(), key.latched() ? Skin.Press.CURRENT : Skin.Press.REST, key.key().equals(hover));
+        var r = p.image();
+        c.sprite(p.sprite(), r.x(), r.y(), r.right(), r.bottom(), 0xFFFFFFFF);
+        c.batch(() -> {
+            c.outline(r.x() - 1, r.y() - 1, r.w() + 2, r.h() + 2, Palette.MUTED);
+            for (var line : p.caption()) c.text(line.text(), line.x(), line.y(), line.colour());
+        });
+        skin.button(c, p.back().rect(), p.back().text(), Skin.Press.REST, p.back().key().equals(hover));
+    }
+
     private static void drawCard(Canvas c, Skin skin, CardPlace p, Card.State state, @Nullable String hover, Function<String, String> tr) {
         double control = state.control();
         for (int i = 0; i < p.options().size(); i++) {
@@ -512,7 +593,7 @@ public final class GuidePage {
             var card = step != null && step.media() instanceof Guide.Card named ? Cards.build(named.name()) : null;
             if (card != null)
                 return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, view, 0, false, List.of(),
-                        card(in.card(), card, view, m, tr), null, tr);
+                        card(in.card(), card, view, m, tr), null, null, null, tr);
         }
         // P5: an open equipment page in place of the steps, its texts scrolling over its keys.
         var page = in.pages() == null || in.page() == null ? null : in.pages().page(in.page());
@@ -520,16 +601,95 @@ public final class GuidePage {
             var e = equipment(in.pages(), page, view, m, tr, ScrollView.BAR);
             int content = textHeight(e.texts(), e.text());
             return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, e.text(), content, content > e.text().h(),
-                    List.of(), null, e, tr);
+                    List.of(), null, e, null, null, tr);
         }
-        var rows = rows(in, chapter, current, view.x() + 2, view.w() - 4, view.y() + 2, m, tr);
+        // Batch 2026-11-18-tutorial-photos: the chapter's photos, as the manifest knows them.
+        var photos = new ArrayList<Photos.Photo>();
+        if (in.photos() != null)
+            for (var id : chapter.photos()) {
+                var p = in.photos().photo(id);
+                if (p != null) photos.add(p);
+            }
+        Photos.Photo shown = null;
+        for (var p : photos) if (p.id().equals(in.photo())) shown = p;
+        if (shown != null)
+            return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, view, 0, false, List.of(), null, null, null,
+                    viewer(shown, photos, view, m, tr), tr);
+        var first = photos.isEmpty() ? null : photos.getFirst();
+        var photoRow = first == null ? null : photoRow(first, view.x() + 2, view.w() - 4, view.y(), m, tr);
+        int y0 = photoRow == null ? view.y() + 2 : photoRow.rect().bottom() + PHOTO_GAP;
+        var rows = rows(in, chapter, current, view.x() + 2, view.w() - 4, y0, m, tr);
         int content = height(rows, view);
         boolean bar = content > view.h();
         if (bar) {
-            rows = rows(in, chapter, current, view.x() + 2, view.w() - 6 - ScrollView.BAR, view.y() + 2, m, tr);
+            photoRow = first == null ? null : photoRow(first, view.x() + 2, view.w() - 6 - ScrollView.BAR, view.y(), m, tr);
+            y0 = photoRow == null ? view.y() + 2 : photoRow.rect().bottom() + PHOTO_GAP;
+            rows = rows(in, chapter, current, view.x() + 2, view.w() - 6 - ScrollView.BAR, y0, m, tr);
             content = height(rows, view);
         }
-        return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, view, content, bar, rows, null, null, tr);
+        return new Page(width, height, title, strip, keys.get(1), keys.get(0), themeHint, door, chapters, finished, well, view, content, bar, rows, null, null, photoRow,
+                null, tr);
+    }
+
+    /**
+     * The photo row over the steps, {@code w} wide from {@code x0}, its top at the glass's {@code top}: the thumbnail at
+     * (x0 + 1, top + 3), cut round the photo's focus; View at the right, centred on the row; the caption wrapped between
+     * them where that room is at least {@link #BESIDE_MIN}, centred on the row's height.
+     */
+    private static PhotoRow photoRow(Photos.Photo p, int x0, int w, int top, Measure m, Function<String, String> tr) {
+        String word = tr.apply(KEY + "view");
+        int bw = Math.max(48, m.width(word) + 12);
+        var thumb = new Rect(x0 + 1, top + 3, THUMB_W, THUMB_H);
+        int captionX = thumb.right() + 6, room = x0 + w - bw - 6 - captionX;
+        var lines = room >= BESIDE_MIN ? m.wrap(tr.apply(p.captionKey()), room) : List.<String>of();
+        int rowH = Math.max(THUMB_H, lines.size() * Measure.LINE);
+        int ty = thumb.y() + (rowH - lines.size() * Measure.LINE) / 2;
+        var caption = new ArrayList<Text>();
+        for (int i = 0; i < lines.size(); i++) caption.add(new Text(lines.get(i), captionX, ty + i * Measure.LINE, Palette.MUTED));
+        var view = new Key(PHOTO_VIEW, new Rect(x0 + w - bw, thumb.y() + (rowH - KEY_H) / 2, bw, KEY_H), word, null, false);
+        // Cover: the largest rectangle of the thumbnail's shape inside the photo, centred on the focus where the edges allow.
+        double scale = Math.max(THUMB_W / (double) p.w(), THUMB_H / (double) p.h());
+        int sw = Math.min(p.w(), (int) Math.round(THUMB_W / scale)), sh = Math.min(p.h(), (int) Math.round(THUMB_H / scale));
+        int sx = (int) Math.round(Math.clamp(p.fx() * p.w() - sw / 2.0, 0, p.w() - sw)), sy = (int) Math.round(Math.clamp(p.fy() * p.h() - sh / 2.0, 0, p.h() - sh));
+        var sprite = new Sprite(p.texture(), sx, sy, sw, sh, p.w(), p.h());
+        return new PhotoRow(p, thumb, sprite, caption, view, new Rect(x0, thumb.y(), w, rowH));
+    }
+
+    /**
+     * The viewer in {@code view}: where the chapter has several photos, their names as option keys across the top (flowing
+     * into a second row where the glass is narrow); Back at the foot right; the caption wrapped at the foot left, beside
+     * Back; the photo whole and centred in the room between, with a pixel round it for its outline.
+     */
+    private static PhotoPlace viewer(Photos.Photo shown, List<Photos.Photo> photos, Rect view, Measure m, Function<String, String> tr) {
+        var options = new ArrayList<Key>();
+        int top = view.y() + 2;
+        if (photos.size() > 1) {
+            int x = view.x() + 2, y = view.y() + 2;
+            for (var p : photos) {
+                String word = tr.apply(p.nameKey());
+                int ow = Math.min(view.w() - 4, Math.max(24, m.width(word) + OPTION_PAD));
+                if (x > view.x() + 2 && x + ow > view.right() - 2) {
+                    x = view.x() + 2;
+                    y += KEY_H + KEY_GAP;
+                }
+                options.add(new Key(PHOTO_SHOW + p.id(), new Rect(x, y, ow, KEY_H), word, null, p == shown));
+                x += ow + KEY_GAP;
+            }
+            top = options.getLast().rect().bottom() + 3;
+        }
+        String backText = tr.apply(KEY + "back");
+        int bw = Math.max(48, m.width(backText) + 12);
+        var back = new Key(PHOTO_BACK, new Rect(view.right() - bw - 2, view.bottom() - KEY_H - 2, bw, KEY_H), backText, null, false);
+        var lines = m.wrap(tr.apply(shown.captionKey()), view.w() - 8 - bw - 6);
+        int captionY = view.bottom() - 3 - lines.size() * Measure.LINE;
+        var caption = new ArrayList<Text>();
+        for (int i = 0; i < lines.size(); i++) caption.add(new Text(lines.get(i), view.x() + 4, captionY + i * Measure.LINE, Palette.TEXT));
+        int bottom = Math.min(captionY, back.rect().y()) - 4;
+        var room = new Rect(view.x() + 2, top + 1, view.w() - 4, Math.max(2, bottom - top - 2));
+        double scale = Math.min(room.w() / (double) shown.w(), room.h() / (double) shown.h());
+        int w = Math.max(1, (int) Math.round(shown.w() * scale)), h = Math.max(1, (int) Math.round(shown.h() * scale));
+        var image = new Rect(room.x() + (room.w() - w) / 2, room.y() + (room.h() - h) / 2, w, h);
+        return new PhotoPlace(shown, options, image, new Sprite(shown.texture(), 0, 0, shown.w(), shown.h(), shown.w(), shown.h()), caption, back);
     }
 
     private static int height(List<Row> rows, Rect view) {
