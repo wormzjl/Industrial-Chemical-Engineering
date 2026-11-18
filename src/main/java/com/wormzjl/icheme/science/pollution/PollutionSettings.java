@@ -13,12 +13,15 @@ package com.wormzjl.icheme.science.pollution;
  * @param cutoff the smallest index the field keeps
  * @param maximumCubes the most cubes the field holds
  * @param closedAirShare below this air share a cube is closed: it exchanges nothing, and its index uses this share
+ * @param riseShare share of a cube's amount carried to the cube above per {@code nominalSeconds}, on top of the face
+ *     exchange (warm, buoyant air rises; 0.12 doubles the upward face); the per-step share is capped at 1/7; 0 is the
+ *     field before the drift (batch 2026-11-18-pollution-propagation)
  */
 public record PollutionSettings(double faceShare, double nominalSeconds, double halfLifeOpenSeconds,
         double halfLifeEnclosedSeconds, double washout, double settlingShare, double cutoff, int maximumCubes,
-        double closedAirShare) {
+        double closedAirShare, double riseShare) {
     public static final PollutionSettings DEFAULT = new PollutionSettings(0.12, 20, 300, 3600, 4, 0.05, 1e-3, 8192,
-            0.02);
+            0.02, 0.12);
 
     public PollutionSettings {
         positive("faceShare", faceShare);
@@ -34,6 +37,9 @@ public record PollutionSettings(double faceShare, double nominalSeconds, double 
         }
         if (maximumCubes < 1) {
             throw new IllegalArgumentException("maximumCubes must be at least 1: " + maximumCubes);
+        }
+        if (!(riseShare >= 0.0) || !(riseShare <= 0.5)) {
+            throw new IllegalArgumentException("riseShare must be from 0 to 0.5: " + riseShare);
         }
         if (closedAirShare > 1.0) {
             throw new IllegalArgumentException("closedAirShare must not exceed 1: " + closedAirShare);

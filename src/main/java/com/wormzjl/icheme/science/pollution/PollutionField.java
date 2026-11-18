@@ -32,6 +32,8 @@ public final class PollutionField {
     private static final int[] DX = {-1, 1, 0, 0, 0, 0};
     private static final int[] DY = {0, 0, -1, 1, 0, 0};
     private static final int[] DZ = {0, 0, 0, 0, -1, 1};
+    /** The face toward the cube above. */
+    private static final int UP = 3;
     private static final Comparator<Release> RELEASE_ORDER = Comparator.comparingLong(Release::key)
             .thenComparingInt((Release release) -> release.channel().ordinal())
             .thenComparingLong((Release release) -> Double.doubleToLongBits(release.amount()));
@@ -222,6 +224,7 @@ public final class PollutionField {
      * <ol>
      *   <li>releases land in their cubes (loaded or not) and are booked {@code released};</li>
      *   <li>loaded, open-to-air cubes exchange with their six faces, simultaneously, from the higher index to the lower;
+     *       each also drifts a share of its amount to the cube above ({@code riseShare}), whatever the index there;
      *       the dimension's top and bottom are sinks ({@code dissipated}); a cube not yet in the field takes a channel
      *       only when the sum of its inflows gives it an index of at least {@code cutoff};</li>
      *   <li>particulate settles to the cube below (to {@code ground} over a closed cube or the bottom);</li>
@@ -287,6 +290,8 @@ public final class PollutionField {
         int n = work.keys.length;
         double closed = settings.closedAirShare();
         double k = Math.min(1.0 / 7.0, settings.faceShare() * seconds / settings.nominalSeconds());
+        // The upward drift: U = r min(φa, φb) A_a / φa toward the cube above, on top of the face exchange.
+        double r = Math.min(1.0 / 7.0, settings.riseShare() * seconds / settings.nominalSeconds());
         int minimumY = environment.minimumY();
         int maximumY = environment.maximumY();
         long[] keys = work.keys;
@@ -303,9 +308,11 @@ public final class PollutionField {
             int base = i * CHANNELS;
             for (int d = 0; d < 6; d++) {
                 int ny = y + DY[d];
+                boolean up = d == UP && r > 0.0;
                 if (ny < minimumY || ny > maximumY) {
+                    double share = up ? k + r : k;
                     for (int c = 0; c < CHANNELS; c++) {
-                        double f = k * a[base + c];
+                        double f = share * a[base + c];
                         delta[base + c] -= f;
                         book[PollutionLedger.slot(c, Total.DISSIPATED)] += f;
                     }
@@ -314,6 +321,15 @@ public final class PollutionField {
                 long neighbour = CubeKey.offset(key, DX[d], DY[d], DZ[d]);
                 int j = Arrays.binarySearch(keys, neighbour);
                 if (j >= 0) {
+                    if (up && work.loaded[j] && work.phi[j] >= closed) {
+                        double u = r * Math.min(phiA, work.phi[j]) / phiA;
+                        int above = j * CHANNELS;
+                        for (int c = 0; c < CHANNELS; c++) {
+                            double f = u * a[base + c];
+                            delta[base + c] -= f;
+                            delta[above + c] += f;
+                        }
+                    }
                     // Each face between two present cubes is computed once, from the cube with the smaller key.
                     if (neighbour < key || !work.loaded[j] || work.phi[j] < closed) {
                         continue;
@@ -328,7 +344,8 @@ public final class PollutionField {
                         delta[other + c] += f;
                     }
                 } else {
-                    front.offer(neighbour, i, a, base, phiA, k, closed, environment);
+                    // A new cube above takes the face share and the drift as one inflow, accepted or refused together.
+                    front.offer(neighbour, i, a, base, phiA, up ? k + r : k, closed, environment);
                 }
             }
         }

@@ -153,7 +153,8 @@ class PollutionFieldTest {
         double amount = 1e3 * N;
         Result r = pass(start(), List.of(new Release(top, Channel.TOXIC, amount),
                 new Release(bottom, Channel.COMBUSTIBLE, amount)), environment, PASS);
-        assertEquals(0.12 * amount, r.ledger().get(Channel.TOXIC, Total.DISSIPATED), 1e-12 * amount);
+        // The top face takes its face share and the upward drift; the bottom face its face share alone.
+        assertEquals((0.12 + 0.12) * amount, r.ledger().get(Channel.TOXIC, Total.DISSIPATED), 1e-12 * amount);
         assertEquals(0.12 * amount, r.ledger().get(Channel.COMBUSTIBLE, Total.DISSIPATED), 1e-12 * amount);
         assertCloses(r, 1e-12);
     }
@@ -267,7 +268,7 @@ class PollutionFieldTest {
 
     @Test
     void theCapRemovesTheLowestLoadedCubesFirst() {
-        PollutionSettings capped = new PollutionSettings(0.12, 20, 300, 3600, 4, 0.05, 1e-3, 3, 0.02);
+        PollutionSettings capped = new PollutionSettings(0.12, 20, 300, 3600, 4, 0.05, 1e-3, 3, 0.02, 0.12);
         Map<Long, Cell> cells = new HashMap<>();
         List<Release> releases = new ArrayList<>();
         for (int i = 1; i <= 5; i++) {
@@ -292,10 +293,15 @@ class PollutionFieldTest {
     @Test
     void theSteadyH2sPlumeMatchesThePlanNumbers() {
         // 1 mol/s of H2S, 20 mol per pass, reference 100 ppm: 2e5 air-mole equivalents per pass, ΔI = 1.19.
+        // The plan's numbers are those of the field without the upward drift (riseShare 0).
+        PollutionSettings still = PollutionDriftTest.settings(0.0, S.maximumCubes());
         Environment open = MapEnvironment.uniform(OPEN, false, BOTTOM, TOP);
         long source = CubeKey.of(0, 4, 0);
         double perPass = 2e5;
-        Result r = passes(start(), List.of(new Release(source, Channel.TOXIC, perPass)), open, 600);
+        Result r = start();
+        for (int p = 0; p < 600; p++) {
+            r = PollutionField.step(r.field(), r.ledger(), List.of(new Release(source, Channel.TOXIC, perPass)), open, PASS, still);
+        }
         double atSource = r.field().index(source, Channel.TOXIC, 1.0, S);
         double neighbour = r.field().index(CubeKey.of(1, 4, 0), Channel.TOXIC, 1.0, S);
         double second = r.field().index(CubeKey.of(2, 4, 0), Channel.TOXIC, 1.0, S);
@@ -306,6 +312,25 @@ class PollutionFieldTest {
         assertTrue(atSource >= 0.8 && atSource <= 1.0, "source after the pass " + atSource);
         assertTrue(neighbour >= 0.4 && neighbour <= 0.6, "face neighbour " + neighbour);
         assertTrue(second >= 0.1 && second <= 0.2, "second ring " + second);
+        assertCloses(r, 1e-9);
+    }
+
+    @Test
+    void theSteadyH2sPlumeRisesWithTheDrift() {
+        // The same source with the default drift (0.12): the plume stands lower at the source and its faces, higher
+        // above it; tmp/pollution-bench/Plume.java gives 0.594 at the source, 0.368 and 0.094 sideways, 0.665 above,
+        // 0.333 below, and the centre of mass 2.5 cubes above the source.
+        Environment open = MapEnvironment.uniform(OPEN, false, BOTTOM, TOP);
+        long source = CubeKey.of(0, 4, 0);
+        Result r = passes(start(), List.of(new Release(source, Channel.TOXIC, 2e5)), open, 600);
+        double atSource = r.field().index(source, Channel.TOXIC, 1.0, S);
+        double side = r.field().index(CubeKey.of(1, 4, 0), Channel.TOXIC, 1.0, S);
+        double above = r.field().index(CubeKey.of(0, 5, 0), Channel.TOXIC, 1.0, S);
+        double below = r.field().index(CubeKey.of(0, 3, 0), Channel.TOXIC, 1.0, S);
+        assertEquals(0.594, atSource, 0.01, "source after the pass");
+        assertEquals(0.368, side, 0.01, "face neighbour");
+        assertEquals(0.665, above, 0.01, "above");
+        assertEquals(0.333, below, 0.01, "below");
         assertCloses(r, 1e-9);
     }
 
