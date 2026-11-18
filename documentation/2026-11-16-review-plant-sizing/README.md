@@ -375,3 +375,11 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   `mod_version`, `VesselSection` to `src/test` (the only class new on this branch that the game does not reach), the
   translation commit and the final lane. Code guide: the chapters were updated with each package; the `VesselSection`
   row of `client-screens.md` says where the class stands.
+
+- 2026-11-18, after 0.35.0 (main thread; owner: "need to improve its model", "do the model here", "C: round, marked"): the
+  creative motor's model. Three options were drawn beside today's four boxes (A boxed, B round frame, C round frame
+  marked); C is built: `tools/pump-sprites/CreativeMotorAssets.java` writes `models/block/creative_motor.json` (15
+  boxes) and seven `creative_motor_*` sprites in the creative power block's colours; `CreativeMotorBlock`'s collision
+  boxes follow it through `HorizontalShapes.byFacing`. The shaft end keeps its place. Judged on the software views of
+  the tool, not in a client. The 43 classes of `affected.mjs select` ran: 287 tests, no failure. The data gland's place
+  is the terminal box lid's centre (north model 8, 16, 8.5, outward up); the socket itself is the pump thread's part C.

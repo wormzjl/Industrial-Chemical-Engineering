@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Changed
+
+- Creative motor model (`2026-11-16-review-plant-sizing`): an eight-sided finned frame with a fan cowl, feet, a terminal box and the creative plate replaces the four boxes; `tools/pump-sprites/CreativeMotorAssets.java`.
+
 ## [0.35.0] - 2026-11-18
 
 On `claude/column-testing-sizing-26b5b9`. Formats: fluid facts schema 30, checkpoint state format 53, equipment shape fields 14, protocol `icheme-7`, a new saved flag `icheme_column_test_world` (format 1); see `documentation/reference/FORMATS.md`.

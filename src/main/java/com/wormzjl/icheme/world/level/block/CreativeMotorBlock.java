@@ -10,10 +10,8 @@ import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-import java.util.EnumMap;
 import java.util.Map;
 
 /**
@@ -24,27 +22,9 @@ import java.util.Map;
  */
 public final class CreativeMotorBlock extends HorizontalDirectionalBlock {
     public static final MapCodec<CreativeMotorBlock> CODEC = simpleCodec(CreativeMotorBlock::new);
-    private static final Map<Direction, VoxelShape> SHAPES = new EnumMap<>(Direction.class);
-
-    static {
-        // Facing north: the base, the body, the shaft's stub out of the north face.
-        var base = Block.box(1, 0, 2, 15, 2, 15);
-        for (var facing : Direction.Plane.HORIZONTAL) {
-            VoxelShape body = switch (facing) {
-                case NORTH -> Shapes.or(Block.box(3, 2, 4, 13, 14, 15), Block.box(6.5, 6.5, 0, 9.5, 9.5, 4));
-                case SOUTH -> Shapes.or(Block.box(3, 2, 1, 13, 14, 12), Block.box(6.5, 6.5, 12, 9.5, 9.5, 16));
-                case EAST -> Shapes.or(Block.box(1, 2, 3, 12, 14, 13), Block.box(12, 6.5, 6.5, 16, 9.5, 9.5));
-                default -> Shapes.or(Block.box(4, 2, 3, 15, 14, 13), Block.box(0, 6.5, 6.5, 4, 9.5, 9.5));
-            };
-            var plate = switch (facing) {
-                case NORTH -> base;
-                case SOUTH -> Block.box(1, 0, 1, 15, 2, 14);
-                case EAST -> Block.box(1, 0, 1, 14, 2, 15);
-                default -> Block.box(2, 0, 1, 15, 2, 15);
-            };
-            SHAPES.put(facing, Shapes.or(plate, body));
-        }
-    }
+    /** Facing north, as the model of tools/pump-sprites/CreativeMotorAssets: the base, the frame and its cowl, the terminal box, the shaft's stub. */
+    private static final Map<Direction, VoxelShape> SHAPES = HorizontalShapes.byFacing(java.util.List.of(
+            new double[]{2, 0, 3, 14, 1, 15}, new double[]{2.5, 1, 4, 13.5, 13.5, 15}, new double[]{5, 12.5, 6, 11, 16, 11}, new double[]{6.5, 6.5, 0, 9.5, 9.5, 4}));
 
     public CreativeMotorBlock(Properties properties) {
         super(properties);

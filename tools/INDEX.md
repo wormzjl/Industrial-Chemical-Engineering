@@ -46,7 +46,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 | [device-names/](device-names/README.md) | Nameplate placement probe and plate-look renders | `2026-11-02-process-simulator` | In use since 2026-11-03 |
 | [simulator-bench/](simulator-bench/README.md) | Process simulator CPU, allocation, heap and draw-call bench on the bundled crude unit, with JFR | `2026-11-02-process-simulator` | In use since 2026-11-04 |
 | [rotating-machinery/](rotating-machinery/README.md) | Machine-law quick checks and campaigns, worked numbers, W2 hold traces and probes | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
-| [pump-sprites/](pump-sprites/README.md) | Machinery/control sprites and normal/low-detail render probes | `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing` | In use since 2026-11-04 |
+| [pump-sprites/](pump-sprites/README.md) | Machinery/control sprites and normal/low-detail render probes | `2026-11-03-rotating-machinery`, `2026-11-06-simulator-sizing`, `2026-11-16-review-plant-sizing` | In use since 2026-11-04; the creative motor's model added 2026-11-18 |
 | [still-sprites/](still-sprites/README.md) | Batch still sprites and textured still renders | `2026-11-09-batch-distiller` | In use since 2026-11-09 |
 | [batch-still-column/](batch-still-column/README.md) | B3 measurement: the bubble-point column candidate against V3 | `2026-11-09-batch-distiller` | Kept for reference since 2026-11-10 |
 | [machine-parts/](machine-parts/README.md) | Flat 16 x 16 machine part item icons (the pump repair kit, the pollution meter) | `2026-11-03-rotating-machinery` | In use since 2026-11-04 |
