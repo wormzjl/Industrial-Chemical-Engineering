@@ -1,15 +1,17 @@
 package com.wormzjl.icheme.runtime.control;
 
 import com.wormzjl.icheme.runtime.fluid.*;
+import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position;
 import com.wormzjl.icheme.runtime.instrument.*;
+import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.equipment.*;
 import com.wormzjl.icheme.science.fluid.network.*;
-import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.*;
 
 import net.minecraft.core.BlockPos;
 
 import java.util.*;
+import java.util.function.LongFunction;
 
 /**
  * The equipment on the data bus: each host's data port, the built-in bindings of equipment, a
@@ -25,11 +27,13 @@ final class ControlHosts {
             new HashMap<>();
     private final Map<Long, List<ControlInput>> memberInputs = new HashMap<>();
     private final Map<Long, Set<Long>> columnMembers = new HashMap<>();
+    private final Map<Long, Map<Long, BuiltInInputs.Binding>> memberBindings = new HashMap<>();
     private final Map<Long, Long> aliases = new HashMap<>();
-    /** The fixed pollution monitors bound this session, by host (WP10): where each reads its cube. */
+    /** The fixed pollution monitors, by host (WP10): where each reads its cube. */
     private final Map<Long, Monitor> monitors = new HashMap<>();
     private DataBus bus = new DataBus(List.of(), Map.of());
     private long busRevision = -1;
+    private boolean restored;
 
     ControlHosts(FluidWorldAuthority world, ControlFacts facts) {
         this.world = world;
@@ -42,34 +46,69 @@ final class ControlHosts {
                         });
     }
 
+    /** Reconstructs the engine bindings of saved data hosts before the first control cadence. */
+    void restoreSavedBindings() {
+        if (restored) return;
+        restored = true;
+        for (var port : equipmentPorts.values()) {
+            long host = port.host();
+            if (bindings.containsKey(host) || monitors.containsKey(host)) continue;
+            var shaft = world.shafts().unit(host);
+            if (shaft != null) {
+                if (shaft.kind() == com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR) {
+                    var shape = SavedEquipment.at(world, shaft.position());
+                    if (shape != null && shape.kind() == EquipmentShape.Kind.MOTOR)
+                        bindings.put(host, new BuiltInInputs.Binding(host, shape, shaft.position(), List.of()));
+                }
+                // Creative motors connect their drives through the saved port alone.
+                continue;
+            }
+            var vessel = SavedEquipment.ownedBy(world, port.dimension(), port.owner());
+            if (vessel != null) {
+                var origin = position(port.dimension(), vessel.origin());
+                if (vessel.shape().kind() == EquipmentShape.Kind.COLUMN)
+                    bindings.put(host, new BuiltInInputs.Binding(host, vessel.shape(), origin, List.of()));
+                else {
+                    var binding = equipmentBinding(origin, vessel.shape());
+                    if (binding.host() == host) remember(binding);
+                }
+                continue;
+            }
+            if (port.kind() == DataPort.Kind.SENSOR && !world.registrations().containsKey(host)) {
+                var tag = world.savedBlockEntity(port.dimension(), port.owner());
+                var level = world.serverLevel(port.dimension());
+                if (level != null && tag != null && "icheme:pollution_monitor".equals(tag.getString("id")))
+                    monitors.put(host, new Monitor(level.getServer(), level.dimension(), port.owner()));
+            }
+        }
+    }
+
+    private static Position position(String dimension, BlockPos pos) {
+        return new Position(dimension, pos.getX(), pos.getY(), pos.getZ());
+    }
+
+    private BuiltInInputs.Binding equipmentBinding(Position origin, EquipmentShape shape) {
+        var ids = new ArrayList<Long>();
+        for (var cell : ShapeRasterizer.fluidCells(shape)) {
+            var node = new Position(origin.dimension(), origin.x() + cell.x(), origin.y() + cell.y(), origin.z() + cell.z());
+            ids.add(world.at(node).map(r -> r.device().id()).orElse(0L));
+        }
+        long primary = ids.stream().filter(i -> i > 0).findFirst().orElse(0L);
+        return new BuiltInInputs.Binding(primary, shape, origin, ids);
+    }
+
+    private void remember(BuiltInInputs.Binding binding) {
+        bindings.put(binding.host(), binding);
+        for (long id : binding.nodes()) if (id > 0) aliases.put(id, binding.host());
+    }
+
     void bind(InstrumentHosts.Host host) {
         if (host.entity() instanceof EquipmentShellBlockEntity shell && shell.shape() != null) {
-            var nodes = ShapeRasterizer.fluidCells(shell.shape());
-            var ids = new ArrayList<Long>();
-            for (var node : nodes) {
-                var at = shell.origin().offset(node.x(), node.y(), node.z());
-                var pos =
-                        new PhysicalFluidTopology.Position(
-                                shell.getLevel().dimension().location().toString(),
-                                at.getX(),
-                                at.getY(),
-                                at.getZ());
-                ids.add(world.at(pos).map(r -> r.device().id()).orElse(0L));
-            }
-            if (!ids.isEmpty() && ids.getFirst() > 0) {
-                long primary = ids.getFirst();
-                bindings.put(
-                        primary,
-                        new BuiltInInputs.Binding(
-                                primary,
-                                shell.shape(),
-                                new PhysicalFluidTopology.Position(
-                                        shell.getLevel().dimension().location().toString(),
-                                        shell.origin().getX(),
-                                        shell.origin().getY(),
-                                        shell.origin().getZ()),
-                                ids));
-                for (long id : ids) if (id > 0) aliases.put(id, primary);
+            var origin = position(shell.getLevel().dimension().location().toString(), shell.origin());
+            var binding = equipmentBinding(origin, shell.shape());
+            if (binding.node(0) > 0) {
+                long primary = binding.host();
+                remember(binding);
                 if (host.identity() != primary) {
                     if (shell.instruments().dataPort() != null
                             && !facts.wired(shell.instruments().dataPort().id())) {
@@ -77,7 +116,7 @@ final class ControlHosts {
                         shell.instruments().dataPort(null);
                         syncPort(host);
                     }
-                    var cell = nodes.getFirst();
+                    var cell = ShapeRasterizer.fluidCells(shell.shape()).getFirst();
                     var pos = shell.origin().offset(cell.x(), cell.y(), cell.z());
                     if (shell.getLevel().getBlockEntity(pos)
                             instanceof EquipmentShellBlockEntity first)
@@ -336,72 +375,49 @@ final class ControlHosts {
      * chunk.
      */
     void refreshColumnMembers() {
-        for (var entry : columnCells.entrySet()) {
-            var cell = entry.getValue().get();
-            if (cell == null
-                    || cell.isRemoved()
-                    || !(cell.getLevel() instanceof net.minecraft.server.level.ServerLevel level))
-                continue;
+        var columns = bindings.values().stream().filter(b -> b.shape().kind() == EquipmentShape.Kind.COLUMN).toList();
+        for (var column : columns) {
+            var origin = column.origin();
+            var level = world.serverLevel(origin.dimension());
+            if (level == null) continue;
             var stored =
-                    com.wormzjl.icheme.runtime.assembly.AssemblyService.entry(level, cell.origin());
-            if (stored == null || stored.report() == null) {
-                memberInputs.remove(entry.getKey());
-                columnMembers.remove(entry.getKey());
-                continue;
-            }
-            var inputs = new ArrayList<ControlInput>();
-            var members = new HashSet<Long>();
-            for (var slot : stored.report().slots())
-                for (long placed : slot.units()) {
-                    var pos = BlockPos.of(placed);
-                    if (!level.hasChunkAt(pos)) continue;
-                    var vessel = EquipmentStructure.find(level, pos);
-                    if (vessel == null) continue;
-                    var ids = new ArrayList<Long>();
-                    for (var node : ShapeRasterizer.fluidCells(vessel.shape())) {
-                        var at = vessel.origin().offset(node.x(), node.y(), node.z());
-                        var where =
-                                new PhysicalFluidTopology.Position(
-                                        level.dimension().location().toString(),
-                                        at.getX(),
-                                        at.getY(),
-                                        at.getZ());
-                        ids.add(world.at(where).map(r -> r.device().id()).orElse(0L));
-                    }
-                    long primary = ids.stream().filter(i -> i > 0).findFirst().orElse(0L);
-                    if (primary == 0) continue;
-                    members.addAll(ids.stream().filter(i -> i > 0).toList());
-                    var binding =
-                            new BuiltInInputs.Binding(
-                                    primary,
-                                    vessel.shape(),
-                                    new PhysicalFluidTopology.Position(
-                                            level.dimension().location().toString(),
-                                            vessel.origin().getX(),
-                                            vessel.origin().getY(),
-                                            vessel.origin().getZ()),
-                                    ids);
-                    bindings.put(primary, binding);
-                    for (long node : ids) if (node > 0) aliases.put(node, primary);
-                    String prefix =
-                            slot.slot().part()
-                                    + "_"
-                                    + (slot.slot().index() + 1)
-                                    + "_EQ"
-                                    + primary
-                                    + "_";
-                    for (var input : BuiltInInputs.member(binding))
-                        inputs.add(
-                                ControlInput.builtIn(
-                                        entry.getKey(),
-                                        input.source(),
-                                        prefix + input.channel(),
-                                        input.kind(),
-                                        input.role()));
-                }
-            memberInputs.put(entry.getKey(), List.copyOf(inputs));
-            columnMembers.put(entry.getKey(), Set.copyOf(members));
+                    com.wormzjl.icheme.runtime.assembly.AssemblyService.entry(level, new BlockPos(origin.x(), origin.y(), origin.z()));
+            refreshColumnMembers(column.host(), stored == null ? null : stored.report(), placed -> {
+                var member = position(origin.dimension(), BlockPos.of(placed));
+                var shape = SavedEquipment.at(world, member);
+                return shape == null ? null : equipmentBinding(member, shape);
+            });
         }
+    }
+
+    void refreshColumnMembers(long host, AssemblyReport report, LongFunction<BuiltInInputs.Binding> read) {
+        if (report == null || report.members().isEmpty()) {
+            memberInputs.remove(host);
+            columnMembers.remove(host);
+            memberBindings.remove(host);
+            return;
+        }
+        var inputs = new ArrayList<ControlInput>();
+        var members = new HashSet<Long>();
+        var origins = new HashSet<>(report.members());
+        var previous = memberBindings.getOrDefault(host, Map.of());
+        var present = new HashMap<Long, BuiltInInputs.Binding>();
+        for (var slot : report.slots())
+            for (long placed : slot.units()) {
+                if (!origins.contains(placed)) continue;
+                var binding = read.apply(placed);
+                if (binding == null || binding.host() == 0) binding = previous.get(placed);
+                if (binding == null) continue;
+                present.put(placed, binding);
+                for (long node : binding.nodes()) if (node > 0) members.add(node);
+                remember(binding);
+                String prefix = slot.slot().part() + "_" + (slot.slot().index() + 1) + "_EQ" + binding.host() + "_";
+                for (var input : BuiltInInputs.member(binding))
+                    inputs.add(ControlInput.builtIn(host, input.source(), prefix + input.channel(), input.kind(), input.role()));
+            }
+        memberInputs.put(host, List.copyOf(inputs));
+        columnMembers.put(host, Set.copyOf(members));
+        memberBindings.put(host, present);
     }
 
     /** Connected physical host IDs, independent of chunk loading and menu subscriptions. */
@@ -422,6 +438,7 @@ final class ControlHosts {
         columnCells.remove(host);
         memberInputs.remove(host);
         columnMembers.remove(host);
+        memberBindings.remove(host);
         monitors.remove(host);
         aliases.entrySet().removeIf(a -> a.getKey() == host || a.getValue() == host);
         var port = equipmentPorts.remove(host);
@@ -531,9 +548,8 @@ final class ControlHosts {
 
     /** The master position of column host {@code host}, or null where {@code host} is no column's (W6.3: a column loop's output). */
     PhysicalFluidTopology.Position columnMaster(long host) {
-        if (!columnCells.containsKey(host)) return null;
         var binding = bindings.get(host);
-        return binding == null ? null : binding.origin();
+        return binding != null && binding.shape().kind() == EquipmentShape.Kind.COLUMN ? binding.origin() : null;
     }
 
     /** The data port registered for an equipment host, or null. */

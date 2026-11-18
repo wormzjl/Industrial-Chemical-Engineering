@@ -640,7 +640,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
             // A cell outside the box of the current layout stays bound until its vessel is refreshed (it was placed by
             // a larger one); the box it was placed by, when saved, bounds it.
             int[] cell = tag.getIntArray("Cell"), placed = tag.contains("Box") ? tag.getIntArray("Box") : new int[3];
-            if (cell.length != 3 || cell[0] < 0 || cell[1] < 0 || cell[2] < 0 || cell[0] >= MAX_CELL || cell[1] >= MAX_CELL || cell[2] >= MAX_CELL)
+            if (cell.length != 3 || !validSavedCell(cell[0], cell[1], cell[2]))
                 throw new IllegalArgumentException("Cell outside any vessel");
             if (placed.length != 3 || placed[0] < 0 || placed[1] < 0 || placed[2] < 0 || placed[0] > MAX_CELL || placed[1] > MAX_CELL || placed[2] > MAX_CELL)
                 throw new IllegalArgumentException("Invalid placed box");
@@ -673,6 +673,11 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         } catch (IllegalArgumentException invalid) {
             IChemE.LOGGER.warn("Equipment shell at {} has invalid data and stays unbound: {}", worldPosition, invalid.getMessage());
         }
+    }
+
+    /** Valid bounds for the local cell coordinates stored in a shell tag. */
+    public static boolean validSavedCell(int x, int y, int z) {
+        return x >= 0 && x < MAX_CELL && y >= 0 && y < MAX_CELL && z >= 0 && z < MAX_CELL;
     }
 
     private void write(CompoundTag tag) {

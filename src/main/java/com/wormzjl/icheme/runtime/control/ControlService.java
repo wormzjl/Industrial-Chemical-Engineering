@@ -54,7 +54,7 @@ public final class ControlService {
         law = new ControlLaw(world, hosts);
         plans = new ControlPlans(world);
         publication = new ControlPublication(world, facts, hosts);
-        alarms = new ControlAlarms(world, facts, hosts);
+        alarms = new ControlAlarms(world::serverLevel, facts, hosts);
     }
 
     public ControlFacts facts() {
@@ -342,6 +342,7 @@ public final class ControlService {
         if (tick % CADENCE != 0) return;
         if (facts.panels().isEmpty() && publication.idle() && edits.isEmpty() && columnCommands.isEmpty() && converterCommands.isEmpty() && plans.isEmpty() && alarms.idle())
             return;
+        hosts.restoreSavedBindings();
         long busRevision = hosts.busRevision();
         if (driveRevision != busRevision) {
             driveRevision = busRevision;

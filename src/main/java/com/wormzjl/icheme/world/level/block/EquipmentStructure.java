@@ -336,10 +336,17 @@ public final class EquipmentStructure {
     public static @Nullable Vessel at(BlockGetter level, BlockPos origin) {
         var vessel = find(level, origin);
         if (vessel != null && vessel.origin().equals(origin)) return vessel;
+        return at(origin, pos -> level.getBlockEntity(pos) instanceof EquipmentShellBlockEntity shell && shell.shape() != null
+                ? new Vessel(shell.origin(), shell.shape()) : null);
+    }
+
+    /** The same bottom-layer origin search over a supplied shell reader, which may read saved cells without a level. */
+    public static @Nullable Vessel at(BlockPos origin, java.util.function.Function<BlockPos, Vessel> shellAt) {
         for (int dx = 0; dx <= FIND_STEPS; dx++)
-            for (int dz = 0; dz <= FIND_STEPS; dz++)
-                if (level.getBlockEntity(origin.offset(dx, 0, dz)) instanceof EquipmentShellBlockEntity shell && shell.shape() != null && origin.equals(shell.origin()))
-                    return new Vessel(origin, shell.shape());
+            for (int dz = 0; dz <= FIND_STEPS; dz++) {
+                var candidate = shellAt.apply(origin.offset(dx, 0, dz));
+                if (candidate != null && origin.equals(candidate.origin())) return candidate;
+            }
         return null;
     }
 

@@ -1,5 +1,11 @@
 package com.wormzjl.icheme.runtime.fluid;
 
+import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.ColumnOperatingPoint;
+import com.wormzjl.icheme.science.equipment.ColumnTrays;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
 import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import com.wormzjl.icheme.science.plant.column.Condition;
@@ -15,6 +21,10 @@ import com.wormzjl.icheme.science.fluid.network.PortPlan;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.integrity.Metallurgy;
+import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.ChunkPos;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction;
@@ -938,6 +948,89 @@ class ColumnRunTest {
         // A stopped unit keeps no engine state.
         var u=again.ledger.column(r.unit());assertNull(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()).state());
     }
+
+    @Test void aColdReloadAsksForAFreshSolveFromTheRegistryOrAnOlderSavedShell() {
+        var condenser = ColumnComponents.Condenser.AIR_COOLER;
+        var trays = ColumnTrays.of(Fake.DESIGN);
+        var components = new ColumnComponents(condenser, ColumnComponents.Pump.STANDARD,
+                Collections.nCopies(trays.pumparounds().size(), ColumnComponents.Pump.STANDARD), false, false);
+        double diameter = 4;
+        var shape = EquipmentShape.column(diameter, trays.withComponents(components).withOperating(ColumnOperatingPoint.of(Fake.DESIGN)),
+                EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(diameter));
+        for (boolean legacy : List.of(false, true)) {
+            var original = rig(0, new Fake(0));
+            var world = original.world();
+            long unit = original.unit();
+            var master = world.ledger.column(unit).master();
+            if (!legacy) world.ledger.structure(master, WorldTopologyLedger.Structure.of(shape, Paint.DEFAULT));
+            var bytes = FluidCheckpointCodec.encodeTopology(world.ledger.snapshot());
+            var saved = FluidCheckpointCodec.decodeTopology(bytes, world.ledger.onlineTick(), k -> world.model);
+            var again = new EventPathWorld(1, saved, world.entries());
+
+            var olderShell = new CompoundTag();
+            EquipmentShellBlockEntity.writeShape(olderShell, shape);
+            olderShell.putString("id", "icheme:equipment_shell");
+            olderShell.putIntArray("Cell", new int[] {1, 0, 0});
+            var shellAt = new BlockPos(master.x() + 1, master.y(), master.z());
+            var solve = new Fake(0);
+            solve.world = again;
+            solve.model = again.model;
+            var equipment = new SavedEquipment();
+            var ops = new ColumnOperation(again.ledger, again.registry, again.coordinator,
+                    again.model.components(), again.model.molecularWeights());
+            ops.solves(new ColumnOperation.Solves() {
+                private EquipmentShape structure(ColumnUnit column) {
+                    return equipment.at(column.master(), again.ledger::structure, at -> {
+                        assertTrue(legacy, "a registry shape needs no shell tag");
+                        return shellAt.equals(at) ? olderShell : null;
+                    });
+                }
+
+                @Override public V3ColumnInput design(ColumnUnit column) {
+                    return SavedEquipment.columnInput(structure(column));
+                }
+
+                @Override public ColumnComponents.Condenser condenser(ColumnUnit column) {
+                    return SavedEquipment.columnCondenser(structure(column));
+                }
+
+                @Override public boolean submit(long id, ColumnSolve.Job job, java.util.function.Consumer<ColumnSolve.Outcome> done) {
+                    return solve.submit(id, job, done);
+                }
+            });
+            again.coordinator.ports(ops);
+            ops.refresh();
+            solve.runTo(again.ledger.onlineTick() + 700);
+            var start = solve.jobs.stream().filter(job -> job.trigger() == DriftBands.Trigger.START).findFirst().orElseThrow();
+            assertEquals(diameter, start.design().columnDiameterMetres());
+            assertEquals(condenser, start.condenser());
+            assertNotNull(ops.run(unit).table, "the solve was applied");
+        }
+    }
+
+    @Test void aLegacyShapeMissIsReadAgainWhenItsChunkLoads() {
+        var equipment = new SavedEquipment();
+        var master = new PhysicalFluidTopology.Position(EventPathWorld.DIM, 15, 70, 0);
+        var owner = new BlockPos(16, 70, 0);
+        var shape = EquipmentShape.column(4, ColumnTrays.simple(12, 6), EquipmentShape.Heading.NORTH,
+                EquipmentShape.minimumSkirt(4));
+        var shell = new CompoundTag();
+        EquipmentShellBlockEntity.writeShape(shell, shape);
+        shell.putString("id", "icheme:equipment_shell");
+        shell.putIntArray("Cell", new int[] {1, 0, 0});
+        var tags = new HashMap<BlockPos, CompoundTag>();
+        assertNull(equipment.at(master, ignored -> null, tags::get));
+        tags.put(owner, shell);
+        assertNull(equipment.at(master, ignored -> null, ignored -> fail("the miss must be cached")));
+
+        equipment.invalidate(master.dimension(), ChunkPos.asLong(1, 0));
+        assertEquals(shape, equipment.at(master, ignored -> null, tags::get));
+        assertEquals(shape, equipment.at(master, ignored -> null, ignored -> fail("the resolved shape must be cached")));
+        equipment.invalidate(master);
+        tags.clear();
+        assertNull(equipment.at(master, ignored -> null, tags::get));
+    }
+
     /** A solver's hydraulics where the worst tray stands at 0.6 of flood per unit of reflux ratio at the design feed (0.5 mol/s): tray 12, vapour limited. */
     private static SplitTable.Flood floodByReflux(ColumnSolve.Job job){return new SplitTable.Flood(.6*job.setpoints().refluxRatio()/.5,12,true,1000,3000);}
     private void reflux(Rig r,double ratio){var u=r.world().ledger.column(r.unit());var s=u.setpoints();

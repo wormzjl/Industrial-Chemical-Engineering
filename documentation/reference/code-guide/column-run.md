@@ -43,6 +43,7 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | [`runtime/fluid/ColumnPower`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnPower.java) | `ColumnOperation.Power` over `ElectricStores` and `ShaftTrains`: fan sides on their store (`ElectricStores.member`), a casing's rated shaft power on its train (`ShaftTrains.held`), an in-line pump on its own store; `undriven` | 68 |
 | [`runtime/assembly/ColumnStarts`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ColumnStarts.java) | From a complete assembly report to a start request (`build`, `port`): ports, the condenser's water sides, the air condenser's surface, the reboiler's and pumparound coolers' heat sides, the fan sides and the pumps' movers | 151 |
 | `runtime/fluid/FluidWorldAuthority` (`startColumn`, `stopColumn`, `editColumn`, `columnRemoved`, `columnView`, `columnCondenser`, `columnAlarms`, `columnLoop`, `columnInstrument`) | Start and Stop as one queued ledger event each; utility sides (`utilitySides`), held members; [runtime-registry.md](runtime-registry.md) | |
+| [`runtime/fluid/SavedEquipment`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/SavedEquipment.java) | Reads the built shape by origin for a solve and for assembly member inputs. Uses the registry's build facts and caches the saved-shell search for older worlds. | |
 | [`science/fluid/network/PortPlan`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/PortPlan.java), `PassiveStepSolver.ports` | One slice's mass target on a port's valve; an outlet's generator stated at its product | 32 |
 | [`science/equipment/ColumnOperatingPoint`](../../../src/main/java/com/wormzjl/icheme/science/equipment/ColumnOperatingPoint.java) | The design's solved input, a shape field of `ColumnTrays` (`operating`): package, assay, components, feed, pressures, condenser, reflux, reboiler, steam, draws, pumparounds; `of(input)`, `fits`, `input(trays, diameter)` | 123 |
 | [`client/gui/common/OperationColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/OperationColumn.java) | The Operation page ([client-equipment-screens.md](client-equipment-screens.md)) | 493 |
@@ -59,6 +60,8 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 3. **First solve.** `ColumnOperation.refresh` makes a `Run` with status `STARTING`; the first cycle asks a START solve of
    the design (no seed), submitted through `Solves.submit` (`ProcessSolveServices.submitColumnUnit`,
    `ColumnUnitCommand(job, model, liquidSupplyScreenRatio)`). Nothing moves until the table applies.
+   The first solve and later solves get the built diameter, trays, operating point and condenser from the saved
+   structure, including after a restart with the shell unloaded.
 4. **Run.** `due` → `cycle` (→ `ColumnCycle.step`) each cycle; `IslandCoordinator` calls `plans` at an island's
    dispatch (→ `PortPlan` → `PassiveStepSolver.ports`) and `booked` at its commit; `decide` (the `Ports` hook, called
    at each decision point after the shafts) runs `due`.
@@ -264,7 +267,10 @@ stopped unit with no stations when its set points are applied. A DCS sends the s
   advisories, the seed, the pending solve, the wakes and the draw curves. After a load each utility's heat rate starts
   from the table, and a unit whose pumparounds have cooler sides asks one Start solve to sample its draw curves.
 - **Shape**: `ColumnTrays.operating` (`ColumnDesignTags.writeOperating`, `ShapeRepair.SavedOperating.resolve`; an
-  unreadable one repairs to none). Corpus `src/test/resources/compat/equipment/shapes-4.snbt`.
+  unreadable one repairs to none). `BuildFacts` already stores the complete shape by origin. When a legacy save
+  lacks the build record, `SavedEquipment` reads existing shell tags through region storage without loading chunks.
+  The lookup caches a found shape or a miss until the registry changes that origin or a searched chunk loads.
+  Corpus `src/test/resources/compat/equipment/shapes-4.snbt`.
 - **Protocol**: the assembly protocol's operation view (`AssemblyView.operation`, `OperationPayload`,
   `AssemblyNetwork.encodeOperation`, `decodeOperation`; the DCS page reads the same bytes). Every number:
   [FORMATS.md](../FORMATS.md).
@@ -275,6 +281,7 @@ stopped unit with no stations when its set points are applied. A DCS sends the s
 |---|---|---|
 | Conservation, the fence, plans, booking, solves' timing, rules A and B in the world, Stop and dismantle, utilities, power, reloads | `ColumnOperation` | `ColumnRunTest` (with `aColumnsProductsDoNotDependOnWhenItsIslandsJobsComplete`, `aHorizonPassedBeforeItsDeadlineFiresWithACycleDueBehindIt`, `aStoppedUnitWithNoStationsSurvivesTheFacts`) |
 | Held devices, ports | `startColumn`, `PhysicalFluidTopology` | `ColumnSuspensionTest` |
+| Fresh solves with unloaded equipment | `SavedEquipment`, `ColumnOperation` | `ColumnRunTest` (`aColdReloadAsksForAFreshSolveFromTheRegistryOrAnOlderSavedShell`, `aLegacyShapeMissIsReadAgainWhenItsChunkLoads`) |
 | A boundary line's regulation | `PortPlan`, `PassiveStepSolver.ports` | `RegulatingValveHoldTest` ([fluid-step.md](fluid-step.md)) |
 | Probes, the live drop | `ColumnUnit.Probes`, `drop` | `ColumnProbeTest` (`theLiveDropIsTheSolvedOneAtTheTablesFeedAndItsDryPartGoesWithTheSquare`) |
 | Facts, shapes, the wire, the page | `ColumnFacts`, `ColumnUnit`, `OperationView`, `OperationColumn` | `FluidFactsCompatTest`, `EquipmentShapeCompatTest` (`equipmentGates`), `AssemblyNetworkCodecTest`, `AssemblyPresentationTest`, `OperationColumnTest` |

@@ -60,6 +60,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
     final Chimneys chimneys;
     /** The batch stills (batch 2026-11-09-batch-distiller, W3 to W5). */
     final Stills stills;
+    private final SavedChunkData chunkData = new SavedChunkData();
+    private final SavedEquipment savedEquipment = new SavedEquipment();
+    SavedEquipment savedEquipment(){return savedEquipment;}
     /** The steam ejectors' motive slice inputs (batch 2026-11-10-steam-ejector-flow). */
     private final Ejectors ejectors;
     /** The fluid converters (batch 2026-11-12-fluid-conversion, W2): their ports share the port hooks with the columns. */
@@ -327,7 +330,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
     /** Records the structure whose origin is {@code origin}; null removes it. A load of a chunk of its box queues it for its re-alignment. */
     public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure) {
-        owned();var old=topology.structure(origin);if(old!=null){chunks.indexStructure(origin,old,false);nozzles.index(origin,old,false);}
+        owned();savedEquipment.invalidate(origin);var old=topology.structure(origin);if(old!=null){chunks.indexStructure(origin,old,false);nozzles.index(origin,old,false);}
         topology.structure(origin,structure);if(structure!=null){chunks.indexStructure(origin,structure,true);nozzles.index(origin,structure,true);}data.setDirty();
         // The far silhouettes follow the registry (W10): its subscribers see the change at the next presentation bucket.
         if(!Objects.equals(old,structure))silhouettes.changed(origin.dimension());
@@ -723,6 +726,22 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The shaft trains (W3): queue their parts' events here; their views are reads. */
     public ShaftTrains shafts(){owned();return shafts;}
     /** The electric stores (W5): the FE ports' side and their views are reads and the FE protocol only. */
+    /** A legacy cell's saved facts, including cells outside the active chunk set. */
+    public net.minecraft.nbt.CompoundTag savedBlockEntity(String dimension, BlockPos pos) {
+        owned();
+        var level = serverLevel(dimension);
+        return level == null ? null : chunkData.blockEntity(level, pos);
+    }
+    /** Structure origins whose registered bounds meet the inclusive chunk rectangle. */
+    public List<PhysicalFluidTopology.Position> structuresInChunks(String dimension,int firstX,int lastX,int firstZ,int lastZ) {
+        owned();
+        var index = chunks.structureChunks.getOrDefault(dimension, Map.of());
+        var found = new TreeSet<>(Comparator.comparingInt(PhysicalFluidTopology.Position::x)
+                .thenComparingInt(PhysicalFluidTopology.Position::y).thenComparingInt(PhysicalFluidTopology.Position::z));
+        for (int x = firstX; x <= lastX; x++) for (int z = firstZ; z <= lastZ; z++)
+            found.addAll(index.getOrDefault(net.minecraft.world.level.ChunkPos.asLong(x,z), Set.of()));
+        return List.copyOf(found);
+    }
     public ElectricStores electric(){owned();return electric;}
     /** The fired heaters' burners: their views and alarms are reads. */
     public FiredHeaters burners(){owned();return burners;}
@@ -1509,29 +1528,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /**
      * The calculator input of the design of the column at {@code master}, as built (its shell's diameter), or null where it
-     * cannot be read: no operating point, or its chunk not loaded (a read never loads one).
+     * has no saved operating point. Legacy shell data is read without loading the chunk.
      */
     private com.wormzjl.icheme.science.column.v3.V3ColumnInput columnDesign(PhysicalFluidTopology.Position master) {
-        var vessel=columnVessel(master);
-        if(vessel==null)return null;
-        var trays=vessel.shape().trays();var point=trays.operating();
-        return point==null||!point.fits(trays)?null:point.input(trays,vessel.shape().diameter());
+        return SavedEquipment.columnInput(SavedEquipment.at(this,master));
     }
-    /** The condenser of the column at {@code master}'s design: water-cooled where it has none. */
     private com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser columnCondenser(PhysicalFluidTopology.Position master) {
-        var vessel=columnVessel(master);
-        return vessel==null||vessel.shape().trays().components()==null?com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.EXCHANGER:vessel.shape().trays().components().condenser();
-    }
-    /** The loaded column vessel at {@code master}, or null. */
-    private com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel columnVessel(PhysicalFluidTopology.Position master) {
-        for(var level:server.getAllLevels()) {
-            if(!level.dimension().location().toString().equals(master.dimension()))continue;
-            var at=new net.minecraft.core.BlockPos(master.x(),master.y(),master.z());
-            if(!level.isLoaded(at))return null;
-            var vessel=com.wormzjl.icheme.world.level.block.EquipmentStructure.at(level,at);
-            return vessel==null||vessel.shape().trays()==null?null:vessel;
-        }
-        return null;
+        return SavedEquipment.columnCondenser(SavedEquipment.at(this,master));
     }
     /** The column at {@code master} is gone (plan section 12): it stops, and its accounts leave the world, booked as destroyed. */
     public void columnRemoved(PhysicalFluidTopology.Position master) {
@@ -1820,7 +1823,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * structures recorded over it, are queued for their re-alignment (REGISTRY_FIRST_PLAN.md 4.2, 4.4). Never loads a chunk
      * or runs a solve.
      */
-    public void loadedChunk(ResourceKey<Level> dimension,long chunk){owned();if(closed)return;chunks.loadedChunk(dimension,chunk);}
+    public void loadedChunk(ResourceKey<Level> dimension,long chunk) {
+        owned();
+        if (closed) return;
+        String name = dimension.location().toString();
+        savedEquipment.invalidate(name, chunk);
+        chunks.loadedChunk(dimension,chunk);
+    }
     /**
      * The next registration of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued
      * (registry first, REGISTRY_FIRST_PLAN.md 4.2). Each registration of a loaded chunk is queued once, at the load.

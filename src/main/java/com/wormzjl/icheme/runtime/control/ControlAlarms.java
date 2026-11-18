@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.runtime.control;
 
 import com.wormzjl.icheme.registry.ModBlocks;
-import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.instrument.Instrument;
 import com.wormzjl.icheme.runtime.instrument.Sensor;
 import com.wormzjl.icheme.world.inventory.AlarmBeaconMenu;
@@ -9,9 +8,11 @@ import com.wormzjl.icheme.world.level.block.AlarmBeaconBlock;
 import com.wormzjl.icheme.world.level.block.entity.AlarmBeaconBlockEntity;
 
 import net.minecraft.nbt.*;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * The alarm beacons' duties at the control cadence (batch 2026-11-15-fluid-interfaces, W9, plan section 5.1): their
@@ -24,7 +25,7 @@ final class ControlAlarms {
 
     private record Edit(AlarmBeaconMenu menu, UUID id, long revision, AlarmSettings settings) {}
 
-    private final FluidWorldAuthority world;
+    private final Function<String, ServerLevel> levels;
     private final ControlFacts facts;
     private final ControlHosts hosts;
     private final Map<UUID, AlarmLaw.State> states = new HashMap<>();
@@ -36,8 +37,8 @@ final class ControlAlarms {
     private final Set<AlarmBeaconMenu> watchers = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<UUID, CompoundTag> published = new HashMap<>();
 
-    ControlAlarms(FluidWorldAuthority world, ControlFacts facts, ControlHosts hosts) {
-        this.world = world;
+    ControlAlarms(Function<String, ServerLevel> levels, ControlFacts facts, ControlHosts hosts) {
+        this.levels = levels;
         this.facts = facts;
         this.hosts = hosts;
     }
@@ -74,6 +75,7 @@ final class ControlAlarms {
         if (!port.equals(facts.port(alarm.id()))) facts.port(port);
         facts.alarm(alarm);
         if (!alarm.id().equals(beacon.identity()) || !port.equals(beacon.dataPort())) beacon.bind(alarm.id(), port);
+        draw(alarm);
     }
 
     /** Whether an alarm beacon's facts stand in cell {@code pos} of {@code dimension}. */
@@ -159,26 +161,13 @@ final class ControlAlarms {
     }
 
     /**
-     * Every beacon whose chunk is loaded decides, after the loops (plan section 5.1): its acknowledgement first, then its
-     * sample and {@link AlarmLaw#decide}; its block state changes only when what it shows changes (a relight).
+     * Every registered beacon decides after the loops: its acknowledgement first, then its sample and {@link AlarmLaw#decide}.
+     * A standing beacon draws the resulting state.
      */
     void run(Map<UUID, ControlInput> inputs, Map<UUID, Sensor.Reading> readings) {
         var acks = Set.copyOf(acknowledged);
         acknowledged.clear();
         for (var alarm : facts.alarms().stream().sorted(Comparator.comparing(a -> a.id().toString())).toList()) {
-            var level = world.serverLevel(alarm.dimension());
-            var pos = alarm.position();
-            if (level == null || !level.hasChunkAt(pos)) continue;
-            var state = level.getBlockState(pos);
-            if (!state.is(ModBlocks.ALARM_BEACON.get())
-                    || !(level.getBlockEntity(pos) instanceof AlarmBeaconBlockEntity beacon)
-                    || !beacon.identity().equals(alarm.id())) {
-                // Not this beacon's block (another block holds its cell): not decided, and not active.
-                states.remove(alarm.id());
-                status.put(alarm.id(), AlarmLaw.Status.NO_SIGNAL);
-                shown.remove(alarm.id());
-                continue;
-            }
             var previous = states.getOrDefault(alarm.id(), AlarmLaw.State.NONE);
             if (acks.contains(alarm.id())) previous = AlarmLaw.acknowledge(previous);
             var sample = sample(alarm, inputs, readings);
@@ -188,10 +177,28 @@ final class ControlAlarms {
             status.put(alarm.id(), decision.status());
             if (sample == null) shown.remove(alarm.id());
             else shown.put(alarm.id(), sample.value());
-            var drawn = drawn(decision.status());
-            if (state.getValue(AlarmBeaconBlock.STATE) != drawn)
-                level.setBlock(pos, state.setValue(AlarmBeaconBlock.STATE, drawn), Block.UPDATE_ALL);
+            draw(alarm);
         }
+    }
+
+    /** This beacon's last cadence, OFF before its first decision. */
+    AlarmLaw.Status status(UUID id) {
+        return status.getOrDefault(id, AlarmLaw.Status.OFF);
+    }
+
+    /** Replay a cached decision on a matching block in an already loaded chunk. */
+    private void draw(ControlFacts.Alarm alarm) {
+        var level = levels.apply(alarm.dimension());
+        var pos = alarm.position();
+        var chunk = level == null ? null : level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        if (chunk == null) return;
+        var state = chunk.getBlockState(pos);
+        if (!state.is(ModBlocks.ALARM_BEACON.get())
+                || !(chunk.getBlockEntity(pos) instanceof AlarmBeaconBlockEntity beacon)
+                || !beacon.identity().equals(alarm.id())) return;
+        var lamp = drawn(status(alarm.id()));
+        if (state.getValue(AlarmBeaconBlock.STATE) != lamp)
+            level.setBlock(pos, state.setValue(AlarmBeaconBlock.STATE, lamp), Block.UPDATE_ALL);
     }
 
     /** What the block shows for {@code status}. */
