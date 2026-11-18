@@ -49,11 +49,11 @@ import java.util.function.Supplier;
  *
  * <p>Schema 2 (batch 2026-11-18-ground-pollution), append-only, each key absent for a dimension with no ground (and in
  * every schema-1 store, which reads with an empty ground): {@code ground_columns} (long array of chunk columns,
- * {@code MapColumns.column}), {@code ground_amounts} (long array of double bits, four per column), {@code ground_ledger}
- * (long array of 16 double bits, channel-major, {@link GroundLedger.Total} order), {@code ground_ledger_compounds} (list of
- * {@code {n: name, t: long array of 4 double bits}}), {@code ground_compounds} (list of {@code {c: column, ch: channel
- * name, n: compound name, m: moles bits}}), {@code ground_pending} (list of {@code {c: column, a: long array of 4 double
- * bits, k: list of {ch, n, m}}}). Damaged ground arrays drop that dimension's ground alone, with a note; a compound name
+ * {@code MapColumns.column}), {@code ground_amounts} (long array of double bits, one per column: the ground has one amount,
+ * owner 2026-11-18), {@code ground_ledger} (long array of 4 double bits, {@link GroundLedger.Total} order),
+ * {@code ground_ledger_compounds} (list of {@code {n: name, t: long array of 4 double bits}}), {@code ground_compounds}
+ * (list of {@code {c: column, n: compound name, m: moles bits}}), {@code ground_pending} (list of {@code {c: column, a:
+ * amount bits, k: list of {n, m}}}). Damaged ground arrays drop that dimension's ground alone, with a note; a compound name
  * is kept as saved even when no package holds it (a fact).</p>
  */
 public final class PollutionStore extends SavedData {
@@ -65,7 +65,7 @@ public final class PollutionStore extends SavedData {
     private static final int CHANNELS = Channel.values().length;
     private static final int TOTALS = PollutionLedger.Total.values().length;
 
-    /** The largest amount a saved ground channel may hold: index 10^6. */
+    /** The largest amount a saved ground column may hold: index 10^6. */
     public static final double MAXIMUM_GROUND_AMOUNT = 1e6 * GroundField.GROUND_REFERENCE;
 
     /** One dimension's saved facts: the air field, its ledger and pending releases; the ground, its ledger and pending deposits. */
@@ -352,7 +352,7 @@ public final class PollutionStore extends SavedData {
         var ground = saved.ground();
         d.putLongArray("ground_columns", ground.columns());
         d.putLongArray("ground_amounts", bits(ground.amounts()));
-        d.putLongArray("ground_ledger", bits(saved.groundLedger().channels()));
+        d.putLongArray("ground_ledger", bits(saved.groundLedger().totals()));
         var ledgerCompounds = new ListTag();
         for (var e : saved.groundLedger().compounds().entrySet()) {
             var c = new CompoundTag();
@@ -365,7 +365,6 @@ public final class PollutionStore extends SavedData {
         for (var e : ground.entries()) {
             var c = new CompoundTag();
             c.putLong("c", e.column());
-            c.putString("ch", e.channel().name());
             c.putString("n", e.name());
             c.putLong("m", Double.doubleToRawLongBits(e.moles()));
             compounds.add(c);
@@ -375,11 +374,10 @@ public final class PollutionStore extends SavedData {
         for (var deposit : saved.groundPending()) {
             var p = new CompoundTag();
             p.putLong("c", deposit.column());
-            p.putLongArray("a", bits(deposit.amounts()));
+            p.putLong("a", Double.doubleToRawLongBits(deposit.amount()));
             var k = new ListTag();
             for (var compound : deposit.compounds()) {
                 var c = new CompoundTag();
-                c.putString("ch", compound.channel().name());
                 c.putString("n", compound.name());
                 c.putLong("m", Double.doubleToRawLongBits(compound.moles()));
                 k.add(c);
@@ -409,11 +407,7 @@ public final class PollutionStore extends SavedData {
                 if (!(t instanceof CompoundTag c)) {
                     throw new IllegalArgumentException("a ground compound is not a compound");
                 }
-                var channel = channel(c.getString("ch"));
-                if (channel == null) {
-                    throw new IllegalArgumentException("ground compound channel " + c.getString("ch"));
-                }
-                entries.add(new GroundField.Entry(c.getLong("c"), channel, c.getString("n"), Double.longBitsToDouble(c.getLong("m"))));
+                entries.add(new GroundField.Entry(c.getLong("c"), c.getString("n"), Double.longBitsToDouble(c.getLong("m"))));
             }
         }
         return GroundField.of(columnsTag.getAsLongArray(), amounts, entries);
@@ -439,11 +433,9 @@ public final class PollutionStore extends SavedData {
         } catch (RuntimeException damaged) {
             // As the air ledger: rebuilt from what the ground holds, deposited = stored.
             notes.add("dimension " + id + ": ground ledger rebuilt from the kept columns");
-            int totals = GroundLedger.Total.values().length;
+            int totals = GroundLedger.LENGTH;
             double[] book = new double[GroundLedger.LENGTH];
-            for (Channel channel : Channel.values()) {
-                book[channel.ordinal() * totals + GroundLedger.Total.DEPOSITED.ordinal()] = ground.stored(channel);
-            }
+            book[GroundLedger.Total.DEPOSITED.ordinal()] = ground.stored();
             var compounds = new TreeMap<String, double[]>();
             for (var e : ground.entries()) {
                 compounds.computeIfAbsent(e.name(), k -> new double[totals])[GroundLedger.Total.DEPOSITED.ordinal()] += e.moles();
@@ -461,7 +453,7 @@ public final class PollutionStore extends SavedData {
         }
         var out = new ArrayList<GroundField.Deposit>(list.size());
         for (Tag t : list) {
-            if (!(t instanceof CompoundTag p) || !(p.get("a") instanceof LongArrayTag a) || !(p.get("k") instanceof ListTag k)) {
+            if (!(t instanceof CompoundTag p) || !(p.get("a") instanceof net.minecraft.nbt.LongTag a) || !(p.get("k") instanceof ListTag k)) {
                 throw new IllegalArgumentException("a pending ground deposit is damaged");
             }
             var compounds = new ArrayList<GroundField.Compound>(k.size());
@@ -469,13 +461,9 @@ public final class PollutionStore extends SavedData {
                 if (!(x instanceof CompoundTag c)) {
                     throw new IllegalArgumentException("a pending compound is not a compound");
                 }
-                var channel = channel(c.getString("ch"));
-                if (channel == null) {
-                    throw new IllegalArgumentException("pending compound channel " + c.getString("ch"));
-                }
-                compounds.add(new GroundField.Compound(c.getString("n"), channel, Double.longBitsToDouble(c.getLong("m"))));
+                compounds.add(new GroundField.Compound(c.getString("n"), Double.longBitsToDouble(c.getLong("m"))));
             }
-            out.add(new GroundField.Deposit(p.getLong("c"), doubles(a.getAsLongArray()), compounds));
+            out.add(new GroundField.Deposit(p.getLong("c"), Double.longBitsToDouble(a.getAsLong()), compounds));
         }
         return out;
     }

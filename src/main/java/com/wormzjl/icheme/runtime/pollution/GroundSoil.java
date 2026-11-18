@@ -43,8 +43,8 @@ public final class GroundSoil {
         var snapshot = service.groundSnapshot(level.dimension());
         int served = 0;
         for (int i = 0; i < snapshot.size() && served < budget; i++) {
-            double worst = GroundSpoil.worst(snapshot.packed(i));
-            if (worst < GroundSpoil.SPOIL_LIMIT) {
+            double index = GroundSpoil.index(snapshot.value(i));
+            if (index < GroundSpoil.SPOIL_LIMIT) {
                 continue;
             }
             long column = snapshot.column(i);
@@ -54,7 +54,7 @@ public final class GroundSoil {
             }
             served++;
             var random = level.getRandom();
-            int attempts = GroundSpoil.attempts(worst, random.nextDouble());
+            int attempts = GroundSpoil.attempts(index, random.nextDouble());
             for (int a = 0; a < attempts; a++) {
                 pick(level, (x << 4) + random.nextInt(16), (z << 4) + random.nextInt(16));
             }
@@ -87,19 +87,19 @@ public final class GroundSoil {
         return changed;
     }
 
-    /** The four ground bytes of the column holding {@code pos}; 0 (clean) with pollution off or on any failure. */
-    static int packed(ServerLevel level, BlockPos pos) {
+    /** The ground byte of the column holding {@code pos}; 0 (clean) with pollution off or on any failure. */
+    static int value(ServerLevel level, BlockPos pos) {
         try {
             var service = PollutionService.find(level.getServer()).orElse(null);
             if (service == null || !service.enabled()) return 0;
-            return service.groundSnapshot(level.dimension()).packed(MapColumns.column(pos.getX() >> 4, pos.getZ() >> 4));
+            return service.groundSnapshot(level.dimension()).value(MapColumns.column(pos.getX() >> 4, pos.getZ() >> 4));
         } catch (RuntimeException failure) {
             return 0;
         }
     }
 
-    /** Whether polluted soil at {@code pos} turns back to dirt now: its column's worst index is below the recovery limit. */
+    /** Whether polluted soil at {@code pos} turns back to dirt now: its column's index is below the recovery limit. */
     public static boolean recovers(ServerLevel level, BlockPos pos) {
-        return GroundSpoil.recovers(packed(level, pos));
+        return GroundSpoil.recovers(value(level, pos));
     }
 }

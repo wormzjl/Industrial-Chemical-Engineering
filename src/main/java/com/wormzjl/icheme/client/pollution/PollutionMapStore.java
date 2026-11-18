@@ -24,7 +24,7 @@ public final class PollutionMapStore {
     /** The columns of the last answer, ascending (for {@link Arrays#binarySearch}), and their four bytes. */
     private static long[] columns = NONE;
     private static int[] values = NO_VALUES;
-    /** The ground's four bytes of each column (batch 2026-11-18-ground-pollution, G3), in the order of {@link #columns}. */
+    /** The ground's byte of each column (batch 2026-11-18-ground-pollution, G3), in the order of {@link #columns}. */
     private static int[] groundValues = NO_VALUES;
 
     private static Runnable changed = () -> {
@@ -107,7 +107,7 @@ public final class PollutionMapStore {
         return i < 0 ? 0 : values[i];
     }
 
-    /** The ground's four bytes of {@code column} in {@code dimensionId}; 0 when the store has none (no allocation). */
+    /** The ground's byte of {@code column} in {@code dimensionId}; 0 when the store has none (no allocation). */
     public static int ground(String dimensionId, long column) {
         if (!shows(dimensionId)) {
             return 0;
@@ -116,9 +116,9 @@ public final class PollutionMapStore {
         return i < 0 ? 0 : groundValues[i];
     }
 
-    /** The four bytes a square shows in the current {@link #layer}. */
+    /** The square's ARGB in the current {@link #layer}; 0 when it is not drawn. */
     public static int shown(String dimensionId, long column) {
-        return layer().shown(value(dimensionId, column), ground(dimensionId, column));
+        return layer().argb(value(dimensionId, column), ground(dimensionId, column));
     }
 
     /** The layer the squares show (G3, option A): the client's, kept in {@code icheme-client.toml}. */

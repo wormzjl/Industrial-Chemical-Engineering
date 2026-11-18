@@ -113,7 +113,7 @@ class PollutionDataTest {
         // Every key the tooltip names, in every layer (batch 2026-11-18-ground-pollution, G3): both layers, always.
         for (var layer : com.wormzjl.icheme.client.pollution.MapLayer.values()) {
             var lines = layer.tooltip(com.wormzjl.icheme.science.pollution.MapColumns.column(3, -4), 0, 0);
-            assertEquals(1 + 2 * 5, lines.size(), "a title, then the air's and the ground's header and four lines each");
+            assertEquals(1 + 5 + 1, lines.size(), "a title, the air's header and four lines, one ground line");
             for (var line : lines) {
                 assertTrue(english.has(line.key()), line.key());
                 for (var arg : line.args()) if (arg instanceof com.wormzjl.icheme.client.pollution.MapLayer.Key key) assertTrue(english.has(key.key()), key.key());

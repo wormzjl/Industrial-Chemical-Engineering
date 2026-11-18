@@ -13,7 +13,7 @@ import java.util.Locale;
  * ({@code tools/heat-gui-renders/GuiPrototypes}) draw the same lines.
  */
 public enum MapLayer {
-    /** The worse of air and ground per channel. */
+    /** The air's worst channel or the ground, whichever index is higher. */
     BOTH,
     AIR,
     GROUND;
@@ -32,12 +32,12 @@ public enum MapLayer {
         return "pollution.icheme.map.layer." + name().toLowerCase(Locale.ROOT);
     }
 
-    /** The four bytes this layer's square shows from the air's and the ground's. */
-    public int shown(int air, int ground) {
+    /** This layer's square as ARGB from the air's four bytes and the ground's byte; 0 when it is not drawn. */
+    public int argb(int air, int ground) {
         return switch (this) {
-            case AIR -> air;
-            case GROUND -> ground;
-            case BOTH -> MapColumns.worse(air, ground);
+            case AIR -> MapColumns.argb(air);
+            case GROUND -> MapColumns.groundArgb(ground);
+            case BOTH -> MapColumns.bothArgb(air, ground);
         };
     }
 
@@ -50,26 +50,25 @@ public enum MapLayer {
     }
 
     /**
-     * The tooltip of chunk column {@code column}: a title naming the chunk and the layer shown, then the "Air" and the
-     * "Ground" layer, each with its four channel lines, always both.
+     * The tooltip of chunk column {@code column}: a title naming the chunk and the layer shown, then the "Air" header with
+     * its four channel lines and the one "Ground" line, always both.
      */
     public List<Line> tooltip(long column, int air, int ground) {
         var out = new ArrayList<Line>();
         out.add(new Line("pollution.icheme.map.title", List.of(Integer.toString(MapColumns.x(column)), Integer.toString(MapColumns.z(column)), new Key(key())), null));
-        layer(out, "pollution.icheme.map.air", air);
-        layer(out, "pollution.icheme.map.ground", ground);
+        out.add(new Line("pollution.icheme.map.air", List.of(), null));
+        for (var channel : Channel.values()) {
+            int value = MapColumns.value(air, channel);
+            var word = Reading.word(channel, MapColumns.dequantise(value));
+            out.add(new Line("pollution.icheme.meter.line", List.of(new Key(nameKey(channel)), number(value), new Key(wordKey(word))), word));
+        }
+        var word = Reading.groundWord(MapColumns.dequantise(ground));
+        out.add(new Line("pollution.icheme.map.ground", List.of(number(ground), new Key(wordKey(word))), word));
         return out;
     }
 
-    private static void layer(List<Line> out, String header, int packed) {
-        out.add(new Line(header, List.of(), null));
-        for (var channel : Channel.values()) {
-            int value = MapColumns.value(packed, channel);
-            double index = MapColumns.dequantise(value);
-            var word = Reading.word(channel, index);
-            String number = Reading.number(index) + (value >= MapColumns.SATURATED ? "+" : "");
-            out.add(new Line("pollution.icheme.meter.line", List.of(new Key(nameKey(channel)), number, new Key(wordKey(word))), word));
-        }
+    private static String number(int value) {
+        return Reading.number(MapColumns.dequantise(value)) + (value >= MapColumns.SATURATED ? "+" : "");
     }
 
     /** The channel's name key (as the meter's). */

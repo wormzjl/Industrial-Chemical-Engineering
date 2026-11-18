@@ -5,14 +5,14 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 /**
  * Polluted ground spoils the surface (batch 2026-11-18-ground-pollution, G4b, owner 2026-11-18: "Do random block
  * transformations like vanilla"), as pure rules on a column's published bytes. Each world pass ({@code EFFECT_TICKS},
- * 1 s) a column whose worst ground index is at least {@link #SPOIL_LIMIT} gets {@link #attempts} random surface picks; a
+ * 1 s) a column whose ground index is at least {@link #SPOIL_LIMIT} gets {@link #attempts} random surface picks; a
  * pick removes the vegetation it meets and turns the first soil into polluted soil. Polluted soil turns back to dirt on
- * its random tick where the worst index is below {@link #RECOVERY_LIMIT}. The spoiling takes nothing from the ground.
+ * its random tick where the index is below {@link #RECOVERY_LIMIT}. The spoiling takes nothing from the ground.
  */
 public final class GroundSpoil {
-    /** Where the worst index is at least this, the surface spoils (the growth limit). */
+    /** Where the index is at least this, the surface spoils (the growth limit). */
     public static final double SPOIL_LIMIT = Exposure.MEDIUM;
-    /** Below this worst index, polluted soil recovers. */
+    /** Below this index, polluted soil recovers. */
     public static final double RECOVERY_LIMIT = Exposure.LOW;
     /** The surface positions of a chunk column. */
     public static final int POSITIONS = 256;
@@ -32,14 +32,12 @@ public final class GroundSpoil {
     private GroundSpoil() {
     }
 
-    /** A column's worst ground index from its four bytes. */
-    public static double worst(int packed) {
-        int worst = 0;
-        for (var channel : Channel.values()) worst = Math.max(worst, MapColumns.value(packed, channel));
-        return MapColumns.dequantise(worst);
+    /** A column's ground index from its byte. */
+    public static double index(int value) {
+        return MapColumns.dequantise(value);
     }
 
-    /** The expected picks of one pass at worst index {@code index}: 0 below the limit, at most {@link #MAXIMUM_ATTEMPTS}. */
+    /** The expected picks of one pass at index {@code index}: 0 below the limit, at most {@link #MAXIMUM_ATTEMPTS}. */
     public static double expectedAttempts(double index) {
         if (!(index >= SPOIL_LIMIT)) return 0.0;
         return Math.min(MAXIMUM_ATTEMPTS, index * ATTEMPTS_PER_INDEX);
@@ -68,7 +66,7 @@ public final class GroundSpoil {
     }
 
     /** Whether polluted soil in a column of these bytes turns back to dirt on its random tick. */
-    public static boolean recovers(int packed) {
-        return worst(packed) < RECOVERY_LIMIT;
+    public static boolean recovers(int value) {
+        return index(value) < RECOVERY_LIMIT;
     }
 }

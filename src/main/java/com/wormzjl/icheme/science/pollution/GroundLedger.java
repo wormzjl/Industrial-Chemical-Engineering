@@ -8,9 +8,10 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 /**
- * Where every ground amount went (batch 2026-11-18-ground-pollution): per channel in air-mole equivalents and per compound
- * in moles, {@code deposited = stored + decayed + drawn + capped}, exact to rounding ({@link #closure}). The air ledger's
- * {@code GROUND} total keeps its own meaning (what left the air field or an outfall for the ground). Immutable.
+ * Where every ground amount went (batch 2026-11-18-ground-pollution): the one amount in air-mole equivalents and each
+ * compound in moles, {@code deposited = stored + decayed + drawn + capped}, exact to rounding ({@link #closure}). The air
+ * ledger's {@code GROUND} total keeps its own per-channel meaning (what each channel sent to the ground, settled
+ * particulate included). Immutable.
  */
 public final class GroundLedger {
     public enum Total {
@@ -20,26 +21,22 @@ public final class GroundLedger {
         CAPPED
     }
 
-    static final int TOTALS = Total.values().length;
-    /** Length of {@link #channels()}: channel-major, {@code channel.ordinal() * 4 + total.ordinal()}. */
-    public static final int LENGTH = Channel.values().length * TOTALS;
+    /** Length of {@link #totals()}: one value per {@link Total}. */
+    public static final int LENGTH = Total.values().length;
     public static final GroundLedger EMPTY = new GroundLedger(new double[LENGTH], new TreeMap<>());
 
-    private final double[] channels;
+    private final double[] totals;
     private final TreeMap<String, double[]> compounds;
 
     /** Takes the arrays without a copy or a check. */
-    private GroundLedger(double[] channels, TreeMap<String, double[]> compounds) {
-        this.channels = channels;
+    private GroundLedger(double[] totals, TreeMap<String, double[]> compounds) {
+        this.totals = totals;
         this.compounds = compounds;
     }
 
-    static int slot(int channel, Total total) {
-        return channel * TOTALS + total.ordinal();
-    }
-
-    public double get(Channel channel, Total total) {
-        return channels[slot(channel.ordinal(), total)];
+    /** The amount's total, in air-mole equivalents. */
+    public double get(Total total) {
+        return totals[total.ordinal()];
     }
 
     /** A compound's total in moles; 0 for a compound never deposited. */
@@ -48,9 +45,9 @@ public final class GroundLedger {
         return row == null ? 0.0 : row[total.ordinal()];
     }
 
-    /** The channel totals for a save: channel-major, length {@link #LENGTH}. */
-    public double[] channels() {
-        return channels.clone();
+    /** The amount's totals for a save, in {@link Total} order (a copy). */
+    public double[] totals() {
+        return totals.clone();
     }
 
     /** The compound totals for a save, by name, each four values in {@link Total} order (copies). */
@@ -61,35 +58,27 @@ public final class GroundLedger {
     }
 
     /** Reads saved totals; refuses a wrong length, a non-finite or a negative value. */
-    public static GroundLedger of(double[] channels, Map<String, double[]> compounds) {
-        Objects.requireNonNull(channels, "channels");
+    public static GroundLedger of(double[] totals, Map<String, double[]> compounds) {
+        Objects.requireNonNull(totals, "totals");
         Objects.requireNonNull(compounds, "compounds");
-        if (channels.length != LENGTH) {
-            throw new IllegalArgumentException("ground ledger needs " + LENGTH + " values, got " + channels.length);
-        }
-        for (double v : channels) valid(v);
+        if (totals.length != LENGTH) throw new IllegalArgumentException("ground ledger needs " + LENGTH + " values, got " + totals.length);
+        for (double v : totals) valid(v);
         var copy = new TreeMap<String, double[]>();
         for (var e : compounds.entrySet()) {
-            if (e.getValue().length != TOTALS) {
-                throw new IllegalArgumentException("compound " + e.getKey() + " needs " + TOTALS + " totals");
-            }
+            if (e.getValue().length != LENGTH) throw new IllegalArgumentException("compound " + e.getKey() + " needs " + LENGTH + " totals");
             for (double v : e.getValue()) valid(v);
             copy.put(Objects.requireNonNull(e.getKey(), "compound"), e.getValue().clone());
         }
-        return new GroundLedger(channels.clone(), copy);
+        return new GroundLedger(totals.clone(), copy);
     }
 
     private static void valid(double v) {
-        if (!(v >= 0.0) || !Double.isFinite(v)) {
-            throw new IllegalArgumentException("ground ledger value must be finite and not negative: " + v);
-        }
+        if (!(v >= 0.0) || !Double.isFinite(v)) throw new IllegalArgumentException("ground ledger value must be finite and not negative: " + v);
     }
 
-    /** {@code deposited − (stored + decayed + drawn + capped)} of a channel; zero to rounding. */
-    public double closure(Channel channel, GroundField field) {
-        int c = channel.ordinal();
-        return channels[slot(c, Total.DEPOSITED)] - (field.stored(channel) + channels[slot(c, Total.DECAYED)]
-                + channels[slot(c, Total.DRAWN)] + channels[slot(c, Total.CAPPED)]);
+    /** {@code deposited − (stored + decayed + drawn + capped)} of the amount; zero to rounding. */
+    public double closure(GroundField field) {
+        return get(Total.DEPOSITED) - (field.stored() + get(Total.DECAYED) + get(Total.DRAWN) + get(Total.CAPPED));
     }
 
     /** {@code deposited − (stored + decayed + drawn + capped)} of a compound, moles; zero to rounding. */
@@ -102,53 +91,50 @@ public final class GroundLedger {
     Book book() {
         var copy = new TreeMap<String, double[]>();
         for (var e : compounds.entrySet()) copy.put(e.getKey(), e.getValue().clone());
-        return new Book(channels.clone(), copy);
+        return new Book(totals.clone(), copy);
     }
 
     /** The step's working ledger. */
     static final class Book {
-        final double[] channels;
+        final double[] totals;
         final TreeMap<String, double[]> compounds;
 
-        private Book(double[] channels, TreeMap<String, double[]> compounds) {
-            this.channels = channels;
+        private Book(double[] totals, TreeMap<String, double[]> compounds) {
+            this.totals = totals;
             this.compounds = compounds;
         }
 
-        void channel(int channel, Total total, double amount) {
-            channels[slot(channel, total)] += amount;
+        void amount(Total total, double amount) {
+            totals[total.ordinal()] += amount;
         }
 
         void compound(String name, Total total, double moles) {
-            compounds.computeIfAbsent(name, k -> new double[TOTALS])[total.ordinal()] += moles;
+            compounds.computeIfAbsent(name, k -> new double[LENGTH])[total.ordinal()] += moles;
         }
 
         GroundLedger ledger() {
-            return new GroundLedger(channels, compounds);
+            return new GroundLedger(totals, compounds);
         }
     }
 
     @Override
     public boolean equals(Object other) {
-        if (!(other instanceof GroundLedger ledger) || !Arrays.equals(channels, ledger.channels)
-                || !compounds.keySet().equals(ledger.compounds.keySet())) {
+        if (!(other instanceof GroundLedger ledger) || !Arrays.equals(totals, ledger.totals) || !compounds.keySet().equals(ledger.compounds.keySet())) {
             return false;
         }
-        for (var e : compounds.entrySet()) {
-            if (!Arrays.equals(e.getValue(), ledger.compounds.get(e.getKey()))) return false;
-        }
+        for (var e : compounds.entrySet()) if (!Arrays.equals(e.getValue(), ledger.compounds.get(e.getKey()))) return false;
         return true;
     }
 
     @Override
     public int hashCode() {
-        int h = Arrays.hashCode(channels);
+        int h = Arrays.hashCode(totals);
         for (var e : compounds.entrySet()) h = 31 * h + e.getKey().hashCode() * 17 + Arrays.hashCode(e.getValue());
         return h;
     }
 
     @Override
     public String toString() {
-        return "GroundLedger" + Arrays.toString(channels) + " compounds " + compounds.keySet();
+        return "GroundLedger" + Arrays.toString(totals) + " compounds " + compounds.keySet();
     }
 }

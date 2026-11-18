@@ -244,13 +244,14 @@ class PollutionEngineTest {
     /**
      * What the spill law leaves on the ground (batches 2026-11-18-water-intake-outfall and -ground-pollution): the air
      * ledger's GROUND at once, never the air field, kept across a pass in flight; the next pass lands it in the ground
-     * field, whose ledger closes per channel and per compound.
+     * field (one amount: the sum of the channels), whose ledger closes for the amount and per compound. Its deposited total
+     * is what the spills sent; the air gives the ground nothing (owner, 2026-11-18).
      */
     @Test
     void whatGoesToTheGroundIsBookedAndNeverEntersTheField() {
         var engine = new PollutionEngine();
         long column = com.wormzjl.icheme.science.pollution.MapColumns.column(0, 0);
-        engine.deposit(column, amounts(Channel.TOXIC, 40_000), List.of(new com.wormzjl.icheme.science.pollution.GroundField.Compound("crude_pc08", Channel.TOXIC, 0.044)));
+        engine.deposit(column, amounts(Channel.TOXIC, 40_000), List.of(new com.wormzjl.icheme.science.pollution.GroundField.Compound("crude_pc08", 0.044)));
         assertEquals(40_000.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.RELEASED));
         assertEquals(40_000.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.GROUND));
         assertEquals(0, engine.field().size(), "nothing in the air");
@@ -268,10 +269,12 @@ class PollutionEngineTest {
         assertEquals(0.044 * Math.pow(2, -20 / 14400.0), engine.ground().moles(column, "crude_pc08"), 1e-12, "landed, then a pass of decay");
         assertEquals(1, engine.pendingDeposits().size(), "the particulate made during the pass waits");
         engine.complete(engine.begin(OPEN, 20, SETTINGS).orElseThrow().run());
-        assertTrue(engine.ground().amount(column, Channel.PARTICULATE) > 0, "and lands at the next");
         var ground = engine.groundLedger();
-        for (var channel : Channel.values()) assertEquals(0, ground.closure(channel, engine.ground()), 1e-9, "the ground ledger closes: " + channel);
+        assertEquals(0, ground.closure(engine.ground()), 1e-9, "the ground ledger closes");
         assertEquals(0, ground.closure("crude_pc08", engine.ground()), 1e-15);
-        assertEquals(40_000.0, ground.get(Channel.TOXIC, com.wormzjl.icheme.science.pollution.GroundLedger.Total.DEPOSITED), 0, "deposited is what the air ledger booked ground");
+        assertEquals(47_000.0, ground.get(com.wormzjl.icheme.science.pollution.GroundLedger.Total.DEPOSITED), 0,
+                "deposited is the sum over the channels of what the spills sent, and only that");
+        assertEquals(engine.ground().column(0), column, "the one column the spills reached");
+        assertEquals(1, engine.ground().size(), "the air settled nothing onto the ground");
     }
 }

@@ -122,7 +122,7 @@ public final class GuiPrototypes {
     /**
      * The pollution map's layers (batch 2026-11-18-ground-pollution, G3, option A): a 7 by 5 chunk patch of the FTB Chunks
      * large map with an air plume to the east and polluted ground to the west, its squares in each layer
-     * ({@link com.wormzjl.icheme.client.pollution.MapLayer#shown}, {@link com.wormzjl.icheme.science.pollution.MapColumns#argb}),
+     * ({@link com.wormzjl.icheme.client.pollution.MapLayer#argb}: the air's worst colour, the ground's brown, or the higher of the two),
      * and the tooltip of the middle chunk ({@link com.wormzjl.icheme.client.pollution.MapLayer#tooltip}) in the game's colours.
      * The map and the tooltip are FTB's and vanilla's, not the panel's: the light and dark doors only frame them.
      */
@@ -136,7 +136,7 @@ public final class GuiPrototypes {
                     int x = ox + cx * cell, y = oy + cz * cell;
                     d.c.fill(x, y, x + cell, y + cell, ((cx + cz) & 1) == 0 ? 0xFF5E8C3A : 0xFF6A9442);
                     int air = mapAir(cx, cz), ground = mapGround(cx, cz);
-                    int argb = com.wormzjl.icheme.science.pollution.MapColumns.argb(layer.shown(air, ground));
+                    int argb = layer.argb(air, ground);
                     if (argb != 0) d.c.fill(x, y, x + cell, y + cell, argb);
                 }
                 d.c.outline(ox + 3 * cell, oy + 2 * cell, cell, cell, 0xFFFFFFFF);
@@ -171,12 +171,10 @@ public final class GuiPrototypes {
         return com.wormzjl.icheme.science.pollution.MapColumns.quantise(index < 0.1 ? 0 : index) << 8 * com.wormzjl.icheme.science.pollution.Channel.TOXIC.ordinal();
     }
 
-    /** The polluted ground of the map sheets: west of the middle, corrosive, with a little toxic. */
+    /** The polluted ground of the map sheets: west of the middle, one byte. */
     static int mapGround(int cx, int cz) {
         double d = Math.hypot(cx - 1.5, cz - 2), index = 2.0 / (1 + d * d);
-        if (index < 0.1) return 0;
-        return com.wormzjl.icheme.science.pollution.MapColumns.quantise(index) << 8 * com.wormzjl.icheme.science.pollution.Channel.CORROSIVE.ordinal()
-                | com.wormzjl.icheme.science.pollution.MapColumns.quantise(index * 0.3) << 8 * com.wormzjl.icheme.science.pollution.Channel.TOXIC.ordinal();
+        return index < 0.1 ? 0 : com.wormzjl.icheme.science.pollution.MapColumns.quantise(index);
     }
 
     /**

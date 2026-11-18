@@ -33,6 +33,8 @@ public final class MapColumns {
     public static final int COMBUSTIBLE_RGB = 0xFF9800;
     public static final int CORROSIVE_RGB = 0xFFEB3B;
     public static final int PARTICULATE_RGB = 0x9E9E9E;
+    /** The ground layer's colour (batch 2026-11-18-ground-pollution, one amount): a brown apart from the four air colours. */
+    public static final int GROUND_RGB = 0x8D5524;
 
     private static final Channel[] CHANNELS = Channel.values();
     /** The byte of {@link #DRAW_FLOOR}: a column whose worst byte is below it is not kept. */
@@ -219,8 +221,8 @@ public final class MapColumns {
     }
 
     /**
-     * Columns with two layers of four bytes each (batch 2026-11-18-ground-pollution, G3): the air's (worst cube) and the
-     * ground's, in the same order; a layer with nothing at a column is 0 there.
+     * Columns with two layers (batch 2026-11-18-ground-pollution, G3): the air's four bytes (worst cube) and the ground's
+     * one byte, in the same order; a layer with nothing at a column is 0 there.
      */
     public record Layers(long[] columns, int[] air, int[] ground) {
         public static final Layers EMPTY = new Layers(new long[0], new int[0], new int[0]);
@@ -240,7 +242,7 @@ public final class MapColumns {
     }
 
     /**
-     * The union of the air's drawn columns and the ground's columns whose worst byte reaches {@link #DRAW_FLOOR}, sorted by
+     * The union of the air's drawn columns and the ground's columns whose byte reaches {@link #DRAW_FLOOR}, sorted by
      * column, each with both layers' bytes.
      */
     public static Layers layers(Columns air, GroundSnapshot ground) {
@@ -249,8 +251,8 @@ public final class MapColumns {
         var merged = new java.util.TreeMap<Long, int[]>();
         for (int i = 0; i < air.size(); i++) merged.computeIfAbsent(air.columns()[i], k -> new int[2])[0] = air.values()[i];
         for (int i = 0; i < ground.size(); i++) {
-            int packed = ground.packed(i);
-            if (worstByte(packed) >= MINIMUM_BYTE) merged.computeIfAbsent(ground.column(i), k -> new int[2])[1] = packed;
+            int value = ground.value(i);
+            if (value >= MINIMUM_BYTE) merged.computeIfAbsent(ground.column(i), k -> new int[2])[1] = value;
         }
         long[] columns = new long[merged.size()];
         int[] airValues = new int[merged.size()], groundValues = new int[merged.size()];
@@ -280,9 +282,15 @@ public final class MapColumns {
         return new Layers(picked.columns(), air, ground);
     }
 
-    /** Per channel the larger of two columns' bytes: what a square shows for both layers at once. */
-    public static int worse(int a, int b) {
-        return merge(a, b);
+    /** The ground's square as ARGB: {@link #GROUND_RGB} at the alpha of its index; 0 when it is not drawn. */
+    public static int groundArgb(int value) {
+        int alpha = alpha(dequantise(value));
+        return alpha == 0 ? 0 : alpha << 24 | GROUND_RGB;
+    }
+
+    /** Both layers' square: the air's worst channel or the ground, whichever index is higher (the air on a tie). */
+    public static int bothArgb(int air, int ground) {
+        return ground > worstByte(air) ? groundArgb(ground) : argb(air);
     }
 
     // ---------------------------------------------------------------------------------------------------------------

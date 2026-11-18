@@ -39,7 +39,8 @@ public final class PollutionEngine {
 
     /**
      * One pass: the air step, then the ground step (batch 2026-11-18-ground-pollution, G2) over immutable snapshots, on one
-     * worker. The ground takes the pending deposits and what the air step settled. {@link #run} is what the worker calls.
+     * worker. The ground takes only the pending deposits: the air gives it nothing (owner, 2026-11-18: "do not let ground
+     * absorb air pollution for now"). {@link #run} is what the worker calls.
      */
     public record Pass(PollutionField field, PollutionLedger ledger, List<Release> releases, Environment environment,
             double seconds, PollutionSettings settings, GroundField ground, GroundLedger groundLedger,
@@ -62,14 +63,7 @@ public final class PollutionEngine {
 
         public Outcome run() {
             var air = PollutionField.step(field, ledger, releases, environment, seconds, settings);
-            List<GroundField.Deposit> landing = deposits;
-            if (!air.deposits().isEmpty()) {
-                var all = new ArrayList<GroundField.Deposit>(deposits.size() + air.deposits().size());
-                all.addAll(deposits);
-                all.addAll(air.deposits());
-                landing = all;
-            }
-            var groundResult = GroundField.step(ground, groundLedger, landing, groundEnvironment, seconds, groundSettings);
+            var groundResult = GroundField.step(ground, groundLedger, deposits, groundEnvironment, seconds, groundSettings);
             return new Outcome(air, groundResult);
         }
     }
@@ -82,26 +76,24 @@ public final class PollutionEngine {
         }
     }
 
-    /** The deposits of one column waiting for a pass: amounts summed, compounds summed by channel and name. */
+    /** The deposits of one column waiting for a pass: the amount summed, compounds summed by name. */
     private static final class PendingColumn {
-        final double[] amounts = new double[Channel.values().length];
-        final TreeMap<String, double[]> compounds = new TreeMap<>();
+        double amount;
+        final TreeMap<String, Double> compounds = new TreeMap<>();
 
-        void add(double[] a, List<GroundField.Compound> list) {
-            for (int c = 0; c < amounts.length; c++) amounts[c] += a[c];
-            for (var compound : list) {
-                compounds.computeIfAbsent(compound.name(), k -> new double[amounts.length])[compound.channel().ordinal()] += compound.moles();
-            }
+        void add(double a, List<GroundField.Compound> list) {
+            amount += a;
+            for (var compound : list) compounds.merge(compound.name(), compound.moles(), Double::sum);
+        }
+
+        void add(GroundField.Deposit deposit) {
+            add(deposit.amount(), deposit.compounds());
         }
 
         GroundField.Deposit deposit(long column) {
             var list = new ArrayList<GroundField.Compound>();
-            for (var e : compounds.entrySet()) {
-                for (int c = 0; c < amounts.length; c++) {
-                    if (e.getValue()[c] > 0.0) list.add(new GroundField.Compound(e.getKey(), Channel.values()[c], e.getValue()[c]));
-                }
-            }
-            return new GroundField.Deposit(column, amounts, list);
+            for (var e : compounds.entrySet()) if (e.getValue() > 0.0) list.add(new GroundField.Compound(e.getKey(), e.getValue()));
+            return new GroundField.Deposit(column, amount, list);
         }
     }
 
@@ -218,9 +210,10 @@ public final class PollutionEngine {
     }
 
     /**
-     * Puts {@code amounts} (air-mole equivalents, four channels) and {@code compounds} on the ground of {@code column}
-     * (batch 2026-11-18-ground-pollution; what a waste outfall or a spill leaves on the ground). The air ledger books the
-     * amounts {@code RELEASED} and {@code GROUND} at once ({@link PollutionLedger#grounded}), and again on the result of a
+     * Puts {@code amounts} (air-mole equivalents, by air channel) and {@code compounds} on the ground of {@code column}
+     * (batch 2026-11-18-ground-pollution; what a waste outfall or a spill leaves on the ground): the ground takes their sum
+     * as its one amount. The air ledger books each channel's amount {@code RELEASED} and {@code GROUND} at once
+     * ({@link PollutionLedger#grounded}), and again on the result of a
      * pass in flight, which was stepped from the ledger before it; the deposit waits for the next pass, which lands it in
      * the ground field. Nothing enters the air field. A deposit with a non-finite or negative value is ignored and counted;
      * a new column beyond {@link #MAXIMUM_PENDING} is dropped and counted.
@@ -228,13 +221,18 @@ public final class PollutionEngine {
     public void deposit(long column, double[] amounts, List<GroundField.Compound> compounds) {
         GroundField.Deposit deposit;
         try {
-            deposit = new GroundField.Deposit(column, amounts, compounds);
+            if (amounts == null || amounts.length != Channel.values().length) throw new IllegalArgumentException("four channel amounts");
+            double sum = 0.0;
+            for (double a : amounts) {
+                if (!(a >= 0.0) || !Double.isFinite(a)) throw new IllegalArgumentException("amount " + a);
+                sum += a;
+            }
+            deposit = new GroundField.Deposit(column, sum, compounds);
         } catch (RuntimeException invalid) {
             ignored++;
             return;
         }
-        boolean any = false;
-        for (double a : amounts) any |= a > 0.0;
+        boolean any = deposit.amount() > 0.0;
         for (var c : deposit.compounds()) any |= c.moles() > 0.0;
         if (!any) {
             return;
@@ -243,7 +241,7 @@ public final class PollutionEngine {
             dropped++;
             return;
         }
-        pendingDeposits.computeIfAbsent(column, k -> new PendingColumn()).add(amounts, deposit.compounds());
+        pendingDeposits.computeIfAbsent(column, k -> new PendingColumn()).add(deposit);
         for (Channel channel : Channel.values()) {
             double amount = amounts[channel.ordinal()];
             if (!(amount > 0.0)) continue;
@@ -315,7 +313,7 @@ public final class PollutionEngine {
             pending.merge(new PendingKey(release.key(), release.channel()), release.amount(), Double::sum);
         }
         for (var deposit : pass.deposits()) {
-            pendingDeposits.computeIfAbsent(deposit.column(), k -> new PendingColumn()).add(deposit.amounts(), deposit.compounds());
+            pendingDeposits.computeIfAbsent(deposit.column(), k -> new PendingColumn()).add(deposit);
         }
     }
 
@@ -333,11 +331,9 @@ public final class PollutionEngine {
         field = PollutionField.EMPTY;
         pending.clear();
         // The ground too: what it stored is booked capped (removed by a rule, not by its own decay).
-        double[] groundBook = groundLedger.channels();
-        int groundTotals = GroundLedger.Total.values().length;
-        for (Channel channel : Channel.values()) {
-            groundBook[channel.ordinal() * groundTotals + GroundLedger.Total.CAPPED.ordinal()] += ground.stored(channel);
-        }
+        double[] groundBook = groundLedger.totals();
+        int groundTotals = GroundLedger.LENGTH;
+        groundBook[GroundLedger.Total.CAPPED.ordinal()] += ground.stored();
         var groundCompounds = new TreeMap<String, double[]>(groundLedger.compounds());
         for (var e : ground.entries()) {
             groundCompounds.computeIfAbsent(e.name(), k -> new double[groundTotals])[GroundLedger.Total.CAPPED.ordinal()] += e.moles();
@@ -366,7 +362,7 @@ public final class PollutionEngine {
         this.groundSnapshot = GroundSnapshot.of(ground, groundSettings);
         this.pendingDeposits.clear();
         for (var deposit : groundPending) {
-            pendingDeposits.computeIfAbsent(deposit.column(), k -> new PendingColumn()).add(deposit.amounts(), deposit.compounds());
+            pendingDeposits.computeIfAbsent(deposit.column(), k -> new PendingColumn()).add(deposit);
         }
         this.field = Objects.requireNonNull(field, "field");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
@@ -411,8 +407,8 @@ public final class PollutionEngine {
             return pendingDeposits();
         }
         var merged = new TreeMap<Long, PendingColumn>();
-        for (var e : pendingDeposits.entrySet()) merged.computeIfAbsent(e.getKey(), k -> new PendingColumn()).add(e.getValue().amounts, e.getValue().deposit(e.getKey()).compounds());
-        for (var d : inFlight.deposits()) merged.computeIfAbsent(d.column(), k -> new PendingColumn()).add(d.amounts(), d.compounds());
+        for (var e : pendingDeposits.entrySet()) merged.computeIfAbsent(e.getKey(), k -> new PendingColumn()).add(e.getValue().deposit(e.getKey()));
+        for (var d : inFlight.deposits()) merged.computeIfAbsent(d.column(), k -> new PendingColumn()).add(d);
         var out = new ArrayList<GroundField.Deposit>(merged.size());
         for (var e : merged.entrySet()) out.add(e.getValue().deposit(e.getKey()));
         return Collections.unmodifiableList(out);

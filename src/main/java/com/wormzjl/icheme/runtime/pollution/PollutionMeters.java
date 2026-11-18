@@ -153,8 +153,7 @@ public final class PollutionMeters {
             // The ground of the column underfoot (batch 2026-11-18-ground-pollution, G3), from the published snapshot.
             var snapshot = service.groundSnapshot(player.level().dimension());
             long column = com.wormzjl.icheme.science.pollution.MapColumns.column(pos.getX() >> 4, pos.getZ() >> 4);
-            double[] ground = new double[CHANNELS.length];
-            for (var channel : CHANNELS) ground[channel.ordinal()] = snapshot.index(column, channel);
+            double ground = snapshot.index(column);
             for (var line : fullReading(pos, indices[0], indices[1], indices[2], indices[3], cell, ground)) {
                 player.displayClientMessage(line, false);
             }
@@ -205,30 +204,23 @@ public final class PollutionMeters {
     /** The chat lines of a full reading: the cube, the four channels, and the cube's air. */
     public static List<Component> fullReading(BlockPos pos, double toxic, double combustible, double corrosive, double particulate,
             Environment.Cell cell) {
-        return fullReading(pos, toxic, combustible, corrosive, particulate, cell, null);
+        return fullReading(pos, toxic, combustible, corrosive, particulate, cell, 0.0);
     }
 
     /**
-     * {@link #fullReading(BlockPos, double, double, double, double, Environment.Cell)} and then, when {@code ground} holds
-     * any index above 0, the ground of the chunk column underfoot: a header and its four channels, in the same words and
-     * colours (batch 2026-11-18-ground-pollution, G3).
+     * {@link #fullReading(BlockPos, double, double, double, double, Environment.Cell)} and then, when {@code ground} is above
+     * 0, the ground of the chunk column underfoot in one line, its word and colour on the toxic scale
+     * ({@link Reading#groundWord}; batch 2026-11-18-ground-pollution, one amount).
      */
     public static List<Component> fullReading(BlockPos pos, double toxic, double combustible, double corrosive, double particulate,
-            Environment.Cell cell, double[] ground) {
+            Environment.Cell cell, double ground) {
         var out = airReading(pos, toxic, combustible, corrosive, particulate, cell);
-        boolean any = false;
-        if (ground != null) for (double g : ground) any |= g > 0;
-        if (!any) {
+        if (!(ground > 0)) {
             return out;
         }
-        out.add(Component.translatable("pollution.icheme.meter.ground", Integer.toString(pos.getX() >> 4),
-                Integer.toString(pos.getZ() >> 4)).withStyle(ChatFormatting.AQUA));
-        for (var channel : CHANNELS) {
-            double index = ground[channel.ordinal()];
-            var word = Reading.word(channel, index);
-            out.add(Component.translatable("pollution.icheme.meter.line", Component.translatable(nameKey(channel)),
-                    Reading.number(index), Component.translatable(wordKey(word))).withStyle(colour(word)));
-        }
+        var word = Reading.groundWord(ground);
+        out.add(Component.translatable("pollution.icheme.meter.ground", Integer.toString(pos.getX() >> 4), Integer.toString(pos.getZ() >> 4),
+                Reading.number(ground), Component.translatable(wordKey(word))).withStyle(colour(word)));
         return out;
     }
 

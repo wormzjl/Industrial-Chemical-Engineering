@@ -14,7 +14,7 @@ import net.neoforged.neoforge.event.level.block.CropGrowEvent;
 
 /**
  * Polluted ground stops growth (batch 2026-11-18-ground-pollution, G4; config {@code pollution.groundGrowth}): where the
- * worst ground index of a chunk column is at least {@link GroundEffects#GROWTH_LIMIT}, a crop does not grow
+ * ground index of a chunk column is at least {@link GroundEffects#GROWTH_LIMIT}, a crop does not grow
  * ({@link CropGrowEvent.Pre}), a sapling or fungus does not become its tree ({@link BlockGrowFeatureEvent}) and bonemeal
  * does nothing ({@link BonemealEvent}). Reads only the published ground snapshot; no block is changed. Grass spread has no
  * event in NeoForge 21.1 and is not stopped. Never throws into the event.
@@ -59,7 +59,7 @@ public final class GroundGrowth {
                 return false;
             }
             long column = MapColumns.column(pos.getX() >> 4, pos.getZ() >> 4);
-            return GroundEffects.blocksGrowth(service.groundSnapshot(server.dimension()).packed(column));
+            return GroundEffects.blocksGrowth(service.groundSnapshot(server.dimension()).value(column));
         } catch (RuntimeException failure) {
             if (!failureLogged) {
                 failureLogged = true;

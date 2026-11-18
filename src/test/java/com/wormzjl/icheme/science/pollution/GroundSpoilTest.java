@@ -6,8 +6,8 @@ import org.junit.jupiter.api.Test;
 
 /** The spoiling law of polluted ground (batch 2026-11-18-ground-pollution, G4b): limits, rate, half-times. */
 class GroundSpoilTest {
-    private static int packed(Channel channel, double index) {
-        return MapColumns.quantise(index) << 8 * channel.ordinal();
+    private static int value(double index) {
+        return MapColumns.quantise(index);
     }
 
     @Test void halfOfAColumnSpoilsInTenMinutesAtIndexOne() {
@@ -29,11 +29,11 @@ class GroundSpoilTest {
         assertEquals(8, GroundSpoil.attempts(50, 0.99));
     }
 
-    @Test void limitsReadTheWorstChannel() {
+    @Test void limitsReadTheOneIndex() {
         assertTrue(GroundSpoil.recovers(0), "a column with no entry is clean");
-        assertTrue(GroundSpoil.recovers(packed(Channel.TOXIC, 0.08)));
-        assertFalse(GroundSpoil.recovers(packed(Channel.PARTICULATE, 0.1)));
-        assertEquals(0.3, GroundSpoil.worst(packed(Channel.TOXIC, 0.1) | packed(Channel.CORROSIVE, 0.3)), 1e-12);
+        assertTrue(GroundSpoil.recovers(value(0.08)));
+        assertFalse(GroundSpoil.recovers(value(0.1)));
+        assertEquals(0.3, GroundSpoil.index(value(0.3)), 1e-12);
         assertEquals(GroundEffects.GROWTH_LIMIT, GroundSpoil.SPOIL_LIMIT, 0.0, "spoiling starts where growth stops");
     }
 }

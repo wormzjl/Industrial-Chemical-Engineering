@@ -18,14 +18,14 @@ class MapLayerTest {
         assertEquals(MapLayer.AIR, MapLayer.BOTH.next());
     }
 
-    @Test void eachLayerShowsItsBytesAndBothTheWorse() {
+    @Test void eachLayerDrawsItsColourAndBothTheHigherIndex() {
         int air = packed(Channel.TOXIC, 30) | packed(Channel.CORROSIVE, 2);
-        int ground = packed(Channel.TOXIC, 5) | packed(Channel.CORROSIVE, 40);
-        assertEquals(air, MapLayer.AIR.shown(air, ground));
-        assertEquals(ground, MapLayer.GROUND.shown(air, ground));
-        int both = MapLayer.BOTH.shown(air, ground);
-        assertEquals(30, MapColumns.value(both, Channel.TOXIC));
-        assertEquals(40, MapColumns.value(both, Channel.CORROSIVE));
+        assertEquals(MapColumns.argb(air), MapLayer.AIR.argb(air, 40));
+        assertEquals(MapColumns.GROUND_RGB, MapLayer.GROUND.argb(air, 40) & 0xFFFFFF, "the ground has its own brown");
+        assertEquals(MapColumns.groundArgb(40), MapLayer.BOTH.argb(air, 40), "ground 0.80 over the air's worst 0.60");
+        assertEquals(MapColumns.argb(air), MapLayer.BOTH.argb(air, 30), "a tie shows the air");
+        assertEquals(0, MapLayer.GROUND.argb(air, 0), "no ground, no square");
+        for (int rgb : new int[] {MapColumns.TOXIC_RGB, MapColumns.COMBUSTIBLE_RGB, MapColumns.CORROSIVE_RGB, MapColumns.PARTICULATE_RGB}) assertNotEquals(rgb, MapColumns.GROUND_RGB);
     }
 
     @Test void theTooltipNamesTheLayerShownAndListsBothLayers() {
@@ -35,8 +35,9 @@ class MapLayerTest {
         assertEquals(java.util.List.of("-2", "9", new MapLayer.Key("pollution.icheme.map.layer.ground")), lines.get(0).args());
         assertEquals("pollution.icheme.map.air", lines.get(1).key());
         assertEquals("0.60", lines.get(2).args().get(1), "the air's toxic byte 30 is index 0.60");
+        assertEquals(7, lines.size(), "a title, the air header and four lines, one ground line");
         assertEquals("pollution.icheme.map.ground", lines.get(6).key(), "the ground is listed though it is clean");
-        assertNull(lines.get(6).word());
-        assertNotNull(lines.get(7).word());
+        assertEquals("0.00", lines.get(6).args().get(0));
+        assertEquals(com.wormzjl.icheme.science.pollution.Reading.Word.SAFE, lines.get(6).word());
     }
 }

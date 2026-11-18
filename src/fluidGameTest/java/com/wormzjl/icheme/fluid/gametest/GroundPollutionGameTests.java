@@ -46,17 +46,15 @@ public final class GroundPollutionGameTests {
         long column = MapColumns.column(crop.getX() >> 4, crop.getZ() >> 4);
         var amounts = new double[Channel.values().length];
         amounts[Channel.TOXIC.ordinal()] = GroundField.GROUND_REFERENCE;
-        service.deposit(dimension, crop, amounts, List.of(new GroundField.Compound("crude_pc08", Channel.TOXIC, 1100e-6 * GroundField.GROUND_REFERENCE)));
+        service.deposit(dimension, crop, amounts, List.of(new GroundField.Compound("crude_pc08", 1100e-6 * GroundField.GROUND_REFERENCE)));
         helper.startSequence()
-                .thenWaitUntil(() -> helper.assertTrue(service.groundSnapshot(dimension).index(column, Channel.TOXIC) > .9,
-                        "Waiting for the pass to land the deposit: " + service.groundSnapshot(dimension).index(column, Channel.TOXIC)))
+                .thenWaitUntil(() -> helper.assertTrue(service.groundSnapshot(dimension).index(column) > .9,
+                        "Waiting for the pass to land the deposit: " + service.groundSnapshot(dimension).index(column)))
                 .thenExecute(() -> {
                     var ground = service.ground(dimension);
                     var ledger = service.groundLedger(dimension);
-                    for (var channel : Channel.values()) {
-                        double closure = ledger.closure(channel, ground);
-                        helper.assertTrue(Math.abs(closure) <= 1e-9 * Math.max(1, ledger.get(channel, GroundLedger.Total.DEPOSITED)), "The ground ledger closes: " + channel + " " + closure);
-                    }
+                    double closure = ledger.closure(ground);
+                    helper.assertTrue(Math.abs(closure) <= 1e-9 * Math.max(1, ledger.get(GroundLedger.Total.DEPOSITED)), "The ground ledger closes: " + closure);
                     helper.assertTrue(ground.moles(column, "crude_pc08") > 0, "The column keeps the compound");
                     // The event a crop posts at each growth chance (light and moisture aside): the ground says no.
                     var pre = NeoForge.EVENT_BUS.post(new CropGrowEvent.Pre(level, crop, level.getBlockState(crop)));
@@ -79,7 +77,8 @@ public final class GroundPollutionGameTests {
      * G4b: at index 1 a pick removes a flower and turns its grass into polluted soil, takes a wheat crop and turns its farmland
      * into polluted soil, and leaves a log and stone alone; once the ground is clean, the soil's random tick makes dirt.
      */
-    @GameTest(template = "empty", timeoutTicks = 1200, batch = "ground-pollution")
+    // Its own batch: the batch of the growth test runs at the same time, and each clears the dimension's pollution.
+    @GameTest(template = "empty", timeoutTicks = 1200, batch = "ground-pollution-blocks")
     public static void pollutedGroundSpoilsTheSurfaceAndRecovers(GameTestHelper helper) {
         var level = helper.getLevel();
         var dimension = level.dimension();
@@ -102,7 +101,7 @@ public final class GroundPollutionGameTests {
         var columns = new java.util.TreeSet<Long>();
         for (var pos : List.of(grass, farm, log, stone)) if (columns.add(MapColumns.column(pos.getX() >> 4, pos.getZ() >> 4))) service.deposit(dimension, pos, amounts, List.of());
         helper.startSequence()
-                .thenWaitUntil(() -> helper.assertTrue(columns.stream().allMatch(c -> service.groundSnapshot(dimension).index(c, Channel.TOXIC) > .9),
+                .thenWaitUntil(() -> helper.assertTrue(columns.stream().allMatch(c -> service.groundSnapshot(dimension).index(c) > .9),
                         "Waiting for the pass to land the deposit"))
                 .thenExecute(() -> {
                     for (var pos : List.of(grass, farm, log, stone)) {

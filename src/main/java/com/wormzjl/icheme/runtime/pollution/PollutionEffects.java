@@ -174,8 +174,8 @@ public final class PollutionEffects {
 
     /**
      * Water over polluted ground (batch 2026-11-18-ground-pollution, G4; config {@code pollution.groundWater}): every living
-     * thing in water in a chunk column whose toxic or corrosive ground index reaches {@link Exposure#LOW} is treated as the
-     * air treats it, at those levels ({@link GroundEffects#water}). Reads the published ground snapshot; at most
+     * thing in water in a chunk column whose ground index reaches {@link Exposure#LOW} is treated as the air treats a toxic
+     * cube at that index ({@link GroundEffects#water}). Reads the published ground snapshot; at most
      * {@link #CUBE_BUDGET} columns a pass, loaded chunks only.
      */
     private void water(ServerLevel level, PollutionService service) {
@@ -189,7 +189,7 @@ public final class PollutionEffects {
         DamageSource[] sources = sources(level);
         int served = 0;
         for (int i = 0; i < snapshot.size() && served < CUBE_BUDGET; i++) {
-            var exposure = GroundEffects.water(snapshot.packed(i));
+            var exposure = GroundEffects.water(snapshot.value(i));
             if (exposure == null) {
                 continue;
             }

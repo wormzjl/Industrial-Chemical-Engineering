@@ -55,8 +55,8 @@ public final class Releases {
 
         /**
          * What the spill law left on the ground at {@code position} (batch 2026-11-18-ground-pollution): four channel
-         * amounts in air-mole equivalents and the compounds, each under the channel it moves with. Never the air. None by
-         * default.
+         * amounts in air-mole equivalents (the air ledger books each, the ground takes their sum) and the compounds. Never
+         * the air. None by default.
          */
         default void deposit(PhysicalFluidTopology.Position position, double[] amounts, List<GroundField.Compound> compounds) {}
     }
@@ -292,8 +292,8 @@ public final class Releases {
 
     /**
      * A deposit on the ground at {@code at}: the toxic and corrosive amounts of {@code rest} (world axis), {@code solids}
-     * kg as particulate, and each compound with a toxic or corrosive term under the channel of the larger (a compound
-     * with neither, water above all, is not kept: it carries no hazard).
+     * kg as particulate (the ground adds them into its one amount), and each compound with a toxic or corrosive term (a
+     * compound with neither, water above all, is not kept: it carries no hazard).
      */
     private void ground(PhysicalFluidTopology.Position at, double[] rest, double solids) {
         var amounts = new double[Channel.values().length];
@@ -305,7 +305,7 @@ public final class Releases {
             if (!(rest[i] > 0) || !Double.isFinite(rest[i])) continue;
             double toxic = standard.term(Channel.TOXIC, i, rest[i]), corrosive = standard.term(Channel.CORROSIVE, i, rest[i]);
             if (!(toxic > 0) && !(corrosive > 0)) continue;
-            compounds.add(new GroundField.Compound(axis.get(i), toxic >= corrosive ? Channel.TOXIC : Channel.CORROSIVE, rest[i]));
+            compounds.add(new GroundField.Compound(axis.get(i), rest[i]));
         }
         boolean any = !compounds.isEmpty();
         for (double a : amounts) any |= a > 0 && Double.isFinite(a);

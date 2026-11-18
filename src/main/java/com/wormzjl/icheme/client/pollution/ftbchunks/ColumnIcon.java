@@ -67,7 +67,7 @@ final class ColumnIcon implements MapIcon {
     @Override
     public void addTooltip(TooltipList list) {
         try {
-            if (MapColumns.argb(PollutionMapStore.shown(dimension, column)) == 0) {
+            if (PollutionMapStore.shown(dimension, column) == 0) {
                 return;
             }
             // The chunk and the layer shown, then always both layers (batch 2026-11-18-ground-pollution, G3, option A).
@@ -100,7 +100,7 @@ final class ColumnIcon implements MapIcon {
     @Override
     public void draw(MapType mapType, GuiGraphics graphics, int x, int y, int w, int h, boolean outsideVisibleArea, int iconAlpha) {
         try {
-            int argb = MapColumns.argb(PollutionMapStore.shown(dimension, column));
+            int argb = PollutionMapStore.shown(dimension, column);
             if (argb != 0 && w > 0 && h > 0) {
                 graphics.fill(x, y, x + w, y + h, argb);
             }

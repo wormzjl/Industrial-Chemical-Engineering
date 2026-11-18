@@ -232,7 +232,7 @@ public final class PollutionService {
 
     /**
      * Puts what the spill law left at {@code position} on the ground of its chunk column (batch
-     * 2026-11-18-ground-pollution): four channel amounts and the compounds ({@link PollutionEngine#deposit}). The air
+     * 2026-11-18-ground-pollution): four channel amounts, which the ground adds into one, and the compounds ({@link PollutionEngine#deposit}). The air
      * ledger books the amounts {@code RELEASED} and {@code GROUND} at once; the next pass lands the deposit. A position
      * outside the world's height is dropped, as a release is.
      */

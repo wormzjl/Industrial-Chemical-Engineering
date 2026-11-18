@@ -34,6 +34,14 @@ public final class Reading {
         };
     }
 
+    /**
+     * The word of the ground at an index (batch 2026-11-18-ground-pollution: one amount): the same scale as a toxic
+     * channel's, as the ground's water acts on the toxic table.
+     */
+    public static Word groundWord(double index) {
+        return word(Channel.TOXIC, index);
+    }
+
     /** The highest level of the four channels; the warning tick's rate follows it. */
     public static Exposure.Level worst(double toxic, double combustible, double corrosive, double particulate) {
         var out = Exposure.level(toxic);

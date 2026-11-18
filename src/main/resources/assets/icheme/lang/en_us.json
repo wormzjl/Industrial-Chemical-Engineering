@@ -4767,6 +4767,7 @@
   "tutorial.icheme.item.water_intake.needs": "One face must touch 100 connected water blocks.",
   "block.icheme.waste_outfall": "Waste Outfall",
   "tutorial.icheme.item.waste_outfall.serves": "Lets a line's liquid out; its vapour pollutes the air, the rest the ground.",
+  "tutorial.icheme.item.polluted_soil.serves": "Soil spoilt by polluted ground; no plant grows on it until it is clean.",
   "gui.icheme.fluid.status.no_water_body": "No water body: touch 100 connected water blocks",
   "gui.icheme.fluid.status.ground_water": "Ground water (not delivered): %s",
   "gui.icheme.fluid.status.ground_water_item": "%s x = %s",
@@ -4820,7 +4821,7 @@
   "pollution.icheme.meter.line": "%1$s: %2$s (%3$s)",
   "pollution.icheme.map.title": "Chunk %1$s, %2$s: showing %3$s",
   "pollution.icheme.map.air": "Air (worst cube)",
-  "pollution.icheme.map.ground": "Ground",
+  "pollution.icheme.map.ground": "Ground: %1$s (%2$s)",
   "pollution.icheme.map.layer.both": "air and ground",
   "pollution.icheme.map.layer.air": "air",
   "pollution.icheme.map.layer.ground": "ground",
@@ -4868,5 +4869,5 @@
   "message.icheme.column_test.started": "Column test plant: started.",
   "message.icheme.column_test.stopped": "Column test plant: the start stopped at %s. See the log.",
   "message.icheme.column_test.closed": "Column test plant: the world closed during the start; finish it by hand. See the log.",
-  "pollution.icheme.meter.ground": "Ground of chunk %1$s, %2$s"
+  "pollution.icheme.meter.ground": "Ground of chunk %1$s, %2$s: %3$s (%4$s)"
 }

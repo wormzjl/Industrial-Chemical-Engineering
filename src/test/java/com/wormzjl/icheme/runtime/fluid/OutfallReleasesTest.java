@@ -151,10 +151,9 @@ class OutfallReleasesTest {
         assertEquals(moles * (1 - share) / 1100e-6, ground(Channel.TOXIC), 1e-9 * moles / 1100e-6, "the ground: the rest");
         assertEquals(2538, ground(Channel.TOXIC) / SECONDS, 3);
         assertTrue(sum(Channel.TOXIC) / SECONDS < 1e-3, "about nothing to the air: " + sum(Channel.TOXIC) / SECONDS);
-        // The ground keeps the cut itself (batch 2026-11-18-ground-pollution), its moles under its toxic channel.
+        // The ground keeps the cut itself (batch 2026-11-18-ground-pollution), in moles.
         assertEquals(1, deposited.size());
         assertEquals("crude_pc08", deposited.getFirst().name());
-        assertEquals(Channel.TOXIC, deposited.getFirst().channel());
         assertEquals(moles * (1 - share), deposited.getFirst().moles(), 1e-9 * moles);
         double flammable = s.combustible(s.volatileMoles(negated(stream)));
         assertEquals(flammable, sum(Channel.COMBUSTIBLE), 1e-12, "liquid that did not evaporate makes no flammable cloud: its volatile share only");
