@@ -137,8 +137,13 @@ The relief rise is `MAXIMUM_DISCHARGE` less the suction (`reliefRise`). The ejec
   an automated shutoff valve shut; not one closed by a reverse drive, which a faster pump opens) passes nothing at any
   speed: `seriesValveDrop` gives `SHUT` and the trim asks `Motor.LOWEST_SPEED`, by the same steps; the measure stays the
   flow, so the valve's opening hands the speed back to the trim or the secant. Zero flow alone still raises the speed (a
-  pump below its static head). The trim is every `REGULATE_FLOW` driver's on its first machine: a motor's over its data
-  link, a creative motor's or a turbine's with none. `REGULATE_PRESSURE` against a shut valve still winds up (not built).
+  pump below its static head). A motor and a creative motor regulate only a driven machine their data cables reach
+  (`host.linked`; `NO DATA LINK`, `MULTIPLE DUTIES`, `NO DUTY TARGET`, then the last speed held), on one path with the
+  trim; a creative motor's top there is its set speed. `flowSpeed` and `pressureSpeed` ask at most
+  `SpeedControl.REGULATED_TOP` (1.0) of the machine's design speed: at that bound the drive stands and says `RUNNING`.
+  While it idles on a shut valve its status ends `ShaftTrains.VALVE_SHUT` (" / VALVE SHUT"). `REGULATE_PRESSURE` inverts
+  the curve at the booked flow, so against a shut valve it stands at `s = √(Δp / (1.21 ρ g H_r))`, at most 1.0: a defined
+  state, no wind-up.
 - A creative motor with no set speed turns at its train's first machine's design speed over the ratio
   (`ShaftTrains.creativeSpeed`; reading A19's 2950 rpm with no machine); a second machine of another design speed turns
   at its own share of that.

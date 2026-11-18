@@ -380,3 +380,8 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   the NPSH rows read that law; a creative motor with no set speed turns at its train's design speed; a flow-regulating
   drive idles at 0.1 while a flow valve in its pump's series stands shut, and the trim runs on every driver
   (`PUMP_SPEED_SHUT_VALVE_REVIEW.md`, review; branch `claude/pump-speed-shut-valve-6020f0`).
+- Pump speed and the shut valve, part C and the owner items, 2026-11-18: the creative motor is a data host (socket on its
+  terminal box, regulates only over a data cable; existing worlds show NO DATA LINK); a regulating drive asks at most 1.0
+  of its machine's design speed; a drive idling on a shut valve says RUNNING / VALVE SHUT; Send to block sends a pump with
+  its duty and speed; the machine page shows a default creative motor's engine speed; REGULATE_PRESSURE against a shut
+  valve is a defined state; the heater trace finds no defect (same review).

@@ -38,18 +38,12 @@ needed 15.8 m. The sheet and the world read two different pumps.
 **Places that build or propose a motor for a sized pump:**
 - `PlantBuilder.motor`: fixed as above.
 - The Build list: it proposes only a power (`Duty.MOTOR`). It now shows the speed the motor must match.
-- Send to block: it stores the bore-only shape (`UnitSize.built(size)`), with no duty. A sent pump is built at the
-  default 100 m and 2950 rpm, and no motor is sent. This gap was there before this change; it is an owner item below.
+- Send to block: it sends `PumpSizing.built` (owner item 3, below): the pump with its duty and design speed. The
+  constructor's Import keeps the shape's duty (`Design.landed`). No motor is sent.
 
-**Point 5, a slow pump on a real motor in REGULATE_FLOW.** The data-link path asks `Duty.flowSpeed`, which is bounded by
-`SpeedControl.MAXIMUM_CURVE_SPEED` = 1.5 of the pump's design, and then clamps to 3000 rpm.
-- On a 2950 rpm pump, 1.5 × 2950 clamps to 3000 rpm, so the bound is 1.017 of design.
-- On a 1000 rpm pump with a 1000 rpm motor, the bound is 1500 rpm, 1.5 of design. Shaft power at that speed is
-  about 3.4 × rated. Above its base speed the motor gives its rated power at most (`availablePower`), so in practice it
-  goes CURRENT LIMITED first. `PlantBuilder`'s motor is rated for 2 × the design shaft power, which stops it at about
-  1.26 × design.
-- A creative motor regulates at most 1.0 of its set speed (`ShaftTrain.regulated`), which is now the pump's design
-  speed. This is an owner item below.
+**Point 5, a slow pump on a real motor in REGULATE_FLOW.** `Duty.flowSpeed` and `pressureSpeed` were bounded at
+`SpeedControl.MAXIMUM_CURVE_SPEED` = 1.5 of the pump's design (1.017 on a 2950 rpm pump, held by the 3000 rpm clamp). On a
+1000 rpm pump the motor went CURRENT LIMITED near 1.26. Owner item 1 bounds both at `SpeedControl.REGULATED_TOP` = 1.0.
 
 ## 2. A drive idles while a flow valve in its pump's series is shut
 
@@ -84,29 +78,89 @@ data-link branch. The creative charge drive the owner watched never reached that
   already read.
 - (b) A creative motor's share is its speed over its own set speed. After option A that set speed is the pump's design
   speed, so the creative's share is the pump's share.
-- Not changed: `REGULATE_PRESSURE` against a shut valve still winds up.
-- Status: the drive reads `RUNNING` while it idles at 0.1. No existing word fits. The proposal is below.
+- `REGULATE_PRESSURE` is not changed. See owner item 6: it does not wind up.
+- Status: `RUNNING / VALVE SHUT` while it idles (owner item 2).
+
+## 3. The creative motor as a data host (part C)
+
+- The data socket sits on the terminal box: north model (8, 16, 8.5) sixteenths, facing up, turned with FACING. It is the one
+  constant `CreativeMotorGeometry.SOCKET`.
+- `DataPorts.creativeMotor` and `ControlHosts.bindCreativeMotor` keep an actuator socket fact for the shaft unit. The
+  100-tick motor bind covers creative motors, and removing the unit removes the fact.
+- `CreativeMotorBlockEntity` (`DataPort.Owner`) holds the copy that the laying tool and the client read.
+- `CreativeMotorBlock.java`: one changed line (the class line gains `implements EntityBlock`) and six added lines
+  (`newBlockEntity`, before `getStateForPlacement`). `SHAPES`, its static block and the imports are untouched.
+- A creative motor regulates only a machine that its data cables reach. It uses the motor's path, so it can say NO DATA LINK,
+  MULTIPLE DUTIES or NO DUTY TARGET. With no link it holds at most its last speed: from rest it stays at rest, not at its set
+  speed.
+  - Existing worlds show NO DATA LINK (in the CHANGELOG).
+  - The test plant lays the cable for either drive and waits for the socket.
+- Scope: no controller or DCS sets any drive's speed. That is package 2 of the pump plan.
+
+## Owner items (main thread's calls, 2026-11-18)
+
+1. **Bound at 1.0.** `SpeedControl.REGULATED_TOP` = 1 replaces `MAXIMUM_CURVE_SPEED` in `flowSpeed` and `pressureSpeed`.
+   At the bound the drive stands at the pump's design speed and says `RUNNING`, with no hold (D3).
+   - Test `aRegulatingMotorStandsAtItsPumpsDesignSpeed`: an 11 kW, 1000 rpm motor on the 1000 rpm pump, asked twice the
+     rated flow, gives share <= 1.0, ends at 1.0, status `RUNNING`.
+   - Turbine frames keep their own 1.5.
+2. **Status.** `ShaftTrains.VALVE_SHUT` (" / VALVE SHUT") is appended to the step's status when the trim came from a shut
+   valve, the drive runs untripped and its speed is above 0.
+   - Drive statuses are raw engine words, so no `en_us.json` line is added.
+   - "RUNNING / VALVE SHUT" is 120 px at the test font. The door's status row is at least 280 px (300 less 20). Not a warning.
+   - Tests: the shut-valve tests check the suffix while the valve is shut and its absence once it regulates again;
+     `MachineColumnTest.theValveShutStatusFitsTheStatusRow`.
+3. **Send to block.** `SheetSizing.designs` sends `PumpSizing.built(size, Duty.of(rating))` for a pump.
+   - Test `CrudeUnitSampleTest.sendToBlockSendsEachPumpWithItsDutyAndSpeed`: each sized pump is sent with its built duty,
+     and at least one differs from the bore-only shape.
+4. **Machine page.** `MachineView` sends a creative motor's design speed as `ShaftTrains.creativeSpeed`, the function the
+   engine turns it by. `MachineColumn.speedEntry` shows it when no speed is set.
+   - Test `aDefaultCreativeMotorShowsItsTrainsDesignSpeed`: 900 rpm, and a set 1500 rpm stays.
+5. **Geared.** The behaviour is kept.
+   - Test `aDefaultCreativeMotorThroughAGearboxTurnsItsPumpAtItsDesignSpeed`: through the placed gearbox (ratio 4) the pump
+     is at share 1.0 and the motor at 1000 / ratio rpm.
+6. **`REGULATE_PRESSURE` against a shut valve is a defined state.** This corrects the earlier line, "still winds up".
+   - `pressureSpeed` inverts the curve at the booked flow (`SpeedControl.requiredSpeed`, bisection). It is not a secant.
+   - At no flow it asks `s = sqrt(dp / (1.21 rho g H_r))`, bounded to [0.1, 1.0]. Example: a 50 m pump with a set rise of
+     30 m gives s = 0.704, shaft power 0.35 P_r s^3 = 0.12 P_r.
+   - A set rise above 1.21 H_r stands at 1.0 and says RUNNING.
+
+## The heater trace (stored logs, no run)
+
+- The reference's "about 30 MW at 619.6 / 623.7 K" is report 6 (t=4321) of the fouling batch's `review-operation-2.log`,
+  which is that run's last report: 30.9 / 30.1 MW at 165.26 kg/s.
+  - Its drive had stood at share 1.0 against the shut valve (2950 rpm). At report 5 one heater was at 89 kW, so at
+    report 6 its heaters were still recovering.
+- This branch's report 6 (t=4421): 30.3 / 29.4 MW at 634.1 / 634.2 K and 168.0 kg/s (`review-operation-fix12.log`). The
+  part C run gave 29.9 / 29.2 MW at 631.0 / 627.8 K and 162.9 kg/s. At the same report the duty agrees within 2 to 3 %.
+- The table compared this branch's report 10 with the reference's report 6.
+  - Between reports 6 and 10, at the same 168 kg/s, the convection outlet (the radiant inlet) rose from 533.3 to 546.0 K,
+    because the preheat warmed.
+  - So the radiant duty for the same outlet fell to 26.6 / 25.8 MW. That is 168 kg/s x about 3 kJ/(kg K) x 12.7 K
+    = about 6.4 MW for both heaters; the drop seen is 7.3 MW.
+  - The outlets stand at 634.4 to 634.8 K, below a set point of about 638.2 K.
+- No defect is found. The run differs from the reference only in its flow history (the drive's idle and return).
 
 ## Tests
 
-- `UnitSizingTest` (56 pass): `aSizedPumpIsBuiltAtItsDesignSpeed`.
-  - 0.203 m³/s gives 1086.8 rpm and is built at 1000 rpm; 0.01 m³/s stays at 2950 rpm.
-  - On every bore: built at `builtSpeed`, on the 100 rpm grid, the law turns at it, rated NPSH3 ≤ 3.3 m, the design
-    head at the design flow, and `Duty.npsh`, `PUMP_NPSH` and `PUMP_NPSH_WORLD` read the law's NPSH3.
-  - The old in-line 3.3 m expectations are now the built law's: 2.889 m at 731 m³/h on the 0.3 m pump, and 3.668 m
-    for the 0.1 m pump at 118 % of its rated flow.
-  - At 52 × the rated flow, NPSH is the closest row; the flow row stays red.
-- `ShaftCouplingTest` (17 pass):
-  - A default creative motor on a 1000 rpm pump: share 1.0 in SPEED, at most 1.0 in REGULATE_FLOW.
-  - On a motor and on a creative motor, at set flow 15 L/s: regulating, the trim gives 0.830; shut, the speed falls
-    0.2 per decision to 0.1 with no flow, never up; regulating again, 0.830 and 5 % on the valve; open, the set flow.
-  - No valve and a 31.92 m static head: the drive spins up from rest to 6 L/s.
-  - A shut valve on a parallel branch gives the same speed and flow as no valve.
-  - The existing trim tests are unchanged and pass.
-- Selected by `affected.mjs select --since main`, through the lane's init script, all passing: `test` 1975, `holdGates` 59,
-  `equipmentGates` 87. Left out: `LanguageFilesTest` and `UnitTextTest` (the translation commit), and the two classes
-  above, which had already passed on the final code.
-- `runReviewWorldServer -PreviewBatch=review-operation` on a fresh world: 5 of 5 required tests passed.
+- `UnitSizingTest`: `aSizedPumpIsBuiltAtItsDesignSpeed`.
+  - 0.203 m3/s is built at 1000 rpm (duty speed 1086.8 rpm); 0.01 m3/s stays at 2950 rpm.
+  - The in-line expectations become the built law's: 2.889 m and 3.668 m.
+- `ShaftCouplingTest`: the trim and the shut-valve idle on a motor and on a creative motor; the drive spins up against a
+  static head with no valve; a shut valve on a parallel branch changes nothing; the creative motor's default speed, its data
+  link and the gearbox; the motor's 1.0 bound (items 1, 2, 5).
+- `CreativeMotorGeometryTest`, `MachineColumnTest` (items 2, 4), `CrudeUnitSampleTest` (item 3).
+- Each run selected by `affected.mjs select`, through the lane's init script, all passing:
+  - fixes 1 and 2: test 1975 tests, holdGates 59, equipmentGates 87;
+  - part C: 832 / 10 / 2;
+  - the block entity: 70 / 2;
+  - owner items (`--since 95f718836`): 230 test classes, 10 holdGates, 2 equipmentGates.
+  - `LanguageFilesTest` and `UnitTextTest` are left out until the translation commit.
+- `runReviewWorldServer -PreviewBatch=review-operation`, 5 of 5 each time:
+  - after fixes 1 and 2;
+  - after part C, on a fresh world (the old world is kept in `tmp/pump-speed/review-world-fix12`).
+  - No run after the owner items: the plant's drive is the creative motor, whose top was already 1.0, and nothing in the
+    plant reads a drive's status. Only its log line gains " / VALVE SHUT".
 
 ## Moved numbers (review-operation, reference `f31db3a4b`)
 
@@ -120,8 +174,10 @@ data-link branch. The creative charge drive the owner watched never reached that
 | Reports 5 to 10 | (valve open, steady) | 0.569, then 0.578 to 0.591, flow 0.1938 m³/s against 0.19357 set | the secant (the feed valve stands open: no trim) |
 | `chargeCheck` at report 3 | passed | flow 0.19226 m³/s (−0.7 %), 523 of 900 rpm: passed | |
 | Column | RUNNING, about 2557 kmol/h | RUNNING, 2557.2 kmol/h, solved table from report 8 | |
-| Heaters (radiant, report 10) | about 30 MW at 619.6 / 623.7 K | 26.0 / 25.3 MW at 634.4 / 634.6 K | not traced |
+| Heaters (radiant) | 30.9 / 30.1 MW at 619.6 / 623.7 K (report 6, the last) | report 6: 30.3 / 29.4 MW at 634.1 / 634.2 K; report 10: 26.6 / 25.8 MW at 634.5 / 634.6 K | the preheat warmed; see the heater trace |
 
+- Part C run: shares 0.487, 0.571, 0.578, then 0.100 (90 rpm, no flow) at t=3223 and t=5020 with the feed valve shut,
+  0.570 to 0.587 between. The drive is wired by cable. FEED0 2557.2 kmol/h. Holds at ticks 1891 and 6214.
 - Round-deadline holds at ticks 1923, 4927 and 6802 to 6839 (the end). The batch passed, so none was replayed. This run
   did not compare its holds with the reference run's.
 - Conservation: no mass, energy or component law was changed. These changes move only the drive's speed decision and
@@ -129,14 +185,4 @@ data-link branch. The creative charge drive the owner watched never reached that
 
 ## Open items for the owner
 
-1. **A real motor's REGULATE_FLOW bound on a slow pump** is 1.5 × the pump's design speed (about 1.26 × in practice,
-   CURRENT LIMITED), where it was 1.017 × before. Options:
-   - (A) bound `flowSpeed` and `pressureSpeed` to 1.0 of the pump's design, as a creative motor is bound;
-   - (B) keep it: a real VFD runs a pump above its rating up to the motor's limit.
-2. **Drive status while idling against a shut valve.** Proposal: `RUNNING / VALVE SHUT` (one en_us key), or keep `RUNNING`.
-3. **Send to block sends no pump duty.** A sent pump is built at the default 100 m and 2950 rpm. Option: send
-   `PumpSizing.built(SizedUnit)`, which carries the duty and the speed.
-4. **The machine page's set speed for a default creative motor** (`MachineColumn` 268) still shows 2950 rpm. Option:
-   show the view's design speed.
-5. **A creative motor on a geared 2950 rpm pump** now turns at 2950 / ratio, not at 2950. No test covered it.
-6. `REGULATE_PRESSURE` against a shut valve still winds up. Not changed.
+None from this branch. The owner items above are built.
