@@ -16,7 +16,9 @@ java -cp build/classes/java/main tools/pollution-bench/Digest.java
 
 - `Bench.java <case> [warm-up s] [measured s]`: steps per second and allocated bytes per step (the thread's allocation counter). Each step starts from the same field, so the work per step is constant.
   - `air-512`, `air-4096`, `air-8192`: `PollutionField.step` on a block of 8 × 8 × 8, 16 × 16 × 16 and 32 × 16 × 16 cubes (80 % open, 12 % enclosed, 5 % thin, 3 % closed), every cube above the cutoff, two releases; the 8192 case stands at the default cap.
+  - `wanted-8192`: the server thread's share of a pass at the cap: `PollutionEngine.core()` and `wanted()`, the sets the environment's cells are built from (`PollutionService.environment`).
   - `ground-4096`: `GroundField.step` on 64 × 64 columns with compounds on a third of them, two water columns, one deposit.
+  - `digest`: the bits of five chained steps of each air case (the large front and the cap at 8 192), for comparing an optimised step with the old class compiled apart (`javac -d <folder>` of the old `PollutionField.java`, that folder first on the class path).
   - `counts`: one step of each air case, with the environment's `cell` calls counted.
 - `Digest.java`: the digest of `PollutionDriftTest.digest` (the same scenario and hash) for riseShare 0 and 0.12. With the settings of before the drift (nine fields) it prints the rise-0 digest only.
 

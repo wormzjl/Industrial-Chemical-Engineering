@@ -104,12 +104,44 @@ public class Bench {
             }
             return;
         }
+        if (name.equals("digest")) {
+            // The bits of five chained steps of each air case: an optimisation must leave them alone.
+            for (String c : List.of("air-512", "air-4096", "air-8192")) {
+                Case k = airCase(c);
+                PollutionField field = k.field();
+                PollutionLedger ledger = PollutionLedger.EMPTY;
+                long h = 0xcbf29ce484222325L;
+                for (int p = 0; p < 5; p++) {
+                    PollutionField.Result r = PollutionField.step(field, ledger, k.releases(), k.environment(), 20.0, settings);
+                    field = r.field();
+                    ledger = r.ledger();
+                    for (long key : field.keys()) h = mix(h, key);
+                    for (double a : field.amounts()) h = mix(h, Double.doubleToRawLongBits(a));
+                    for (double v : ledger.values()) h = mix(h, Double.doubleToRawLongBits(v));
+                }
+                System.out.printf("%s: digest %s%n", c, Long.toHexString(h));
+            }
+            return;
+        }
         Runnable step;
         int size;
         if (name.startsWith("air-")) {
             Case k = airCase(name);
             size = k.field().size();
             step = () -> PollutionField.step(k.field(), PollutionLedger.EMPTY, k.releases(), k.environment(), 20.0, settings);
+        } else if (name.equals("wanted-8192")) {
+            // The server thread's share of a pass: the engine's core and wanted sets, which the environment walks.
+            Case k = airCase("air-8192");
+            var engine = new com.wormzjl.icheme.runtime.pollution.PollutionEngine();
+            engine.restore(k.field(), PollutionLedger.EMPTY, List.of());
+            size = k.field().size();
+            step = () -> {
+                var core = engine.core();
+                var wanted = engine.wanted();
+                if (core.size() > wanted.size()) {
+                    throw new IllegalStateException();
+                }
+            };
         } else if (name.equals("ground-4096")) {
             long[] columns = new long[4096];
             double[] amounts = new double[4096];
@@ -148,6 +180,15 @@ public class Bench {
         long bytes = allocated() - bytes0;
         System.out.printf("%s: size %d, %d steps in %.1f s, %.1f steps/s, %.0f bytes/step%n", name, size, steps, seconds,
                 steps / seconds, (double) bytes / steps);
+    }
+
+    /** The digest's hash (FNV-1a over the bytes), as in Digest.java and PollutionDriftTest. */
+    static long mix(long h, long v) {
+        for (int b = 0; b < 8; b++) {
+            h ^= (v >>> (8 * b)) & 0xff;
+            h *= 0x100000001b3L;
+        }
+        return h;
     }
 
     static void run(Runnable step, double seconds) {
