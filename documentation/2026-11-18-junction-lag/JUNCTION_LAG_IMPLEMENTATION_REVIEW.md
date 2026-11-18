@@ -12,6 +12,27 @@ All 126 selected solver, reconstruction, phase-change, certificate, checkpoint a
 
 The 6,000-tick restored two-heater save recorded 69 matched discharge/feed windows, 20 ending at full firing. The first such window delivered 637.690217 kg at 636.917646 K equivalent and the feed received it at 636.911865 K. The largest absolute gap among all 69 windows was 0.150135 K. The charge island later held at a round deadline in 34 samples and the column ended at zero feed. Earlier fresh and saved soak reports had no sampled holds. On the captured stopped-feed request, the feed valve demanded 0 kg/s and the two parallel heater legs had last circulated 0.017610 kg/s in opposite directions.
 
-The blocked runtime command was replayed independently from the restored graph with a bounded diagnostic worker. It admitted zero substeps in 600,001 solver checkpoints. The nonfinite derivative occurred in the recirculating leg at node 21: its accepted temperature was 626.960 K, while a Newton iterate reached 187.916 K. Substituting an exact finite-difference stencil removed the nonfinite matrix exception but left the step unable to converge. Extending the deadline does not establish a fix. Both diagnostic changes were removed.
+The blocked runtime command was replayed independently from the restored graph with a bounded diagnostic worker. It admitted zero substeps in 600,001 solver checkpoints. The nonfinite derivative occurred in the recirculating leg at node 21: its accepted temperature was 626.960 K, while a Newton iterate reached 187.916 K. Substituting an exact finite-difference stencil removed the nonfinite matrix exception but left the step unable to converge. Extending the deadline does not establish a fix. A cyclic inlet predictor initialized all ten circulating junctions near 625–626 K but also failed to advance that job. The diagnostic changes were removed.
 
-The owner requested the optional full lane. Broader qualification is pending.
+## Full lane
+
+The owner-requested `lane.sh head --all` finished at `93a5c848d`. This candidate is not merge-ready. The test stage ran 4,457 methods with 16 failures and no skips. The chain-100 result matched its reference exactly for amounts, temperature, phases and flow. Five required fluid GameTests failed. Campaigns completed all 3,000 seeds. Local reports are in `tmp/junction-lag/full-lane/head/`.
+
+| Campaign | Clean / 1,000 | Previous archived full run | Newly observed budget-class seeds replayed alone | Holds reproduced |
+| --- | ---: | ---: | ---: | ---: |
+| Cold random | 981 | 992 | 6 | 5 |
+| Bundled random | 969 | 989 | 13 | 12 |
+| Bundled defaults | 997 | 1,000 | 2 | 2 |
+
+The original lane's 16 failures include these findings.
+
+| Group | Finding |
+| --- | --- |
+| Two gas-mixing formula assertions | Both expected the entire lifetime stock to enter the flowing blend. Commit `d2a1fc434` checks the actual first-slice fractions and independently closes mass and enthalpy against the booked inventory. The class passed its targeted rerun. |
+| Flow and phase behavior | Three `HoldClassWorldsTest` cases held. The steady fired-water outlet was 448.02515 K against 448.15 K with a 0.1 K steady tolerance. The pressure-valve fixture's bottom valve regulated where its reference expects it open. One mixed-gas case used 42 Newton solves against its bound of 40. |
+| Deadline-sensitive fixtures | A one-worker rerun reproduced the blanket drain, blanket level-loop start and cooling-tower holds. The vent-header fixture passed its isolated rerun. |
+| Column operations | Cold-to-hot feed tripped the condenser-duty closure. The two-shell condenser's water-duty share missed its reference. |
+| Source rules | The Curios respirator imports a client class from common integration code. Sight-glass geometry calls `Math.hypot`. Both source lines predate the junction batch. |
+| GameTests | Two blanket level loops timed out, the lost-drum recovery waited for isolation, the cross-chunk test waited for cleanup, and the 65-terminal test missed its same-tick completion-budget condition. |
+
+The three campaign lists now contain 65 watch entries. Six failing methods were removed from the lane's exclusion list under its existing upkeep rule. The full lane was run once; the two corrected gas assertions and isolated budget replays are reported separately.

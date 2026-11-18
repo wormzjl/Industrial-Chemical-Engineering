@@ -17,3 +17,5 @@ The solver must deliver hot and cold fronts within 0.5 K on the first slice whil
 - 2026-11-18: revised the plan after the conservation and replay review. The owner selected 0.5 K and kept passive hot and cold inlets in scope. Solver and plant qualification are in progress.
 
 - 2026-11-19: extended same-slice delivery to isothermal composition changes. Added direct receiving-port and two-furnace measurements. See [implementation qualification](JUNCTION_LAG_IMPLEMENTATION_REVIEW.md) for verified behavior and open gates.
+
+- 2026-11-19: completed the optional full lane and recorded the failed test, GameTest and campaign cases. Qualification remains open.
