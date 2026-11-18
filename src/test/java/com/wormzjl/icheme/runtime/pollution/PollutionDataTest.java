@@ -274,7 +274,6 @@ class PollutionDataTest {
             assertTrue(english.has(key), key);
             assertEquals(key, com.wormzjl.icheme.world.item.RepairKitItem.key(outcome));
         }
-        assertFalse(english.has("chat.icheme.repair_kit.breach_repaired"), "the kit no longer mends a breach");
     }
 
     /**

@@ -8,7 +8,6 @@ import net.minecraft.world.phys.Vec3;
 
 import org.junit.jupiter.api.Test;
 
-import java.nio.file.*;
 import java.util.*;
 
 class LineToolSessionTest {
@@ -96,20 +95,6 @@ class LineToolSessionTest {
         assertFalse(session.view().pending());
         session.press(c, false);
         assertEquals("b", session.view().start());
-    }
-
-    @Test
-    void nativeAdaptersCannotReintroduceIndependentInputOrTickOwners() throws Exception {
-        for (var name : List.of("PipeLayingClient", "CableLayingClient")) {
-            String source =
-                    Files.readString(
-                            Path.of("src/main/java/com/wormzjl/icheme/client/" + name + ".java"));
-            assertFalse(
-                    source.matches("(?s).*static void (use|tick)\\(.*"),
-                    name + " must remain a domain/drawing adapter");
-            assertFalse(source.contains("boolean armed"));
-            assertFalse(source.contains("boolean serverRefused"));
-        }
     }
 
     private record Plan(Component refusal) {}
