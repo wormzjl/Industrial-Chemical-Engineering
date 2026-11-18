@@ -71,7 +71,7 @@ public final class GuideFile {
         var chapters = new ArrayList<Guide.Chapter>();
         for (var element : json.getAsJsonArray("chapters")) {
             var c = object(element, "chapter");
-            only(c, "chapter", "id", "steps");
+            only(c, "chapter", "id", "steps", "photos");
             String id = c.get("id").getAsString();
             var steps = new ArrayList<Guide.Step>();
             for (var stepElement : c.getAsJsonArray("steps")) {
@@ -81,7 +81,9 @@ public final class GuideFile {
                 steps.add(new Guide.Step(s.get("id").getAsString(), media(s.has("media") ? s.get("media").getAsString() : null, films, cards), check,
                         s.has("criterion") ? s.get("criterion").getAsString() : null));
             }
-            chapters.add(new Guide.Chapter(id, steps));
+            var photos = new ArrayList<String>();
+            if (c.has("photos")) for (var photo : c.getAsJsonArray("photos")) photos.add(photo.getAsString());
+            chapters.add(new Guide.Chapter(id, steps, photos));
         }
         var terms = new LinkedHashMap<String, String>();
         if (json.has("terms"))

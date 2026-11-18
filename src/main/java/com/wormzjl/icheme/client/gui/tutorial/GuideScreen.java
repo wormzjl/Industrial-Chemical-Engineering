@@ -46,6 +46,8 @@ public class GuideScreen extends Screen {
     private @org.jetbrains.annotations.Nullable String showing;
     /** P5: the open equipment page (an item id), or null; the page step that opened it, reported once it is read to its end. */
     protected @org.jetbrains.annotations.Nullable String pageId;
+    /** The photo open in the viewer (batch 2026-11-18-tutorial-photos), or null: the steps. */
+    protected @org.jetbrains.annotations.Nullable String photo;
     private @org.jetbrains.annotations.Nullable String reading;
     /** P5: where Back returns to from an equipment page: the chapter, card or page the player came from. Empty: Back closes the guide. */
     private final java.util.ArrayDeque<Back> back = new java.util.ArrayDeque<>();
@@ -74,6 +76,7 @@ public class GuideScreen extends Screen {
         if (GuideClient.pages().page(id) == null) return;
         back.push(new Back(open, card, cardView, pageId, offset));
         pageId = id;
+        photo = null;
         card = null;
         cardView = null;
         offset = 0;
@@ -164,7 +167,7 @@ public class GuideScreen extends Screen {
     private java.util.List<Object> placedFor;
 
     private java.util.List<Object> placing() {
-        return java.util.Arrays.asList(GuideClient.generation(), GuideClient.language(), GuideClient.progress(), open, card, pageId, width, height, ClientConfig.temperature(),
+        return java.util.Arrays.asList(GuideClient.generation(), GuideClient.language(), GuideClient.progress(), open, card, pageId, photo, width, height, ClientConfig.temperature(),
                 ClientConfig.theme());
     }
 
@@ -181,7 +184,7 @@ public class GuideScreen extends Screen {
         left = (width - w) / 2;
         top = (height - h) / 2;
         page = GuidePage.place(new GuidePage.Input(guide(), GuideClient.progress(), open, card, com.wormzjl.icheme.client.gui.tutorial.cards.Card.temperature(ClientConfig.temperature()))
-                .withPage(GuideClient.pages(), pageId), w, h, GuiCanvas.measure(font), GuideScreen::tr, themeHint());
+                .withPage(GuideClient.pages(), pageId).withPhotos(GuideClient.photos(), photo), w, h, GuiCanvas.measure(font), GuideScreen::tr, themeHint());
         read();
     }
 
@@ -283,6 +286,19 @@ public class GuideScreen extends Screen {
             ClientConfig.toggleTheme();
             return;
         }
+        if (action.equals(GuidePage.PHOTO_VIEW)) {
+            var chapter = guide().chapter(open);
+            if (chapter != null && !chapter.photos().isEmpty()) photo = chapter.photos().getFirst();
+            return;
+        }
+        if (action.startsWith(GuidePage.PHOTO_SHOW)) {
+            photo = action.substring(GuidePage.PHOTO_SHOW.length());
+            return;
+        }
+        if (action.equals(GuidePage.PHOTO_BACK)) {
+            photo = null;
+            return;
+        }
         if (page.equipment() != null && action.startsWith("page:")) {
             pageAction(action, page.equipment().page());
             return;
@@ -298,6 +314,7 @@ public class GuideScreen extends Screen {
         }
         if (action.startsWith("chapter:")) {
             open = action.substring("chapter:".length());
+            photo = null;
             card = null;
             cardView = null;
             pageId = null;
@@ -369,6 +386,7 @@ public class GuideScreen extends Screen {
                 var built = Cards.build(named.name());
                 if (built == null) return;
                 card = step;
+                photo = null;
                 cardView = new CardView(built, () -> GuideClient.report(step));
             }
             default -> {
@@ -385,6 +403,7 @@ public class GuideScreen extends Screen {
     /** The {@code ?} key: the page's tour, over the steps (an open card closes first); finishing it completes {@link #TOURED}. */
     protected void help() {
         if (!tour.has()) return;
+        photo = null;
         card = null;
         cardView = null;
         place();
@@ -433,6 +452,7 @@ public class GuideScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
         if (tour.isOpen()) return true;
+        if (page.photo() != null) return true;
         if (page.card() == null && page.view().contains(mouseX - left, mouseY - top)) {
             offset = Math.clamp(offset - (int) Math.round(vertical * ScrollView.STEP), 0, page.maxOffset());
             return true;
