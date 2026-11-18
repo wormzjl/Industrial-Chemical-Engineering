@@ -27,6 +27,23 @@ import java.util.TreeMap;
 public final class GroundField {
     /** The amount of a column's channel at index 1: 100 open cubes of air ({@code 100 × CUBE_AIR_MOLES}, 1.674e7). */
     public static final double GROUND_REFERENCE = 100 * PollutionField.CUBE_AIR_MOLES;
+    /** The water of a chunk column 4 m deep (plan G5): 256 m² × 4 m × 55 500 mol/m³ = 5.68e7 mol. */
+    public static final double REFERENCE_WATER = 256.0 * 4.0 * 55_500.0;
+
+    /** One compound of a column's ground water: its mole fraction {@code moles / REFERENCE_WATER}. */
+    public record WaterShare(String name, double fraction) {
+    }
+
+    /**
+     * What a column's ground gives its water (plan G5, the intake's status line): each compound's moles over
+     * {@link #REFERENCE_WATER}, the largest first (name order on a tie). Display only: nothing is drawn.
+     */
+    public List<WaterShare> waterShares(long column) {
+        var out = new ArrayList<WaterShare>();
+        for (var e : compounds(column).entrySet()) if (e.getValue() > 0.0) out.add(new WaterShare(e.getKey(), e.getValue() / REFERENCE_WATER));
+        out.sort(Comparator.comparingDouble(WaterShare::fraction).reversed().thenComparing(WaterShare::name));
+        return out;
+    }
 
     static final int CHANNELS = 4;
     private static final double LN2 = 0.6931471805599453;

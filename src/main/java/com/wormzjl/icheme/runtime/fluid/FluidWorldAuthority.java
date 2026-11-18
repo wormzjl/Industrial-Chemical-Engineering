@@ -537,6 +537,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Registration placeOutfall(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeOutfall(position,facing);}
     /** The status clause of a water intake whose block finds no water body: its boundary is closed until it does. */
     public static final String NO_WATER_BODY="NO WATER BODY";
+    /** A water intake's ground clause (batch 2026-11-18-ground-pollution, G5 display): {@code GROUND WATER: name=x;name=x (and n more)}. */
+    public static final String GROUND_WATER="GROUND WATER: ";
+    /** The most compounds the ground clause names. */
+    public static final int GROUND_WATER_NAMED=3;
     /**
      * Whether registration {@code r} stands as the water intake block, not the gas intake block. The one place that tells
      * the two apart (batch 2026-11-18-water-intake-outfall, option A): it reads stored facts only, an ambient generator
@@ -1060,6 +1064,20 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
     }
     /** What the spill law leaves on the ground (batch 2026-11-18-ground-pollution): a deposit on the pollution service's ground, never the air field. */
+    /**
+     * The ground clause of a water intake (batch 2026-11-18-ground-pollution, G5, display only): the compounds the ground of
+     * its chunk column holds, as mole fractions in the column's reference water ({@link com.wormzjl.icheme.science.pollution.GroundField#waterShares}),
+     * read from the installed ground; nothing is drawn or delivered. Empty for a clean column, another device, or pollution off.
+     */
+    String groundWater(WorldTopologyLedger.Registration r){
+        if(!waterIntake(r))return "";
+        var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);if(service.isEmpty()||!service.get().enabled())return "";
+        var p=r.device().position();long column=com.wormzjl.icheme.science.pollution.MapColumns.column(p.x()>>4,p.z()>>4);
+        var shares=service.get().ground(dimension(p.dimension())).waterShares(column);if(shares.isEmpty())return "";
+        var named=new ArrayList<String>();
+        for(int i=0;i<Math.min(GROUND_WATER_NAMED,shares.size());i++)named.add(shares.get(i).name()+"="+String.format(java.util.Locale.ROOT,"%.3g",shares.get(i).fraction()));
+        return GROUND_WATER+String.join(";",named)+(shares.size()>GROUND_WATER_NAMED?" (and "+(shares.size()-GROUND_WATER_NAMED)+" more)":"");
+    }
     private void depositPollution(PhysicalFluidTopology.Position at,double[] amounts,List<com.wormzjl.icheme.science.pollution.GroundField.Compound> compounds) {
         var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
         if(service.isPresent())service.get().deposit(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),amounts,compounds);

@@ -206,4 +206,19 @@ class GroundFieldTest {
         double source = air.deposits().stream().filter(d -> d.column() == MapColumns.column(3, -2)).findFirst().orElseThrow().amounts()[Channel.PARTICULATE.ordinal()];
         for (var d : air.deposits()) assertTrue(d.amounts()[Channel.PARTICULATE.ordinal()] <= source, "the source column settles the most: " + source + " of " + ground);
     }
+
+    @Test void theWaterSharesAreMolesOverTheReferenceWaterLargestFirst() {
+        assertEquals(5.6832e7, GroundField.REFERENCE_WATER, 1e-6, "256 m2 x 4 m x 55 500 mol/m3");
+        long column = MapColumns.column(2, 7);
+        var field = GroundField.of(new long[] {column}, new double[] {10, 0, 5, 0}, List.of(
+                new GroundField.Entry(column, Channel.TOXIC, "b", 568.32),
+                new GroundField.Entry(column, Channel.CORROSIVE, "a", 5683.2),
+                new GroundField.Entry(column, Channel.TOXIC, "c", 568.32)));
+        var shares = field.waterShares(column);
+        assertEquals(List.of("a", "b", "c"), shares.stream().map(GroundField.WaterShare::name).toList(), "largest first, then by name");
+        assertEquals(1e-4, shares.get(0).fraction(), 1e-16);
+        assertEquals(1e-5, shares.get(1).fraction(), 1e-17);
+        assertTrue(field.waterShares(MapColumns.column(0, 0)).isEmpty(), "a clean column names nothing");
+        assertEquals(5683.2, field.moles(column, "a"), 0.0, "display only: nothing is drawn");
+    }
 }
