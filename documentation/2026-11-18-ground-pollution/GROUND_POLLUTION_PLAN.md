@@ -8,13 +8,11 @@ Batch `2026-11-18-ground-pollution`, on `claude/water-intake-outfall-0e90c8` aft
 
 ## The model
 
-- One entry per chunk column (`MapColumns.column(x, z)`), per dimension. An entry holds four channel amounts (toxic, combustible, corrosive, particulate, the air field's units) and a compound inventory (moles by compound name).
-- The index of a channel is its amount over `GROUND_REFERENCE`.
-- Deposits come from two places:
-  - the air field's settling at its floor (`PollutionField.settle` now returns the deposits by column, inside the pass);
-  - the spill law (`Releases.spill`, through `Sink.deposit` and `PollutionService.deposit`): the waste outfall, an open spill, a destroyed device's liquid; its non-volatile part, with its solids.
+- One entry per chunk column (`MapColumns.column(x, z)`), per dimension. An entry holds one amount in the air field's equivalent moles (owner, 2026-11-18: "ground only have one type of pollution"; four channels were built first and reworked) and a compound inventory (moles by compound name).
+- The index of a column is its amount over `GROUND_REFERENCE`.
+- Deposits come only from the spill law (`Releases.spill`, through `Sink.deposit` and `PollutionService.deposit`): the waste outfall, an open spill, a destroyed device's liquid; its non-volatile part, with its solids; the amount is the sum of its channels' amounts. The air gives the ground nothing (owner, 2026-11-18: "do not let ground absorb air pollution for now").
 - One pass, every engine pollution pass, in this order: land, spread, decay, truncate, cap.
-- Ledger per channel and per compound: deposited = stored + decayed + drawn + capped.
+- Ledger for the amount and per compound: deposited = stored + decayed + drawn + capped.
 
 ## Constants
 
@@ -32,14 +30,22 @@ Batch `2026-11-18-ground-pollution`, on `claude/water-intake-outfall-0e90c8` aft
 | `maximumColumns` | 16 384 | `GroundSettings` | Cap; the lowest peak index leaves first, booked as capped |
 | `CELL_BUDGET` | 256 columns a pass | `PollutionService` | Surface water reads, cached |
 | Surface water | at least 9 of 16 samples | `PollutionService.surfaceWater` | "Mostly water" |
-| `GROWTH_LIMIT` | 0.3 (`Exposure.MEDIUM`) | `GroundEffects` | Growth stops at or above this worst index |
-| Snapshot byte | steps of 0.02, 255 = 5.1 or more | `MapColumns.quantise` | The air map's byte |
-| W (G5) | 256 × 4 × 55 500 = 5.68e7 mol | `GroundField.draw` argument | The water of a column 4 m deep |
+| `GROWTH_LIMIT` | 0.3 (`Exposure.MEDIUM`) | `GroundEffects` | Growth stops at or above this index |
+| Snapshot byte | one per column, steps of 0.02, 255 = 5.1 or more | `MapColumns.quantise` | The air map's byte |
+| `GROUND_RGB` | `0x8D5524` (brown) | `MapColumns` | The ground's own colour scale on the map |
+| W (G5) | 256 × 4 × 55 500 = 5.68e7 mol | `GroundField.REFERENCE_WATER` | The water of a column 4 m deep |
+| `SPOIL_LIMIT` (G4b) | 0.3 | `GroundSpoil` | Spoiling starts where growth stops |
+| `RECOVERY_LIMIT` (G4b) | 0.1 | `GroundSpoil` | Polluted soil recovers below it |
+| `ATTEMPTS_PER_INDEX` (G4b) | 0.2952 per 1 s pass | `GroundSpoil` | Half of 256 positions picked in 10 min at index 1 |
+| `MAXIMUM_ATTEMPTS` (G4b) | 8 per pass | `GroundSpoil` | Bound on work per column |
+| `WALK` (G4b) | 3 blocks | `GroundSoil` | A pick reaches the soil under a plant |
 
 ## Steps
 
-- G1: `GroundField`, `GroundSettings`, `GroundLedger`, `GroundEnvironment`; `PollutionField.settle` returns its deposits.
+- G1: `GroundField`, `GroundSettings`, `GroundLedger`, `GroundEnvironment` (`PollutionField.settle` returned its deposits until the owner turned air-to-ground deposition off).
 - G2: the engine pass carries the ground; `PollutionStore` schema 2 (append-only); the published snapshot `GroundSnapshot` (column → 4 bytes); one spill law in `Releases`.
 - G3: the map answer carries the ground bytes (display only, no protocol number); the layer (`PollutionMapStore.Layer`); the meter's ground lines; the ledger command's ground lines.
-- G4: growth (`GroundGrowth`, config `pollution.groundGrowth`) and water (`PollutionEffects.water`, config `pollution.groundWater`). Tint: options to the main thread.
-- G5: the dirty water intake: the draw law is built (`GroundField.draw`); the delivery is held (stop rule, see the review).
+- G4: growth (`GroundGrowth`, config `pollution.groundGrowth`) and water (`PollutionEffects.water`, config `pollution.groundWater`).
+- G4b (owner, replaces the tint): random picks remove vegetation and turn soil into polluted soil; recovery to dirt below 0.1 (`GroundSpoil`, `GroundSoil`, `PollutedSoilBlock`, config `pollution.groundBlocks`).
+- G3 key (main thread, option A): the layer key and the client config entry.
+- G5: the dirty water intake: the draw law is built (`GroundField.draw`) and the intake names its contaminants; the delivery is an open package after the solute batch's WP2.

@@ -33,8 +33,9 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `ExplosionLaw` | `flammable` (index ≥ 1), `burntIndex` (at most 2), `energy`, `tntKilograms`, `power`, `strengthAt(power, distance)`, `reach`. |
 | `Exposure` | Levels at 0.1, 0.3, 1 and 3; the effects and damage of each kind. |
 | `Reading` | The meter's words and numbers. |
-| `GroundField`, `GroundSettings`, `GroundLedger`, `GroundEnvironment` | The ground: one entry per chunk column, four amounts and a compound inventory (name → moles, each under one channel); `step` (land, spread, decay, truncate, cap), `draw` (a water draw, G5 law); reference 100 × `CUBE_AIR_MOLES`; ledger `DEPOSITED` = stored + `DECAYED` + `DRAWN` + `CAPPED`, per channel and per compound. |
-| `GroundSnapshot`, `GroundEffects` | The published ground: column → four bytes (the map's byte); growth stops at a worst index ≥ 0.3; the water's toxic and corrosive levels. |
+| `GroundField`, `GroundSettings`, `GroundLedger`, `GroundEnvironment` | The ground: one entry per chunk column, one amount and a compound inventory (name → moles); `step` (land, spread, decay, truncate, cap), `draw` (a water draw, G5 law); reference 100 × `CUBE_AIR_MOLES`; ledger `DEPOSITED` = stored + `DECAYED` + `DRAWN` + `CAPPED`, for the amount and per compound. |
+| `GroundSpoil` | The block changes' law: limits 0.3 and 0.1, 0.2952 picks per pass and unit index (half a column in 10 min at index 1), at most 8, random rounding. |
+| `GroundSnapshot`, `GroundEffects` | The published ground: column → one byte (the map's scale); growth stops at index ≥ 0.3; the water acts on the toxic table at the ground index. |
 | `MapColumns` | The map overlay's summary: per chunk column the largest index of each kind, one byte each (steps of 0.02, 255 = 5.1 or more); the 32-chunk radius, the cap of 4096 columns (nearest first), the square's colour and alpha. |
 | **Runtime (`runtime/pollution/`)** | |
 | `PollutionService` | One per server, server thread. `tick` (pass every 100 ticks, effects every 20, ignition every 10, blasts every tick), `release`, `burn`, `index`, `field`, `cell`. Cells are read with `getChunkNow` only. |
@@ -43,6 +44,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `PollutionCommands` | `/icheme pollution get|add|clear|ledger`. |
 | `PollutionEffects` | Status effects, damage, corroded armour, dust particles; at most 256 cubes a pass; `water`: a swimmer in a polluted column. |
 | `GroundGrowth` | Crop, tree and bonemeal events on polluted ground. |
+| `GroundSoil`, `world/level/block/PollutedSoilBlock` | The picks on the world pass (kills, then spoils, along a 4-block walk; plain `setBlock`); the soil's recovery on its random tick. |
 | `Ignition`, `Blasts` | Ignition sources in flammable cubes; the burn, `Level.explode`, the chain queue. |
 | `BurstPipes` | A one-block device a blast destroys: the mark, the release, one sound per cube and tick. |
 | `Breaches` | Constructed equipment in a blast: a `Detonate` listener, one breach per structure. |
@@ -82,12 +84,13 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 
 ## The ground
 
-- Deposits: the air's settling at its floor (`PollutionField.settle` returns them by column, inside the pass) and the spill law (`PollutionService.deposit`, queued like a release). A compound sits under the channel of its larger term, toxic or corrosive, so its moles are counted once.
+- Deposits: the spill law only (`PollutionService.deposit`, queued like a release); the amount is the sum of its channels' amounts, which the air ledger books `RELEASED` and `GROUND` each. The air's settling does not reach the ground store (owner, 2026-11-18: off for now); the ground gives the air nothing.
 - Each pass, on the worker with the air: land; spread to the four face columns (5e-4 per 20 s, ×4 in rain, ×4 across a water face, each face at most 0.2), amounts and compounds by the same donor share; decay, loaded columns only (half-life 4 h, ÷4 in rain); truncate below index 1e-4 (booked decayed); cap at 16 384 columns (lowest peak first, booked capped).
 - Water columns: a surface mostly water (9 of 16 samples), read at most 256 columns a pass and cached.
 - `GroundSnapshot` is installed with the field; the map, the meter, `GroundGrowth` and `PollutionEffects.water` read only it.
 - `clear` books the cleared ground as capped.
-- The dirty water intake's draw law (`GroundField.draw`) is built; nothing calls it yet (batch 2026-11-18-ground-pollution, G5).
+- Block changes (`pollution.groundBlocks`): each world pass a column at or above 0.3 gets random picks; a pick removes `icheme:pollution_kills` blocks with no drops and turns the first `icheme:pollution_spoils` block into polluted soil; polluted soil turns back to dirt on a random tick below 0.1. Nothing is taken from the ground.
+- The dirty water intake's draw law (`GroundField.draw`) is built; nothing calls it yet (batch 2026-11-18-ground-pollution, G5, after the solute batch's WP2). A water intake's status names its column's compounds as x = moles / 5.68e7 (`FluidWorldAuthority.groundWater`), display only.
 
 ## Ignition, blasts and breaches
 
@@ -105,10 +108,11 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - `pollution.mapOverlay`: `METER` (default; the player carries a pollution meter anywhere in the inventory), `ALL`, `OFF`. A player without access gets a refused answer and the client shows nothing.
 - FTB gathers the large map's icons when its panel builds (at opening, at a dimension switch, on `LargeMapScreen.refreshIconsIfOpen`), not each frame. Each column is one `ColumnIcon` that reads its colour from the store when it draws; a changed set of columns asks FTB for a refresh. The square is one chunk, drawn below FTB's own icons, coloured by the worst kind, with a tooltip of the four values.
 - There is no minimap line: the store is empty while the large map is closed.
+- Layers (`MapLayer`): a key (`key.icheme.pollution_layer`, unbound) cycles Air, Ground, Both (the air's worst channel or the ground, whichever index is higher; the ground in brown); kept in `icheme-client.toml` (`gui.pollution_map_layer`). The tooltip names the layer shown and always lists the four air lines and one ground line. Without FTB Chunks the meter and `/icheme pollution ledger` are the only views of the ground.
 
 ## Formats
 
-- `PollutionStore#SCHEMA` 2 (2 adds the ground: `ground_columns`, `ground_amounts`, `ground_ledger`, `ground_ledger_compounds`, `ground_compounds`, `ground_pending`, absent for a dimension with no ground; damaged ground arrays drop that dimension's ground alone; unknown compound names are kept). Schema 1 state the engine cannot compute again, so it is saved, but under its own rule: a damaged store is copied aside (`icheme_pollution.damaged-<n>.dat`) or, when that fails, erased, and the dimension starts clean. A damaged cube is dropped alone. Corpus: `src/test/resources/compat/pollution/`.
+- `PollutionStore#SCHEMA` 2 (2 adds the ground: `ground_columns`, `ground_amounts` (one per column), `ground_ledger`, `ground_ledger_compounds`, `ground_compounds`, `ground_pending`, absent for a dimension with no ground; damaged ground arrays drop that dimension's ground alone; unknown compound names are kept). Schema 1 state the engine cannot compute again, so it is saved, but under its own rule: a damaged store is copied aside (`icheme_pollution.damaged-<n>.dat`) or, when that fails, erased, and the dimension starts clean. A damaged cube is dropped alone. Corpus: `src/test/resources/compat/pollution/`.
 - `FluidDeviceSpec.breached` is a fluid fact (schema 26, [runtime-saves.md](runtime-saves.md)); `wrecked` is one of the integrity facts (schema 29).
 - The monitor adds no control fact: its socket is an ordinary sensor port; `Sensor.Kind.ANALYSER` and `Sensor.Unit.INDEX` are appended and saved by name.
 - The map answer's ground bytes are display only: no protocol number.
@@ -117,7 +121,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 
 ## Config (`pollution`)
 
-`enabled`, `halfLifeOpenMinutes`, `halfLifeEnclosedMinutes`, `cutoff`, `maxActiveCubes`, `effects`, `particles`, `explosions`, `blockDamage`, `explosionPowerCap`, `equipmentBreach`, `mapOverlay`, `groundGrowth`, `groundWater`.
+`enabled`, `halfLifeOpenMinutes`, `halfLifeEnclosedMinutes`, `cutoff`, `maxActiveCubes`, `effects`, `particles`, `explosions`, `blockDamage`, `explosionPowerCap`, `equipmentBreach`, `mapOverlay`, `groundGrowth`, `groundWater`, `groundBlocks`.
 
 ## Tests and gates
 
@@ -132,7 +136,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 | Breach and repair, schema 26 | `VesselBreachTest`, `FluidFactsCompatTest`, `MachineHealthTest` |
 | Levels, readings, monitor signals, data files | `ExposureTest`, `ReadingTest`, `MonitorSignalsTest`, `PollutionDataTest` |
 | The monitor on a bus | `ControlSystemTest` |
-| The ground: step, closure, draw; its store; layers; effects | `GroundFieldTest`, `GroundStoreTest`, `MapLayersTest`, `GroundEffectsTest` |
+| The ground: step, closure, draw; its store; layers; effects; spoiling; the layer key | `GroundFieldTest`, `GroundStoreTest`, `MapLayersTest`, `GroundEffectsTest`, `GroundSpoilTest`, `MapLayerTest` |
 | The map summary, its payloads, access | `MapColumnsTest`, `PollutionMapNetworkCodecTest`, `PollutionMapsTest` |
 | In a server | `Pollution*GameTests` in `src/fluidGameTest` (batches `pollution…`) |
 
@@ -148,4 +152,4 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - No class outside `client/pollution/ftbchunks/` may name an FTB or Architectury type: the mod must load without FTB Chunks. No test or GameTest loads those two classes; only a dev client with FTB Chunks proves the overlay's look.
 - `LargeMapScreen` and `refreshIconsIfOpen` are FTB internals, not its API. A new FTB version that moves them turns the overlay off, not the game.
 
-**Snapshot:** `966bee2c0`, 2026-11-18.
+**Snapshot:** the one-amount rework, 2026-11-18.
