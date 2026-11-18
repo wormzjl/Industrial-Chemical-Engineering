@@ -62,6 +62,13 @@ repositories {
             includeGroup 'dev.ftb.mods'
         }
     }
+    // Curios (the respirator's optional head slot, batch 2026-11-18-respirator): its own maven, its group only.
+    maven {
+        url = 'https://maven.theillusivec4.top/'
+        content {
+            includeGroup 'top.theillusivec4.curios'
+        }
+    }
     maven {
         url = 'https://maven.architectury.dev/'
         content {
@@ -303,6 +310,10 @@ dependencies {
         transitive = false
     }
 
+    // Curios is optional (batch 2026-11-18-respirator): its API at compile time only, never on a runtime, so dev runs,
+    // tests and GameTests load none of it. Only compat/curios/ names its types, behind ModList.isLoaded("curios").
+    compileOnly("top.theillusivec4.curios:curios-neoforge:${curios_version}:api")
+
     // JEI is an optional client integration: APIs at compile time, full mod only in dev runs.
     compileOnly("mezz.jei:jei-${minecraft_version}-common-api:${jei_version}")
     compileOnly("mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}")
@@ -327,6 +338,7 @@ def metadataProperties = [
     create_version_range   : create_version_range,
     jei_version_range      : jei_version_range,
     ftb_chunks_version_range: ftb_chunks_version_range,
+    curios_version_range   : curios_version_range,
     kubejs_version_range   : kubejs_version_range
 ]
 
