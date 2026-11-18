@@ -472,13 +472,16 @@ public final class GroundField {
             long[] nc = new long[size];
             double[] na = new double[size];
             int[] ns = new int[size + 1];
-            var nn = new ArrayList<String>(names.length + 4);
-            var nm = new ArrayList<Double>(names.length + 4);
+            int room = names.length;
+            for (int d = 0; d < counting; d++) room += sorted[d].compounds().size();
+            String[] nn = new String[room];
+            double[] nm = new double[room];
+            int e2 = 0;
             int i = 0, d = 0, o = 0;
             while (i < n || d < counting) {
                 long next = i < n && (d >= counting || columns[i] <= sorted[d].column()) ? columns[i] : sorted[d].column();
                 boolean old = i < n && columns[i] == next;
-                ns[o] = nn.size();
+                ns[o] = e2;
                 nc[o] = next;
                 if (d < counting && sorted[d].column() == next) {
                     double amount = old ? a[i] : 0.0;
@@ -492,27 +495,28 @@ public final class GroundField {
                     }
                     na[o] = amount;
                     for (var e : inventory.entrySet()) {
-                        nn.add(e.getKey());
-                        nm.add(e.getValue());
+                        nn[e2] = e.getKey();
+                        nm[e2] = e.getValue();
+                        e2++;
                     }
                 } else {
                     na[o] = a[i];
                     for (int e = start[i]; e < start[i + 1]; e++) {
-                        nn.add(names[e]);
-                        nm.add(moles[e]);
+                        nn[e2] = names[e];
+                        nm[e2] = moles[e];
+                        e2++;
                     }
                 }
                 if (old) i++;
                 o++;
             }
-            ns[o] = nn.size();
+            ns[o] = e2;
             n = o;
             columns = nc;
             a = na;
             start = Arrays.copyOf(ns, o + 1);
-            names = nn.toArray(new String[0]);
-            moles = new double[nm.size()];
-            for (int e = 0; e < moles.length; e++) moles[e] = nm.get(e);
+            names = Arrays.copyOf(nn, e2);
+            moles = Arrays.copyOf(nm, e2);
         }
 
         // ----- spread
@@ -523,9 +527,10 @@ public final class GroundField {
             double wet = environment.raining() ? settings.wetSpread() : 1.0;
             // Transfers in visiting order; a destination not in the field is -(slot + 1).
             int tn = 0;
-            int[] tFrom = new int[16], tTo = new int[16];
-            double[] tAmount = new double[16], tShare = new double[16];
-            var slots = new java.util.HashMap<Long, Integer>();
+            int room = Math.max(16, 2 * n);
+            int[] tFrom = new int[room], tTo = new int[room];
+            double[] tAmount = new double[room], tShare = new double[room];
+            var slots = new LongIntMap(Math.max(16, n / 4));
             long[] newKeys = new long[8];
             double[] newInflow = new double[8];
             int newCount = 0;
@@ -552,8 +557,8 @@ public final class GroundField {
                         if (j >= 0) {
                             to = j;
                         } else {
-                            Integer slot = slots.get(other);
-                            if (slot == null) {
+                            int slot = slots.get(other);
+                            if (slot < 0) {
                                 if (newCount == newKeys.length) {
                                     newKeys = Arrays.copyOf(newKeys, newCount * 2);
                                     newInflow = Arrays.copyOf(newInflow, newCount * 2);
@@ -595,8 +600,9 @@ public final class GroundField {
             double[] newA = new double[newCount];
             // Compound moves, from the donors' inventories before anything moves.
             int cn = 0;
-            int[] cFrom = new int[16], cTo = new int[16], cEntry = new int[16];
-            double[] cMoles = new double[16];
+            int moveRoom = Math.max(16, 2 * moles.length);
+            int[] cFrom = new int[moveRoom], cTo = new int[moveRoom], cEntry = new int[moveRoom];
+            double[] cMoles = new double[moveRoom];
             for (int t = 0; t < tn; t++) {
                 if (tTo[t] < 0 && !acceptedSlot[-tTo[t] - 1]) continue;
                 int from = tFrom[t];
@@ -629,7 +635,9 @@ public final class GroundField {
             int[] xColumn = new int[8]; // column index, or n + slot for a new column
             String[] xName = new String[8];
             double[] xMoles = new double[8];
-            var extra = new java.util.HashMap<String, java.util.HashMap<Integer, Integer>>();
+            // Extras by (column reference, name): the step's few names get small ids.
+            var nameIds = new java.util.HashMap<String, Integer>();
+            var extra = new LongIntMap(16);
             for (int c = 0; c < cn; c++) {
                 int e = cEntry[c];
                 moles[e] += -cMoles[c];
@@ -649,16 +657,21 @@ public final class GroundField {
                     continue;
                 }
                 int ref = to >= 0 ? to : n + (-to - 1);
-                var byColumn = extra.computeIfAbsent(name, k -> new java.util.HashMap<>());
-                Integer x = byColumn.get(ref);
-                if (x == null) {
+                Integer id = nameIds.get(name);
+                if (id == null) {
+                    id = nameIds.size();
+                    nameIds.put(name, id);
+                }
+                long extraKey = (long) ref << 20 | id;
+                int x = extra.get(extraKey);
+                if (x < 0) {
                     if (xn == xColumn.length) {
                         xColumn = Arrays.copyOf(xColumn, xn * 2);
                         xName = Arrays.copyOf(xName, xn * 2);
                         xMoles = Arrays.copyOf(xMoles, xn * 2);
                     }
                     x = xn++;
-                    byColumn.put(ref, x);
+                    extra.put(extraKey, x);
                     xColumn[x] = ref;
                     xName[x] = name;
                     xMoles[x] = 0.0;
@@ -682,14 +695,30 @@ public final class GroundField {
                 int q = 0;
                 for (int s = 0; s < newCount; s++) if (acceptedSlot[s]) order[q++] = newKeys[s];
                 Arrays.sort(order);
-                var position = new java.util.HashMap<Long, Integer>();
+                var position = new LongIntMap(Math.max(16, accepted));
                 for (int s = 0; s < newCount; s++) if (acceptedSlot[s]) position.put(newKeys[s], s);
                 for (int r = 0; r < accepted; r++) slotOf[r] = position.get(order[r]);
             }
             // Extras grouped by column reference, each group by name.
-            var extrasOf = new java.util.HashMap<Integer, List<Integer>>();
-            for (int x = 0; x < xn; x++) extrasOf.computeIfAbsent(xColumn[x], k -> new ArrayList<>()).add(x);
-            for (var list : extrasOf.values()) list.sort((p, q) -> xName[p].compareTo(xName[q]));
+            // Counting sort of the extras by column reference; within one, by name.
+            int refs = n + newCount;
+            int[] first = new int[refs + 1];
+            for (int x = 0; x < xn; x++) first[xColumn[x] + 1]++;
+            for (int r0 = 0; r0 < refs; r0++) first[r0 + 1] += first[r0];
+            int[] byRef = new int[xn];
+            int[] fill = Arrays.copyOf(first, refs);
+            for (int x = 0; x < xn; x++) byRef[fill[xColumn[x]]++] = x;
+            for (int r0 = 0; r0 < refs; r0++) {
+                for (int p = first[r0] + 1; p < first[r0 + 1]; p++) {
+                    int v = byRef[p];
+                    int q = p - 1;
+                    while (q >= first[r0] && xName[byRef[q]].compareTo(xName[v]) > 0) {
+                        byRef[q + 1] = byRef[q];
+                        q--;
+                    }
+                    byRef[q + 1] = v;
+                }
+            }
             int size = n + accepted;
             long[] nc = new long[size];
             double[] na = new double[size];
@@ -702,7 +731,6 @@ public final class GroundField {
                 boolean old = r >= accepted || i < n && columns[i] < order[r];
                 ns[o] = e2;
                 int ref;
-                List<Integer> extras;
                 if (old) {
                     nc[o] = columns[i];
                     na[o] = a[i];
@@ -712,16 +740,15 @@ public final class GroundField {
                     na[o] = newA[slotOf[r]];
                     ref = n + slotOf[r];
                 }
-                extras = extrasOf.get(ref);
                 int e = old ? start[i] : 0, end = old ? start[i + 1] : 0;
-                int x = 0, xe = extras == null ? 0 : extras.size();
+                int x = first[ref], xe = first[ref + 1];
                 while (e < end || x < xe) {
-                    if (x >= xe || e < end && names[e].compareTo(xName[extras.get(x)]) < 0) {
+                    if (x >= xe || e < end && names[e].compareTo(xName[byRef[x]]) < 0) {
                         nn[e2] = names[e];
                         nm[e2] = moles[e];
                         e++;
                     } else {
-                        int xi = extras.get(x++);
+                        int xi = byRef[x++];
                         nn[e2] = xName[xi];
                         nm[e2] = xMoles[xi];
                     }

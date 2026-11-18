@@ -163,10 +163,23 @@ public class Bench {
                 }
             }
             GroundField field = GroundField.of(columns, amounts, entries);
-            GroundEnvironment environment = GroundEnvironment.of(null, Set.of(columns[count / 40], columns[count / 2 - 48]), false);
+            GroundEnvironment environment0 = GroundEnvironment.of(null, Set.of(columns[count / 40], columns[count / 2 - 48]), false);
+            // -Dsorted=true: the environment the runtime builds since the cache change (sorted arrays, no boxing).
+            GroundEnvironment environment = environment0;
+            if (Boolean.getBoolean("sorted")) {
+                long[] water = {columns[count / 40], columns[count / 2 - 48]};
+                Arrays.sort(water);
+                try {
+                    environment = (GroundEnvironment) GroundEnvironment.class.getMethod("sorted", long[].class, long[].class, boolean.class)
+                            .invoke(null, null, water, false);
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException("no sorted ground environment in these classes", e);
+                }
+            }
             List<GroundField.Deposit> deposits = List.of(GroundField.Deposit.of(columns[count / 2], 5e5));
             size = field.size();
-            step = () -> GroundField.step(field, GroundLedger.EMPTY, deposits, environment, 20.0, GroundSettings.DEFAULT);
+            GroundEnvironment chosen = environment;
+            step = () -> GroundField.step(field, GroundLedger.EMPTY, deposits, chosen, 20.0, GroundSettings.DEFAULT);
         } else {
             throw new IllegalArgumentException(name);
         }
