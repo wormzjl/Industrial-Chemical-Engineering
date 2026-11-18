@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Removed
+
+- Tests that guard no behaviour (`2026-11-18-prune-tests`, on `claude/prune-tests-97440b`, `7b9ba01c4`): four tests and four assertions that read source text for helper, method or field names, or asserted that removed code stays removed. No game change.
+
 ## [0.35.2] - 2026-11-18
 
 On `claude/column-testing-sizing-26b5b9` (version chosen by the owner). Formats: pollution store `icheme_pollution` schema 2 (the ground field); no other format number moves; protocol stays `icheme-7` (display-only payload changes take no number).
