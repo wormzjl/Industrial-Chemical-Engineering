@@ -269,6 +269,30 @@ class FiredHeaterFuelTest {
      * fuel burning, so the first stream through it leaves at the set point; still water above the set point asks for none.
      * The coil takes no heat while nothing flows.
      */
+    /**
+     * After a load a heater knows no fuel island, and a fuel island saved at rest books nothing until it is woken (the
+     * owner's test world, 2026-11-18: NO FUEL for five minutes after a reload). The radiant coil's first demand wakes every
+     * island that holds the burners; once the fuel island has booked, that island is the one woken.
+     */
+    @Test
+    void aHeaterThatKnowsNoFuelIslandWakesTheIslandsHoldingItsBurners() {
+        var rig = new Rig(compile(pure("Methane", 300, 500_000), 323.15, 1_000_000));
+        rig.power();
+        var asked = new ArrayList<Long>();
+        rig.heaters.islands(id -> {
+            asked.add(id);
+            return List.of(7L);
+        });
+        rig.run(1, false);
+        assertTrue(rig.heaters.view(BURNERS).demand() > 0, "the still cold coil asks for its duty");
+        assertEquals(List.of(BURNERS), asked, "its burners' islands are looked up: no fuel booking named one");
+        assertEquals(0, rig.heaters.view(BURNERS).fired(), 0, "nothing fired yet");
+        asked.clear();
+        rig.run(2, true);
+        assertTrue(rig.heaters.view(BURNERS).fired() > 0, "the woken fuel island fires");
+        assertEquals(List.of(), asked, "a heater whose fuel island booked wakes that one, with no lookup");
+    }
+
     @Test
     void stillTubesBelowTheSetPointKeepTheBurnersLit() {
         var cold = new Rig(compile(pure("Methane", 300, 500_000), 323.15, 1_000_000));
