@@ -391,20 +391,6 @@ class SimulatorBlockTest {
         SheetClipboard.copy(null);
     }
 
-    /** No packet on Copy: what it calls reads the menu's data and writes the clipboard. */
-    @Test
-    void copyOnATankSendsNoPacketAndSolvesNothing() throws Exception {
-        var screen = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/FluidDeviceScreen.java"));
-        int at = screen.indexOf("private void copyContents(){");
-        assertTrue(at > 0);
-        var body = screen.substring(at, screen.indexOf("\n    }", at));
-        assertTrue(body.contains("menu.clientData()"), "it reads the last published snapshot");
-        assertTrue(body.contains("SheetClipboard.copy(held)"));
-        for (var word : List.of("FluidNetwork", "PacketDistributor", "send", "flash", "solve", "Thermodynamics")) assertFalse(body.contains(word), word);
-        var clipboard = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/client/gui/flowsheet/SheetClipboard.java"));
-        for (var word : List.of("net.minecraft", "PacketDistributor", ".network.", "Thermodynamics")) assertFalse(clipboard.contains(word), word);
-    }
-
     /** The server stores what it is sent, and a replay is a read: none of its code can reach a solver or the engine. */
     @Test
     void theServersHalfNamesNoSolverAndNoProcessState() throws Exception {

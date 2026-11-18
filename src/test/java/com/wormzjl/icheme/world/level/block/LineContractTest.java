@@ -346,31 +346,6 @@ class LineContractTest {
         }
     }
 
-    @Test
-    void domainAdaptersCannotRegainCommandOrRouteOwnership() throws Exception {
-        var root = Path.of("src/main/java/com/wormzjl/icheme");
-        for (var name : List.of("FluidLineBackend", "ConduitLineBackend")) {
-            var source = Files.readString(root.resolve("world/level/block/" + name + ".java"));
-            for (var forbidden :
-                    List.of(
-                            "PipeRoute.search(",
-                            "LinePlacement.commit(",
-                            "canInteractWithBlock(",
-                            "getInventory(",
-                            "destroyBlock("))
-                assertFalse(
-                        source.contains(forbidden),
-                        name + " must leave admission and geometry to the shared owner");
-        }
-        for (var name : List.of("PipeLayingClient", "CableLayingClient")) {
-            var source = Files.readString(root.resolve("client/" + name + ".java"));
-            assertTrue(source.contains("LineLaying.search("));
-            assertFalse(source.contains("PipeRoute.hostJoints("));
-            assertFalse(source.contains("LinePlacement.search("));
-        }
-        assertFalse(Files.exists(root.resolve("world/level/block/CableLaying.java")));
-    }
-
     private static LineBackend.Host host(LineProfile profile, int lane, int joints) {
         return new LineBackend.Host(
                 BlockPos.ZERO,

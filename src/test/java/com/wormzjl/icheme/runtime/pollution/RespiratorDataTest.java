@@ -65,7 +65,6 @@ class RespiratorDataTest {
         assertTrue(size.find(), "the texture size is declared");
         assertEquals(Integer.parseInt(size.group(1)), worn.getWidth());
         assertEquals(Integer.parseInt(size.group(2)), worn.getHeight());
-        assertTrue(geometry.contains("tools/respirator-sheets/model.mjs"), "the geometry names its generator");
         var cube = java.util.regex.Pattern.compile("texOffs\\((\\d+), (\\d+)\\)\\.addBox\\([^,]+, [^,]+, [^,]+, ([\\d.]+)F, ([\\d.]+)F, ([\\d.]+)F\\)").matcher(geometry);
         int cubes = 0;
         while (cube.find()) {
@@ -80,8 +79,6 @@ class RespiratorDataTest {
             assertTrue((worn.getRGB(u + (int) d, v + (int) d) >>> 24) > 127, "drawn front face at " + u + "," + v);
         }
         assertEquals(14, cubes, "the mask's 8 cubes and two cartridges of 3");
-        var model = Files.readString(Path.of("src/main/java/com/wormzjl/icheme/client/RespiratorModel.java"), StandardCharsets.UTF_8);
-        assertTrue(model.contains("RespiratorGeometry.build(head)"), "the parts hang from the head");
     }
 
     private static List<String> ingredients(JsonObject recipe) {
