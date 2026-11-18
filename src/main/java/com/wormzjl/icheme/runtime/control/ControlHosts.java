@@ -287,9 +287,11 @@ final class ControlHosts {
         var port = equipmentPorts.get(unit.id());
         var mount = DataPorts.creativeMotor(level, pos, facing, unit.id(), port == null ? UUID.randomUUID() : port.id());
         var next = port == null ? mount : DataPorts.remount(port, mount, facts.wired(port.id()));
-        if (next.equals(port)) return;
-        facts.port(next);
-        equipmentPorts.put(unit.id(), next);
+        if (!next.equals(port)) {
+            facts.port(next);
+            equipmentPorts.put(unit.id(), next);
+        }
+        if (level.getBlockEntity(pos) instanceof CreativeMotorBlockEntity motor) motor.bind(next);
     }
 
     void bindMotor(EquipmentShellBlockEntity cell, ShaftUnit unit) {
