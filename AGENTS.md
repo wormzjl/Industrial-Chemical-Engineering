@@ -99,6 +99,6 @@ This file holds the core of each subject. The full rules are in `documentation/r
 
 ## Merging to main
 
-- Every merge to `main` includes, in the same merge: a `CHANGELOG.md` entry, a proposed `mod_version` bump that the owner chooses, the translation commit, a code guide update and the tooling cleanup. Follow the `merge-prep` skill for each.
+- Every merge to `main` includes, in the same merge: a `CHANGELOG.md` entry, a proposed `mod_version` bump that the owner chooses, the translation commit, a code guide update, a tutorial update and the tooling cleanup. Follow the `merge-prep` skill for each.
 - Probes, rigs and scripts a batch made for measurement leave `src/main` for `tools/<tool-folder>/` before the merge.
 - A documentation-only merge changes only `documentation/`, `tools/`, `AGENTS.md`, `.gitignore`, the project skills or the agent hook files. It needs none of these.
