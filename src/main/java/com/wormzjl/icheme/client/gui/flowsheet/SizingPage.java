@@ -294,7 +294,7 @@ public final class SizingPage {
 
     /**
      * What the player builds, in a few words (the Build list): a centrifugal pump built with its duty reads the rated flow and
-     * head to enter in the constructor, then its discharge ({@link PumpSizing#built(PumpSizing.Size, PumpSizing.Duty)}); any
+     * head to enter in the constructor, then its discharge and its design speed (rpm, the constructor's rated speed) ({@link PumpSizing#built(PumpSizing.Size, PumpSizing.Duty)}); any
      * other size, or a pump with no duty, reads as {@link #sizeText}.
      */
     public static String buildText(SheetContext x, @Nullable UnitSize size, com.wormzjl.icheme.science.flowsheet.sizing.Rating rating) {
@@ -303,7 +303,7 @@ public final class SizingPage {
             if (built != null && !built.equals(p.shape())) {
                 var u = x.units();
                 return x.text("sizing.size.pump_duty", number(u.time().display(built.duty().flow() / 3600)), u.time().unit("m³"), number(built.duty().head()),
-                        SheetUnits.number(2, p.discharge()));
+                        SheetUnits.number(2, p.discharge()), SheetUnits.number(0, com.wormzjl.icheme.science.equipment.UnitDesign.designSpeed(built)));
             }
         }
         return sizeText(x, size);

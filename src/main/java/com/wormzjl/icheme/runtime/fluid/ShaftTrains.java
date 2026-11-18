@@ -1058,6 +1058,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         if (drive == null) drive = ShaftTrain.Drive.CREATIVE;
         double design = d.designSpeed() > 0 ? d.designSpeed() : ShaftTrain.CREATIVE_SPEED;
         var s = d.settings();
+        // A creative motor turns at its set speed, rpm, or with none at its train's design speed (creativeSpeed): its own
+        // design speed, its share's base (ShaftTrain.regulated) and its lowest speed's.
+        double setPoint = s.setPoint();
+        if (drive == ShaftTrain.Drive.CREATIVE) {
+            design = setPoint > 0 ? setPoint : creativeSpeed(d);
+            setPoint = design;
+        }
         if (drive == ShaftTrain.Drive.CREATE) {
             // A Create coupling (W6b, D40): Create's |rpm| and the power of the stress it may take; no settings of its own.
             var in = create.get(d.position());
@@ -1065,7 +1072,28 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             return new ShaftTrain.Driver(drive, 0, d.designSpeed() > 0 ? d.designSpeed() : com.wormzjl.icheme.science.machine.CreateCoupling.DESIGN_SPEED, 0, true,
                     ShaftTrain.Mode.SPEED, rpm, limit, ShaftTrain.Trip.NONE, true);
         }
-        return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), s.setPoint(), s.powerLimit(), d.trip(), powered);
+        return new ShaftTrain.Driver(drive, d.ratedPower(), design, d.poles(), s.running(), s.mode(), setPoint, s.powerLimit(), d.trip(), powered);
+    }
+
+    /**
+     * The speed, rpm, of creative motor {@code d} with no set speed (reading A19, which chose 2950 rpm when every pump turned at
+     * it): its train's first driven machine's design speed over its ratio, so that machine turns at its design speed; {@link
+     * ShaftTrain#CREATIVE_SPEED} with no train, no driven machine or one with no design speed. A second driven machine of another
+     * design speed turns at its own share of that.
+     */
+    double creativeSpeed(ShaftUnit d) {
+        Long key = trainOf.get(d.id());
+        var run = key == null ? null : runs.get(key);
+        if (run == null || run.train.fault() != ShaftNetwork.Fault.NONE || run.train.driven().isEmpty()) return ShaftTrain.CREATIVE_SPEED;
+        var member = run.train.driven().getFirst();
+        var unit = topology.shaft(member.id());
+        return unit == null || !(unit.designSpeed() > 0) || !(member.ratio() > 0) ? ShaftTrain.CREATIVE_SPEED : unit.designSpeed() / member.ratio();
+    }
+
+    /** The set speed, rpm, of driver {@code unit} (a creative motor's with none: {@link #creativeSpeed}), NaN for no such driver. */
+    public double setSpeed(long unit) {
+        var d = topology.shaft(unit);
+        return d == null || !d.kind().driver() ? Double.NaN : driver(d).setSpeed();
     }
 
     /**

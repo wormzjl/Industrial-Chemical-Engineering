@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.equipment.design.UnitRatings;
+import com.wormzjl.icheme.science.machine.Npsh;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -73,18 +74,56 @@ final class UnitSizingTest {
 
     @Test void aPumpsWorldLimitsAreRed() {
         var size = new PumpSizing.Size(.3);
-        assertSame(Limit.PUMP_FLOW, PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).closest().limit());
+        // At 52 times its rated flow the pump's NPSH3 is the closest row; the world's flow row is red too.
+        assertFalse(PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).reading(Limit.PUMP_FLOW).met());
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(40000, 71, 204.5, 80.), size).lamp());
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 210, 204.5, 80.), size).lamp());
-        // Owner decision D21 and option O4: the world's in-line pump for 731 m³/h needs 3.3 m, so it starves under 0.85 × 3.3 m
-        // and the margin row asks for 4.3 m.
-        assertEquals(3.3, PumpSizing.requiredNpsh(731), 1e-9);
+        // Owner decision D21 and option O4: the pump built at 0.3 m (763 m³/h at 1000 rpm, NPSH3_r 3.04 m) needs 2.89 m at 731 m³/h,
+        // so it starves under 0.85 of that and the margin row asks for 1 m more.
+        double required = PumpSizing.requiredNpsh(size, 731);
+        assertEquals(2.889, required, .005);
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 0.), size).lamp(), "NPSH on 0 misses");
-        assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 2.8), size).lamp(), "under the world's floor, 2.805 m");
-        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 2.81), size).lamp(), "over the floor, under the margin");
-        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 4.2), size).lamp());
-        assertEquals(Lamp.GREEN, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 4.3), size).lamp(), "NPSH3 plus 1 m meets it");
-        assertEquals(1.7, PumpSizing.requiredNpsh(36), .05, "the default in-line pump, 0.01 m³/s at 2950 rpm");
+        assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, .85 * required - .01), size).lamp(), "under the world's floor");
+        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, .85 * required + .01), size).lamp(), "over the floor, under the margin");
+        assertEquals(Lamp.YELLOW, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, required + .99), size).lamp());
+        assertEquals(Lamp.GREEN, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, required + 1), size).lamp(), "NPSH3 plus 1 m meets it");
+        var small = new PumpSizing.Size(.05);
+        assertEquals(Npsh.rated(UnitRatings.pumpFlow(.05) / 3600, 2950, 1).required(20 / 3600.), PumpSizing.requiredNpsh(small, 20), 1e-12,
+                "a small pump at the 2-pole speed, as before");
+    }
+
+    /**
+     * A sized pump is built at its design speed (owner decision D21; PUMP_SPEED_SHUT_VALVE_REVIEW.md): the duty speed that keeps its
+     * rated NPSH3 at most 3.3 m, rounded down to the constructor's 100 rpm grid, a base speed only below the 2-pole speed. The
+     * world's law of the built shape has that speed and that NPSH3, and the sizer's NPSH rows read the same law at the design flow.
+     */
+    @Test void aSizedPumpIsBuiltAtItsDesignSpeed() {
+        assertEquals(1000, PumpSizing.builtSpeed(.203), 0, "0.203 m³/s: duty speed 1086 rpm, built at 1000");
+        assertEquals(1086.8, Npsh.dutySpeed(.203, 2950), .1);
+        assertEquals(2.95, Npsh.rated(.203, 1000), .01, "its rated NPSH3");
+        assertEquals(2950, PumpSizing.builtSpeed(.01), 0, "a small pump keeps the 2-pole speed");
+        for (double d : UnitSize.grid(EquipmentShape.Kind.PUMP)) {
+            var size = new PumpSizing.Size(d);
+            double rated = UnitRatings.pumpFlow(d), design = .9 * rated;
+            var load = new PumpSizing.Load(design, 60, 204.5, 50., 850);
+            var rating = PumpSizing.rate(load, size);
+            var shape = PumpSizing.built(size, PumpSizing.Duty.of(rating));
+            if (shape == null || shape.equals(size.shape())) continue;
+            double speed = com.wormzjl.icheme.science.equipment.UnitDesign.designSpeed(shape);
+            assertEquals(PumpSizing.builtSpeed(rated / 3600), speed, 0, d + " m: built at its design speed");
+            assertEquals(speed < 2950 ? speed : 0, shape.duty().baseSpeed(), 0, d + " m: a base speed only below the 2-pole speed");
+            assertEquals(0, speed % 100 == 0 || speed == 2950 ? 0 : 1, d + " m: on the constructor's grid, " + speed);
+            var law = (com.wormzjl.icheme.science.machine.CentrifugalPump) ((com.wormzjl.icheme.science.fluid.network.FlowControl.Machine)
+                    com.wormzjl.icheme.science.plant.machine.MachineRatings.machineControl(shape)).law();
+            assertEquals(speed, law.ratedSpeed(), 0, d + " m: the world's law turns at it");
+            assertTrue(law.npsh(1).ratedNpsh3() <= Npsh.DUTY_NPSH3 + 1e-9, d + " m: rated NPSH3 " + law.npsh(1).ratedNpsh3());
+            assertEquals(60, law.head(design / 3600, 1), 1e-9, d + " m: the design head at the design flow");
+            assertEquals(law.npsh(1).required(design / 3600), PumpSizing.Duty.of(rating).npsh(), 1e-12, d + " m: the duty's NPSH3 is the law's");
+            assertEquals(law.npsh(1).required(design / 3600) + Limit.PUMP_NPSH.value(), rating.reading(Limit.PUMP_NPSH).low(), 1e-12,
+                    d + " m: the PUMP_NPSH row reads the law's NPSH3");
+            assertEquals(Npsh.BREAKDOWN * law.npsh(1).required(design / 3600), rating.reading(Limit.PUMP_NPSH_WORLD).low(), 1e-12,
+                    d + " m: the world's row reads the law's breakdown NPSH");
+        }
     }
 
     /**
@@ -114,7 +153,7 @@ final class UnitSizingTest {
         assertEquals(100, duty.flow(), 0);
         assertEquals(80, duty.head(), 0);
         assertEquals(31.1e3, duty.shaft(), .1e3, "21.8 kW hydraulic at Corripio's 0.70");
-        assertEquals(3.3, duty.npsh(), 1e-9);
+        assertEquals(3.668, duty.npsh(), .001, "the 0.1 m pump (84.8 m³/h at 2950 rpm, NPSH3_r 2.97 m) at 118 % of its rated flow");
         assertEquals(45e3, duty.motor(), 0, "1.2 × 31.1 kW = 37.4 kW: the next standard motor is 45 kW");
         var dry = PumpSizing.Duty.of(PumpSizing.rate(PUMP, new PumpSizing.Size(.3)));
         assertNotNull(dry);
@@ -603,7 +642,7 @@ final class UnitSizingTest {
         assertEquals(Lamp.GREEN, gassy.reading(Limit.PUMP_NPSH_WORLD).lamp());
         assertEquals(Lamp.GREEN, gassy.reading(Limit.PUMP_NPSH).lamp(), "the margin row reads the same NPSH available");
         assertEquals(Lamp.RED, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 21.5, 850, 21.6, true), size).lamp(), "under the edge the world starves it");
-        assertEquals(.85 * 3.3, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 25., 850, 1., true), size).reading(Limit.PUMP_NPSH_WORLD).low(), 1e-9, "an edge under the breakdown: 0.85 NPSH3");
+        assertEquals(.85 * PumpSizing.requiredNpsh(size, 731), PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 25., 850, 1., true), size).reading(Limit.PUMP_NPSH_WORLD).low(), 1e-9, "an edge under the breakdown: 0.85 NPSH3");
         assertEquals(12, PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 30., 850, 12., false), size).reading(Limit.PUMP_NPSH_WORLD).low(), 1e-12, "no vapour pressure: the edge alone, over zero pressure");
         var dead = PumpSizing.rate(new PumpSizing.Load(731, 71, 204.5, 30., 850, Double.POSITIVE_INFINITY, false), size);
         assertNull(dead.reading(Limit.PUMP_NPSH_WORLD), "neither: the world has no limit");

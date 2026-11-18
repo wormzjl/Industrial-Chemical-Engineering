@@ -502,8 +502,9 @@ public final class CrudeUnitPlant {
         if (!(unit.size() instanceof PumpSizing.Size pump)) throw new IllegalStateException("The sized pump is " + unit.size() + ": the rig builds a centrifugal pump");
         var shape = PumpSizing.built(unit);
         if (shape == null) throw new IllegalStateException("The constructor refuses the sized pump " + pump + " at " + PumpSizing.Duty.of(unit.rating()));
-        IChemE.LOGGER.info("review_operation sizing pump_duty discharge_m={} rated_m3_h={} head_m={} poles={}", shape.diameter(),
-                String.format(Locale.ROOT, "%.1f", shape.duty().flow()), String.format(Locale.ROOT, "%.2f", shape.duty().head()), shape.duty().poles());
+        IChemE.LOGGER.info("review_operation sizing pump_duty discharge_m={} rated_m3_h={} head_m={} poles={} speed_rpm={}", shape.diameter(),
+                String.format(Locale.ROOT, "%.1f", shape.duty().flow()), String.format(Locale.ROOT, "%.2f", shape.duty().head()), shape.duty().poles(),
+                String.format(Locale.ROOT, "%.0f", UnitDesign.designSpeed(shape)));
         return shape;
     }
 
@@ -1390,7 +1391,8 @@ public final class CrudeUnitPlant {
          * top and its status, logged at every report. The pump stands dead-headed until the column's start opens its feed valve,
          * and its drive regulates only on a flow: the check waits for the first report at least {@link #CHARGE_TICKS} online
          * ticks (at least 6 of the drive's decisions) after the first report that saw the pump's flow ({@link #chargeFlowing}).
-         * There, once, the flow lies within 2 % of the set flow and the drive below its top speed (a creative motor's set speed; a
+         * There, once, the flow lies within 2 % of the set flow and the drive below its top speed (a creative motor's set speed, with
+         * none its pump's design speed; a
          * motor's {@link com.wormzjl.icheme.science.machine.Motor#MAXIMUM_RPM}); else {@link #chargeFault}.
          */
         public void chargeCheck(long ticks, int n) {
@@ -1403,7 +1405,7 @@ public final class CrudeUnitPlant {
             var train = driver == null ? null : plant.world.shafts().view(driver.id());
             double speed = train == null ? Double.NaN : train.driverSpeed();
             double top = driver == null ? Double.NaN : driver.kind() == com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR ? com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM
-                    : driver.settings().setPoint() > 0 ? driver.settings().setPoint() : com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED;
+                    : plant.world.shafts().setSpeed(driver.id());
             var discharge = plant.world.view(id(PlantBuilder.front(chargePump, Role.DISCHARGE)));
             IChemE.LOGGER.info("review_operation t={} charge_pump suction_kPa={} discharge_kPa={} rise_kPa={}", ticks, state == null ? "-" : String.format(Locale.ROOT, "%.1f", state.pressure() / 1000),
                     discharge.state() == null ? "-" : String.format(Locale.ROOT, "%.1f", discharge.state().pressure() / 1000),

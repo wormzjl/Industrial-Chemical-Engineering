@@ -513,6 +513,59 @@ class ShaftCouplingTest {
         assertEquals(target, flow, .05 * target, "the motor holds the set flow: " + status);
     }
 
+    /**
+     * A creative motor with no set speed turns at its train's design speed (reading A19 after PUMP_SPEED_SHUT_VALVE_REVIEW.md): a
+     * pump built at 1000 rpm runs at share 1.0 in SPEED, and in REGULATE_FLOW, asked twice its rated flow, at most 1.0.
+     */
+    @Test
+    void aDefaultCreativeMotorTurnsItsPumpAtItsDesignSpeed() {
+        assertEquals(1, slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0).getLast(), 1e-9, "SPEED: share 1.0");
+        var regulated = slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .02);
+        for (double s : regulated) assertTrue(s <= 1 + 1e-9, "REGULATE_FLOW: at most 1.0, " + regulated);
+        assertEquals(1, regulated.getLast(), 1e-9, "at its top, short of the set flow: " + regulated);
+    }
+
+    /** The speed share of a pump rated 0.01 m³/s, 50 m at 1000 rpm on a creative motor with no set speed in {@code mode}, each 5 s. */
+    private List<Double> slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow) {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(3);
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                0, com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,
+                new ShaftUnit.Settings(true, mode, 0, 0, 0), trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+                0, 1000, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, trip, null));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        rig.coordinator.shafts(trains);
+        trains.host(new ShaftTrains.Host() {
+            public void edit(long device, FlowControl.ControlValve control) {
+            }
+
+            public UUID speedSensor(long turbine) {
+                return null;
+            }
+
+            public void resize(PhysicalFluidTopology.Position shaft, int pixels) {
+            }
+
+            public Set<Long> linked(long motor) {
+                return Set.of();
+            }
+        });
+        var slow = new CentrifugalPump(.01, 50, .7, 1000);
+        var base = line();
+        var line = new PassiveNetwork(base.reservoirs(), List.of(base.pipes().getFirst().withControl(new FlowControl.Machine(slow, 0, true, setFlow, 0))));
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        var out = new ArrayList<Double>();
+        for (int c = 0; c < 20; c++) {
+            rig.run(5);
+            out.add(((FlowControl.Machine) rig.coordinator.observe(1).lastResult().orElseThrow().graph().pipes().get(0).control()).speed());
+        }
+        return out;
+    }
+
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */
     @Test
     void theGovernorWalkFindsTheTurbinesValve() {
