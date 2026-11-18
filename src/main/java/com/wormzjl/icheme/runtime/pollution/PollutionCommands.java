@@ -121,6 +121,19 @@ public final class PollutionCommands {
                 }
                 source.sendSuccess(() -> Component.literal(line.toString()), false);
             }
+            // The ground (batch 2026-11-18-ground-pollution): its columns and its own ledger, deposited = stored + decayed + drawn + capped.
+            var ground = service.ground(dimension);
+            var groundLedger = service.groundLedger(dimension);
+            source.sendSuccess(() -> Component.literal(String.format(Locale.ROOT, "Ground in %s: %d columns, %d compound entries (air-mole equivalents, mol)",
+                    dimension.location(), ground.size(), ground.entries().size())), false);
+            for (Channel channel : Channel.values()) {
+                var line = new StringBuilder("ground ").append(channel.name().toLowerCase(Locale.ROOT)).append(':');
+                line.append(String.format(Locale.ROOT, " stored %.4g", ground.stored(channel)));
+                for (var total : com.wormzjl.icheme.science.pollution.GroundLedger.Total.values()) {
+                    line.append(String.format(Locale.ROOT, ", %s %.4g", total.name().toLowerCase(Locale.ROOT), groundLedger.get(channel, total)));
+                }
+                source.sendSuccess(() -> Component.literal(line.toString()), false);
+            }
             return 1;
         } catch (RuntimeException failure) {
             return failed(context, failure);

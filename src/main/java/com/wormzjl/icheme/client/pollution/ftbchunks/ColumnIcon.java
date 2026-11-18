@@ -70,22 +70,31 @@ final class ColumnIcon implements MapIcon {
     @Override
     public void addTooltip(TooltipList list) {
         try {
-            int packed = PollutionMapStore.value(dimension, column);
-            if (MapColumns.argb(packed) == 0) {
+            if (MapColumns.argb(PollutionMapStore.shown(dimension, column)) == 0) {
                 return;
             }
-            list.add(Component.translatable("pollution.icheme.map.header", Integer.toString(MapColumns.x(column)),
-                    Integer.toString(MapColumns.z(column))).withStyle(ChatFormatting.AQUA));
-            for (var channel : CHANNELS) {
-                int value = MapColumns.value(packed, channel);
-                double index = MapColumns.dequantise(value);
-                var word = Reading.word(channel, index);
-                String number = Reading.number(index) + (value >= MapColumns.SATURATED ? "+" : "");
-                list.add(Component.translatable("pollution.icheme.meter.line", Component.translatable(PollutionMeters.nameKey(channel)),
-                        number, Component.translatable(PollutionMeters.wordKey(word))).withStyle(PollutionMeters.colour(word)));
-            }
+            // Both layers whenever they hold something (batch 2026-11-18-ground-pollution, G3): the air's worst cube, the ground.
+            lines(list, "pollution.icheme.map.header", PollutionMapStore.value(dimension, column));
+            lines(list, "pollution.icheme.map.ground", PollutionMapStore.ground(dimension, column));
         } catch (LinkageError | RuntimeException failure) {
             PollutionMapClient.off(failure);
+        }
+    }
+
+    /** A layer's header and four lines; nothing when the layer has nothing drawable at this column. */
+    private void lines(TooltipList list, String header, int packed) {
+        if (MapColumns.argb(packed) == 0) {
+            return;
+        }
+        list.add(Component.translatable(header, Integer.toString(MapColumns.x(column)), Integer.toString(MapColumns.z(column)))
+                .withStyle(ChatFormatting.AQUA));
+        for (var channel : CHANNELS) {
+            int value = MapColumns.value(packed, channel);
+            double index = MapColumns.dequantise(value);
+            var word = Reading.word(channel, index);
+            String number = Reading.number(index) + (value >= MapColumns.SATURATED ? "+" : "");
+            list.add(Component.translatable("pollution.icheme.meter.line", Component.translatable(PollutionMeters.nameKey(channel)),
+                    number, Component.translatable(PollutionMeters.wordKey(word))).withStyle(PollutionMeters.colour(word)));
         }
     }
 
@@ -102,7 +111,7 @@ final class ColumnIcon implements MapIcon {
     @Override
     public void draw(MapType mapType, GuiGraphics graphics, int x, int y, int w, int h, boolean outsideVisibleArea, int iconAlpha) {
         try {
-            int argb = MapColumns.argb(PollutionMapStore.value(dimension, column));
+            int argb = MapColumns.argb(PollutionMapStore.shown(dimension, column));
             if (argb != 0 && w > 0 && h > 0) {
                 graphics.fill(x, y, x + w, y + h, argb);
             }

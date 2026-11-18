@@ -165,7 +165,7 @@ public final class PollutionMaps {
         try {
             var access = access();
             // One summary a dimension and pass, shared by its subscribers.
-            var summaries = new HashMap<ResourceKey<Level>, MapColumns.Columns>();
+            var summaries = new HashMap<ResourceKey<Level>, MapColumns.Layers>();
             for (var it = subscribers.entrySet().iterator(); it.hasNext(); ) {
                 var entry = it.next();
                 ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
@@ -196,7 +196,7 @@ public final class PollutionMaps {
      * or absent; else the columns around the player from the dimension's summary in {@code summaries} (made on first use).
      */
     private static PollutionMapNetwork.Answer answer(ServerPlayer player, PollutionService service, Access access,
-            Map<ResourceKey<Level>, MapColumns.Columns> summaries) {
+            Map<ResourceKey<Level>, MapColumns.Layers> summaries) {
         var dimension = player.level().dimension();
         String id = dimension.location().toString();
         if (!allowed(access, player)) {
@@ -205,14 +205,15 @@ public final class PollutionMaps {
         if (service == null || !service.enabled()) {
             return new PollutionMapNetwork.Answer(id, false, new long[0], new int[0]);
         }
-        var all = summaries.computeIfAbsent(dimension, key -> MapColumns.columns(service.field(key), cube -> {
+        // Both layers (batch 2026-11-18-ground-pollution, G3): the air's worst cube per column and the ground's snapshot.
+        var all = summaries.computeIfAbsent(dimension, key -> MapColumns.layers(MapColumns.columns(service.field(key), cube -> {
             var cell = service.cell(key, cube);
             // The field's own rule: the cube's last read air share, 1 when none is kept.
             return cell.loaded() ? cell.airShare() : 1.0;
-        }, service.settings()));
+        }, service.settings()), service.groundSnapshot(key)));
         var near = MapColumns.around(all, player.getBlockX() >> 4, player.getBlockZ() >> 4, MapColumns.RADIUS_CHUNKS,
                 MapColumns.MAXIMUM_ENTRIES);
-        return new PollutionMapNetwork.Answer(id, false, near.columns(), near.values());
+        return new PollutionMapNetwork.Answer(id, false, near.columns(), near.air(), near.ground());
     }
 
     /** Whether {@code access} lets {@code player} see the overlay. */

@@ -4856,5 +4856,7 @@
   "generator.icheme.column_test": "IChemE column test",
   "message.icheme.column_test.started": "Column test plant: started.",
   "message.icheme.column_test.stopped": "Column test plant: the start stopped at %s. See the log.",
-  "message.icheme.column_test.closed": "Column test plant: the world closed during the start; finish it by hand. See the log."
+  "message.icheme.column_test.closed": "Column test plant: the world closed during the start; finish it by hand. See the log.",
+  "pollution.icheme.map.ground": "Ground pollution, chunk %1$s, %2$s",
+  "pollution.icheme.meter.ground": "Ground of chunk %1$s, %2$s"
 }

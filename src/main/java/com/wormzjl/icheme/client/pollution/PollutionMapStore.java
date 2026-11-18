@@ -24,6 +24,17 @@ public final class PollutionMapStore {
     /** The columns of the last answer, ascending (for {@link Arrays#binarySearch}), and their four bytes. */
     private static long[] columns = NONE;
     private static int[] values = NO_VALUES;
+    /** The ground's four bytes of each column (batch 2026-11-18-ground-pollution, G3), in the order of {@link #columns}. */
+    private static int[] groundValues = NO_VALUES;
+
+    /** Which layer a square shows (G3): both (the worse of air and ground per channel), the air's, or the ground's. */
+    public enum Layer {
+        BOTH,
+        AIR,
+        GROUND
+    }
+
+    private static Layer layer = Layer.BOTH;
     private static Runnable changed = () -> {
     };
 
@@ -56,6 +67,7 @@ public final class PollutionMapStore {
         // The answer is nearest first; the store keeps the columns ascending.
         long[] given = answer.columns();
         int[] givenValues = answer.values();
+        int[] givenGround = answer.ground();
         Integer[] order = new Integer[given.length];
         for (int i = 0; i < order.length; i++) {
             order[i] = i;
@@ -63,15 +75,18 @@ public final class PollutionMapStore {
         Arrays.sort(order, (a, b) -> Long.compare(given[a], given[b]));
         long[] sortedColumns = new long[order.length];
         int[] sortedValues = new int[order.length];
+        int[] sortedGround = new int[order.length];
         for (int k = 0; k < order.length; k++) {
             sortedColumns[k] = given[order[k]];
             sortedValues[k] = givenValues[order[k]];
+            sortedGround[k] = givenGround[order[k]];
         }
         boolean newSet = answer.denied() != denied || !answer.dimension().equals(dimension) || !Arrays.equals(sortedColumns, columns);
         dimension = answer.dimension();
         denied = answer.denied();
         columns = sortedColumns;
         values = sortedValues;
+        groundValues = sortedGround;
         if (newSet) {
             try {
                 changed.run();
@@ -100,6 +115,33 @@ public final class PollutionMapStore {
         return i < 0 ? 0 : values[i];
     }
 
+    /** The ground's four bytes of {@code column} in {@code dimensionId}; 0 when the store has none (no allocation). */
+    public static int ground(String dimensionId, long column) {
+        if (!shows(dimensionId)) {
+            return 0;
+        }
+        int i = Arrays.binarySearch(columns, column);
+        return i < 0 ? 0 : groundValues[i];
+    }
+
+    /** The four bytes a square shows in the current {@link #layer}. */
+    public static int shown(String dimensionId, long column) {
+        return switch (layer) {
+            case AIR -> value(dimensionId, column);
+            case GROUND -> ground(dimensionId, column);
+            case BOTH -> com.wormzjl.icheme.science.pollution.MapColumns.worse(value(dimensionId, column), ground(dimensionId, column));
+        };
+    }
+
+    public static Layer layer() {
+        return layer;
+    }
+
+    /** Shows {@code next} on the squares from the next draw. */
+    public static void layer(Layer next) {
+        layer = next == null ? Layer.BOTH : next;
+    }
+
     /** Run when an answer brings another set of columns (the map gathers its squares again); one listener. */
     public static void onChange(Runnable listener) {
         changed = listener == null ? () -> {
@@ -123,5 +165,6 @@ public final class PollutionMapStore {
         denied = false;
         columns = NONE;
         values = NO_VALUES;
+        groundValues = NO_VALUES;
     }
 }

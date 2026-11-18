@@ -218,6 +218,73 @@ public final class MapColumns {
         return new Columns(columns, values);
     }
 
+    /**
+     * Columns with two layers of four bytes each (batch 2026-11-18-ground-pollution, G3): the air's (worst cube) and the
+     * ground's, in the same order; a layer with nothing at a column is 0 there.
+     */
+    public record Layers(long[] columns, int[] air, int[] ground) {
+        public static final Layers EMPTY = new Layers(new long[0], new int[0], new int[0]);
+
+        public Layers {
+            Objects.requireNonNull(columns, "columns");
+            Objects.requireNonNull(air, "air");
+            Objects.requireNonNull(ground, "ground");
+            if (columns.length != air.length || columns.length != ground.length) {
+                throw new IllegalArgumentException(columns.length + " columns, " + air.length + " air, " + ground.length + " ground");
+            }
+        }
+
+        public int size() {
+            return columns.length;
+        }
+    }
+
+    /**
+     * The union of the air's drawn columns and the ground's columns whose worst byte reaches {@link #DRAW_FLOOR}, sorted by
+     * column, each with both layers' bytes.
+     */
+    public static Layers layers(Columns air, GroundSnapshot ground) {
+        Objects.requireNonNull(air, "air");
+        Objects.requireNonNull(ground, "ground");
+        var merged = new java.util.TreeMap<Long, int[]>();
+        for (int i = 0; i < air.size(); i++) merged.computeIfAbsent(air.columns()[i], k -> new int[2])[0] = air.values()[i];
+        for (int i = 0; i < ground.size(); i++) {
+            int packed = ground.packed(i);
+            if (worstByte(packed) >= MINIMUM_BYTE) merged.computeIfAbsent(ground.column(i), k -> new int[2])[1] = packed;
+        }
+        long[] columns = new long[merged.size()];
+        int[] airValues = new int[merged.size()], groundValues = new int[merged.size()];
+        int k = 0;
+        for (var e : merged.entrySet()) {
+            columns[k] = e.getKey();
+            airValues[k] = e.getValue()[0];
+            groundValues[k] = e.getValue()[1];
+            k++;
+        }
+        return new Layers(columns, airValues, groundValues);
+    }
+
+    /** {@link #around(Columns, int, int, int, int)} for both layers: the same columns, the nearest first. */
+    public static Layers around(Layers all, int centreX, int centreZ, int radius, int maximum) {
+        Objects.requireNonNull(all, "all");
+        // The positions ride in the values of a Columns, so the one distance rule picks and orders both layers.
+        int[] positions = new int[all.size()];
+        for (int i = 0; i < positions.length; i++) positions[i] = i;
+        var picked = around(new Columns(all.columns(), positions), centreX, centreZ, radius, maximum);
+        int n = picked.size();
+        int[] air = new int[n], ground = new int[n];
+        for (int k = 0; k < n; k++) {
+            air[k] = all.air()[picked.values()[k]];
+            ground[k] = all.ground()[picked.values()[k]];
+        }
+        return new Layers(picked.columns(), air, ground);
+    }
+
+    /** Per channel the larger of two columns' bytes: what a square shows for both layers at once. */
+    public static int worse(int a, int b) {
+        return merge(a, b);
+    }
+
     // ---------------------------------------------------------------------------------------------------------------
     // The look.
 

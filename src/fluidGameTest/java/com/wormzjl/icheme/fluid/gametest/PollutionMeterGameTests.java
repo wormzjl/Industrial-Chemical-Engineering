@@ -46,6 +46,15 @@ public final class PollutionMeterGameTests {
         for (var line : PollutionMeters.fullReading(new BlockPos(40, 70, -20), 1.2, 0, 0, 0, new Environment.Cell(0.87, true, true))) {
             lines.addAll(keys(line));
         }
+        // Batch 2026-11-18-ground-pollution, G3: the ground of the column underfoot, in the same words.
+        var withGround = new ArrayList<String>();
+        for (var line : PollutionMeters.fullReading(new BlockPos(40, 70, -20), 0, 0, 0, 0, new Environment.Cell(1, true, true), new double[] {0.46, 0, 0.12, 0})) {
+            withGround.addAll(keys(line));
+        }
+        var noGround = new ArrayList<String>();
+        for (var line : PollutionMeters.fullReading(new BlockPos(40, 70, -20), 0, 0, 0, 0, new Environment.Cell(1, true, true), new double[4])) {
+            noGround.addAll(keys(line));
+        }
         var unread = new ArrayList<String>();
         for (var line : PollutionMeters.fullReading(BlockPos.ZERO, 0, 0, 0, 0, Environment.Cell.UNLOADED)) {
             unread.addAll(keys(line));
@@ -72,6 +81,9 @@ public final class PollutionMeterGameTests {
                 && lines.contains("pollution.icheme.meter.air") && lines.contains("87") && lines.contains("pollution.icheme.air.open"),
                 "The full reading holds the cube, the words and the air: " + lines);
         helper.assertTrue(unread.contains("pollution.icheme.air.unread"), "An unread cube says so: " + unread);
+        helper.assertTrue(withGround.contains("pollution.icheme.meter.ground") && withGround.contains("2") && withGround.contains("-2")
+                && withGround.contains("0.46"), "The full reading adds the ground of chunk 2, -2: " + withGround);
+        helper.assertFalse(noGround.contains("pollution.icheme.meter.ground"), "No ground, no ground lines: " + noGround);
         helper.assertTrue(keys(PollutionMeters.off()).contains("pollution.icheme.meter.off"), "Off reads OFF");
         helper.assertFalse(emptyHolds, "A player without the meter is not served");
         helper.assertTrue(holderHolds, "A player with the meter in the off hand is served");
