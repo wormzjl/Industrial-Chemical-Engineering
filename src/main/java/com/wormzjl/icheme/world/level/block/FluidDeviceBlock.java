@@ -101,7 +101,7 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     public boolean hopper(){return false;}
     /**
      * A water intake (batch 2026-11-18-water-intake-outfall): a generator block that registers the water body it touches
-     * ({@code Placement.waterIntake}); its switch follows the water body rule ({@link WaterBody}), counted by this block.
+     * ({@code Placement.waterIntake}); its switch follows the water body rule ({@link WaterBody}), sampled on placement and by the engine.
      */
     public static FluidDeviceBlock waterIntake(BlockBehaviour.Properties properties){return new WaterIntake(properties);}
     private static final MapCodec<FluidDeviceBlock> WATER_INTAKE_CODEC=RecordCodecBuilder.mapCodec(instance->instance.group(propertiesCodec()).apply(instance,FluidDeviceBlock::waterIntake));
@@ -122,24 +122,15 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     }
     /** Whether this block is a waste outfall. */
     public boolean outfall(){return false;}
-    /**
-     * How often a water intake counts its water body again, ticks (60 s at 20 TPS): a body that changed beyond its
-     * neighbours, or a neighbour chunk that loaded since (a chunk that is not loaded counts as no water). A scheduled block
-     * tick, a due deadline the server keeps with the chunk; never a per-tick poll.
-     */
-    public static final int WATER_BODY_RECHECK=1200;
-    /**
-     * Whether the water intake at {@code position} touches a water body ({@link WaterBody#count}): a block whose fluid is in
-     * the {@code minecraft:water} tag, in a loaded chunk; no chunk is loaded, no block is changed and no biome is read.
-     */
-    public static boolean touchesWaterBody(ServerLevel level,BlockPos position){
-        var probe=new BlockPos.MutableBlockPos();
-        return WaterBody.count(position.getX(),position.getY(),position.getZ(),(x,y,z)->{probe.set(x,y,z);return level.isLoaded(probe)&&level.getFluidState(probe).is(net.minecraft.tags.FluidTags.WATER);}).body();
-    }
+    public static final int WATER_BODY_RECHECK=WaterIntakes.RECHECK_TICKS;
+
+    /** Tests the connected body in already generated terrain without opening a chunk. */
+    public static boolean touchesWaterBody(ServerLevel level,BlockPos pos){return WaterIntakes.supplying(level,pos);}
+
     /** Counts the water intake at {@code position} and queues its switch's edit when the answer changed ({@link FluidWorldAuthority#waterBody}). */
     private static void recountWaterBody(ServerLevel level,BlockPos position){
         if(registered)return;var world=authority(level);if(world==null)return;
-        world.at(Positions.of(level,position)).ifPresent(r->world.waterBody(r.device().id(),touchesWaterBody(level,position)));
+        WaterIntakes.changed(world,level,position);
     }
     @Override protected void neighborChanged(BlockState state,Level level,BlockPos position,Block neighbor,BlockPos neighborPosition,boolean moved){
         super.neighborChanged(state,level,position,neighbor,neighborPosition,moved);
@@ -253,7 +244,6 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
         return super.updateShape(connected,direction,neighbor,level,position,neighborPosition);
     }
     @Override protected void tick(BlockState state,ServerLevel level,BlockPos position,net.minecraft.util.RandomSource random) {
-        if(waterIntake()){recountWaterBody(level,position);level.scheduleTick(position,this,WATER_BODY_RECHECK);return;}
         if(kind!=TopologyCompiler.Kind.PIPE||!state.getValue(SIGHT_GLASS)||supportsSightGlass(state))return;
         if(level.setBlock(position,state.setValue(SIGHT_GLASS,false),Block.UPDATE_ALL)) {
             if(level.getBlockEntity(position) instanceof FluidDeviceBlockEntity entity)entity.refreshGeometry(entity.bore(),true);
@@ -313,7 +303,6 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
     @Override protected void onPlace(BlockState state,Level level,BlockPos position,BlockState previous,boolean moved) {
         super.onPlace(state,level,position,previous,moved);
         // A water intake counts its water body again on a long deadline, from its placement or its registry's restanding on.
-        if(waterIntake()&&level instanceof ServerLevel server&&previous.getBlock()!=this)server.scheduleTick(position,this,WATER_BODY_RECHECK);
         if(!(level instanceof ServerLevel serverLevel)||registered)return;
         FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
             var p=Positions.of(level,position);

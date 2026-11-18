@@ -9,15 +9,14 @@ import java.util.Objects;
  * gives water only while one of its faces touches world water that belongs to a connected body of at least
  * {@link #WATER_BODY} water blocks. The count is a bounded flood fill through face-adjacent water blocks that stops as soon
  * as it has found {@link #WATER_BODY}; it removes no block and reads no biome. What counts as water is the probe's: in the
- * world, a block whose fluid is in the {@code minecraft:water} tag (a source, a flowing block or a waterlogged block) in a
- * loaded chunk; a block in a chunk that is not loaded is no water.
+ * world, a block whose fluid is in the {@code minecraft:water} tag (a source, a flowing block or a waterlogged block) in
+ * existing terrain, including a saved chunk.
  * <p>
  * Each face's water is its own body: two pools that meet only at the intake are two bodies (the intake is no water). Bound:
  * the intake's six faces are read first; each face's fill takes fewer than {@link #WATER_BODY} blocks before it either
  * stops or ends, and reads each one's six neighbours once: at most {@link #MAX_READS} = 6 + 6 × 6 × 100 = 3 606 block reads
  * per count (606 for one body), whatever the world holds. A fact about
- * the world, counted on the server thread by the block (at placement, on a neighbour's change and on a long recheck), never
- * on the engine's schedule or inside a solve. Pure: no Minecraft types.
+ * the world, counted on the server thread at placement, after a neighbour change and on a periodic engine deadline, outside the fluid solve. Pure: no Minecraft types.
  */
 public final class WaterBody {
     /** The least connected water blocks that make a water body (owner, 2026-11-18). */

@@ -59,6 +59,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The chimneys (batch 2026-11-10-chimney). */
     final Chimneys chimneys;
     /** The batch stills (batch 2026-11-09-batch-distiller, W3 to W5). */
+    private long nextWaterCheck;
     final Stills stills;
     private final StillFuelInventory stillFuel = new StillFuelInventory(this);
     private final SavedChunkData chunkData = new SavedChunkData();
@@ -1637,6 +1638,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     private void tick() {
         owned();if(closed)return;refreshProperties();topology.tick();
+        if (topology.onlineTick() >= nextWaterCheck) {
+            WaterIntakes.recheck(this);
+            nextWaterCheck = topology.onlineTick() + WaterIntakes.RECHECK_TICKS;
+        }
         holdValves();
         // Sample electrical supply before this cadence's shaft decisions and presentation, including idle trains.
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();}
