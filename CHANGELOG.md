@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- Field Guide photographs (`2026-11-18-tutorial-photos`): 14 redistributable photos (public domain, CC0, one CC BY 2.0), at least one a chapter, as a thumbnail row with View over the steps and a viewer in the glass; credits in `assets/icheme/tutorial/PHOTO_CREDITS.md`; `tools/tutorial-photos/PhotoAssets.java`.
+
 ## [0.35.1] - 2026-11-18
 
 ### Changed
