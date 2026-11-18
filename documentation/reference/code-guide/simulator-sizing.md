@@ -78,7 +78,8 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
 3. **Size all** (`Proposal.sizeAll`): every Auto size applied to a copy of the sheet; where a size moves the run (a
    column's diameter, sized drops) one warm re-run; a run that is not steady sizes nothing; the result is one undoable
    edit.
-4. **Send to block**: `SheetSizing.designs` gives one `SentDesign` per sized unit (valves left out, at most 64), sent as
+4. **Send to block**: `SheetSizing.designs` gives one `SentDesign` per sized unit (valves left out, at most 64; a pump as
+   `PumpSizing.built`, with its duty and design speed), sent as
    `simulator_send_designs`; the server takes the list whole from the holder and replaces the earlier one.
 5. **Import**: the constructor asks the nearest simulator within `EquipmentNetwork.IMPORT_REACH`
    (`EquipmentConstructorBlockEntity.simulator`) for its list: the saved column design first, then the sent designs; the
@@ -100,8 +101,11 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
   `COLUMN_SOLVES`. A column with a vacuum pump has a `vacuum_pump` member in `BlockSizing`.
 - **Pumps** (`PumpSizing`): NPSH available over the liquid's p_v, or over zero pressure where it has none;
   `PUMP_NPSH_WORLD` against the greater of the clean zone's edge and 0.85 NPSH3 (`ReleasePressure.limit` as heads over
-  p_v; no row where neither exists), `PUMP_NPSH` against NPSH3 plus its margin. A drum liquid saturated with gas has the
-  head over its vapour pressure. On one dense suction (`State.dense()`) `PUMP_DENSITY` (SHOULD) reads its reduced density
+  p_v; no row where neither exists), `PUMP_NPSH` against NPSH3 plus its margin. NPSH3 is the built pump's own law
+  (`requiredNpsh(size, flow)`): rated at the bore's flow at its design speed `builtSpeed`, the duty speed (`Npsh.dutySpeed`,
+  owner D21, rated NPSH3 at most 3.3 m) rounded down to the constructor's 100 rpm grid, 2950 rpm up to 0.0275 m³/s, 1000 rpm
+  at 0.2 m³/s. `built(Size, Duty)` gives the pump that speed as its base speed (none at 2950 rpm); the Build list shows it.
+  A drum liquid saturated with gas has the head over its vapour pressure. On one dense suction (`State.dense()`) `PUMP_DENSITY` (SHOULD) reads its reduced density
   against 0.86, the lightest suction pumps run on carbon dioxide; no other suction reads it.
 - **Plunger pumps** (`PumpSizing.Plunger`, the Pump tile's `PLUNGER` type): `PUMP_RATED` reads the spared flow against
   the model's displacement times its clearance's share at the rise (`PlungerPump.volumetricEfficiency` on `Load.pressure`

@@ -259,13 +259,15 @@ public final class MachineColumn {
         return Double.isFinite(value) ? String.format(Locale.ROOT, "%.0f", value) : "—";
     }
 
-    /** The speed entry's value for {@code v}: a motor's share in %, a turbine's set speed in rpm, a creative motor's rpm. */
+    /** The speed entry's value for {@code v}: a motor's share in %, a turbine's set speed in rpm, a creative motor's rpm (with none
+     * set, its design speed as the view carries it: {@code ShaftTrains.creativeSpeed}). */
     public static double speedEntry(MachineView v) {
         double set = v.settings().setPoint();
         return switch (Kind.of(v.kind())) {
             case MOTOR -> (set>0?set:1)*v.designSpeed();
             case STEAM_TURBINE, PRIME_MOVER -> (set > 0 ? set : 1) * v.designSpeed();
-            case CREATIVE_MOTOR -> set > 0 ? set : ShaftTrain.CREATIVE_SPEED;
+            // A creative motor with none set turns at its train's design speed: the view's, the engine's creativeSpeed.
+            case CREATIVE_MOTOR -> set > 0 ? set : v.designSpeed();
             case null, default -> 0;
         };
     }

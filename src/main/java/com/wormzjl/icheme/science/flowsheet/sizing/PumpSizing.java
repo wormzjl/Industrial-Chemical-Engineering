@@ -5,7 +5,6 @@ import com.wormzjl.icheme.science.equipment.MachineDuty;
 import com.wormzjl.icheme.science.equipment.ProcessUnit;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
-import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveStepSolver;
 import com.wormzjl.icheme.science.fluid.network.ReleasePressure;
 import com.wormzjl.icheme.science.machine.CentrifugalPump;
@@ -157,7 +156,7 @@ public final class PumpSizing {
      * @param head  m of its liquid
      * @param shaft its shaft power at the design efficiency of a pump rated for the duty ({@link CentrifugalPump#bestEfficiency}), W;
      *              NaN where the load has no density
-     * @param npsh  its NPSH3 at that flow ({@link #requiredNpsh}), m
+     * @param npsh  the NPSH3 at that flow of the pump built at its size ({@link #requiredNpsh}), m
      * @param motor the motor a design proposes ({@link Motor#ratingFor}: the next standard rating above 1.2 times the shaft power), W;
      *              NaN with no shaft power
      */
@@ -178,16 +177,19 @@ public final class PumpSizing {
         }
     }
 
-    /** {@code load}'s duty: its shaft power {@code ρ g Q H / η}, η Corripio's for a pump rated at its flow (W1, decision A5). */
-    public static Duty duty(Load load) {
+    /**
+     * {@code load}'s duty at {@code size}: its shaft power {@code ρ g Q H / η}, η Corripio's for a pump rated at its flow (W1, decision
+     * A5); its NPSH3 that of the pump built at the size ({@link #requiredNpsh}).
+     */
+    public static Duty duty(Load load, Size size) {
         double volume = load.flow() / 3600, shaft = load.density() * PassiveStepSolver.GRAVITY * volume * load.head() / CentrifugalPump.bestEfficiency(volume);
-        return new Duty(load.flow(), load.head(), shaft, requiredNpsh(load.flow()), Double.isNaN(shaft) ? Double.NaN : Motor.ratingFor(shaft));
+        return new Duty(load.flow(), load.head(), shaft, requiredNpsh(size, load.flow()), Double.isNaN(shaft) ? Double.NaN : Motor.ratingFor(shaft));
     }
 
     /** Every limit of {@code load} read at {@code size}, with its {@link Duty} beside them. */
     public static Rating rate(Load load, Size size) {
         if (!load.flows()) return Rating.NONE;
-        return duty(load).on(limits(load, size));
+        return duty(load, size).on(limits(load, size));
     }
 
     /** {@code load}'s rise, Pa: its head in metres of what it pumps, on that liquid's weight; NaN where it has no density. */
@@ -253,8 +255,10 @@ public final class PumpSizing {
      * {@code size}'s shape as it is built for {@code duty} (owner, 2026-11-17: a sized pump is built with its duty): the pump
      * design rated at its bore's flow ({@link UnitRatings#pumpFlow}), at the rated head for which its own curve ({@link
      * CentrifugalPump}, the law the world builds from it) gives the design head at the design flow, at the poles the pump design
-     * gives the bore. The bore-only shape where there is no duty, or where that design point is outside the pump design's
-     * ranges (the PUMP_HEAD and PUMP_FLOW rows say why). Null where the constructor refuses the bore itself.
+     * gives the bore, at its design speed ({@link #builtSpeed}: a base speed only where that is below the 2-pole speed). The curve
+     * is in shares of the rated flow, head and speed, so the speed moves no point of it at the rated speed. The bore-only shape
+     * where there is no duty, or where that design point is outside the pump design's ranges (the PUMP_HEAD and PUMP_FLOW rows
+     * say why). Null where the constructor refuses the bore itself.
      */
     public static @Nullable EquipmentShape built(Size size, @Nullable Duty duty) {
         var shape = UnitSize.built(size);
@@ -264,7 +268,9 @@ public final class PumpSizing {
         double share = unit.head(design, 1);
         if (!(share > 0)) return shape;
         try {
-            return shape.withDuty(MachineDuty.pump(UnitRatings.pumpFlow(size.discharge()), duty.head() / share, shape.duty().poles()));
+            double speed = builtSpeed(rated);
+            return shape.withDuty(MachineDuty.pump(UnitRatings.pumpFlow(size.discharge()), duty.head() / share, shape.duty().poles())
+                    .withBaseSpeed(speed < Motor.ratedSpeed(2) ? speed : 0));
         } catch (IllegalArgumentException outside) {
             return shape;
         }
@@ -281,7 +287,7 @@ public final class PumpSizing {
         readings.add(Limit.PUMP_HEAD.against(load.head(), load.mostHead()));
         var npsh = load.npsh();
         if (npsh != null) {
-            double required = requiredNpsh(load.flow());
+            double required = requiredNpsh(size, load.flow());
             // The world's suction limit as heads over the pressure the NPSH counts from: p_v stands at 0 there, or nowhere.
             double floor = ReleasePressure.limit(load.boils() ? 0 : Double.POSITIVE_INFINITY, load.edge(), Npsh.BREAKDOWN * required);
             if (floor < Double.POSITIVE_INFINITY) readings.add(Limit.PUMP_NPSH_WORLD.against(npsh, floor));
@@ -292,13 +298,28 @@ public final class PumpSizing {
         return new Rating(readings);
     }
 
+    /** The constructor's base speed grid, rpm: its steps ({@code PumpDesign.step} "base_speed") and its lowest speed. */
+    static final double SPEED_STEP = 100, LOWEST_SPEED = 300;
+
     /**
-     * The NPSH3 (m) of the world's in-line pump set to {@code flow} (m³/h), at that flow: its duty design
-     * ({@link FlowControl.Pump#npsh}, {@link Npsh#forDuty}; owner decision D21), 1.7 m at 36 m³/h and 3.3 m from 100 m³/h up.
+     * The design speed (rpm) a sized pump rated {@code ratedFlow} (m³/s) is built at: its duty speed ({@link Npsh#dutySpeed},
+     * owner decision D21: a designer turns a large pump slower so that its rated NPSH3 is at most {@link Npsh#DUTY_NPSH3}) on the
+     * 2-pole speed, which a pump up to 0.0275 m³/s keeps; below it, rounded down to the constructor's 100 rpm grid (at least 300
+     * rpm), which keeps the NPSH3 at most the duty's. 1000 rpm for 0.2 m³/s.
      */
-    public static double requiredNpsh(double flow) {
-        double volumeFlow = flow / 3600;
-        return new FlowControl.Pump(volumeFlow, 1).npsh().required(volumeFlow);
+    public static double builtSpeed(double ratedFlow) {
+        double top = Motor.ratedSpeed(2), duty = Npsh.dutySpeed(ratedFlow, top);
+        return duty >= top ? top : Math.clamp(Math.floor(duty / SPEED_STEP) * SPEED_STEP, LOWEST_SPEED, Motor.MAXIMUM_RPM);
+    }
+
+    /**
+     * The NPSH3 (m) at {@code flow} (m³/h) of the pump built at {@code size} ({@link #built(Size, Duty)}): rated at its bore's flow
+     * at its design speed ({@link #builtSpeed}), so at most 3.3 m at its rated flow (owner decision D21). The law the world builds
+     * from the built shape ({@code CentrifugalPump.npsh}), at its rated speed.
+     */
+    public static double requiredNpsh(Size size, double flow) {
+        double rated = UnitRatings.pumpFlow(size.discharge()) / 3600;
+        return Npsh.rated(rated, builtSpeed(rated), 1).required(flow / 3600);
     }
 
     /** The smallest discharge that meets every limit, those whose rated flow holds the design flow with {@link Limit#AUTO_SPARE} first. No flow, no size. */

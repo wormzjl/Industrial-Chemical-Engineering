@@ -63,6 +63,13 @@ Registry first ([runtime-registry.md](runtime-registry.md)). A rack lane's frame
 - `BuiltInInputs`: a chimney's `flow_rate` (`CHIMNEY:FLOW`, kg/s), `solids_rate` (`CHIMNEY:SOLIDS`) and `venting` (`CHIMNEY:VENTING`, 1 from `Chimney.NO_FLOW` up), read from `Chimneys.view` at the online tick; its alarms `alarm_over_capacity` and `alarm_no_draft` (`EquipmentAlarm.CHIMNEY`).
 - `EquipmentServices`: its junction box set into the foot's side (a steel stack's plinth, a brick chimney's shell), cover flush, gland on the bottom block's centre.
 
+## The creative motor's data socket
+
+- The creative motor is a one-block data host (part C of `PUMP_SPEED_SHUT_VALVE_REVIEW.md`): an actuator socket of its shaft
+  unit on its terminal box (`CreativeMotorGeometry.SOCKET`, turned with its facing; `DataPorts.creativeMotor`), a control
+  fact kept by `ControlHosts.bindCreativeMotor` at the 100-tick motor bind and removed with the unit (`removeHost`); its
+  block entity (`CreativeMotorBlockEntity`, `DataPort.Owner`) holds the copy the laying tool and the client read.
+
 ## The pollution monitor's data channels
 
 - `PollutionMonitorBlock` is a one-block data host with a sensor socket on its back. `ControlHosts.bindMonitor` keeps the socket fact its block owns (a monitor placed again where a lost one stood takes it back), else reserves a control identity. Label `AT-nnnn` from the host number, as `COL-` and `EQ-`.

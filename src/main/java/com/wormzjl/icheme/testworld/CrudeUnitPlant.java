@@ -502,8 +502,9 @@ public final class CrudeUnitPlant {
         if (!(unit.size() instanceof PumpSizing.Size pump)) throw new IllegalStateException("The sized pump is " + unit.size() + ": the rig builds a centrifugal pump");
         var shape = PumpSizing.built(unit);
         if (shape == null) throw new IllegalStateException("The constructor refuses the sized pump " + pump + " at " + PumpSizing.Duty.of(unit.rating()));
-        IChemE.LOGGER.info("review_operation sizing pump_duty discharge_m={} rated_m3_h={} head_m={} poles={}", shape.diameter(),
-                String.format(Locale.ROOT, "%.1f", shape.duty().flow()), String.format(Locale.ROOT, "%.2f", shape.duty().head()), shape.duty().poles());
+        IChemE.LOGGER.info("review_operation sizing pump_duty discharge_m={} rated_m3_h={} head_m={} poles={} speed_rpm={}", shape.diameter(),
+                String.format(Locale.ROOT, "%.1f", shape.duty().flow()), String.format(Locale.ROOT, "%.2f", shape.duty().head()), shape.duty().poles(),
+                String.format(Locale.ROOT, "%.0f", UnitDesign.designSpeed(shape)));
         return shape;
     }
 
@@ -1077,16 +1078,26 @@ public final class CrudeUnitPlant {
             return shell.fluidIdentity();
         }
 
-        /** Whether the charge pump's train has compiled with its driver (always true without a charge pump). */
+        /** Whether the charge pump's train has compiled with its driver and the driver's data socket is bound (always true without a
+         * charge pump). */
         public boolean chargeDriven() {
-            return chargePump == null || plant.world.shafts().driverOf(chargeId()) != null;
+            if (chargePump == null) return true;
+            var driver = plant.world.shafts().driverOf(chargeId());
+            return driver != null && drivePort(driver.id()) != null;
+        }
+
+        /** The data socket of drive {@code unit} (a motor's or a creative motor's, its shaft unit the host), or null before its bind. */
+        private @Nullable com.wormzjl.icheme.runtime.control.DataPort drivePort(long unit) {
+            for (var p : plant.world.controls().facts().ports().values())
+                if (p.host() == unit && p.kind().medium() == com.wormzjl.icheme.science.equipment.CableMedium.DATA) return p;
+            return null;
         }
 
         /**
          * The charge pump's flow held by its drive (PUMP_DRIVE_FLOW_PLAN.md): its set flow, {@link Preheat#chargeSetFlow} at
          * suction, through the edit a player's Apply on its page queues; its drive stopped in REGULATE_FLOW until {@link
-         * #openCrude}. A motor on FE reads the pump's duty over a data cable from its port to the pump's (else NO DATA LINK); a
-         * creative motor regulates its own first machine with no link (ShaftTrains, the first machine's measure).
+         * #openCrude}. Its drive, a motor on FE or a creative motor, reads the pump's duty over a data cable from its port to the
+         * pump's (else NO DATA LINK).
          */
         public void holdCharge(String[] failure) {
             if (chargePump == null) return;
@@ -1100,16 +1111,14 @@ public final class CrudeUnitPlant {
             double set = options.preheat().chargeSetFlow();
             plant.world.edit(pump, old.revision(), d.withControl(new com.wormzjl.icheme.science.fluid.network.FlowControl.Machine(m.law(), m.speed(), m.enabled(), set, m.setPressure())), old.spec());
             var driver = plant.world.shafts().driverOf(pump);
-            if (options.motors()) {
-                var motor = motors.get(pumps.indexOf(chargePump));
-                var from = PlantBuilder.port(plant, motor.origin(), com.wormzjl.icheme.science.equipment.CableMedium.DATA);
-                var to = PlantBuilder.port(plant, chargePump.origin(), com.wormzjl.icheme.science.equipment.CableMedium.DATA);
-                if (from == null || to == null) {
-                    failure[0] = "no data port on the charge pump's " + (from == null ? "motor" : "casing");
-                    return;
-                }
-                PlantBuilder.lay(plant, List.of(from, to), com.wormzjl.icheme.science.equipment.CableMedium.DATA);
+            // The drive regulates the pump over a data cable, a motor's or a creative motor's (part C of PUMP_SPEED_SHUT_VALVE_REVIEW.md).
+            var from = drivePort(driver.id());
+            var to = PlantBuilder.port(plant, chargePump.origin(), com.wormzjl.icheme.science.equipment.CableMedium.DATA);
+            if (from == null || to == null) {
+                failure[0] = "no data port on the charge pump's " + (from == null ? "drive" : "casing");
+                return;
             }
+            PlantBuilder.lay(plant, List.of(from, to), com.wormzjl.icheme.science.equipment.CableMedium.DATA);
             var s = driver.settings();
             plant.world.shafts().queue(new com.wormzjl.icheme.runtime.fluid.ShaftTrains.Configure(driver.id(),
                     new com.wormzjl.icheme.runtime.fluid.ShaftUnit.Settings(false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, s.setPoint(), s.powerLimit(), s.ratio())));
@@ -1390,7 +1399,8 @@ public final class CrudeUnitPlant {
          * top and its status, logged at every report. The pump stands dead-headed until the column's start opens its feed valve,
          * and its drive regulates only on a flow: the check waits for the first report at least {@link #CHARGE_TICKS} online
          * ticks (at least 6 of the drive's decisions) after the first report that saw the pump's flow ({@link #chargeFlowing}).
-         * There, once, the flow lies within 2 % of the set flow and the drive below its top speed (a creative motor's set speed; a
+         * There, once, the flow lies within 2 % of the set flow and the drive below its top speed (a creative motor's set speed, with
+         * none its pump's design speed; a
          * motor's {@link com.wormzjl.icheme.science.machine.Motor#MAXIMUM_RPM}); else {@link #chargeFault}.
          */
         public void chargeCheck(long ticks, int n) {
@@ -1403,7 +1413,7 @@ public final class CrudeUnitPlant {
             var train = driver == null ? null : plant.world.shafts().view(driver.id());
             double speed = train == null ? Double.NaN : train.driverSpeed();
             double top = driver == null ? Double.NaN : driver.kind() == com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR ? com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM
-                    : driver.settings().setPoint() > 0 ? driver.settings().setPoint() : com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED;
+                    : plant.world.shafts().setSpeed(driver.id());
             var discharge = plant.world.view(id(PlantBuilder.front(chargePump, Role.DISCHARGE)));
             IChemE.LOGGER.info("review_operation t={} charge_pump suction_kPa={} discharge_kPa={} rise_kPa={}", ticks, state == null ? "-" : String.format(Locale.ROOT, "%.1f", state.pressure() / 1000),
                     discharge.state() == null ? "-" : String.format(Locale.ROOT, "%.1f", discharge.state().pressure() / 1000),

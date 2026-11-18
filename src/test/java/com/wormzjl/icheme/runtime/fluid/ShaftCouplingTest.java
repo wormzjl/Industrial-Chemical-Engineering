@@ -5,6 +5,8 @@ import com.wormzjl.icheme.runtime.ProcessSolveJobs;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.machine.CentrifugalPump;
+import com.wormzjl.icheme.science.machine.Motor;
+import com.wormzjl.icheme.science.machine.SpeedControl;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -513,6 +515,127 @@ class ShaftCouplingTest {
         assertEquals(target, flow, .05 * target, "the motor holds the set flow: " + status);
     }
 
+    /**
+     * A creative motor with no set speed turns at its train's design speed (reading A19 after PUMP_SPEED_SHUT_VALVE_REVIEW.md): a
+     * pump built at 1000 rpm runs at share 1.0 in SPEED, and in REGULATE_FLOW, asked twice its rated flow, at most 1.0.
+     */
+    @Test
+    void aDefaultCreativeMotorTurnsItsPumpAtItsDesignSpeed() {
+        assertEquals(1, slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0, false).getLast(), 1e-9, "SPEED: share 1.0, no link needed");
+        var regulated = slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .02, true);
+        for (double s : regulated) assertTrue(s <= 1 + 1e-9, "REGULATE_FLOW: at most 1.0, " + regulated);
+        assertEquals(1, regulated.getLast(), 1e-9, "at its top, short of the set flow: " + regulated);
+    }
+
+    /**
+     * A creative motor regulates only a machine its data cables reach, as a motor does (part C of PUMP_SPEED_SHUT_VALVE_REVIEW.md):
+     * with no link it says NO DATA LINK and holds at most its last speed, so from rest it stands; linked, it reaches the set flow.
+     */
+    @Test
+    void aCreativeMotorRegulatesOnlyOverItsDataLink() {
+        var status = new String[1];
+        var unlinked = slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .006, false, status);
+        assertTrue(status[0].startsWith("NO DATA LINK"), status[0]);
+        for (double s : unlinked) assertEquals(0, s, 0, "no link: it holds its last speed, at rest " + unlinked);
+        var linked = slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .006, true, status);
+        assertFalse(status[0].contains("NO DATA LINK"), status[0]);
+        assertTrue(linked.getLast() > .1, "linked: it regulates " + linked);
+    }
+
+    /**
+     * A real motor in REGULATE_FLOW turns its pump at most at the pump's design speed ({@link SpeedControl#REGULATED_TOP}, owner
+     * item 1): an 11 kW, 1000 rpm motor on the 1000 rpm pump, asked twice its rated flow, stands at share 1.0 and says RUNNING, with
+     * no hold (D3). Before, the bound was 1.5 and the motor went CURRENT LIMITED near 1.26.
+     */
+    @Test
+    void aRegulatingMotorStandsAtItsPumpsDesignSpeed() {
+        var r = slowPump(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .02, true);
+        for (double s : r.shares()) assertTrue(s <= SpeedControl.REGULATED_TOP + 1e-9, "at most 1.0: " + r);
+        assertEquals(SpeedControl.REGULATED_TOP, r.shares().getLast(), 1e-9, "at its top, short of the set flow: " + r);
+        assertEquals("RUNNING", r.status(), r.toString());
+    }
+
+    /**
+     * A default creative motor through a gearbox turns its pump at the pump's design speed (owner item 5): the motor at 1000 rpm over
+     * the gearbox's ratio, the pump at share 1.0 in SPEED.
+     */
+    @Test
+    void aDefaultCreativeMotorThroughAGearboxTurnsItsPumpAtItsDesignSpeed() {
+        var r = slowPump(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR, true, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0, false);
+        assertTrue(r.ratio() > 0 && Math.abs(r.ratio() - 1) > .1, "geared: " + r);
+        assertEquals(1, r.shares().getLast(), 1e-9, "the pump at its design speed: " + r);
+        assertEquals(1000 / r.ratio(), r.driverSpeed(), 1e-6, "the motor at 1000 rpm over the ratio: " + r);
+    }
+
+    private List<Double> slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow, boolean link) {
+        return slowPumpShares(mode, setFlow, link, new String[1]);
+    }
+
+    private List<Double> slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow, boolean link, String[] status) {
+        var r = slowPump(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR, false, mode, setFlow, link);
+        status[0] = r.status();
+        return r.shares();
+    }
+
+    /** What {@link #slowPump} books: the pump's speed share each 5 s, the drive's last status and speed (rpm), and the gearbox's
+     * compiled ratio (0 for none). */
+    private record SlowPump(List<Double> shares, String status, double driverSpeed, double ratio) {}
+
+    /** The speed share of a pump rated 0.01 m³/s, 50 m at 1000 rpm in {@code mode}, each 5 s, data-linked to the pump where
+     * {@code link}. Its drive is a creative motor with no set speed, or a variable-speed motor of 11 kW built at 1000 rpm (6
+     * poles); through a gearbox where {@code geared}. */
+    private SlowPump slowPump(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind driver, boolean geared, com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow, boolean link) {
+        var rig = new Rig();
+        var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
+        long first = ledger.reserve(5);
+        var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
+        var drive = com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE;
+        var regulate = new ShaftUnit.Settings(true, mode, 0, 0, 0);
+        var end = List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true));
+        ledger.shaft(driver == com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR
+                ? new ShaftUnit(first, driver, cell(0), 0, end, 0, 0, com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED, 0, drive, regulate, trip, null)
+                : new ShaftUnit(first, driver, cell(0), 0, end, 0, 11e3, 1000, 6, drive, regulate, trip, null));
+        ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
+        int casing = 2;
+        if (geared) {
+            var gearbox = com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GEARBOX;
+            ledger.shaft(new ShaftUnit(first + 2, gearbox, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false), new ShaftUnit.End(cell(2), 1, 0, 0, true)),
+                    0, 0, 0, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.placed(gearbox), trip, null));
+            ledger.shaft(ShaftUnit.shaft(first + 3, cell(3), 0));
+            casing = 4;
+        }
+        ledger.shaft(new ShaftUnit(first + casing, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(casing), 0, List.of(new ShaftUnit.End(cell(casing), -1, 0, 0, false)), 1,
+                0, 1000, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, trip, null));
+        var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
+        rig.coordinator.shafts(trains);
+        trains.host(new ShaftTrains.Host() {
+            public void edit(long device, FlowControl.ControlValve control) {
+            }
+
+            public UUID speedSensor(long turbine) {
+                return null;
+            }
+
+            public void resize(PhysicalFluidTopology.Position shaft, int pixels) {
+            }
+
+            public Set<Long> linked(long motor) {
+                return link ? Set.of(1L) : Set.of();
+            }
+        });
+        var slow = new CentrifugalPump(.01, 50, .7, 1000);
+        var base = line();
+        var line = new PassiveNetwork(base.reservoirs(), List.of(base.pipes().getFirst().withControl(new FlowControl.Machine(slow, 0, true, setFlow, 0))));
+        rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
+        var out = new ArrayList<Double>();
+        for (int c = 0; c < 20; c++) {
+            rig.run(5);
+            out.add(((FlowControl.Machine) rig.coordinator.observe(1).lastResult().orElseThrow().graph().pipes().get(0).control()).speed());
+        }
+        var view = trains.view(first);
+        return new SlowPump(out, view.status(), view.speed(), geared ? trains.ratio(first + 2) : 0);
+    }
+
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */
     @Test
     void theGovernorWalkFindsTheTurbinesValve() {
@@ -535,20 +658,39 @@ class ShaftCouplingTest {
 
     // ---- The drive trims the valve (owner decision D4 of the pump-valve work; LOAD_HOLD_REVIEW.md, "Built") ----
 
-    /** One booked slice of the trim rig: the pump's speed share, its rise and the valve's drop (Pa), the flow (kg/s), the valve's mode. */
-    private record Booked(double speed, double rise, double drop, double flow, FlowControl.Mode valve, String status) {}
+    /** One booked slice of the trim rig: the pump's speed share, its rise and the valve's drop (Pa), the flow (kg/s), the valve's
+     * mode, the island's status and the drive's. */
+    private record Booked(double speed, double rise, double drop, double flow, FlowControl.Mode valve, String status, String drive) {}
+
+    /** Where the trim rig's mass flow valve stands: in the pump's series, nowhere (the pump on the void), or on a branch beside a
+     * plain line from the junction to the void (not in the pump's series). */
+    private enum Branch { SERIES, NONE, PARALLEL }
+
+    /** {@link #trimRig(double, int, Branch, double...)} in series, at {@code litres} L/s, raised to {@code raisedLitres} halfway where above 0. */
+    private List<Booked> trimRig(double setFlow, double litres, double raisedLitres, int cadences) {
+        return raisedLitres > 0 ? trimRig(setFlow, cadences, Branch.SERIES, litres, raisedLitres) : trimRig(setFlow, cadences, Branch.SERIES, litres);
+    }
 
     /** The flow-regulating motor and its pump of {@link #aRegulatingMotorRunsItsPumpAtTheSetFlow}, a junction, a mass flow valve
-     * at {@code litres} L/s of water (raised to {@code raisedLitres} halfway, where above 0), and a void 31.92 m above the
-     * supply (friction about nothing): each cadence's slice. */
-    private List<Booked> trimRig(double setFlow, double litres, double raisedLitres, int cadences) {
+     * on {@code branch} at each of {@code phases} L/s of water in turn (equal shares of the cadences; 0 shuts it), and a void
+     * 31.92 m above the supply (friction about nothing): each cadence's slice. */
+    private List<Booked> trimRig(double setFlow, int cadences, Branch branch, double... phases) {
+        return trimRig(false, setFlow, cadences, branch, phases);
+    }
+
+    /** {@link #trimRig(double, int, Branch, double...)} on a creative motor with no set speed where {@code creative}, linked to the
+     * pump by data as a motor is. */
+    private List<Booked> trimRig(boolean creative, double setFlow, int cadences, Branch branch, double... phases) {
+        double litres = phases[0];
         var rig = new Rig();
         var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
         long first = ledger.reserve(3);
         var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
-        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
-                11e3, 2950, 2, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,
-                new ShaftUnit.Settings(true, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, 0, 0, 0), trip, null));
+        var regulate = new ShaftUnit.Settings(true, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, 0, 0, 0);
+        ledger.shaft(creative ? new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                0, com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE, regulate, trip, null)
+                : new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
+                11e3, 2950, 2, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE, regulate, trip, null));
         ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
         ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
                 0, 2950, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, trip, null));
@@ -573,14 +715,28 @@ class ShaftCouplingTest {
         double rho = supply.mass() / supply.volume();
         var sink = water(101325 + rho * 9.80665 * 31.92);
         var valve = new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW, 200000, litres * 1e-3 * rho, .01, new UUID(7, 7), 0);
-        var line = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, supply, PassiveNetwork.NodeKind.GENERATOR),
-                new PassiveNetwork.Reservoir(2, 0, sink, PassiveNetwork.NodeKind.VOID), new PassiveNetwork.Reservoir(3, 0, water(101325 + rho * 9.80665 * 40), PassiveNetwork.NodeKind.JUNCTION)),
-                List.of(new PassiveNetwork.Pipe(10, 0, 2, FAT, new FlowControl.Machine(PUMP, 0, true, setFlow, 0)), new PassiveNetwork.Pipe(11, 2, 1, FAT, valve)));
+        var pump = new FlowControl.Machine(PUMP, 0, true, setFlow, 0);
+        var nodes = new ArrayList<>(List.of(new PassiveNetwork.Reservoir(1, 0, supply, PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2, 0, sink, PassiveNetwork.NodeKind.VOID), new PassiveNetwork.Reservoir(3, 0, water(101325 + rho * 9.80665 * 40), PassiveNetwork.NodeKind.JUNCTION)));
+        var connections = switch (branch) {
+            case SERIES -> List.of(new PassiveNetwork.Pipe(10, 0, 2, FAT, pump), new PassiveNetwork.Pipe(11, 2, 1, FAT, valve));
+            case NONE -> List.of(new PassiveNetwork.Pipe(10, 0, 2, FAT, pump), new PassiveNetwork.Pipe(11, 2, 1, FAT, new FlowControl.Passive()));
+            case PARALLEL -> {
+                nodes.add(new PassiveNetwork.Reservoir(4, 0, water(101325 + rho * 9.80665 * 31.92), PassiveNetwork.NodeKind.VOID));
+                yield List.of(new PassiveNetwork.Pipe(10, 0, 2, FAT, pump), new PassiveNetwork.Pipe(11, 2, 1, FAT, new FlowControl.Passive()),
+                        new PassiveNetwork.Pipe(12, 2, 3, FAT, valve));
+            }
+        };
+        var line = new PassiveNetwork(nodes, connections);
+        int valvePipe = branch == Branch.PARALLEL ? 2 : 1;
         rig.coordinator.register(new IslandCoordinator.Snapshot(1, 0, line, new IslandClock.Snapshot(0, 0, 0, 100), Optional.empty(), "READY"), model);
         var out = new ArrayList<Booked>();
+        int phase = 0;
         for (int c = 0; c < cadences; c++) {
-            if (c == cadences / 2 && raisedLitres > 0) {
-                double raised = raisedLitres * 1e-3 * rho;
+            int next = c * phases.length / cadences;
+            if (next != phase) {
+                phase = next;
+                double raised = phases[phase] * 1e-3 * rho;
                 rig.coordinator.controls(g -> {
                     var pipes = new ArrayList<PassiveNetwork.Pipe>();
                     for (var p : g.pipes()) pipes.add(p.control() instanceof FlowControl.ControlValve v ? p.withControl(v.withMassTarget(raised)) : p);
@@ -592,15 +748,18 @@ class ShaftCouplingTest {
             var s = rig.coordinator.observe(1);
             var r = s.lastResult().orElseThrow();
             double drop = Double.NaN;
-            for (var o : r.observations()) if (o.pipe() == 11) drop = o.valveDrop();
-            out.add(new Booked(((FlowControl.Machine) r.graph().pipes().get(0).control()).speed(), r.endpointHeads()[0], drop, r.endpointFlows()[1], r.endpointModes().get(1), s.status()));
+            long valveId = r.graph().pipes().get(valvePipe).id();
+            for (var o : r.observations()) if (o.pipe() == valveId) drop = o.valveDrop();
+            var drive = trains.view(first);
+            out.add(new Booked(((FlowControl.Machine) r.graph().pipes().get(0).control()).speed(), r.endpointHeads()[0], drop, r.endpointFlows()[0], r.endpointModes().get(valvePipe), s.status(),
+                    drive == null ? "-" : drive.status()));
         }
         return out;
     }
 
     private static String trace(List<Booked> booked) {
         var t = new StringBuilder();
-        for (var b : booked) t.append(String.format(Locale.ROOT, "%n  s %.4f rise %.0f Pa drop %.0f Pa (%.4f) flow %.4f kg/s %s", b.speed, b.rise, b.drop, b.drop / b.rise, b.flow, b.valve));
+        for (var b : booked) t.append(String.format(Locale.ROOT, "%n  s %.4f rise %.0f Pa drop %.0f Pa (%.4f) flow %.4f kg/s %s drive %s", b.speed, b.rise, b.drop, b.drop / b.rise, b.flow, b.valve, b.drive));
         return t.toString();
     }
 
@@ -642,5 +801,88 @@ class ShaftCouplingTest {
         var supply = water(101325);
         assertEquals(.006 * supply.mass() / supply.volume(), last.flow, .05 * .006 * supply.mass() / supply.volume(), "the set flow:" + text);
         assertNotEquals(FlowControl.Mode.VALVE_REGULATING, last.valve, "the valve stands open:" + text);
+    }
+
+    // ---- A shut flow valve in the pump's series idles the drive (PUMP_SPEED_SHUT_VALVE_REVIEW.md) ----
+
+    /**
+     * The trim rig at set flow 15 L/s through four phases of 30 decisions: the valve regulates 8.81 L/s (the trim, 0.830); it
+     * shuts (target 0): no flow at any speed, so the drive steps down 0.2 a decision to the lowest speed, 0.1, and stays there,
+     * never rising; it regulates 8.81 L/s again: the flow secant brings the speed back and the trim settles it at 0.830 with the
+     * valve's 5 %; it opens fully (1000 L/s): the secant reaches the set flow.
+     */
+    @Test
+    void aShutValveInThePumpsSeriesIdlesTheDrive() {
+        shutValveIdles(false);
+    }
+
+    /** {@link #aShutValveInThePumpsSeriesIdlesTheDrive} on a creative motor with no set speed, linked by data: the same law. */
+    @Test
+    void aShutValveInThePumpsSeriesIdlesACreativeDrive() {
+        shutValveIdles(true);
+    }
+
+    private void shutValveIdles(boolean creative) {
+        var booked = trimRig(creative, .015, 120, Branch.SERIES, 8.81, 0, 8.81, 1000);
+        String text = (creative ? "creative" : "motor") + trace(booked);
+        System.out.println("shut:" + text);
+        double trimmed = booked.get(29).speed;
+        assertEquals(.830, trimmed, .005, "trimmed before the valve shuts:" + text);
+        // The valve shuts at decision 30: each decision after the slice that saw it shut steps 0.2 down, to 0.1.
+        int shutSeen = -1;
+        for (int i = 30; i < 60; i++) if (booked.get(i).valve == FlowControl.Mode.CLOSED) { shutSeen = i; break; }
+        assertTrue(shutSeen >= 0, "the valve stands shut:" + text);
+        double expected = booked.get(shutSeen).speed;
+        for (int i = shutSeen + 1; i < 60; i++) {
+            expected = Math.max(Motor.LOWEST_SPEED, expected - SpeedControl.LARGEST_STEP);
+            assertEquals(expected, booked.get(i).speed, 1e-9, "decision " + i + ": 0.2 down to 0.1:" + text);
+            assertTrue(booked.get(i).speed <= booked.get(i - 1).speed + 1e-12, "never up against the shut valve:" + text);
+            assertEquals(0, booked.get(i).flow, 1e-6, "no flow at any speed:" + text);
+            assertTrue(booked.get(i).drive.endsWith(ShaftTrains.VALVE_SHUT), "says why it idles:" + text);
+        }
+        assertEquals(Motor.LOWEST_SPEED, booked.get(59).speed, 1e-9, "idles at the lowest speed:" + text);
+        var regulating = booked.get(89);
+        assertEquals(FlowControl.Mode.VALVE_REGULATING, regulating.valve, "regulates again:" + text);
+        assertEquals(.830, regulating.speed, .005, "the trim holds as before:" + text);
+        assertEquals(.05, regulating.drop / regulating.rise, 1e-3, "the valve keeps 5 % of the rise:" + text);
+        assertFalse(regulating.drive.contains(ShaftTrains.VALVE_SHUT), "not shut any more:" + text);
+        var open = booked.getLast();
+        var supply = water(101325);
+        double set = .015 * supply.mass() / supply.volume();
+        assertEquals(set, open.flow, .02 * set, "open: the secant reaches the set flow:" + text);
+        for (var b : booked) assertFalse(b.status.startsWith("HELD"), b.status);
+    }
+
+    /** No valve in the pump's series, the void 31.92 m above the supply: the pump reads no flow until its speed gives that head,
+     * and zero flow alone still raises the speed, from rest to the set flow (6 L/s). */
+    @Test
+    void aDriveWithNoValveStillSpinsUpAgainstAStaticHead() {
+        spinsUp(false);
+        spinsUp(true);
+    }
+
+    private void spinsUp(boolean creative) {
+        var booked = trimRig(creative, .006, 30, Branch.NONE, 15);
+        String text = (creative ? "creative" : "motor") + trace(booked);
+        var supply = water(101325);
+        double set = .006 * supply.mass() / supply.volume();
+        assertTrue(booked.stream().anyMatch(b -> b.speed > .5), "spun up past the static head:" + text);
+        assertEquals(set, booked.getLast().flow, .02 * set, "the set flow:" + text);
+    }
+
+    /** A shut valve on a branch beside the pump's line to the void (not in its series): the drive regulates as with no valve. */
+    @Test
+    void aShutValveOutsideThePumpsSeriesChangesNothing() {
+        outsideChangesNothing(false);
+        outsideChangesNothing(true);
+    }
+
+    private void outsideChangesNothing(boolean creative) {
+        var none = trimRig(creative, .006, 30, Branch.NONE, 15);
+        var parallel = trimRig(creative, .006, 30, Branch.PARALLEL, 0);
+        String text = (creative ? "creative" : "motor") + trace(parallel);
+        assertEquals(FlowControl.Mode.CLOSED, parallel.getLast().valve, "the branch's valve stands shut:" + text);
+        assertEquals(none.getLast().speed, parallel.getLast().speed, 1e-3, "the same speed as with no valve:" + text + trace(none));
+        assertEquals(none.getLast().flow, parallel.getLast().flow, 1e-3 * none.getLast().flow, "the same flow:" + text);
     }
 }

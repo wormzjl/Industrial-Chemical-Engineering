@@ -278,6 +278,22 @@ final class ControlHosts {
                 input, indices, com.wormzjl.icheme.runtime.pollution.MonitorSignals.enabled(service), tick);
     }
 
+    /**
+     * Binds creative motor {@code unit} standing at {@code pos} with its shaft out of {@code facing} as a data host (part C of
+     * PUMP_SPEED_SHUT_VALVE_REVIEW.md): its socket ({@link DataPorts#creativeMotor}) is a control fact keyed by the unit, kept
+     * where a cable is wired to it ({@link DataPorts#remount}). No block entity: the unit and its settings are the engine's.
+     */
+    void bindCreativeMotor(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos, net.minecraft.core.Direction facing, ShaftUnit unit) {
+        var port = equipmentPorts.get(unit.id());
+        var mount = DataPorts.creativeMotor(level, pos, facing, unit.id(), port == null ? UUID.randomUUID() : port.id());
+        var next = port == null ? mount : DataPorts.remount(port, mount, facts.wired(port.id()));
+        if (!next.equals(port)) {
+            facts.port(next);
+            equipmentPorts.put(unit.id(), next);
+        }
+        if (level.getBlockEntity(pos) instanceof CreativeMotorBlockEntity motor) motor.bind(next);
+    }
+
     void bindMotor(EquipmentShellBlockEntity cell, ShaftUnit unit) {
         var origin = cell.origin();
         bindings.put(

@@ -20,7 +20,7 @@ import java.util.Map;
  * a shaft block or a machine's shaft end joins it. Its set points and its run are the engine's (W3); this block only
  * stands and points its shaft.
  */
-public final class CreativeMotorBlock extends HorizontalDirectionalBlock {
+public final class CreativeMotorBlock extends HorizontalDirectionalBlock implements net.minecraft.world.level.block.EntityBlock {
     public static final MapCodec<CreativeMotorBlock> CODEC = simpleCodec(CreativeMotorBlock::new);
     /** Facing north, as the model of tools/pump-sprites/CreativeMotorAssets: the base, the frame and its cowl, the terminal box, the shaft's stub. */
     private static final Map<Direction, VoxelShape> SHAPES = HorizontalShapes.byFacing(java.util.List.of(
@@ -39,6 +39,12 @@ public final class CreativeMotorBlock extends HorizontalDirectionalBlock {
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(FACING);
+    }
+
+    /** Its data socket's copy (part C of PUMP_SPEED_SHUT_VALVE_REVIEW.md): the laying tool and the client read it. */
+    @Override
+    public net.minecraft.world.level.block.entity.BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return new com.wormzjl.icheme.world.level.block.entity.CreativeMotorBlockEntity(pos, state);
     }
 
     /** Its shaft points away from the player, into the block they look at beyond it. */
