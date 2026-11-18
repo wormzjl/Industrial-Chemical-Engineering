@@ -123,13 +123,14 @@ final class CabinHeaterDesign extends UnitDesign {
                     else u.knees(p, q, low, cased);
                 }
             }
+            // The leg casings cover the girder ends. The floor and the end legs also cover the side girders’ tops.
             for (int side = -1; side <= 1; side += 2) {
                 double leg = ac + side * (w / 2 - .15);
-                u.box(new double[]{leg - ProcessUnit.GIRDER_HALF, low, zs - cased / 2}, new double[]{leg + ProcessUnit.GIRDER_HALF, y0, ze + cased / 2}, Material.STEELWORK, true);
+                u.box(new double[]{leg - ProcessUnit.GIRDER_HALF, low, zs - cased / 2}, new double[]{leg + ProcessUnit.GIRDER_HALF, y0, ze + cased / 2}, Mesh.ALL_FACES & ~(8 | 16 | 32), Material.STEELWORK, true);
             }
             for (double z : new double[]{zs, ze}) {
                 double left = ac - (w / 2 - .15), right = ac + (w / 2 - .15);
-                u.box(new double[]{left + cased / 2, low, z - ProcessUnit.GIRDER_HALF}, new double[]{right - cased / 2, y0, z + ProcessUnit.GIRDER_HALF}, Material.STEELWORK, true);
+                u.box(new double[]{left + cased / 2, low, z - ProcessUnit.GIRDER_HALF}, new double[]{right - cased / 2, y0, z + ProcessUnit.GIRDER_HALF}, Mesh.ALL_FACES & ~(1 | 2), Material.STEELWORK, true);
                 u.knees(new double[]{left, z}, new double[]{right, z}, low, cased);
             }
             for (int side = -1; side <= 1; side += 2) {
