@@ -60,6 +60,7 @@ public final class IChemE {
     private static final ModConfigSpec.BooleanValue CORROSION_ENABLED, CORROSION_EXTERNAL, EROSION_ENABLED, FOULING_ENABLED;
     private static final ModConfigSpec.DoubleValue CORROSION_YEAR_HOURS, FOULING_TIME_HOURS;
     private static final ModConfigSpec.BooleanValue POLLUTION_ENABLED, POLLUTION_EFFECTS, POLLUTION_PARTICLES;
+    private static final ModConfigSpec.BooleanValue POLLUTION_GROUND_GROWTH, POLLUTION_GROUND_WATER;
     private static final ModConfigSpec.DoubleValue POLLUTION_HALF_LIFE_OPEN_MINUTES, POLLUTION_HALF_LIFE_ENCLOSED_MINUTES, POLLUTION_CUTOFF;
     private static final ModConfigSpec.IntValue POLLUTION_MAX_ACTIVE_CUBES;
     private static final ModConfigSpec.BooleanValue POLLUTION_EXPLOSIONS, POLLUTION_BLOCK_DAMAGE, POLLUTION_EQUIPMENT_BREACH;
@@ -250,6 +251,11 @@ public final class IChemE {
         // WP9: the pollution overlay on the FTB Chunks map (a client with FTB Chunks asks while its map is open).
         POLLUTION_MAP_OVERLAY = builder.comment("Who sees pollution on the FTB Chunks map (one square per polluted chunk): METER, only a player who carries a pollution meter anywhere in the inventory; ALL, every player; OFF, no one. Read at each answer.")
                 .defineInList("mapOverlay", "METER", java.util.Arrays.asList("METER", "ALL", "OFF"));
+        // Batch 2026-11-18-ground-pollution, G4: what polluted ground does; no block is ever changed.
+        POLLUTION_GROUND_GROWTH = builder.comment("Whether polluted ground stops growth: where a chunk's worst ground index is at least 0.3, crops, saplings and bonemeal do not grow. Read at each event.")
+                .define("groundGrowth", true);
+        POLLUTION_GROUND_WATER = builder.comment("Whether water over polluted ground harms what swims in it: its toxic and corrosive ground indices act as the air's do (effects and damage). Read at each world pass.")
+                .define("groundWater", true);
         builder.pop();
         CONFIG_SPEC = builder.build();
     }
@@ -414,6 +420,16 @@ public final class IChemE {
     /** Who sees pollution on the FTB Chunks map: METER, ALL or OFF (WP9; METER before the config loads). */
     public static String pollutionMapOverlay() {
         return CONFIG_SPEC.isLoaded() ? POLLUTION_MAP_OVERLAY.get() : "METER";
+    }
+
+    /** Whether polluted ground stops growth (batch 2026-11-18-ground-pollution, G4; true before the config loads). */
+    public static boolean pollutionGroundGrowth() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_GROUND_GROWTH.get();
+    }
+
+    /** Whether water over polluted ground harms swimmers (G4; true before the config loads). */
+    public static boolean pollutionGroundWater() {
+        return !CONFIG_SPEC.isLoaded() || POLLUTION_GROUND_WATER.get();
     }
 
     /** Whether polluted cubes show particles to players nearby (WP5; true before the config loads). */
