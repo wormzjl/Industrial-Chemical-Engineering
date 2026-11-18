@@ -75,8 +75,10 @@ public final class SpeedControl {
         for(int i=0;i<40;i++){double middle=(low+high)/2;if(law.rise(flow,middle)<head)low=middle;else high=middle;}
         return (low+high)/2;
     }
-    /** Search bound for a driven machine's curve, independent of the motor's absolute rpm limit. */
-    public static final double MAXIMUM_CURVE_SPEED=1.5;
+    /** The highest speed share a regulating drive asks of its machine's curve: its design speed (owner, 2026-11-18, option A of
+     * PUMP_SPEED_SHUT_VALVE_REVIEW.md; a 2950 rpm pump was held at 1.017 by the motor's 3000 rpm). At the bound the drive stands
+     * at that speed and says RUNNING (PUMP_DRIVE_FLOW_PLAN.md D3: no hold). */
+    public static final double REGULATED_TOP=1;
     private static double clamp(double value, double lowest, double highest) {
         return Math.min(highest, Math.max(lowest, value));
     }

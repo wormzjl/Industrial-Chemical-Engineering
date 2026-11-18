@@ -108,7 +108,7 @@ public record MachineView(long unit, ShaftNetwork.Kind kind, String status, doub
         var steam = trains.steam(unit);
         String name = governor.length() > MAX_TEXT ? governor.substring(0, MAX_TEXT) : governor;
         return new MachineView(unit, trains.kindOf(unit), status, v.speed(), v.shaftPower(), v.electricPower(), v.energyPerTick(), v.settings(), v.trip(), u.ratedPower(),
-                u.designSpeed(), u.poles(), u.kind()==ShaftNetwork.Kind.MOTOR||u.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE, share, seconds, name, trains.ratio(unit),
+                u.kind() == ShaftNetwork.Kind.CREATIVE_MOTOR ? trains.creativeSpeed(u) : u.designSpeed(), u.poles(), u.kind()==ShaftNetwork.Kind.MOTOR||u.drive() == com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE, share, seconds, name, trains.ratio(unit),
                 steam == null ? Double.NaN : steam.flow(), steam == null ? Double.NaN : steam.inlet(), steam == null ? Double.NaN : steam.exhaust(), coupling(trains, unit), fuel(trains, u));
     }
 

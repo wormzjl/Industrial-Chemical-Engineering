@@ -24,6 +24,9 @@ public final class ModBlockEntities {
     // Batch 2026-11-15-fluid-interfaces, the alarm beacon (W9).
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.AlarmBeaconBlockEntity>> ALARM_BEACON=BLOCK_ENTITY_TYPES.register("alarm_beacon",
             ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.AlarmBeaconBlockEntity::new,ModBlocks.ALARM_BEACON.get()).build(null));
+    // The creative motor's data socket (part C of PUMP_SPEED_SHUT_VALVE_REVIEW.md).
+    public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.CreativeMotorBlockEntity>> CREATIVE_MOTOR=BLOCK_ENTITY_TYPES.register("creative_motor",
+            ()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.CreativeMotorBlockEntity::new,ModBlocks.CREATIVE_MOTOR.get()).build(null));
     public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity>> FLUID_DEVICE=BLOCK_ENTITY_TYPES.register("fluid_device",()->BlockEntityType.Builder.of(com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity::new,
             ModBlocks.FLUID_RESERVOIR.get(),ModBlocks.FLUID_PIPE.get(),ModBlocks.FLUID_GENERATOR.get(),ModBlocks.FLUID_VOID.get(),ModBlocks.INLINE_FILTER.get(),ModBlocks.DIVERTER_VALVE.get(),ModBlocks.GAS_INTAKE.get(),ModBlocks.LIQUID_HOPPER.get()).build(null));
 

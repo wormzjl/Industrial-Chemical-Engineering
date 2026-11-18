@@ -198,6 +198,11 @@ public final class PlantBuilder {
      * rated {@code kilowatts} at {@code poles}: the plant's, removed with it.
      */
     public Vessel motor(Vessel pump, double kilowatts, int poles) {
+        return motor(pump, kilowatts, poles, 0);
+    }
+
+    /** {@link #motor(Vessel, double, int)} at base speed {@code baseSpeed} rpm (0: its poles' speed). */
+    public Vessel motor(Vessel pump, double kilowatts, int poles, double baseSpeed) {
         for (var s : ShapeRasterizer.shafts(pump.shape())) {
             if (s.role() != EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT) continue;
             var d = Direction.fromDelta(s.dx(), s.dy(), s.dz());
@@ -208,7 +213,7 @@ public final class PlantBuilder {
             int length = design.defaultLength(size);
             for (var heading : EquipmentShape.Heading.values()) {
                 var shape = EquipmentShape.designed(EquipmentShape.Kind.MOTOR, size, length, heading, 0, ProcessUnit.Bank.ONE)
-                        .withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.motor(size, poles, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED));
+                        .withDuty(com.wormzjl.icheme.science.equipment.MachineDuty.motor(size, poles, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED).withBaseSpeed(baseSpeed));
                 for (var m : ShapeRasterizer.shafts(shape)) {
                     if (m.role() != EquipmentShape.ShaftEnd.Role.DRIVER_OUTPUT || m.dx() != -s.dx() || m.dy() != -s.dy() || m.dz() != -s.dz()) continue;
                     var origin = end.offset(-m.cell().x(), -m.cell().y(), -m.cell().z());
@@ -227,12 +232,13 @@ public final class PlantBuilder {
 
     /**
      * A motor for {@code pump} as {@link #motor(Vessel, double, int)}: twice the pump's design shaft power with the design
-     * spare, so its run-out never overloads it, at the pump's poles.
+     * spare, so its run-out never overloads it, at the pump's poles and at its design speed (a pump built slower than its poles'
+     * speed, {@code PumpSizing.builtSpeed}, gets a motor of that base speed: the train turns both at one speed).
      */
     public Vessel motor(Vessel pump) {
         var duty = pump.shape().duty();
         double shaft = 1000 * 9.81 * duty.flow() / 3600 * duty.head() / .6;
-        return motor(pump, com.wormzjl.icheme.science.machine.Motor.ratingFor(2 * shaft) / 1000, duty.poles() == 0 ? 2 : duty.poles());
+        return motor(pump, com.wormzjl.icheme.science.machine.Motor.ratingFor(2 * shaft) / 1000, duty.poles() == 0 ? 2 : duty.poles(), duty.baseSpeed());
     }
 
     /**

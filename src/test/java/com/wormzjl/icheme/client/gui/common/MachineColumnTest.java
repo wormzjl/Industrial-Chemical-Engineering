@@ -30,8 +30,12 @@ class MachineColumnTest {
     }
 
     private static MachineView view(ShaftNetwork.Kind kind, double setPoint, ShaftTrain.Trip trip) {
+        return view(kind, setPoint, trip, 2950);
+    }
+
+    private static MachineView view(ShaftNetwork.Kind kind, double setPoint, ShaftTrain.Trip trip, double designSpeed) {
         return new MachineView(7, kind, trip == ShaftTrain.Trip.NONE ? "RUNNING" : ShaftTrain.tripped(trip), 2950, 24900, kind == ShaftNetwork.Kind.MOTOR ? 26700 : 0,
-                kind == ShaftNetwork.Kind.MOTOR ? 534 : 0, new ShaftUnit.Settings(true, ShaftTrain.Mode.SPEED, setPoint, 0, 0), trip, 30000, 2950, 2, true,
+                kind == ShaftNetwork.Kind.MOTOR ? 534 : 0, new ShaftUnit.Settings(true, ShaftTrain.Mode.SPEED, setPoint, 0, 0), trip, 30000, designSpeed, 2, true,
                 kind == ShaftNetwork.Kind.MOTOR || kind == ShaftNetwork.Kind.GENERATOR ? .72 : Double.NaN, kind == ShaftNetwork.Kind.MOTOR ? 370 : Double.NaN,
                 kind == ShaftNetwork.Kind.STEAM_TURBINE ? "FV-101" : "", kind == ShaftNetwork.Kind.GEARBOX ? 4.27 : 0,
                 kind == ShaftNetwork.Kind.STEAM_TURBINE ? 2.9 : Double.NaN, kind == ShaftNetwork.Kind.STEAM_TURBINE ? 40e5 : Double.NaN, kind == ShaftNetwork.Kind.STEAM_TURBINE ? 4e5 : Double.NaN,
@@ -192,6 +196,29 @@ class MachineColumnTest {
         assertFalse(MachineColumn.input(view(ShaftNetwork.Kind.MOTOR, 1, ShaftTrain.Trip.NO_POWER), true, false, MachineColumn.Mode.SPEED, texts).tripped(),
                 "NO POWER clears itself: no Reset");
         assertEquals("2 h 1 min", MachineColumn.duration(7300, texts));
+    }
+
+    /**
+     * A default creative motor's speed entry is the speed the engine turns it at (owner item 4): the view's design speed, which
+     * {@code MachineView} takes from {@code ShaftTrains.creativeSpeed} (900 rpm for a pump built at 900 rpm); a set speed stays.
+     */
+    @Test
+    void aDefaultCreativeMotorShowsItsTrainsDesignSpeed() {
+        assertEquals(900, MachineColumn.speedEntry(view(ShaftNetwork.Kind.CREATIVE_MOTOR, 0, ShaftTrain.Trip.NONE, 900)), 1e-9);
+        assertEquals(1500, MachineColumn.speedEntry(view(ShaftNetwork.Kind.CREATIVE_MOTOR, 1500, ShaftTrain.Trip.NONE, 900)), 1e-9);
+    }
+
+    /**
+     * A drive idling against a shut valve says so (owner item 2), and the words fit the door's status row whole at the smallest
+     * window (300 px less the door's margins, 20): no cut, no hover needed. Not a warning: the drive does what it should.
+     */
+    @Test
+    void theValveShutStatusFitsTheStatusRow() {
+        for (var status : List.of("RUNNING", "CURRENT LIMITED", "POWER LIMITED")) {
+            String shown = status + com.wormzjl.icheme.runtime.fluid.ShaftTrains.VALVE_SHUT;
+            assertTrue(M.width(shown) <= 300 - 20, shown + ": " + M.width(shown));
+        }
+        assertFalse(MachineColumn.warns("RUNNING" + com.wormzjl.icheme.runtime.fluid.ShaftTrains.VALVE_SHUT));
     }
 
     private static List<String> keys(Column column) {

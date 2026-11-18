@@ -73,7 +73,7 @@ The laws are called, never call:
 
 - Centrifugal pump: `H = H_r (1.21 s² − 0.05 q s − 0.15 q|q| − 0.01 q)`, shaft power `P_r (0.35 s³ + 0.65 q s²)`, with
   `s` the speed share and `q` the flow share; the curve's slope stays below −0.01 H_r/Q_r. A rated speed defaults to the
-  2-pole speed.
+  2-pole speed; a sized pump's is its `PumpSizing.builtSpeed` (owner D21).
 - Centrifugal compressor: `H_p/H_r = s² (0.645 + 1.244 x − 0.889 x²)`, `x = q/s`; below `SURGE` a recycle holds the
   machine's flow and the net law is a straight line; head to pressure ratio after PTC 10.
 - Positive displacement (set-flow pumps and compressors, the reciprocating frame): slip line `u = 1 − SLIP v`, relief
@@ -132,8 +132,21 @@ The relief rise is `MAXIMUM_DISCHARGE` less the suction (`reliefRise`). The ejec
   (`PipeObservation.valveDrop`, Pa) with `SpeedControl.VALVE_TRIM_MARGIN` (5 %) of the rise left on the valve
   (`ShaftTrains.Duty.trimSpeed`, `seriesValveDrop`). The request goes in as `requestedRpm` with the flow secant skipped
   for that decision (`Measure.measured` NaN; `previousMeasured` stays the flow); at most `LARGEST_STEP` down, never up,
-  a move inside `SPEED_DEADBAND` held. The set flow is then an upper limit: with no regulating series valve the secant
-  holds it as before.
+  a move inside `SPEED_DEADBAND` held (`ShaftTrains.trimmed`). The set flow is then an upper limit: with no regulating
+  series valve the secant holds it as before. A flow valve in the series shut on its own target of no flow (a player's 0,
+  an automated shutoff valve shut; not one closed by a reverse drive, which a faster pump opens) passes nothing at any
+  speed: `seriesValveDrop` gives `SHUT` and the trim asks `Motor.LOWEST_SPEED`, by the same steps; the measure stays the
+  flow, so the valve's opening hands the speed back to the trim or the secant. Zero flow alone still raises the speed (a
+  pump below its static head). A motor and a creative motor regulate only a driven machine their data cables reach
+  (`host.linked`; `NO DATA LINK`, `MULTIPLE DUTIES`, `NO DUTY TARGET`, then the last speed held), on one path with the
+  trim; a creative motor's top there is its set speed. `flowSpeed` and `pressureSpeed` ask at most
+  `SpeedControl.REGULATED_TOP` (1.0) of the machine's design speed: at that bound the drive stands and says `RUNNING`.
+  While it idles on a shut valve its status ends `ShaftTrains.VALVE_SHUT` (" / VALVE SHUT"). `REGULATE_PRESSURE` inverts
+  the curve at the booked flow, so against a shut valve it stands at `s = √(Δp / (1.21 ρ g H_r))`, at most 1.0: a defined
+  state, no wind-up.
+- A creative motor with no set speed turns at its train's first machine's design speed over the ratio
+  (`ShaftTrains.creativeSpeed`; reading A19's 2950 rpm with no machine); a second machine of another design speed turns
+  at its own share of that.
 - A steam turbine's internal admission governor follows the requested speed and the shaft demand, limiting admitted work
   so its speed never passes its set speed; it has no overspeed trip. Delivered steam bounds its work (`STEAM LIMITED`);
   with none the train stands.

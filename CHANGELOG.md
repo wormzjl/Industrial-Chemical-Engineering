@@ -15,6 +15,13 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.35.1] - 2026-11-18
+
+### Changed
+
+- Creative motor model (`2026-11-16-review-plant-sizing`): an eight-sided finned frame with a fan cowl, feet, a terminal box and the creative plate replaces the four boxes; `tools/pump-sprites/CreativeMotorAssets.java`.
+- On `claude/pump-speed-shut-valve-6020f0` (batch `2026-11-16-review-plant-sizing`, `PUMP_SPEED_SHUT_VALVE_REVIEW.md`): a sized pump is built at its design speed (owner D21; `687dfd5fa`) and its NPSH rows read that pump; a creative motor with no set speed turns at its train's design speed; a flow-regulating drive idles at its lowest speed while a flow valve in its pump's series stands shut, and the drive's trim runs on every driver, a creative motor included (`4902d1c5a`). The creative motor is a data host as a motor is: a data socket on its terminal box and a block entity holding its copy (`a20474446`, `95f718836`); it regulates only a machine its data cables reach, so a creative motor that regulated with no cable in an existing world now shows NO DATA LINK and holds its last speed (owner's accepted change). A drive regulating flow or pressure asks at most its machine's design speed (was 1.5 ×); a drive idling on a shut valve says `RUNNING / VALVE SHUT`; Send to block sends a pump with its duty and design speed; the machine page shows a default creative motor's speed as the engine turns it. No format changes; a new block entity type `icheme:creative_motor`.
+
 ## [0.35.0] - 2026-11-18
 
 On `claude/column-testing-sizing-26b5b9`. Formats: fluid facts schema 30, checkpoint state format 53, equipment shape fields 14, protocol `icheme-7`, a new saved flag `icheme_column_test_world` (format 1); see `documentation/reference/FORMATS.md`.

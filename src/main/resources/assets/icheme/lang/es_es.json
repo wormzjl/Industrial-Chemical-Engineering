@@ -2728,7 +2728,7 @@
   "gui.icheme.flowsheet.sizing.from_plan": "Este plan",
   "gui.icheme.flowsheet.sizing.from_physics": "Física",
   "gui.icheme.flowsheet.sizing.size.pump": "Descarga %s m",
-  "gui.icheme.flowsheet.sizing.size.pump_duty": "%s %s a %s m, descarga %s m",
+  "gui.icheme.flowsheet.sizing.size.pump_duty": "%s %s a %s m, descarga %s m, %s rpm",
   "gui.icheme.flowsheet.sizing.size.exchanger": "Carcasa %s m, tubos %s m",
   "gui.icheme.flowsheet.sizing.size.air_cooler": "%s × %s bahías de %s × %s m",
   "gui.icheme.flowsheet.sizing.size.heater": "%s × %s m",

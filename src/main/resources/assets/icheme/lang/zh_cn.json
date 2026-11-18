@@ -2728,7 +2728,7 @@
   "gui.icheme.flowsheet.sizing.from_plan": "本计划",
   "gui.icheme.flowsheet.sizing.from_physics": "物理",
   "gui.icheme.flowsheet.sizing.size.pump": "出口 %s m",
-  "gui.icheme.flowsheet.sizing.size.pump_duty": "%s %s，扬程 %s m，出口 %s m",
+  "gui.icheme.flowsheet.sizing.size.pump_duty": "%s %s，扬程 %s m，出口 %s m，%s rpm",
   "gui.icheme.flowsheet.sizing.size.exchanger": "壳径 %s m，管长 %s m",
   "gui.icheme.flowsheet.sizing.size.air_cooler": "%s × %s 跨，每跨 %s × %s m",
   "gui.icheme.flowsheet.sizing.size.heater": "%s × %s m",

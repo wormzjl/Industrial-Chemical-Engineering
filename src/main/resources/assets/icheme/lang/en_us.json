@@ -2728,7 +2728,7 @@
   "gui.icheme.flowsheet.sizing.from_plan": "This plan",
   "gui.icheme.flowsheet.sizing.from_physics": "Physics",
   "gui.icheme.flowsheet.sizing.size.pump": "Discharge %s m",
-  "gui.icheme.flowsheet.sizing.size.pump_duty": "%s %s at %s m, discharge %s m",
+  "gui.icheme.flowsheet.sizing.size.pump_duty": "%s %s at %s m, discharge %s m, %s rpm",
   "gui.icheme.flowsheet.sizing.size.exchanger": "Shell %s m, tubes %s m",
   "gui.icheme.flowsheet.sizing.size.air_cooler": "%s × %s bays of %s × %s m",
   "gui.icheme.flowsheet.sizing.size.heater": "%s × %s m",
