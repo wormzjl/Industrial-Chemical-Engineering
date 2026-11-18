@@ -15,6 +15,11 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- Equipment reflections (`2026-11-18-equipment-reflections`): the shader `equipment_reflection` adds the mirrored sky, ground and sun to equipment bodies, pipes and steel within `reflection_range` (Fresnel by surface class: paint, bare steel, jacketing), faded at the range edge, with the fog, at night and in rain; the baked sheen steps aside while it draws; LabPBR maps for 21 more sprites so shader packs mirror them too. Every custom shader has its own switch in `[effects]` (`flame_shader`, `smoke_shader`, `heat_haze`, `wiring_shader`, `reflections`, `reflection_strength`, `reflection_range`), each falling back to its compatible drawing; `tools/reflection-render/`.
+- Sight glass bubbles carried by the flow (`2026-11-18-equipment-reflections`, part 3): bubbles move at the published liquid speed, rise on vertical runs, ride the top of a slow horizontal run and stretch when fast; drawn round and clipped to the glass by the new shader `sight_glass` (switch `sight_glass_shader`), else as rings; the sight glass display carries the speed (wire change); `tools/sight-glass-frames/`.
+
 ### Changed
 
 - Wall budget default (`2026-11-16-review-plant-sizing`; owner, 2026-11-18: "make it configurable and 3s default"): `fluid.wallBudgetMilliseconds` defaults to 3000 (was 2000; range 100 to 60000 as before), from one constant, `IslandCoordinator.Settings.DEFAULT_HARD_BUDGET_NANOS`, which the test rigs read too. A config file written before keeps its 2000 until it is edited.

@@ -48,7 +48,8 @@ public final class EquipmentClient {
         var client = net.minecraft.client.Minecraft.getInstance();
         client.execute(() -> {
             if (ClientConfig.renderDetail() != EquipmentShellModel.detail()) client.reloadResourcePacks();
-            // pbr_textures under a shader pack moves the shell cells' variant (RELIEF_SPRITES_PLAN.md 4.2): re-mesh them.
+            // pbr_textures under a shader pack, or the reflection pass's mode, switch or strength (0 or not), moves the shell
+            // cells' variant (RELIEF_SPRITES_PLAN.md 4.2; ShellVariant.REFLECTED): re-mesh them once.
             else if (EquipmentShellModel.variantChanged() && client.levelRenderer != null) client.levelRenderer.allChanged();
         });
     }

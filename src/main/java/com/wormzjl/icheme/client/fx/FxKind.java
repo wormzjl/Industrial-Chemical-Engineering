@@ -15,5 +15,8 @@ public enum FxKind {
      * Heat shimmer sprites (W8, owner X6 A): {@code fx_haze} over a screen copy, SHADER path only and only with
      * {@code heat_haze} on; the COMPATIBLE path draws none.
      */
-    HAZE
+    HAZE;
+
+    /** The kinds, one array for every frame. */
+    static final FxKind[] VALUES = values();
 }

@@ -21,6 +21,18 @@ class ShellVariantTest {
     }
 
     @Test
+    void reflectedOnlyWhileThePassDrawsAndNeverUnderAPack() {
+        assertEquals(ShellVariant.REFLECTED, ShellVariant.of(true, false, true));
+        assertEquals(ShellVariant.REFLECTED, ShellVariant.of(false, false, true));
+        assertEquals(ShellVariant.FLAT, ShellVariant.of(true, true, true), "a pack lights the flat variant");
+        assertEquals(ShellVariant.BAKED, ShellVariant.of(false, true, true), "the pass never draws under a pack: the sheen stays");
+        assertEquals(ShellVariant.BAKED, ShellVariant.of(true, false, false));
+        assertTrue(ShellVariant.BAKED.sheen());
+        assertFalse(ShellVariant.REFLECTED.sheen(), "the pass's highlight replaces the baked sheen");
+        assertFalse(ShellVariant.FLAT.sheen());
+    }
+
+    @Test
     void theCacheKeepsTheVariantsOfOneCellApart() {
         var cache = new HashMap<ShellVariant.Key<String>, String>();
         cache.put(new ShellVariant.Key<>(ShellVariant.BAKED, "cell"), "baked quads");

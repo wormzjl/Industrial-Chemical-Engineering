@@ -80,9 +80,13 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
         current = new Active(sprites, flat, detail);
     }
 
-    /** The variant a cell bakes on now: FLAT while a shader pack is in use and {@code pbr_textures} is on. */
+    /**
+     * The variant a cell bakes on now: FLAT while a shader pack is in use and {@code pbr_textures} is on; REFLECTED while
+     * the reflection pass draws ({@code EquipmentReflectionRenderer.active}); BAKED otherwise.
+     */
     public static ShellVariant variant() {
-        return ShellVariant.of(com.wormzjl.icheme.client.ClientConfig.pbrTextures(), com.wormzjl.icheme.client.fx.FxCompat.iris().packInUse());
+        return ShellVariant.of(com.wormzjl.icheme.client.ClientConfig.pbrTextures(), com.wormzjl.icheme.client.fx.FxCompat.iris().packInUse(),
+                com.wormzjl.icheme.client.EquipmentReflectionRenderer.active());
     }
 
     /** The sprite of {@code material} in the model last baked, of the current {@link #variant}, or null before the first bake. */
@@ -142,15 +146,15 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
 
     private Layers bake(ShellVariant.Key<ShapeRasterizer.CellKey> cached) {
         lastBaked = cached.variant();
-        boolean flat = cached.variant() == ShellVariant.FLAT;
-        var sprites = flat ? this.flat : this.sprites;
+        var variant = cached.variant();
+        var sprites = variant == ShellVariant.FLAT ? this.flat : this.sprites;
         var key = cached.cell();
-        return layers(ShapeRasterizer.chunkSurface(key, detail), bake(PortMarkings.surface(key), sprites, Mesh.Material::channel, WHITE, flat), sprites, flat);
+        return layers(ShapeRasterizer.chunkSurface(key, detail), bake(PortMarkings.surface(key), sprites, Mesh.Material::channel, WHITE, variant), sprites, variant);
     }
 
-    private Layers layers(List<Mesh.Polygon> polygons, List<BakedQuad> markings, TextureAtlasSprite[] sprites, boolean flat) {
-        var solid = marked(bake(polygons.stream().filter(p -> p.material() != Mesh.Material.GLASS).toList(), sprites, Mesh.Material::channel, WHITE, flat), markings);
-        var glass = bake(polygons.stream().filter(p -> p.material() == Mesh.Material.GLASS).toList(), sprites, Mesh.Material::channel, WHITE, flat);
+    private Layers layers(List<Mesh.Polygon> polygons, List<BakedQuad> markings, TextureAtlasSprite[] sprites, ShellVariant variant) {
+        var solid = marked(bake(polygons.stream().filter(p -> p.material() != Mesh.Material.GLASS).toList(), sprites, Mesh.Material::channel, WHITE, variant), markings);
+        var glass = bake(polygons.stream().filter(p -> p.material() == Mesh.Material.GLASS).toList(), sprites, Mesh.Material::channel, WHITE, variant);
         return new Layers(solid, glass, marked(solid, glass));
     }
 
@@ -178,16 +182,19 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
 
     /** Fixed material colours multiplied by the same lighting as uncoloured surfaces, without a block tint lookup. */
     public static List<BakedQuad> bake(List<Mesh.Polygon> polygons, TextureAtlasSprite[] sprites, java.util.function.ToIntFunction<Mesh.Material> tints, java.util.function.ToIntFunction<Mesh.Material> colours) {
-        return bake(polygons, sprites, tints, colours, false);
+        return bake(polygons, sprites, tints, colours, ShellVariant.BAKED);
     }
 
-    /** As above; {@code flat}: the {@link ShellVariant#FLAT} quads, an unshaded vertex colour the shader pack shades. */
-    private static List<BakedQuad> bake(List<Mesh.Polygon> polygons, TextureAtlasSprite[] sprites, java.util.function.ToIntFunction<Mesh.Material> tints, java.util.function.ToIntFunction<Mesh.Material> colours, boolean flat) {
+    /**
+     * As above, on {@code variant}: {@link ShellVariant#FLAT} an unshaded vertex colour the shader pack shades;
+     * {@link ShellVariant#REFLECTED} the shade without the sheen, the reflection pass drawing the highlight.
+     */
+    private static List<BakedQuad> bake(List<Mesh.Polygon> polygons, TextureAtlasSprite[] sprites, java.util.function.ToIntFunction<Mesh.Material> tints, java.util.function.ToIntFunction<Mesh.Material> colours, ShellVariant variant) {
         var out = new ArrayList<BakedQuad>();
         for (var polygon : polygons) {
             int tint = tints.applyAsInt(polygon.material());
             for (int first = 1; first + 1 < polygon.size(); first += 2)
-                out.add(quad(polygon, sprites[polygon.material().ordinal()], tint, colours.applyAsInt(polygon.material()), flat, 0, first, first + 1, Math.min(first + 2, polygon.size() - 1)));
+                out.add(quad(polygon, sprites[polygon.material().ordinal()], tint, colours.applyAsInt(polygon.material()), variant, 0, first, first + 1, Math.min(first + 2, polygon.size() - 1)));
         }
         return List.copyOf(out);
     }
@@ -264,16 +271,25 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
      * differ) of a round body the sheen; flat faces keep their shade. Moving parts are baked the same way.
      */
     public static int shade(Mesh.Polygon polygon, int corner) {
+        return shade(polygon, corner, true);
+    }
+
+    /**
+     * As {@link #shade(Mesh.Polygon, int)}, with the sheen only where {@code sheen} (a {@link ShellVariant#sheen} variant:
+     * the reflection pass draws a view-dependent highlight in the fixed sheen's place, which would otherwise double it).
+     */
+    public static int shade(Mesh.Polygon polygon, int corner, boolean sheen) {
         double[] n = polygon.normals();
         boolean curved = false;
-        for (int i = 1; i < polygon.size() && !curved; i++)
+        for (int i = 1; i < polygon.size() && !curved && sheen; i++)
             curved = Math.abs(n[3 * i] - n[0]) + Math.abs(n[3 * i + 1] - n[1]) + Math.abs(n[3 * i + 2] - n[2]) > 1e-4;
         float k = curved && SHEEN.contains(polygon.material()) ? IChemE.equipmentSheen() : 0;
         float nx = (float) n[3 * corner], ny = (float) n[3 * corner + 1], nz = (float) n[3 * corner + 2];
         return Math.round(255 * Math.min(1, QuadLighter.calculateShade(nx, ny, nz, false) + (k > 0 ? sheen(k, nx, nz) : 0)));
     }
 
-    private static BakedQuad quad(Mesh.Polygon polygon, TextureAtlasSprite sprite, int tint, int colour, boolean flat, int... corners) {
+    private static BakedQuad quad(Mesh.Polygon polygon, TextureAtlasSprite sprite, int tint, int colour, ShellVariant variant, int... corners) {
+        boolean flat = variant == ShellVariant.FLAT;
         double[] p = polygon.positions(), uv = polygon.uvs(), n = polygon.normals();
         // Face direction from the corners' winding (Newell), for vanilla's directional shade.
         double fx = 0, fy = 0, fz = 0;
@@ -294,7 +310,7 @@ public final class EquipmentShellModel implements IDynamicBakedModel {
         baker.setShade(flat);
         baker.setHasAmbientOcclusion(false);
         for (int c : corners) {
-            int shade = flat ? 255 : shade(polygon, c);
+            int shade = flat ? 255 : shade(polygon, c, variant.sheen());
             baker.addVertex((float) p[3 * c], (float) p[3 * c + 1], (float) p[3 * c + 2])
                       .setColor(shade*(colour>>16&255)/255, shade*(colour>>8&255)/255, shade*(colour&255)/255, 255)
                     .setUv(sprite.getU((float) uv[2 * c]), sprite.getV((float) uv[2 * c + 1]))
