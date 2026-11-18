@@ -1373,6 +1373,22 @@ class CrudeUnitSampleTest {
             assertEquals(designs, read.designs());
         }
 
+        /** Send to block sends each pump as the Build list shows it: with its duty and its design speed (owner item 3). */
+        @Test
+        void sendToBlockSendsEachPumpWithItsDutyAndSpeed() {
+            var designs = SheetSizing.designs(all.sheet(), all.sized());
+            int pumps = 0;
+            for (var entry : all.sized().units().entrySet()) {
+                if (!(entry.getValue().size() instanceof com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Size)) continue;
+                var built = com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.built(entry.getValue());
+                String id = entry.getKey(), tag = id.contains("/") ? id.substring(0, id.indexOf('/')) : id;
+                var name = all.sheet().units().stream().filter(u -> u.id().equals(tag)).findFirst().map(u -> u.name()).orElse(tag);
+                assertTrue(designs.stream().anyMatch(d -> d.tag().equals(name) && d.shape().duty().equals(built.duty())), id + " goes with its duty");
+                if (!built.duty().equals(com.wormzjl.icheme.science.flowsheet.sizing.UnitSize.built(entry.getValue().size()).duty())) pumps++;
+            }
+            assertTrue(pumps > 0, "a sent pump differs from its bore-only shape");
+        }
+
         /** A run that has just ended rates every size with no trial column: each column reads its own run's trays. */
         @Test
         void aRatingSolvesNoColumn() {

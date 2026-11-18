@@ -8,8 +8,9 @@ package com.wormzjl.icheme.science.equipment;
 public final class CreativeMotorGeometry {
     private CreativeMotorGeometry() {}
 
-    /** The socket's centre, x, y, z in sixteenths, facing north: the centre of the terminal box's top face. */
-    public static final double[] SOCKET = {8, 16, 9.5};
+    /** The socket's centre, x, y, z in sixteenths, facing north: the centre of the terminal box's lid (the box x 5..11, y 12.5..16,
+     * z 6..11). */
+    public static final double[] SOCKET = {8, 16, 8.5};
     /** The socket's outward face, facing north (a direction's ordinal: 1, up). */
     public static final int SOCKET_OUTWARD = 1;
 

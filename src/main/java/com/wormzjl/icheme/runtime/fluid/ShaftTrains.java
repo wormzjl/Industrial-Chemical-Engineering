@@ -183,10 +183,15 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double flowSpeed() {
             if (!flowSolved) {
                 flowSpeed = !(setFlow > 0) ? Double.NaN : frame != null ? com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(frame, setFlow, head, .1, 1.5)
-                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, setFlow, head, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED);
+                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, setFlow, head, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.REGULATED_TOP);
                 flowSolved = true;
             }
             return flowSpeed;
+        }
+
+        /** Whether a flow valve in the machine's series stood shut in the booked slice ({@link #SHUT}). */
+        boolean valveShut() {
+            return law != null && valveDrop == SHUT;
         }
 
         /**
@@ -210,7 +215,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double pressureSpeed() {
             if (!pressureSolved) {
                 pressureSpeed = !(setPressure > 0) ? Double.NaN : frame != null ? com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(frame, flow, setPressure - suction, .1, 1.5)
-                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, flow, setPressure - suction, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.MAXIMUM_CURVE_SPEED);
+                        : com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, flow, setPressure - suction, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, com.wormzjl.icheme.science.machine.SpeedControl.REGULATED_TOP);
                 pressureSolved = true;
             }
             return pressureSpeed;
@@ -859,6 +864,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
 
     /** {@link #seriesValveDrop} of a shut flow valve: it takes the whole rise at any speed. */
     static final double SHUT = Double.POSITIVE_INFINITY;
+    /** The status clause of a drive idling on a shut flow valve in its pump's series, after its own word ({@code RUNNING / VALVE SHUT}),
+     * in the form of {@code NO DATA LINK / LAST SPEED}: the engine's words, which the machine page shows as they are. */
+    public static final String VALVE_SHUT = " / VALVE SHUT";
 
     /** Whether {@code unit} is its train's first driven member: the one a regulating driver reads (reading A31). */
     /**
@@ -941,7 +949,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         double sent = turbine ? run.admission : valve == null ? 0 : governorTargets.getOrDefault(valve, 0.0);
         boolean steamShort = (turbine || valve != null) && sent > 0 && run.steamFlow < .99 * sent;
         boolean idleSupply = turbine && run.admission == 0 && run.drop > 0;
-        String automatic=null;double requestedRpm=Double.NaN;boolean trimmed=false;
+        String automatic=null;double requestedRpm=Double.NaN;boolean trimmed=false,shut=false;
         // A motor and a creative motor regulate a driven machine their data cables reach (part C of PUMP_SPEED_SHUT_VALVE_REVIEW.md:
         // the creative motor is a data host as a motor is): one path, the trim included.
         if((d.kind()==ShaftNetwork.Kind.MOTOR||d.kind()==ShaftNetwork.Kind.CREATIVE_MOTOR)&&d.settings().mode()!=ShaftTrain.Mode.SPEED) {
@@ -954,7 +962,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 run.target=sample==null?Double.NaN:flow?sample.setFlow():sample.setPressure();
                 if(!(run.target>0))automatic="NO DUTY TARGET";
                 else if(sample!=null){double share=flow?sample.flowSpeed():sample.pressureSpeed();var member=train.driven().stream().filter(m->m.id()==candidates.getFirst().id()).findFirst().orElseThrow();
-                    double trim=flow?sample.trimSpeed():Double.NaN;
+                    double trim=flow?sample.trimSpeed():Double.NaN;shut=flow&&sample.valveShut();
                     if(Double.isFinite(trim)) {share=trimmed(trim,state.speed()*member.ratio()/candidates.getFirst().designSpeed());trimmed=true;}
                     requestedRpm=share*candidates.getFirst().designSpeed()/member.ratio();}
             }
@@ -993,6 +1001,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         for(var m:train.driven())if(createLoads.contains(m.id())){var u=topology.shaft(m.id());if(u!=null)host.output(u.position(),step.speed()*m.ratio(),step.speed()>0?Math.max(0,capacity-internal)*m.efficiency()/Math.max(1,train.driven().stream().filter(part->createLoads.contains(part.id())).count()):0);}
         run.trip = step.trip();
         run.status = step.status();
+        // A drive idling on a shut flow valve in its pump's series says so (the trim's lowest speed, not a fault).
+        if (shut && step.trip() == ShaftTrain.Trip.NONE && driver.running() && step.speed() > 0) run.status = run.status + VALVE_SHUT;
         if (d.kind() == ShaftNetwork.Kind.STEAM_TURBINE && bindings.containsKey(d.id()) && step.trip() == ShaftTrain.Trip.NONE) run.status = run.status + " / " + bindings.get(d.id());
         run.electric = step.electricPower();
         run.governorPower = step.governorPower();
@@ -1101,7 +1111,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
      * ShaftTrain#CREATIVE_SPEED} with no train, no driven machine or one with no design speed. A second driven machine of another
      * design speed turns at its own share of that.
      */
-    double creativeSpeed(ShaftUnit d) {
+    public double creativeSpeed(ShaftUnit d) {
         Long key = trainOf.get(d.id());
         var run = key == null ? null : runs.get(key);
         if (run == null || run.train.fault() != ShaftNetwork.Fault.NONE || run.train.driven().isEmpty()) return ShaftTrain.CREATIVE_SPEED;

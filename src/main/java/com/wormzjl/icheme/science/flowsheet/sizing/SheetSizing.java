@@ -194,7 +194,7 @@ public final class SheetSizing {
     /**
      * What Send to block stores ({@code SIZING_PLAN.md} section 3.7): each unit and member at the size the tab shows, the player's where
      * the sheet holds one, else the rating's, in the rating's order. A column goes at its door's diameter with its components and member
-     * counts. A unit the constructor has no kind for (a valve: the pipe tool lays it at its line's bore) or a size it refuses is left out,
+     * counts. A pump goes with its duty ({@link PumpSizing#built(PumpSizing.Size, PumpSizing.Duty)}). A unit the constructor has no kind for (a valve: the pipe tool lays it at its line's bore) or a size it refuses is left out,
      * as is a unit with nothing to size.
      */
     public static List<SentDesign> designs(Flowsheet sheet, Sized sized) {
@@ -217,7 +217,9 @@ public final class SheetSizing {
             String id = entry.getKey();
             var held = sheet.sizing().unit(id).size();
             UnitSize size = held != null ? held : entry.getValue().size();
-            var shape = size == null ? null : UnitSize.built(size);
+            // A pump goes with its duty and its design speed, as the Build list shows it (owner item 3).
+            var shape = size == null ? null : size instanceof PumpSizing.Size pump
+                    ? PumpSizing.built(pump, PumpSizing.Duty.of(entry.getValue().rating())) : UnitSize.built(size);
             if (shape == null) continue;
             int slash = id.indexOf('/');
             String block = slash < 0 ? id : id.substring(0, slash), member = slash < 0 ? "" : id.substring(slash + 1);

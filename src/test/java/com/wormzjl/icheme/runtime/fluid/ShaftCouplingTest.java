@@ -542,22 +542,69 @@ class ShaftCouplingTest {
         assertTrue(linked.getLast() > .1, "linked: it regulates " + linked);
     }
 
+    /**
+     * A real motor in REGULATE_FLOW turns its pump at most at the pump's design speed ({@link SpeedControl#REGULATED_TOP}, owner
+     * item 1): an 11 kW, 1000 rpm motor on the 1000 rpm pump, asked twice its rated flow, stands at share 1.0 and says RUNNING, with
+     * no hold (D3). Before, the bound was 1.5 and the motor went CURRENT LIMITED near 1.26.
+     */
+    @Test
+    void aRegulatingMotorStandsAtItsPumpsDesignSpeed() {
+        var r = slowPump(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR, false, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .02, true);
+        for (double s : r.shares()) assertTrue(s <= SpeedControl.REGULATED_TOP + 1e-9, "at most 1.0: " + r);
+        assertEquals(SpeedControl.REGULATED_TOP, r.shares().getLast(), 1e-9, "at its top, short of the set flow: " + r);
+        assertEquals("RUNNING", r.status(), r.toString());
+    }
+
+    /**
+     * A default creative motor through a gearbox turns its pump at the pump's design speed (owner item 5): the motor at 1000 rpm over
+     * the gearbox's ratio, the pump at share 1.0 in SPEED.
+     */
+    @Test
+    void aDefaultCreativeMotorThroughAGearboxTurnsItsPumpAtItsDesignSpeed() {
+        var r = slowPump(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR, true, com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0, false);
+        assertTrue(r.ratio() > 0 && Math.abs(r.ratio() - 1) > .1, "geared: " + r);
+        assertEquals(1, r.shares().getLast(), 1e-9, "the pump at its design speed: " + r);
+        assertEquals(1000 / r.ratio(), r.driverSpeed(), 1e-6, "the motor at 1000 rpm over the ratio: " + r);
+    }
+
     private List<Double> slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow, boolean link) {
         return slowPumpShares(mode, setFlow, link, new String[1]);
     }
 
-    /** The speed share of a pump rated 0.01 m³/s, 50 m at 1000 rpm on a creative motor with no set speed in {@code mode}, each 5 s,
-     * data-linked to the pump where {@code link}; {@code status} gets the drive's last status. */
     private List<Double> slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow, boolean link, String[] status) {
+        var r = slowPump(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR, false, mode, setFlow, link);
+        status[0] = r.status();
+        return r.shares();
+    }
+
+    /** What {@link #slowPump} books: the pump's speed share each 5 s, the drive's last status and speed (rpm), and the gearbox's
+     * compiled ratio (0 for none). */
+    private record SlowPump(List<Double> shares, String status, double driverSpeed, double ratio) {}
+
+    /** The speed share of a pump rated 0.01 m³/s, 50 m at 1000 rpm in {@code mode}, each 5 s, data-linked to the pump where
+     * {@code link}. Its drive is a creative motor with no set speed, or a variable-speed motor of 11 kW built at 1000 rpm (6
+     * poles); through a gearbox where {@code geared}. */
+    private SlowPump slowPump(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind driver, boolean geared, com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow, boolean link) {
         var rig = new Rig();
         var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
-        long first = ledger.reserve(3);
+        long first = ledger.reserve(5);
         var trip = com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE;
-        ledger.shaft(new ShaftUnit(first, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR, cell(0), 0, List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true)), 0,
-                0, com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE,
-                new ShaftUnit.Settings(true, mode, 0, 0, 0), trip, null));
+        var drive = com.wormzjl.icheme.science.equipment.MachineDuty.Drive.VARIABLE;
+        var regulate = new ShaftUnit.Settings(true, mode, 0, 0, 0);
+        var end = List.of(new ShaftUnit.End(cell(0), 1, 0, 0, true));
+        ledger.shaft(driver == com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR
+                ? new ShaftUnit(first, driver, cell(0), 0, end, 0, 0, com.wormzjl.icheme.science.machine.ShaftTrain.CREATIVE_SPEED, 0, drive, regulate, trip, null)
+                : new ShaftUnit(first, driver, cell(0), 0, end, 0, 11e3, 1000, 6, drive, regulate, trip, null));
         ledger.shaft(ShaftUnit.shaft(first + 1, cell(1), 0));
-        ledger.shaft(new ShaftUnit(first + 2, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false)), 1,
+        int casing = 2;
+        if (geared) {
+            var gearbox = com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.GEARBOX;
+            ledger.shaft(new ShaftUnit(first + 2, gearbox, cell(2), 0, List.of(new ShaftUnit.End(cell(2), -1, 0, 0, false), new ShaftUnit.End(cell(2), 1, 0, 0, true)),
+                    0, 0, 0, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.placed(gearbox), trip, null));
+            ledger.shaft(ShaftUnit.shaft(first + 3, cell(3), 0));
+            casing = 4;
+        }
+        ledger.shaft(new ShaftUnit(first + casing, com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CASING, cell(casing), 0, List.of(new ShaftUnit.End(cell(casing), -1, 0, 0, false)), 1,
                 0, 1000, 0, com.wormzjl.icheme.science.equipment.MachineDuty.Drive.FIXED, ShaftUnit.Settings.DEFAULT, trip, null));
         var trains = new ShaftTrains(ledger, device -> device == 1 ? 1L : null, rig.coordinator);
         rig.coordinator.shafts(trains);
@@ -585,8 +632,8 @@ class ShaftCouplingTest {
             rig.run(5);
             out.add(((FlowControl.Machine) rig.coordinator.observe(1).lastResult().orElseThrow().graph().pipes().get(0).control()).speed());
         }
-        status[0] = trains.view(first).status();
-        return out;
+        var view = trains.view(first);
+        return new SlowPump(out, view.status(), view.speed(), geared ? trains.ratio(first + 2) : 0);
     }
 
     /** The governor walk: from a turbine's inlet upstream through unbranched pipes to the nearest control valve. */
@@ -791,12 +838,14 @@ class ShaftCouplingTest {
             assertEquals(expected, booked.get(i).speed, 1e-9, "decision " + i + ": 0.2 down to 0.1:" + text);
             assertTrue(booked.get(i).speed <= booked.get(i - 1).speed + 1e-12, "never up against the shut valve:" + text);
             assertEquals(0, booked.get(i).flow, 1e-6, "no flow at any speed:" + text);
+            assertTrue(booked.get(i).drive.endsWith(ShaftTrains.VALVE_SHUT), "says why it idles:" + text);
         }
         assertEquals(Motor.LOWEST_SPEED, booked.get(59).speed, 1e-9, "idles at the lowest speed:" + text);
         var regulating = booked.get(89);
         assertEquals(FlowControl.Mode.VALVE_REGULATING, regulating.valve, "regulates again:" + text);
         assertEquals(.830, regulating.speed, .005, "the trim holds as before:" + text);
         assertEquals(.05, regulating.drop / regulating.rise, 1e-3, "the valve keeps 5 % of the rise:" + text);
+        assertFalse(regulating.drive.contains(ShaftTrains.VALVE_SHUT), "not shut any more:" + text);
         var open = booked.getLast();
         var supply = water(101325);
         double set = .015 * supply.mass() / supply.volume();
