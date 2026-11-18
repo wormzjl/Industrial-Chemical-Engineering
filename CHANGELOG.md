@@ -18,6 +18,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 ### Added
 
 - Water intake and waste outfall (`2026-11-18-water-intake-outfall`, on `claude/water-intake-outfall-0e90c8`): a Water Intake block gives the network pure water at 25 °C and 1 atm, with a strainer loss, while one of its faces touches a body of at least 100 connected water blocks (a pump on its line moves the water; NO WATER BODY otherwise); a Waste Outfall block lets a line out to the open air at 1 atm and books what evaporates (the spill law on the whole stream) to the pollution field at its cube and the rest, with any solids, to the pollution ledger's ground total, never the air; clean water books nothing. Its falling liquid plays the falling-water sound. Placeholder models. No format changes.
+- Ground pollution (`2026-11-18-ground-pollution`, on `claude/water-intake-outfall-0e90c8`): the ground is stored per chunk column with four channel amounts and a compound inventory; it receives the air's settling and the spill law's non-volatile part and solids (outfall, open spills, destroyed devices), spreads slowly to its four neighbours (faster in rain and across water), decays with a 4 h half-life (1 h in rain), and closes its own ledger. The FTB Chunks overlay, the pollution meter and `/icheme pollution ledger` show it; polluted ground (worst index 0.3 or more) stops crops, saplings and bonemeal (`pollution.groundGrowth`), and its water harms a swimmer (`pollution.groundWater`). Pollution store schema 2.
 
 ## [0.35.1] - 2026-11-18
 
