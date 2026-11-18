@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.wormzjl.icheme.science.column.v3.thermo.V3PengRobinsonThermo;
 import com.wormzjl.icheme.science.material.CrystalPhasesUnavailable;
+import com.wormzjl.icheme.science.material.IdealGasFitUnavailable;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.MaterialRuntime;
 import com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog;
@@ -19,9 +20,10 @@ import org.junit.jupiter.api.Test;
  * crystal could form unseen, and never zero-padding or projecting its species away.
  *
  * <ul>
- * <li>The V3 column (a vapour-liquid algorithm) builds the pilot {@code icheme:pilot_cryogenic}, which admits CO2-I, on the
- * bundled catalog and on the dev override that selects the pilot as the network package: whether a crystal forms is the
- * equilibrium of its solved products (batch 2026-11-18-co2-column-input), not a property of the package.</li>
+ * <li>The V3 column (a vapour-liquid algorithm) no longer refuses a package for its crystals (batch
+ * 2026-11-18-co2-column-input): whether a crystal forms is the equilibrium of its solved products. The pilot
+ * {@code icheme:pilot_cryogenic}, which admits CO2-I, is refused for its reference spine ({@link IdealGasFitUnavailable}),
+ * on the bundled catalog and on the dev override that selects the pilot as the network package.</li>
  * <li>The neural binding is classical for a crystal package (no model is bound), and a projected inference view of it is
  * refused typed rather than dropping its crystals.</li>
  * <li>The world's package {@code icheme:refinery} admits the CO2-I crystal on its fit ideal gas (decision E27 of batch
@@ -43,11 +45,11 @@ class CrystalPackageConsumersTest {
 
     @AfterEach void reset() { MaterialRuntime.reset(); }
 
-    @Test void theColumnBuildsAPackageWithCrystals() {
+    @Test void theColumnRefusesThePilotForItsSpineNotItsCrystal() {
         for (MaterialCatalog catalog : List.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PilotCryogenicTestCatalog.catalog())) {
-            var column = MaterialRuntime.with(catalog, PILOT, () -> V3PengRobinsonThermo.fromRegisteredPackage(PILOT));
-            assertEquals(PILOT, column.packageId());
-            assertTrue(column.componentBasis().componentIds().contains("CarbonDioxide"), "CO2 is a column component");
+            var refused = assertThrows(IdealGasFitUnavailable.class,
+                    () -> MaterialRuntime.with(catalog, PILOT, () -> V3PengRobinsonThermo.fromRegisteredPackage(PILOT)));
+            assertTrue(refused.getMessage().contains(PILOT), refused.getMessage());
             assertEquals(List.of(CO2_I), catalog.requirePackage(PILOT).crystals(), "the package still admits CO2-I");
         }
         // A column package builds as before.

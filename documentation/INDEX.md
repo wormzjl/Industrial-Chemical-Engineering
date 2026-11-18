@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-18-co2-column-input/](2026-11-18-co2-column-input/README.md) | CO2 in the gas intake's air; a column with CO2 in its feed solves, dry ice decided by the crystal equilibrium of its products and coldest tray | In progress since 2026-11-18 (built and tested; owner items O1, O2) |
 | [2026-11-18-equipment-reflections/](2026-11-18-equipment-reflections/README.md) | View-dependent reflections on equipment in the mod's own shader; a switch for every custom shader | In progress since 2026-11-18 (built and tested; not seen in a client) |
 | [2026-11-18-tutorial-photos/](2026-11-18-tutorial-photos/README.md) | Redistributable photographs in the Field Guide: a thumbnail row per chapter and a viewer | In progress since 2026-11-18 |
 | [2026-11-18-water-intake-outfall/](2026-11-18-water-intake-outfall/README.md) | A water intake that draws from a real water body; a waste outfall that pollutes the air at its cube | In progress since 2026-11-18 |

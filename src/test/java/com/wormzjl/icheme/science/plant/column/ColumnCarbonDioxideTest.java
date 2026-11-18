@@ -24,7 +24,8 @@ import org.junit.jupiter.api.Test;
  * products on the world list.
  *
  * <ul>
- * <li>A deethaniser, 2 mol % CO2 in an ethane, propane and n-butane feed at 2.2 MPa, every tray above 250 K: it solves, the
+ * <li>A deethaniser, 2 mol % CO2 in an ethane, propane and n-butane feed, 1 MPa at the top with a 230 K condenser, every
+ * node at 230 K or warmer (the condenser the coldest, the crystal equilibrium run on its distillate): it solves, the
  * CO2 leaves with the distillate, and a cycle at the table's reference conserves every compound exactly and closes its
  * energy.</li>
  * <li>A CO2 and propane column at 0.6 MPa with a 200 K condenser, below CO2's triple point: its distillate holds dry ice, so
@@ -46,7 +47,7 @@ class ColumnCarbonDioxideTest {
 
     @Test void aDeethaniserWithCarbonDioxideSolvesAndSendsItOverhead() {
         var ids = List.of("Ethane", "Propane", "N-butane", "CarbonDioxide");
-        var design = design(ids, new double[] {25, 45, 28, 2}, 300, 10, 5, 2.2e6, 700, 265, 3, 1.6e6);
+        var design = design(ids, new double[] {25, 45, 28, 2}, 300, 10, 5, 1e6, 700, 230, 2, 1.2e6);
         var model = WHOLE.on(ids, true);
         var axis = model.whole().components();
         double[] feed = onTheWorld(design, axis);
@@ -57,7 +58,7 @@ class ColumnCarbonDioxideTest {
         var nodes = solved.inspection().nodes();
         double coldest = nodes.stream().mapToDouble(n -> n.temperatureKelvin()).min().orElseThrow();
         System.out.println("CO2_DEETHANISER temperatures=" + nodes.stream().map(n -> String.format(java.util.Locale.ROOT, "%.2f", n.temperatureKelvin())).toList());
-        assertTrue(coldest > 250, "every tray above 250 K: " + coldest);
+        assertEquals(230, coldest, 1e-6, "the condenser is the coldest node");
 
         var table = solved.table();
         assertEquals(axis, table.axis());

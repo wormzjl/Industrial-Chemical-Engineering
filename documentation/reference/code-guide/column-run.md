@@ -125,8 +125,9 @@ bottoms, a `Credit` is logged, totals grow, each utility is owed its duty (`owed
 conditions, status and phase, and `save` writes the state. A trip asks a solve on the attempted take: STEAM_RATIO where
 rule B's steam is short, else the first band the state left, else CLOSURE. A state standing inside a refused state's
 bands passes (`ColumnCycle.step`'s `refused`), and a passing cycle asks its solve of the state it was given (feed and
-steam at its ratio), the closure's where no band was left; the air fans stand while it passes. A solve whose product holds a crystal
-(`ColumnSolve.Frozen`: a compound solidifies in the column) installs no table and raises `FROZEN` (`Run.frozen`, memory
+steam at its ratio), the closure's where no band was left; the air fans stand while it passes. A solve whose product holds a crystal, or whose coldest tray does where it is colder than every product (`ColumnSolve.coldestTray`, one
+equilibrium at most; CO2 is a column component like any other)
+(`ColumnSolve.Frozen`: the compound, the node, its temperature and the crystal) installs no table and raises `FROZEN` (`Run.frozen`, memory
 only): the cycle takes nothing and asks a solve of the attempted take, none inside the frozen state's bands, until a solve
 finds no crystal; a set-point solve that finds one is refused as `SETPOINT_REFUSED`. An arriving crystal never trips.
 
