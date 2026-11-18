@@ -42,6 +42,16 @@ public final class ModItems {
                             ? com.mojang.serialization.DataResult.success(com.wormzjl.icheme.science.fluid.network.Orifice.snap(beta))
                             : com.mojang.serialization.DataResult.error(() -> "An orifice plate's bore ratio is 0.20 to 0.80 in steps of 0.05, not " + beta)))
                     .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.DOUBLE).build());
+    /** A respirator's fitted filter (batch 2026-11-18-respirator): its remaining capacity, index-seconds, 0 (spent) to 600; absent: no filter. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Double>> RESPIRATOR_FILTER = COMPONENTS.register("respirator_filter",
+            () -> DataComponentType.<Double>builder().persistent(com.wormzjl.icheme.world.item.RespiratorFilterCodec.CODEC)
+                    .networkSynchronized(net.minecraft.network.codec.ByteBufCodecs.DOUBLE).build());
+    /** The respirator's wearable material: no armour, no toughness, no durability; the worn look's texture is {@code textures/models/armor/respirator_layer_1.png}. */
+    private static final DeferredRegister<net.minecraft.world.item.ArmorMaterial> ARMOR_MATERIALS = DeferredRegister.create(Registries.ARMOR_MATERIAL, IChemE.MOD_ID);
+    public static final DeferredHolder<net.minecraft.world.item.ArmorMaterial, net.minecraft.world.item.ArmorMaterial> RESPIRATOR_MATERIAL = ARMOR_MATERIALS.register("respirator",
+            () -> new net.minecraft.world.item.ArmorMaterial(java.util.Map.of(net.minecraft.world.item.ArmorItem.Type.HELMET, 0), 0,
+                    net.minecraft.sounds.SoundEvents.ARMOR_EQUIP_LEATHER, () -> net.minecraft.world.item.crafting.Ingredient.EMPTY,
+                    java.util.List.of(new net.minecraft.world.item.ArmorMaterial.Layer(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "respirator"))), 0, 0));
     private static DeferredHolder<DataComponentType<?>, DataComponentType<Integer>> linePaint(String name) {
         return COMPONENTS.register(name, () -> DataComponentType.<Integer>builder()
                 .persistent(com.mojang.serialization.Codec.INT.validate(rgb -> com.wormzjl.icheme.science.equipment.Paint.line(rgb) ? com.mojang.serialization.DataResult.success(rgb)
@@ -102,6 +112,10 @@ public final class ModItems {
     public static final DeferredItem<com.wormzjl.icheme.world.item.RepairKitItem> REPAIR_KIT = ITEMS.registerItem("repair_kit", com.wormzjl.icheme.world.item.RepairKitItem::new);
     /** The handheld pollution meter (batch 2026-11-15-pollution-system, WP8): held, it reads the cube's air; used, the full reading in chat. */
     public static final DeferredItem<com.wormzjl.icheme.world.item.PollutionMeterItem> POLLUTION_METER = ITEMS.registerItem("pollution_meter", com.wormzjl.icheme.world.item.PollutionMeterItem::new);
+    /** The respirator (batch 2026-11-18-respirator): worn on the head (or a Curios head slot), it divides the breathed index by 50 while its filter lasts. */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.RespiratorItem> RESPIRATOR = ITEMS.registerItem("respirator", com.wormzjl.icheme.world.item.RespiratorItem::new);
+    /** The respirator's consumable filter: one combined cartridge for every channel (owner). */
+    public static final DeferredItem<com.wormzjl.icheme.world.item.RespiratorFilterItem> RESPIRATOR_FILTER_ITEM = ITEMS.registerItem("respirator_filter", com.wormzjl.icheme.world.item.RespiratorFilterItem::new);
 
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> PRESSURE_PROBE=sensor("pressure_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.PRESSURE);
     public static final DeferredItem<com.wormzjl.icheme.world.item.SensorItem> TEMPERATURE_PROBE=sensor("temperature_probe",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE);
@@ -139,6 +153,7 @@ public final class ModItems {
     /** Registers the item settings components and the items. */
     public static void register(IEventBus modEventBus) {
         COMPONENTS.register(modEventBus);
+        ARMOR_MATERIALS.register(modEventBus);
         ITEMS.addAlias(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "column_calculator_v3"), PROCESS_SIMULATOR.getId());
         ITEMS.register(modEventBus);
     }

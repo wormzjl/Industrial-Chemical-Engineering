@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.Environment;
 import com.wormzjl.icheme.science.pollution.Exposure;
 import com.wormzjl.icheme.science.pollution.Reading;
+import com.wormzjl.icheme.world.item.RespiratorItem;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -125,12 +126,13 @@ public final class PollutionMeters {
     }
 
     private static void show(ServerPlayer player, PollutionService service) {
+        var mask = respirator(RespiratorGear.worn(player));
         if (!on(service)) {
-            player.displayClientMessage(off(), true);
+            player.displayClientMessage(withMask(off(), mask), true);
             return;
         }
         double[] indices = indices(service, player);
-        player.displayClientMessage(actionBar(indices[0], indices[1], indices[2], indices[3]), true);
+        player.displayClientMessage(withMask(actionBar(indices[0], indices[1], indices[2], indices[3]), mask), true);
         var sound = tickSound(Reading.worst(indices[0], indices[1], indices[2], indices[3]));
         if (sound != null) {
             player.playNotifySound(sound, SoundSource.PLAYERS, TICK_VOLUME, 1f);
@@ -152,6 +154,10 @@ public final class PollutionMeters {
             var cell = service.cell(player.level().dimension(), PollutionService.cube(pos));
             for (var line : fullReading(pos, indices[0], indices[1], indices[2], indices[3], cell)) {
                 player.displayClientMessage(line, false);
+            }
+            var mask = respirator(RespiratorGear.worn(player));
+            if (mask != null) {
+                player.displayClientMessage(mask, false);
             }
         } catch (RuntimeException failure) {
             IChemE.LOGGER.warn("pollution status=METER_REPORT_FAILED detail={}", String.valueOf(failure));
@@ -190,6 +196,30 @@ public final class PollutionMeters {
                     Reading.number(index), Component.translatable(wordKey(word))).withStyle(colour(word)));
         }
         return out;
+    }
+
+    /**
+     * The worn respirator's segment (batch 2026-11-18-respirator): "Mask 73% protected", "Mask 0% filter spent" or
+     * "Mask 0% no filter"; null when none is worn.
+     */
+    public static Component respirator(net.minecraft.world.item.ItemStack worn) {
+        if (worn == null || worn.isEmpty()) {
+            return null;
+        }
+        boolean fitted = RespiratorItem.fitted(worn);
+        double remaining = RespiratorItem.filter(worn);
+        boolean working = com.wormzjl.icheme.science.pollution.Respirator.protects(remaining);
+        String word = !fitted ? "pollution.icheme.meter.respirator.none"
+                : working ? "pollution.icheme.meter.respirator.protected" : "pollution.icheme.meter.respirator.spent";
+        return Component.translatable("pollution.icheme.meter.respirator", RespiratorItem.percent(remaining), Component.translatable(word))
+                .withStyle(working ? ChatFormatting.AQUA : ChatFormatting.RED);
+    }
+
+    private static Component withMask(Component line, Component mask) {
+        if (mask == null) {
+            return line;
+        }
+        return Component.empty().append(line).append(Component.literal(" | ").withStyle(ChatFormatting.DARK_GRAY)).append(mask);
     }
 
     /** The one segment shown while pollution is disabled or absent. */
