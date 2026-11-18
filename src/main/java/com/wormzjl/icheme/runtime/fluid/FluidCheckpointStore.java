@@ -320,7 +320,7 @@ public final class FluidCheckpointStore {
         Objects.requireNonNull(catalog);
         var core=FluidCheckpointCodec.readCore(coreTag);
         // Why the state cannot be used, once known: the load then reads facts only.
-        String why=core.stateFormat()!=FluidCheckpointCodec.VERSION?"state format "+core.stateFormat()+", this build's is "+FluidCheckpointCodec.VERSION:null;boolean restate=false;
+        String why=!FluidCheckpointCodec.readableState(core.stateFormat())?"state format "+core.stateFormat()+", this build's is "+FluidCheckpointCodec.VERSION:null;boolean restate=false;
         var byKey=new HashMap<FluidCheckpointCodec.PackageKey,FluidThermodynamics>();
         // The package records whose data moved or whose compounds are gone: only the islands on them restate (V3).
         var moved=new HashSet<FluidCheckpointCodec.PackageRecord>();

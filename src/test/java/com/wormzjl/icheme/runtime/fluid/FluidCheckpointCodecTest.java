@@ -37,6 +37,26 @@ class FluidCheckpointCodecTest {
         assertEquals(control,after.islands().getFirst().snapshot().graph().pipes().getFirst().control());
     }
 
+    @Test void aJunctionReopensWithBothItsFlowingSlurryAndItsBufferedParticles() {
+        var material = model.solids.require("icheme:demo_particle");
+        var size = ParticleSize.micrometres("100");
+        var buffered = new SolidInventory(List.of(new SolidInventory.Population(material,size,.125)));
+        var moving = new SolidInventory(List.of(new SolidInventory.Population(material,size,.75)));
+        var gas = model.initialNitrogenCharge(1,298.15,101325,()->{});
+        var stock = new PassiveNetwork.Reservoir(1,0,gas).inventory();
+        var node = new PassiveNetwork.Reservoir(1,0,gas.withSolids(moving),PassiveNetwork.NodeKind.JUNCTION,
+                stock.with(stock.moles(),stock.internalEnergy(),buffered));
+        var snapshot = new IslandCoordinator.Snapshot(1,0,new PassiveNetwork(List.of(node),List.of()),
+                new IslandClock.Snapshot(0,0,0,100),Optional.empty(),"READY");
+        var before = new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,snapshot)));
+        var image = FluidCheckpointCodec.encode(before,key->model);
+        var loaded = FluidCheckpointCodec.decode(image,key->model);
+        var reopened = loaded.islands().getFirst().snapshot().graph().reservoirs().getFirst();
+        assertEquals(buffered,reopened.inventory().solids());
+        assertEquals(moving,reopened.state().solids());
+        assertSameImage(image,FluidCheckpointCodec.encode(loaded,key->model),"flowing and stationary populations round-trip");
+    }
+
     static void assertSameImage(FluidCheckpointCodec.Image a,FluidCheckpointCodec.Image b,String what) {
         assertEquals(a.core(),b.core(),what+": core record");assertEquals(a.packs().keySet(),b.packs().keySet(),what+": packs");
         for(var pack:a.packs().keySet())assertArrayEquals(a.packs().get(pack),b.packs().get(pack),what+": pack "+pack);
