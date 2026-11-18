@@ -89,4 +89,27 @@ class ExchangerRelayTest {
         var water=new ExchangerRelay.Stream(liquid(2000),h(300),2,own,true);
         assertEquals(h(350),water.inlet()+ExchangerRelay.plan(own,water,null,cooling,5).heat(water.curve(),water.inlet(),2)/2,1e-6,"the water's outlet stops at its ceiling");
     }
+    /**
+     * L5 of batch 2026-11-17-column-cold-feed: a pumparound cooler's water takes the heat the column owes it no faster than
+     * its wall moves it from the pumparound's own stream. Water 2 kg/s at 300 K, the draw liquid 4 kg/s at 400 K (both
+     * 4180 J/kgK), 2e5 W owed over the slice (2e5 W x 5 s), ceiling 350 K. On an oversized surface (1000 m²) the wall could
+     * move 836 kW: the ceiling's read stands, bit for bit. On 1 m² of films 2000 W/m²K (UA 1 kW/K, NTU 0.12, Cr 0.5) it
+     * moves about 92 kW, UA times its log-mean difference: the water takes that and the rest stays owed. Without the stream
+     * (the read before L5) the same surface takes the whole due.
+     */
+    @Test void aPumparoundCoolerTakesNoMoreThanItsWallMovesFromTheDraw() {
+        double due=1e6,seconds=5;var draw=new ExchangerRelay.ColumnStream(liquid(2000),h(400),4);
+        var big=side(1000,2000);var water=new ExchangerRelay.Stream(liquid(2000),h(300),2,big,true);
+        var ceiling=ExchangerRelay.plan(big,water,null,ExchangerRelay.Read.column(due,seconds,350,0),seconds);
+        var bounded=ExchangerRelay.plan(big,water,null,ExchangerRelay.Read.column(due,seconds,350,0,draw),seconds);
+        assertEquals(ceiling,bounded,"an oversized surface: the ceiling's read, bit for bit");
+        assertEquals(due/seconds,ceiling.heat(water.curve(),water.inlet(),2),1e-6*due,"the whole due over the slice");
+        var small=side(1,2000);var narrow=new ExchangerRelay.Stream(liquid(2000),h(300),2,small,true);
+        double taken=ExchangerRelay.plan(small,narrow,null,ExchangerRelay.Read.column(due,seconds,350,0,draw),seconds).heat(narrow.curve(),narrow.inlet(),2);
+        double hotOut=400-taken/(4*4180.),coldOut=300+taken/(2*4180.),a=hotOut-300,b=400-coldOut,lmtd=(b-a)/Math.log(b/a);
+        assertTrue(taken<.6*due/seconds,"a short surface takes less than its due: "+taken+" W");
+        assertEquals(1000*lmtd,taken,.02*taken,"UA times the log-mean difference: "+taken+" W");
+        assertEquals(due/seconds,ExchangerRelay.plan(small,narrow,null,ExchangerRelay.Read.column(due,seconds,350,0),seconds).heat(narrow.curve(),narrow.inlet(),2),
+                1e-6*due,"no stream, the read before L5: the ceiling alone, the whole due on the same surface");
+    }
 }

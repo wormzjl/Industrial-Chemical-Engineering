@@ -3,6 +3,7 @@ package com.wormzjl.icheme.science.flowsheet.sizing;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.flowsheet.FlowStream;
 import com.wormzjl.icheme.science.flowsheet.FlowThermo;
+import com.wormzjl.icheme.science.fluid.network.Separation;
 import com.wormzjl.icheme.science.fluid.transport.MixtureViscosity;
 import org.jetbrains.annotations.Nullable;
 
@@ -41,11 +42,23 @@ public final class DrumSizing {
      * @param diameter m
      * @param length   tangent to tangent, m
      * @param boot     whether a lying drum has one
+     * @param demister whether it has a mesh pad under its gas outlet (batch 2026-11-17-three-phase-separator): Auto never
+     *                 proposes one; a Fixed size the player chose with one is rated with it
      */
-    public record Size(UnitType type, double diameter, int length, boolean boot) implements UnitSize {
+    public record Size(UnitType type, double diameter, int length, boolean boot, boolean demister) implements UnitSize {
+        /** A drum without a demister. */
+        public Size(UnitType type, double diameter, int length, boolean boot) {
+            this(type, diameter, length, boot, false);
+        }
+
         public Size {
             if (type != UnitType.STANDING_DRUM && type != UnitType.LYING_DRUM) throw new IllegalArgumentException("Not a drum: " + type);
             if (!(diameter > 0) || !Double.isFinite(diameter) || length < 1) throw new IllegalArgumentException("Invalid drum size");
+        }
+
+        /** This size with a demister or without one. */
+        public Size withDemister(boolean value) {
+            return new Size(type, diameter, length, boot, value);
         }
 
         private boolean lying() {
@@ -58,7 +71,7 @@ public final class DrumSizing {
 
         private EquipmentShape withBoot(boolean with) {
             int support = with ? EquipmentShape.minimumBootSupport(diameter, length) : EquipmentShape.defaultSupport(diameter, orientation());
-            return EquipmentShape.drum(diameter, length, orientation(), EquipmentShape.Heading.NORTH, support, List.of(), with);
+            return EquipmentShape.drum(diameter, length, orientation(), EquipmentShape.Heading.NORTH, support, List.of(), with).withDemister(demister);
         }
 
         @Override public EquipmentShape shape() {
@@ -75,8 +88,17 @@ public final class DrumSizing {
      * @param light  the gas's density, kg/m³
      * @param heavy  the liquid's it settles from, kg/m³
      * @param hold   the drum's entry, min
+     * @param oilDensity     kg/m³; 0 where the load does not say how its liquids settle
+     * @param waterDensity   kg/m³
+     * @param oilViscosity   Pa s
+     * @param waterViscosity Pa s
      */
-    public record Load(double gas, double oil, double water, double light, double heavy, double hold) {
+    public record Load(double gas, double oil, double water, double light, double heavy, double hold, double oilDensity, double waterDensity, double oilViscosity, double waterViscosity) {
+        /** A load that does not say how its liquids settle: no settling rows. */
+        public Load(double gas, double oil, double water, double light, double heavy, double hold) {
+            this(gas, oil, water, light, heavy, hold, 0, 0, 0, 0);
+        }
+
         /** A drum with no flow: no size, no lamp. */
         public static final Load NONE = new Load(0, 0, 0, 0, 0, 0);
 
@@ -89,7 +111,13 @@ public final class DrumSizing {
             var boot = water.empty() ? null : LineSizing.Carried.of(water, flow, thermo, scratch);
             var liquid = bottom != null ? bottom : boot;
             return new Load(top == null ? 0 : top.volume(), bottom == null ? 0 : bottom.volume(), boot == null ? 0 : boot.volume(), top == null ? 0 : top.density(), liquid == null ? 0 : liquid.density(),
-                    hold == null ? Limit.DRUM_HOLD.value() : hold);
+                    hold == null ? Limit.DRUM_HOLD.value() : hold,
+                    bottom == null ? 0 : bottom.density(), boot == null ? 0 : boot.density(), bottom == null ? 0 : bottom.viscosity(), boot == null ? 0 : boot.viscosity());
+        }
+
+        /** Whether the load says how its two liquids settle. */
+        private boolean settles() {
+            return twoLiquids() && oilDensity > 0 && waterDensity > 0 && oilViscosity > 0 && waterViscosity > 0 && oilDensity != waterDensity;
         }
 
         boolean flows() {
@@ -129,14 +157,27 @@ public final class DrumSizing {
         double slender = size.length() / size.diameter();
         readings.add(size.lying() ? Limit.DRUM_SLENDERNESS_LYING.read(slender) : Limit.DRUM_SLENDERNESS_STANDING.read(slender));
         if (load.gas() > 0 && load.heavy() > 0) {
-            double section = Math.PI * size.diameter() * size.diameter() / (size.lying() ? 8 : 4), allowed = Math.sqrt((load.heavy() - load.light()) / load.light());
+            // The world's law (Separation) at design flow, half full: a standing drum's limit falls with its gas space; a pad doubles it.
+            double section = Math.PI * size.diameter() * size.diameter() / (size.lying() ? 8 : 4);
             var row = size.lying() ? Limit.DRUM_GAS_LYING : Limit.DRUM_GAS_STANDING;
-            readings.add(row.against(load.gas() / section, row.value() * allowed));
+            var geometry = shape == null ? null : shape.fluidGeometry();
+            double limit = geometry == null ? Separation.gasLimit(size.lying(), size.demister(), load.heavy(), load.light())
+                    : Separation.gasLimit(geometry, geometry.heightAt(geometry.capacity() / 2), load.heavy(), load.light());
+            readings.add(row.against(load.gas() / section, limit));
         }
         if (shape != null) {
             double held = boot ? size.withBoot(false).volume() : shape.volume(), settled = boot ? load.oil() : load.oil() + load.water();
             if (settled > 0) readings.add(Limit.DRUM_HOLD.against(held / 2 / settled / 60, load.hold()));
             if (boot && load.water() > 0) readings.add(Limit.DRUM_BOOT_HOLD.read((shape.volume() - held) / load.water() / 60));
+            var geometry = shape.fluidGeometry();
+            if (boot && geometry.boot() && load.settles()) {
+                // The world's law (Separation) at design flow: the body half full of oil over a boot full of water.
+                var oil = new Separation.Layer(geometry.volumeAt(size.diameter() / 2) - geometry.bootCapacity(), load.oilDensity(), load.oilViscosity(), load.oil(), load.oil());
+                var water = new Separation.Layer(geometry.bootCapacity(), load.waterDensity(), load.waterViscosity(), load.water(), load.water());
+                double[] numbers = Separation.numbers(geometry, Separation.DROPS, oil, water);
+                if (Double.isFinite(numbers[0])) readings.add(Limit.DRUM_SETTLE_WATER.read(numbers[0]));
+                if (Double.isFinite(numbers[1])) readings.add(Limit.DRUM_SETTLE_OIL.read(numbers[1]));
+            }
         }
         return new Rating(readings);
     }

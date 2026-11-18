@@ -157,6 +157,19 @@ public final class KitDoor {
     }
 
     /**
+     * The choice row at door point ({@code x}, {@code y}), where the view shows it, or null. A choice's hover stands beside its
+     * column, level with its row, so it covers none of the list's other choices (batch 2026-11-16-review-plant-sizing).
+     */
+    public @Nullable Rect choice(double x, double y) {
+        if (!view.inside(x, y)) return null;
+        for (var column : columns) {
+            var p = column.at(x, view.contentY(y));
+            if (p != null && p.row() instanceof Column.Choice) return view.onScreen(p.rect());
+        }
+        return null;
+    }
+
+    /**
      * The action of the choice at door point ({@code x}, {@code y}): the first a column places there, read at the view's
      * offset; null outside the view or where no choice stands (finding C6, batch 2026-11-13-codebase-review).
      */

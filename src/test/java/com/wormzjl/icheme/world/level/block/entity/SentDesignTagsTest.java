@@ -160,6 +160,8 @@ class SentDesignTagsTest {
                             "$1, " + java.util.regex.Matcher.quoteReplacement("still=" + com.wormzjl.icheme.science.equipment.BatchStillOptions.DEFAULT) + "], column=");
                     // Shape fields 13: a design stored before the material is carbon steel.
                     if (!expected.contains("material=")) expected = expected.replaceAll("(still=BatchStillOptions\\[[^\\]]*\\])\\], column=", "$1, material=CARBON_STEEL], column=");
+                    // Shape fields 14: a design stored before the demister has none.
+                    if (!expected.contains("demister=")) expected = expected.replaceAll("(material=[A-Z_]+)\\], column=", "$1, demister=false], column=");
                     var design = read.designs().getFirst();
                     if (!expected.contains("exchangers=Exchangers[") && design.shape().trays() != null && design.shape().trays().components() != null) {
                         var pattern = java.util.regex.Pattern.compile("(units=Units\\[condenser=\\d+, kettle=\\d+, coolers=\\[[0-9, ]*\\], trim=\\d+\\])\\]");

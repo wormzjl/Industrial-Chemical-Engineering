@@ -384,7 +384,18 @@ public final class PassiveStepSolver {
         try{return solveRate(new PassiveNetwork(ports,graph.pipes()),checkpoint);}
         catch(SparseNewton.Nonconvergence|IllegalArgumentException failed){return null;}
     }
+    /**
+     * A solve that fails hands the next solve the point it started from (option S2 of START_HOLD_REVIEW.md, batch
+     * 2026-11-16-review-plant-sizing): its passes write {@link #carry} as they converge, and a retry at a shorter interval
+     * that read the failed attempt's would start from a mode set no accepted point holds (a pump left on its suction limit
+     * by the failed attempt before a valve the committed interval holds closed: no root at any step size).
+     */
     private Result solve(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {
+        var entry=carry;
+        try{return solvePasses(inputGraph,dt,checkpoint,rateOnly,acceptedEndpointModes);}
+        catch(RuntimeException failed){carry=entry;throw failed;}
+    }
+    private Result solvePasses(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {
         // A junction minted by its constructor and not yet sized to its connections is sized here (no-op otherwise).
         inputGraph=PassiveNetwork.sizeJunctionHoldups(inputGraph,model);
         this.rateOnly=rateOnly;
@@ -527,6 +538,8 @@ public final class PassiveStepSolver {
         // Owner decision of 2026-11-10 (option A, batch 2026-11-10-custom-shader-system): the connections at a void or generator
         // end this solve has restarted in their allowed direction ({@link OneWayClosures#allowedRestart}), and how many restarts it took.
         boolean[] restarted=new boolean[graph.pipes().size()];int restarts=0;
+        // The flow valves a failed pass has opened in this solve ({@link DeviceModes#openFailedRegulators}).
+        boolean[] openedOnFailure=new boolean[graph.pipes().size()];
         // What the next pass's start point is handed (S-03): the first pass the junctions the seeds restated; each pass consumes it.
         var passStart=new PassStart(null,false,seeded.flashRestated());
         for(int pass=0;pass<maximumPasses;pass++) {
@@ -602,6 +615,9 @@ public final class PassiveStepSolver {
                 // Decision D11: a phase a vessel's ports draw at their full capacity leaves the vessel within the step; a
                 // pass whose seed still holds it may have no root (see drainedSeeds).
                 if(changedSeeds==null)changedSeeds=equations.drainedSeeds(checkpoint);
+                // Option B of VALVE_HOLD_TRACE.md (batch 2026-11-16-review-plant-sizing): where nothing else changed, a flow valve
+                // regulating in this pass is solved open, once per solve; asked for more than its line passes it has no root.
+                if(changedSeeds==null&&DeviceModes.openFailedRegulators(original,modes,openedOnFailure))continue;
                 if(changedSeeds==null)throw new SparseNewton.Nonconvergence(failure.getMessage()+"; active-set pass="+pass,failure.lastVariables(),failure.phaseHold());
                 seeds=changedSeeds;continue;
             }
@@ -655,6 +671,8 @@ public final class PassiveStepSolver {
             // mode, so the reversible correction comes first.
             if(deviceChange>=0) {
                 modes.set(deviceChange,deviceNext);changed=true;
+                // Option E1 (START_HOLD_REVIEW.md): a flow valve regulating below a pump on its suction limit puts the pump on its law.
+                if(deviceNext==FlowControl.Mode.VALVE_REGULATING){var dp=graph.pipes().get(deviceChange);int law=DeviceModes.lawBelowSuctionLimit(graph,modes,deviceChange,deviceNext,flows,equations.drawn(deviceChange,0,equations.cachedTransport[dp.first()],flows[deviceChange]).density());if(law>=0)modes.set(law,FlowControl.Mode.MOVER_LAW);}
                 // A flow valve that closes can seal a mover's side (owner decision D58).
                 if(flowValve(graph.pipes().get(deviceChange)))relieveSealedPockets(graph,modes,boundaryClosed);
             }
@@ -697,8 +715,13 @@ public final class PassiveStepSolver {
             // through a valve set to 0.75: law flow 5.25, -75.9, then 48, slope 1e-11, at every step size). The regulated pass takes its
             // law flows from the balance on these modes ({@link BalanceStart#balanceStart}) and keeps its seeds: a junction still holding its old
             // charge is laid out on that, not on the mixture the balance sends it (a liquid reaching a gas junction went singular).
+            // An unconverged balance states no point of the island (VALVE_HOLD_TRACE.md of batch 2026-11-16-review-plant-sizing,
+            // option C3: one left at 1 kPa behind a one-way inlet started that inlet 8.5 times past its reverse cap and the pass
+            // never took a step): the regulated pass then starts from this pass's own flows, as every other change does (below),
+            // and where that fails too the failure goes to the failure branch like any other.
             if(deviceChange>=0&&deviceNext==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(deviceChange).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()) {
-                seeds=states;balanceLawFlows=balance.balanceStart(graph,new ArrayList<>(modes),boundaryClosed,keep,checkpoint).lawFlows();passStart=new PassStart(null,true,null);carry=carry.withModes(List.copyOf(modes));continue;
+                var regulated=balance.balanceStart(graph,new ArrayList<>(modes),boundaryClosed,keep,checkpoint);
+                if(regulated.converged()){seeds=states;balanceLawFlows=regulated.lawFlows();passStart=new PassStart(null,true,null);carry=carry.withModes(List.copyOf(modes));continue;}
             }
             if(changed){seeds=states;carry=new CarriedPoint(pipeIdentities,nodeIds,inputStates,states,rateOnly,flows.clone(),lawFlows,heads.clone(),List.copyOf(modes));continue;}
             // Decision D11: the phase-port segments this pass froze must be the ones its own converged flows land in
@@ -1545,7 +1568,11 @@ public final class PassiveStepSolver {
             if(plan.moles()!=null) {
                 if(n.kind()!=PassiveNetwork.NodeKind.GENERATOR)throw new IllegalArgumentException("An outlet port is a generator");
                 double t=plan.temperature(),p=n.state().pressure();var x=plan.moles();
-                if(!(t==n.state().temperature()&&sameShares(PhaseLayout.totalAmounts(n.state()),x)&&plan.solids().empty()&&n.state().solids().empty())) {
+                boolean same=sameShares(PhaseLayout.totalAmounts(n.state()),x)&&plan.solids().empty()&&n.state().solids().empty();
+                // An outlet at its account's enthalpy (L0 of batch 2026-11-17-column-cold-feed): already there within the deadband,
+                // else the temperature whose flash holds it, the planned one where the PH equilibrium does not converge.
+                if(plan.byEnthalpy()?!(same&&atEnthalpy(n.state(),plan.enthalpy(),t)):!(t==n.state().temperature()&&same)) {
+                    if(plan.byEnthalpy())t=enthalpyTemperature(plan,p,x,checkpoint);
                     var unit=model.flashTP(t,p,x,checkpoint);double factor=n.inventory().volume()/unit.volume();
                     for(int c=0;c<x.length;c++)x[c]*=factor;
                     var state=model.flashTP(t,p,x,checkpoint);
@@ -1568,6 +1595,28 @@ public final class PassiveStepSolver {
             pipes.set(valve,driven.withControl(new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,law.targetPressure(),target,volume,PortPlan.COLUMN_SENSOR,revision)));
         }
         return nodes==null&&pipes==null?graph:new PassiveNetwork(nodes==null?graph.reservoirs():nodes,pipes==null?graph.pipes():pipes,graph.scheduledTransfers());
+    }
+    /**
+     * A generator at a planned enthalpy stands still while its own enthalpy per mole is within this many of the PH
+     * equilibrium's tolerance ({@code FluidTpEquilibrium.SPECIFICATION_TOLERANCE}, per mole R T) of the plan's: ten, so a
+     * generator set by a converged flash keeps its graph at the next slice. About 0.05 J/mol at 600 K, a millikelvin of oil.
+     */
+    public static final double ENTHALPY_DEADBAND=10*com.wormzjl.icheme.science.thermo.phase.FluidTpEquilibrium.SPECIFICATION_TOLERANCE;
+    /** Whether {@code state}'s enthalpy per mole is the plan's {@code enthalpy} (J/mol) within {@link #ENTHALPY_DEADBAND} at {@code t}. */
+    private static boolean atEnthalpy(FluidThermodynamics.State state,double enthalpy,double t) {
+        double total=0;for(double n:PhaseLayout.totalAmounts(state))total+=n;
+        return total>0&&Math.abs(state.enthalpy()/total-enthalpy)<=ENTHALPY_DEADBAND*com.wormzjl.icheme.science.thermo.PengRobinsonKernel.GAS_CONSTANT*Math.max(t,state.temperature());
+    }
+    /**
+     * The temperature at which {@code x} holds the plan's enthalpy per mole at pressure {@code p}: the PH equilibrium's,
+     * guessed at the plan's temperature; the plan's temperature where it does not converge (a rejected trial, never a hold: the
+     * column books the residual).
+     */
+    private double enthalpyTemperature(PortPlan plan,double p,double[] x,Runnable checkpoint) {
+        double total=0;for(double n:x)total+=n;
+        FluidThermodynamics.State at;
+        try{at=model.equilibriumPH(plan.temperature(),p,plan.enthalpy()*total,x.clone(),checkpoint);}catch(IllegalArgumentException refused){at=null;}
+        return at!=null&&at.temperature()>0&&Double.isFinite(at.temperature())?at.temperature():plan.temperature();
     }
     /** Whether {@code a} and {@code b} hold the same shares of their totals, to 1e-12. */
     private static boolean sameShares(double[] a,double[] b) {
@@ -1759,6 +1808,9 @@ public final class PassiveStepSolver {
      * {@link #sealedWithout} for a mover's side (owner decision D58, A4): with {@code relief} 1 the pocket must let flow
      * out (a mover's discharge), with -1 it must let flow in (its suction), and a connection whose one-way rules
      * ({@link #boundaryAllowed}) forbid that direction counts as closed. With 0 every open connection counts, either way.
+     * A closed connection seals in its current mode, a closed flow valve with a target too: the mover stands closed until a
+     * pass opens the valve, and reopens on its rise ({@link DeviceModes#nextMode}); a pump on its suction limit before a shut
+     * valve leaves its discharge's pressure in no row (START_HOLD_REVIEW.md, option S2).
      */
     static boolean sealedWithout(PassiveNetwork graph,int[][] nodeEdges,List<FlowControl.Mode> modes,boolean[] boundaryClosed,int node,int edge,int relief) {
         if(!graph.reservoirs().get(node).junction())return false;
@@ -1767,8 +1819,6 @@ public final class PassiveStepSolver {
             int at=queue.remove();
             for(int e:nodeEdges[at]) {
                 if(e==edge)continue;var mode=modes.get(e);var p=graph.pipes().get(e);
-                // A closed flow valve with a target opens to the head on it (nextMode): it seals no discharge.
-                if(relief>0&&mode==FlowControl.Mode.CLOSED&&!boundaryClosed[e]&&p.first()==at&&flowValve(p)&&p.control() instanceof FlowControl.Valve valve&&valve.targetMassFlow(1)>0)return false;
                 if(closedEdge(mode,boundaryClosed[e]))continue;
                 int other=p.first()==at?p.second():p.first();
                 if(relief!=0&&other!=at) {

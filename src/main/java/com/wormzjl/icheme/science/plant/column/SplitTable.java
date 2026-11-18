@@ -77,16 +77,31 @@ public record SplitTable(List<String> axis, List<Product> products, double reboi
      * The intensive state of the solve: the feed's mole fractions on the axis, its specific enthalpy (J/mol, network basis)
      * and its slope (J/mol K) for the enthalpy band, the steam taken per mole of feed per steam inlet, the throughput
      * relative to the design rate, the setpoints it solved, and the feed's and each steam's temperature there (K, NaN
-     * unknown; the Operation tab's, C7).
+     * unknown; the Operation tab's, C7), and each pumparound's duty per mole of feed in the state (J, column sign; batch
+     * 2026-11-17-column-cold-feed, L4): a table's the duty it was solved at, which follows its cooler and need not be the
+     * set point; a refused state's the duty its cycle booked. Empty where none is known (no pumparound band).
      */
     public record Reference(double[] feedFractions, double feedEnthalpy, double enthalpySlope, double[] steamRatios, double alpha, Setpoints setpoints,
-                            double feedTemperature, double[] steamTemperatures) {
+                            double feedTemperature, double[] steamTemperatures, double[] pumparounds) {
         public Reference {
             feedFractions = feedFractions.clone();
             steamRatios = steamRatios.clone();
             steamTemperatures = steamTemperatures.clone();
+            pumparounds = pumparounds.clone();
             Objects.requireNonNull(setpoints, "setpoints");
             if (steamTemperatures.length != steamRatios.length) throw new IllegalArgumentException("One temperature per steam inlet");
+            for (double q : pumparounds) if (!Double.isFinite(q)) throw new IllegalArgumentException("Invalid pumparound duty " + q);
+        }
+
+        /** A state solved at its set points' pumparound duties, as every solve was before L4. */
+        public Reference(double[] feedFractions, double feedEnthalpy, double enthalpySlope, double[] steamRatios, double alpha, Setpoints setpoints,
+                         double feedTemperature, double[] steamTemperatures) {
+            this(feedFractions, feedEnthalpy, enthalpySlope, steamRatios, alpha, setpoints, feedTemperature, steamTemperatures, setpoints.pumparoundsPerFeed());
+        }
+
+        @Override
+        public double[] pumparounds() {
+            return pumparounds.clone();
         }
 
         @Override

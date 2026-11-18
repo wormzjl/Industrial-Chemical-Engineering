@@ -106,7 +106,7 @@ final class SizingFactsFile {
                 case "AIR_COOLER" -> new AirCoolerSizing.Size(fields.number("width"), fields.whole("length"), new ProcessUnit.Bank(fields.whole("parallel"), fields.whole("series")), fields.whole("banks", 1));
                 case "HEATER" -> new HeaterSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("length"));
                 case "COMPRESSOR" -> new CompressorSizing.Size(fields.name("type", UnitType.class), fields.number("size"), fields.whole("length"));
-                case "DRUM" -> new DrumSizing.Size(fields.name("type", UnitType.class), fields.number("diameter"), fields.whole("length"), fields.bool("boot"));
+                case "DRUM" -> new DrumSizing.Size(fields.name("type", UnitType.class), fields.number("diameter"), fields.whole("length"), fields.bool("boot"), fields.bool("demister", false));
                 case "TANK" -> new TankSizing.Size(fields.name("type", UnitType.class), fields.whole("count"), fields.number("diameter"), fields.whole("shell"));
                 case "EJECTOR" -> new EjectorSizing.Size(fields.number("suction"));
                 case "VACUUM_PUMP" -> new com.wormzjl.icheme.science.flowsheet.sizing.VacuumPumpSizing.Size(fields.name("type", com.wormzjl.icheme.science.machine.VacuumPump.Type.class), fields.whole("model"));
@@ -207,6 +207,8 @@ final class SizingFactsFile {
                 json.addProperty("diameter", drum.diameter());
                 json.addProperty("length", drum.length());
                 json.addProperty("boot", drum.boot());
+                // A drum's demister (batch 2026-11-17-three-phase-separator), only when it has one: absent reads none.
+                if (drum.demister()) json.addProperty("demister", true);
             }
             case TankSizing.Size tank -> {
                 json.addProperty("kind", "TANK");

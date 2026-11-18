@@ -5,7 +5,7 @@ The full rules of the `AGENTS.md` section "Gradle, measurement and verification"
 - At most two Gradle invocations run at a time on the machine, each in its own worktree; the final lane may be one of them. Never run a test suite while a dev client is running.
 - Worker threads: a large solver campaign 8 to 10, never beside another of that size; a run on the second Gradle lane at most 4; the final lane's test step 8 (`LANE_WORKERS`).
 - Record time only in a performance optimization task; a timed run runs alone. In every other task judge cost by counters, in wall-time cost gates and campaigns too, and report no times. Replay a wall-clock budget hold alone before you count it.
-- The test tasks are `test` (the quick suite), `holdGates`, `columnGates`, `equipmentGates` and `nativeSmoke`. Outside the final lane, every run names its test classes with `--tests`. `check`, `build` and `slowGates` are the lane's alone; `assemble` builds the jar.
+- The test tasks are `test` (the quick suite), `holdGates`, `columnGates` and `equipmentGates`. Outside the final lane, every run names its test classes with `--tests`. `check`, `build` and `slowGates` are the lane's alone; `assemble` builds the jar.
 - `columnGates` and `equipmentGates` hold the column and equipment tests, which `test` leaves out, and see only what their tests load. When one fails with a class or resource missing, add it to the group's list in `build.gradle`.
 - The final lane is `bash tools/merge-lane/lane.sh head`; `tools/merge-lane/README.md` holds its steps and options.
   - It runs once per batch, when the code is final, on the test classes the batch's changes can reach (`tools/merge-lane/affected.mjs`).

@@ -20,7 +20,7 @@ The test packages and which task runs them. Paths under `src/test/java/com/wormz
 | Package | Pins | Task |
 |---|---|---|
 | root | `LayeringTest` (the import rules between the top-level layers, read from the sources), `FormatsTableTest` (every constant `FORMATS.md` names has the value it states) | `test` |
-| `science/column/v3/**` | The V3 column: residuals and Jacobian, initializers and neural seeds, side draws, pumparounds, steam, hydraulics, water, the Holland benchmark, the native library's tests ([column-v3.md](column-v3.md)) | `columnGates`; `NativeColumnSolverTest` in `nativeSmoke`; `HollandExample32BenchmarkTest` also in `v3HollandBenchmark` |
+| `science/column/v3/**` | The V3 column: residuals and Jacobian, initializers and neural seeds, side draws, pumparounds, steam, hydraulics, water, the Holland benchmark ([column-v3.md](column-v3.md)) | `columnGates`; `HollandExample32BenchmarkTest` also in `v3HollandBenchmark` |
 | `science/equipment` | Geometry, layouts, designs, saved shapes ([equipment-geometry.md](equipment-geometry.md), [equipment-designs.md](equipment-designs.md), [equipment-structure.md](equipment-structure.md)) | `equipmentGates` |
 | `science/fluid/**` | The network step, laws, solver, thermo port, topology, transport, conversion, `DeterministicMath` ([fluid-step.md](fluid-step.md), [fluid-laws.md](fluid-laws.md)) | `test`, `fluidScienceTest` |
 | `science/thermo/**` | The kernel, the equilibrium engine (`phase/`, `EngineDigestTest`), water, the qualification families `G3F*`, `G4F*`, `G5F*` (`qualification/`), the Helmholtz oracle (`reference/`) ([equilibrium-engine.md](equilibrium-engine.md), [thermo-kernel.md](thermo-kernel.md), [materials.md](materials.md)) | `test` |

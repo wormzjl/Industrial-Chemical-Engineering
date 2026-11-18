@@ -148,6 +148,71 @@ class ColumnSolveTest {
         assertEquals(warmer, resolved.table().reference().feedEnthalpy(), 0);
     }
 
+    /**
+     * L4 of batch 2026-11-17-column-cold-feed: a solve at half the pumparound duties (a relaxed solve, the coolers short):
+     * the draw trays stand hotter, the condenser takes more per mole of feed, the table's reference carries the duties it
+     * was solved at beside the set points it ran on (so no setpoint solve follows), and a cycle booking those duties closes
+     * on the table's condenser exactly.
+     */
+    @Test void aTableSolvedAtHalfThePumparoundDutiesHasHotterDrawsAndALargerCondenser() {
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
+        V3ColumnInput design = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
+        var model = column(catalog, design);
+        double[] feed = feedOnTheNetwork(model, design);
+        var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
+        var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
+        double screen = V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO;
+        var start = assertInstanceOf(ColumnSolve.Solved.class, ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints,
+                new ColumnSolve.Taken(feed, Double.NaN, steam), null), model, screen, () -> {}));
+        assertArrayEquals(setpoints.pumparoundsPerFeed(), start.table().reference().pumparounds(), 0, "a start solves at the set points");
+        double[] half = setpoints.pumparoundsPerFeed();
+        assertTrue(half.length > 0, "the design has pumparounds");
+        for (int j = 0; j < half.length; j++) half[j] *= .5;
+        var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.PUMPAROUND, design, setpoints, new ColumnSolve.Taken(feed, start.table().reference().feedEnthalpy(), steam),
+                start.seed(), ColumnComponents.Condenser.EXCHANGER, half), model, screen, () -> {});
+        var solved = assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
+        var a = start.table();var b = solved.table();
+        System.out.println("L4_HALF draws=" + Arrays.toString(a.pumparoundDraw()) + " -> " + Arrays.toString(b.pumparoundDraw()) + " condenserPerFeed=" + a.condenserPerFeed() + " -> " + b.condenserPerFeed());
+        for (int j = 0; j < half.length; j++) {
+            assertEquals(half[j], b.pumparoundPerFeed()[j], 1e-9 * Math.abs(half[j]), "pumparound " + j + " at half its duty");
+            assertTrue(b.pumparoundDraw()[j] > a.pumparoundDraw()[j], "draw tray " + j + " hotter: " + a.pumparoundDraw()[j] + " -> " + b.pumparoundDraw()[j] + " K");
+        }
+        assertTrue(b.condenserPerFeed() < a.condenserPerFeed(), "the condenser takes what the pumparounds leave: " + a.condenserPerFeed() + " -> " + b.condenserPerFeed());
+        assertArrayEquals(half, b.reference().pumparounds(), 0, "the reference carries the duties it was solved at");
+        assertFalse(b.reference().setpoints().intensivelyDiffers(setpoints), "and the set points it ran on: no setpoint solve");
+        // L5: each pumparound's draw liquid, sampled with the solve, is an oil liquid's (about 2 to 3 kJ/kgK) up to its tray.
+        assertEquals(half.length, solved.drawCurves().size(), "a draw curve per pumparound");
+        for (int j = 0; j < half.length; j++) {
+            var curve = solved.drawCurves().get(j);double td = b.pumparoundDraw()[j];
+            assertNotNull(curve, "pumparound " + j + "'s draw curve");
+            assertEquals(Math.min(ColumnSolve.DRAW_CURVE_LOW, td - 10), curve.temperature(0), 1e-9, "from the curve's low end");
+            double cp = (curve.enthalpyAt(td) - curve.enthalpyAt(td - 60)) / 60;
+            System.out.printf(java.util.Locale.ROOT, "L5_CURVE %d draw=%.1f K cp=%.0f J/kgK%n", j, td, cp);
+            assertTrue(cp > 1500 && cp < 3500, "an oil liquid's heat capacity: " + cp + " J/kgK");
+        }
+        // A cycle at the reference whose pumparounds book the table's duties (their coolers take half): the closure is the table's.
+        var axis = model.whole().components();
+        int water = axis.indexOf(SplitTable.WATER);
+        double rate = Arrays.stream(feed).sum();
+        var feedAccount = new Account(scale(feed, SECONDS), b.reference().feedEnthalpy() * rate * SECONDS);
+        var steamAccounts = new ArrayList<Account>();
+        for (int j = 0; j < steam.size(); j++) {
+            double[] n = new double[axis.size()];
+            n[water] = steam.get(j).rate();
+            double p = design.topPressurePascal() + design.steamFeeds().get(j).stageNumber() * design.stagePressureDropPascal();
+            steamAccounts.add(new Account(scale(n, SECONDS), model.whole().flashTP(steam.get(j).temperature(), p, n.clone(), () -> {}).enthalpy() * SECONDS));
+        }
+        double[] room = new double[b.products().size()];
+        Arrays.fill(room, Double.MAX_VALUE);
+        double[] cooler = new double[half.length];
+        for (int j = 0; j < half.length; j++) cooler[j] = -b.pumparoundPerFeed()[j] * rate * SECONDS;
+        double[][] h = solved.enthalpy();
+        var step = ColumnCycle.step(b, setpoints, SECONDS, feedAccount, steamAccounts, room, ColumnCycle.Rooms.NONE.withPumparounds(cooler), (k, n) -> dot(h[k], n), false);
+        assertFalse(step.tripped(), step.conditions().toString());
+        assertEquals(0, step.departure(), 1e-9, "the closure is the table's");
+        assertTrue(DriftBands.check(b, step, setpoints.designFeedRate() * SECONDS).isEmpty(), "inside its own bands");
+    }
+
     /** The design's feed on the network's compound list. */
     /**
      * W3b: the model a column of {@code design} solves on in a world: the network package's view of the design's compounds with

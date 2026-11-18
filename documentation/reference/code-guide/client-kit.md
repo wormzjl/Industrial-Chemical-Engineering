@@ -23,7 +23,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | Class | Role | Lines |
 |---|---|---|
 | **The kit (`gui/common/kit`)** | | |
-| `Column` | Rows placed top to bottom from the width (`place`, `Metrics.DEFAULT` or `COMPACT`): `Group`, `Line`, `Paragraph`, `Choice`, `Field`, `Wide`, `Reading`, `Setting`, `Buttons` of `Button` (`latched`, `soft`), `Bar`, `Split`, `Gap`; a `Placed` row keeps its rect, slots, texts and hover; `slots`, `action`, `hover`, `draw`; `BOX`, `UNIT`, `STEP`, `INSET` | 456 |
+| `Column` | Rows placed top to bottom from the width (`place`, `Metrics.DEFAULT` or `COMPACT`): `Group`, `Line`, `Paragraph`, `Choice`, `Field`, `Wide`, `Reading`, `Setting`, `Buttons` of `Button` (`latched`, `soft`), `Bar`, `Split`, `Gauge` (a labelled bar of one share, its value and unit in a meter's box and unit places, a group's bars from one x to one x), `Gap`; a `Placed` row keeps its rect, slots, texts, hover and mark (a gauge's bar); `slots`, `action`, `hover`, `draw`; `BOX`, `UNIT`, `STEP`, `INSET` | 518 |
 | `Rect` | A rectangle in GUI pixels | 33 |
 | `Measure` | Text width, cut and wrap: the game font (`GuiCanvas.measure`), `Measure.fixed(6)` in tests and tools; `LINE` | 61 |
 | `Canvas` | Where the kit draws: fills, lines, text, clip, `sprite`, `batch` | 51 |
@@ -35,7 +35,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | `PanelSkin` | The light door (`PanelSkin.LIGHT`, RAL 7035, red LED meters) and the dark door (`.DARK`, RAL 7016, amber meters): engraved plates, 7-segment LCD entries (`segments`), LED meters, IEC 60073 button colours | 389 |
 | `ScrollView` | A viewport over a taller column: an offset and its own 8 px bar; input only while shown and inside | 120 |
 | `KitWidgets` | Game widgets kept at their slots in a scrolled column, shown only wholly inside | 39 |
-| `KitDoor` | A door's columns in one view with one bar (`layout`, `place`, `placeAll`), the kept widgets (`keep`), `draw`, `action` (the `Choice` under a door point), `wheel`, `press`, `drag`, `release`, static `hint` | 200 |
+| `KitDoor` | A door's columns in one view with one bar (`layout`, `place`, `placeAll`), the kept widgets (`keep`), `draw`, `action` (the `Choice` under a door point), `choice` (its row, where a choice's hover stands beside the column), `wheel`, `press`, `drag`, `release`, static `hint` | 213 |
 | `DoorInput` | Static input order shared by kit screens: `press` (the tour, `SkinField.clickOutside`, the door), `wheel`, `overlay` (the tour, else the hint); its `Overlay` is what a tour implements | 51 |
 | `EditFocus` | `ends`: a press outside the focused entry ends its edit, as Enter does (Minecraft-free) | 18 |
 | `GuiCanvas` | The canvas on `GuiGraphics` with the game font: scissor, linear sprite blits, `batch` held as `HeldDraws` says, `release`, `drawOut`, `of(g, font)` one per frame, `measure` | 237 |

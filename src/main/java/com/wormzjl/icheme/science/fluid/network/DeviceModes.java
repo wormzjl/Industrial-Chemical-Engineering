@@ -10,7 +10,7 @@ import java.util.*;
  * carry's tests {@link #shutoffMargin} and {@link #moverBounds}), the one statement of the transitions at a converged
  * point ({@link #nextMode}, with the band its tests read, {@link #shutoffBand}, and the head a closed mover must beat,
  * {@link #demand}), the series rule of a pressure valve beside a flow regulator ({@link #regulatesInSeries},
- * {@link #regulating}), and the changes a failed pass makes ({@link #cavitates}, {@link #openStarved}). One per solver
+ * {@link #regulating}), and the changes a failed pass makes ({@link #cavitates}, {@link #openStarved}, {@link #openFailedRegulators}). One per solver
  * ({@code PassiveStepSolver.devices}), built with it; it reads the solve constants, the suction readings and the movers'
  * laws through {@code solver} and holds no state of its own: the modes are the solve's (S-01, batch
  * 2026-11-13-codebase-review, D-S5: moved out of the solver with every body unchanged but its qualifiers, and two
@@ -46,6 +46,25 @@ final class DeviceModes {
             if(e==edge||series[e]!=series[edge]||ControlConstraints.pressureRegulator(graph,e)==pressure||!regulating(graph,e,modes.get(e)))continue;
             return graph.pipes().get(e).control() instanceof FlowControl.Valve?e:pressure?edge:-1;
         }
+        return -1;
+    }
+    /**
+     * Option E1 of START_HOLD_REVIEW.md (batch 2026-11-16-review-plant-sizing), beside {@link #regulatesInSeries}: the pump
+     * that returns to its law in the same change as flow valve {@code edge} goes to {@code next}, or -1. A pump's suction
+     * limit, {@code max(E, pv + bd(Q))} ({@link MoverSuction#suctionLimit}), does not fall as its flow falls, and its suction
+     * pressure does not fall either (its suction line's loss shrinks, and no other device changes mode in the same pass,
+     * decision A272). So below the flow at which a pump sits on its suction limit its suction stands at or above its floor
+     * and the pump is on its law. The pump is the one on {@code PUMP_SUCTION_LIMIT} that carries one flow with the valve by
+     * the junction balances ({@link ControlConstraints#inSeries}), where the valve's change to {@code VALVE_REGULATING} is due
+     * and its target, as a mass flow at {@code density}, lies below the pump's converged flow {@code flows}. A valve set to
+     * 167 kg/s behind a crude pump on its limit at 216 kg/s otherwise regulated with the pump still on its limit, a pass with
+     * no root (its limit 138 kPa, its suction line 149.85 kPa), and the valve opened, regulated and cycled.
+     */
+    static int lawBelowSuctionLimit(PassiveNetwork graph,List<FlowControl.Mode> modes,int edge,FlowControl.Mode next,double[] flows,double density) {
+        if(next!=FlowControl.Mode.VALVE_REGULATING||!(graph.pipes().get(edge).control() instanceof FlowControl.Valve valve)||valve.pressureControl()||valve.bare())return -1;
+        double target=valve.targetMassFlow(density);
+        for(int e=0;e<modes.size();e++)
+            if(modes.get(e)==FlowControl.Mode.PUMP_SUCTION_LIMIT&&target<flows[e]&&ControlConstraints.inSeries(graph,e,edge))return e;
         return -1;
     }
     /** Whether connection {@code e} in {@code mode} fixes what it regulates: a valve regulating, or a set-flow mover on its law (its displacement on its supply's density, {@link MoverSuction#riseDensity}) or closed (no flow). */
@@ -148,6 +167,22 @@ final class DeviceModes {
         for(int edge=0;edge<modes.size();edge++)
             if(modes.get(edge)==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(edge).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()
                     &&InletPhase.starved(graph,edge,node->emptying!=null&&emptying[node])){modes.set(edge,FlowControl.Mode.VALVE_OPEN);changed=true;}
+        return changed;
+    }
+    /**
+     * A failed pass's last change (batch 2026-11-16-review-plant-sizing, VALVE_HOLD_TRACE.md, option B): every flow valve
+     * regulating in it that this rule has not opened yet in this solve ({@code opened}, per connection, set here) is set to
+     * open; whether any was. A flow valve asked for more than its line passes stands open and the line carries what it can,
+     * but a pass that states it regulating has no root: a valve set to 60 kg/s on a pump's line that passes 51 drove the
+     * pump's discharge to the property box's floor at every step size. The open pass that follows regulates again where it
+     * passes more than the target, as after {@link #openStarved}, whose rule this is without its condition. Once per valve
+     * per solve, so a valve that fails regulating after it was opened ends the solve.
+     */
+    static boolean openFailedRegulators(PassiveNetwork graph,List<FlowControl.Mode> modes,boolean[] opened) {
+        boolean changed=false;
+        for(int edge=0;edge<modes.size();edge++)
+            if(!opened[edge]&&modes.get(edge)==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(edge).control() instanceof FlowControl.Valve valve&&!valve.pressureControl())
+                {modes.set(edge,FlowControl.Mode.VALVE_OPEN);opened[edge]=true;changed=true;}
         return changed;
     }
     /**

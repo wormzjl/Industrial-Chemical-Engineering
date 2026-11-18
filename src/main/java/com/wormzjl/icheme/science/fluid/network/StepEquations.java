@@ -147,19 +147,6 @@ final class StepEquations implements SparseNewton.Equations {
      * residual accumulates that node's targets, energy and junction inflows in, so a per-node
      * re-assembly reproduces every accumulator bit for bit. */
     final int[][] nodeEdges;
-    /** Per liquid pump connection, the supplier its suction walk ends at ({@link InletPhase#walk}) and the walk's link into
-     * it; -1 where the pump draws straight from its first node (or the connection is no liquid pump). What the suction
-     * limit's row and mode test read the supplier's pressure on (owner decision D17, {@link PassiveStepSolver#suctionLimit}). */
-    final int[] suctionSuppliers,suctionLinks;
-    /** Per node, the connections on their suction limit whose supplier it is and which it is no end of: their actuator
-     * row reads its state (owner decision D17), which {@link #buildSparsity} declares and the block sweep re-assembles. */
-    final int[][] remoteSuctions;
-    /** Whether the actuator row of connection {@code edge} is a suction limit that reads a supplier the connection does not
-     * end at. */
-    private boolean remoteSuction(int edge) {
-        int supplier=suctionSuppliers[edge];var pipe=graph.pipes().get(edge);
-        return supplier>=0&&controlOffsets[edge]>=0&&modes.get(edge)==FlowControl.Mode.PUMP_SUCTION_LIMIT&&supplier!=pipe.first()&&supplier!=pipe.second();
-    }
     /** The pressure a junction no open connection reaches keeps, or 0 for every other node.
      * Depends on the pass's active set, so it is built with the equations and not per
      * evaluation; see {@link PhaseLayout#junctionRows}. */
@@ -251,6 +238,13 @@ final class StepEquations implements SparseNewton.Equations {
      * {@link PhaseDraw.Segment#marginalAt}). */
     private final double[] carriedMoments=new double[3],mixedMoments=new double[3],solidMix=new double[3];
     private final boolean[] heldScratch=new boolean[3];
+    /**
+     * What a vessel's outlets carry beside their own phase for this slice ({@link Separation.Carried}, a slice input on
+     * its inventory): per connection end, the mass share of its stream it draws as each other phase ({@code [edge][end]}
+     * by phase id), on the densities and the volumes of the step's start state; {@code carriedOwn} the end's own phase.
+     * Null where no vessel of the graph carries anything, which leaves every draw as it was, to the bit.
+     */
+    final double[][][] carriedShares;final int[][] carriedOwn;
     /** Per node, its solids' moments at the step's start ({@link #startMoments}), worked out at the first evaluation that
      * reads them and kept for the pass: a function of the graph's inventory, which a pass does not change. Read only. */
     private final double[][] startMoments;
@@ -278,6 +272,14 @@ final class StepEquations implements SparseNewton.Equations {
         capacities=capacities(graph,dt);overflowCapacities=overflowCapacities(graph,dt);
         seedHeld=new boolean[count][];startPhases=new Transport[count][];
         for(int i=0;i<count;i++)if(drawsPhase[i]){seedHeld[i]=PhaseDraw.held(this.seeds.get(i));startPhases[i]=transport(i,graph.reservoirs().get(i).state(),null).phases;}
+        double[][][] carrying=null;int[][] own=null;
+        for(int edge=0;edge<graph.pipes().size();edge++)for(int end=0;end<2;end++) {
+            var pipe=graph.pipes().get(edge);int node=end==0?pipe.first():pipe.second();
+            var shares=carriedShares(node,end==0?pipe.firstPort():pipe.secondPort());if(shares==null)continue;
+            if(carrying==null){carrying=new double[graph.pipes().size()][2][];own=new int[graph.pipes().size()][2];}
+            carrying[edge][end]=shares;own[edge][end]=(int)shares[3];
+        }
+        carriedShares=carrying;carriedOwn=own;
         int cursor=0;dry=new boolean[count];bagStart=new double[count];
         for(int i=0;i<count;i++) {
             var node=graph.reservoirs().get(i);
@@ -331,18 +333,6 @@ final class StepEquations implements SparseNewton.Equations {
         energy=new double[count];incomingMass=new double[count];incomingEnergy=new double[count];netMass=new double[count];
         for(int node=0;node<count;node++)if(layout[node]!=null)cachedVariables[node]=new double[layout[node].size()];
         nodeEdges=incidence(graph);
-        suctionSuppliers=new int[graph.pipes().size()];suctionLinks=new int[graph.pipes().size()];Arrays.fill(suctionSuppliers,-1);Arrays.fill(suctionLinks,-1);
-        int[] remote=new int[count];
-        for(int edge=0;edge<graph.pipes().size();edge++) {
-            var pipe=graph.pipes().get(edge);
-            if(!(pipe.control() instanceof FlowControl.Mover liquid&&liquid.liquid()))continue;
-            var walk=InletPhase.walk(graph,edge);if(walk.via()<0)continue;
-            suctionSuppliers[edge]=walk.node();suctionLinks[edge]=walk.via();
-            if(remoteSuction(edge))remote[walk.node()]++;
-        }
-        remoteSuctions=new int[count][];for(int node=0;node<count;node++)remoteSuctions[node]=new int[remote[node]];
-        Arrays.fill(remote,0);
-        for(int edge=0;edge<graph.pipes().size();edge++)if(remoteSuction(edge))remoteSuctions[suctionSuppliers[edge]][remote[suctionSuppliers[edge]]++]=edge;
         pressureScales=new double[graph.pipes().size()];
         for(int edge=0;edge<pressureScales.length;edge++) {
             var pipe=graph.pipes().get(edge);
@@ -703,8 +693,62 @@ final class StepEquations implements SparseNewton.Equations {
         var rates=segment.rates(segment.marginalAt(held(node)),q);
         return Math.max(0,q-rates[FluidThermodynamics.OIL]-rates[3+FluidThermodynamics.OIL]);
     }
-    private double[] phaseRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q){
-        int marginal=segment.marginalAt(held(node));
+    /**
+     * The mass shares a {@code port} end of vessel {@code node} draws as the phases beside its own (entries by phase id,
+     * then its own phase), from what the vessel carries this slice ({@link Separation.Carried}); null where it carries
+     * nothing there. An oil outlet draws {@code waterInOil} m3 of water per m3 of oil and a water outlet {@code oilInWater}
+     * of oil; a gas outlet draws the share {@code liquidInGas} of its volume as the vessel's bulk, each phase in the
+     * volume the vessel holds of it. Densities and volumes are the start state's, so the shares are constants of the step.
+     */
+    private double[] carriedShares(int node,PassiveNetwork.PhasePort port) {
+        if(port!=PassiveNetwork.PhasePort.BOOT_HC&&port!=PassiveNetwork.PhasePort.BOOT_WATER&&port!=PassiveNetwork.PhasePort.VAPOR)return null;
+        var carried=graph.reservoirs().get(node).inventory().carried();var start=startPhases[node];
+        if(carried.none()||start==null)return null;
+        var state=graph.reservoirs().get(node).state();var oil=start[FluidThermodynamics.OIL];var water=start[FluidThermodynamics.AQUEOUS];var gas=start[FluidThermodynamics.GAS];
+        double[] shares=new double[4];int own=PhaseDraw.order(model,state,port)[0];shares[3]=own;
+        if(own==FluidThermodynamics.GAS) {
+            if(gas==null||!(carried.liquidInGas()>0))return null;
+            double vo=oil==null?0:FluidThermodynamics.phaseVolume(state,FluidThermodynamics.OIL),vw=water==null?0:FluidThermodynamics.phaseVolume(state,FluidThermodynamics.AQUEOUS);
+            double total=state.vaporVolume()+vo+vw,bulk=carried.liquidInGas();
+            double mo=oil==null?0:bulk*vo/total*oil.density,mw=water==null?0:bulk*vw/total*water.density;
+            double sum=(1-bulk+bulk*state.vaporVolume()/total)*gas.density+mo+mw;
+            shares[FluidThermodynamics.OIL]=mo/sum;shares[FluidThermodynamics.AQUEOUS]=mw/sum;
+        } else {
+            if(oil==null||water==null)return null;
+            int other=own==FluidThermodynamics.OIL?FluidThermodynamics.AQUEOUS:FluidThermodynamics.OIL;
+            double ratio=own==FluidThermodynamics.OIL?carried.waterInOil():carried.oilInWater();
+            double mass=ratio*start[other].density;
+            shares[other]=mass/(start[own].density+mass);
+        }
+        return shares[FluidThermodynamics.OIL]>0||shares[FluidThermodynamics.AQUEOUS]>0?shares:null;
+    }
+    /** The carried shares of end {@code end} of {@code edge} ({@link #carriedShares}) where its segment draws its own phase
+     * alone, {@code marginal} at the end state; null otherwise: an end already drawing by priority (a phase run out) or
+     * the two liquids together carries nothing more. */
+    private double[] carriedAt(PhaseDraw.Segment segment,int edge,int end,int marginal) {
+        var shares=carriedShares==null?null:carriedShares[edge][end];
+        return shares!=null&&segment.pinned().length==0&&!segment.mixed()&&marginal==carriedOwn[edge][end]?shares:null;
+    }
+    private double[] phaseRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q){return phaseRates(segment,edge,end,node,q,true);}
+    /**
+     * {@link #ownRates} with what the end carries ({@link #carriedAt}): each carried phase takes its share of {@code q}
+     * from the end's own phase, drawn at the step's start state as a pinned phase is and, where {@code limited}, up to
+     * its capacity there (what the vessel held of it at the start, over its drawing ends), so the step never draws more
+     * of a phase than the vessel held. {@code limited} is false for the stream of a vanishing flow, whose shares are the
+     * limit's.
+     */
+    private double[] phaseRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q,boolean limited) {
+        int marginal=segment.marginalAt(held(node));var rates=ownRates(segment,edge,end,node,q,marginal);
+        var shares=carriedAt(segment,edge,end,marginal);if(shares==null)return rates;
+        var pipe=graph.pipes().get(edge);var capacity=capacities==null?null:capacities[end==0?pipe.first():pipe.second()];
+        for(int phase=FluidThermodynamics.OIL;phase<=FluidThermodynamics.AQUEOUS;phase++) {
+            if(!(shares[phase]>0))continue;
+            double take=shares[phase]*q;if(limited)take=Math.min(take,capacity==null?0:capacity[phase]);
+            rates[3+phase]+=take;rates[marginal]-=take;
+        }
+        return rates;
+    }
+    private double[] ownRates(PhaseDraw.Segment segment,int edge,int end,Transport node,double q,int marginal){
         if(weirOffsets[edge][end]<0)return segment.rates(marginal,q,densityOf(node.phases,FluidThermodynamics.OIL),densityOf(node.phases,FluidThermodynamics.AQUEOUS));
         var rates=segment.rates(marginal,q);double remaining=remainingAfterHc(segment,node,q);
         double water=node.phases[FluidThermodynamics.GAS]==null?remaining:Math.min(remaining,Math.max(0,weirValues[edge][end]));
@@ -726,11 +770,12 @@ final class StepEquations implements SparseNewton.Equations {
     private Transport drawn(PhaseDraw.Segment segment,int edge,int end,Transport node,double q,double[][] pool,int slot) {
         if(segment==null||node.phases==null)return node;
         int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
-        if(pinned.length==0&&!segment.mixed()&&weirOffsets[edge][end]<0)return marginal<0?node:node.phases[marginal];
+        boolean carries=carriedAt(segment,edge,end,marginal)!=null;
+        if(pinned.length==0&&!segment.mixed()&&weirOffsets[edge][end]<0&&!carries)return marginal<0?node:node.phases[marginal];
         var pipe=graph.pipes().get(edge);var start=startPhases[end==0?pipe.first():pipe.second()];
         if(pinned.length==1&&marginal<0&&weirOffsets[edge][end]<0)return start[pinned[0]];
-        double total=segment.pinnedTotal(),basis=weirOffsets[edge][end]>=0?(q==0?1:Math.abs(q)):segment.mixed()?Math.max(Math.abs(q),1):marginal<0?total:Math.max(Math.abs(q),total);
-        var rates=phaseRates(segment,edge,end,node,basis);
+        double total=segment.pinnedTotal(),basis=weirOffsets[edge][end]>=0||carries?(q==0?1:Math.abs(q)):segment.mixed()?Math.max(Math.abs(q),1):marginal<0?total:Math.max(Math.abs(q),total);
+        var rates=phaseRates(segment,edge,end,node,basis,q!=0);
         double[] moles=pool==null?new double[node.moles.length]:pooled(pool,slot,node.moles.length);double volume=0,viscous=0,heat=0,limit=Double.POSITIVE_INFINITY,solidMass=0,solidVolume=0,solidCapacity=0;
         for(int k=0;k<6;k++) {
             if(!(rates[k]>0)&&!(k<3&&k==marginal))continue;
@@ -792,7 +837,7 @@ final class StepEquations implements SparseNewton.Equations {
         var pipe=graph.pipes().get(edge);
         if(segment==null||node.phases==null)return node.density*pipe.minimumArea()*node.velocityLimit;
         int marginal=segment.marginalAt(held(node));var pinned=segment.pinned();
-        if(segment.mixed()||weirOffsets[edge][end]>=0){var stream=drawn(segment,edge,end,node,1,capMoles,0);return stream.density*pipe.minimumArea()*stream.velocityLimit;}
+        if(segment.mixed()||weirOffsets[edge][end]>=0||carriedAt(segment,edge,end,marginal)!=null){var stream=drawn(segment,edge,end,node,1,capMoles,0);return stream.density*pipe.minimumArea()*stream.velocityLimit;}
         if(pinned.length==0){var stream=marginal<0?node:node.phases[marginal];return stream.density*pipe.minimumArea()*stream.velocityLimit;}
         var start=startPhases[end==0?pipe.first():pipe.second()];
         double velocity=marginal<0?Double.POSITIVE_INFINITY:node.phases[marginal].velocityLimit,total=segment.pinnedTotal(),pinnedVolume=0;
@@ -875,9 +920,6 @@ final class StepEquations implements SparseNewton.Equations {
                 }
             }
         }
-        // Owner decision D17: a suction limit's row reads its supplier's state, which may stand beyond its own ends.
-        for(int node=0;node<count;node++)for(int edge:remoteSuctions[node])
-            for(int c=offsets[node];c<offsets[node]+nodeSize(node);c++)columns[c].set(controlOffsets[edge]);
         for(int edge=0;edge<weirOffsets.length;edge++)for(int end=0;end<2;end++){
             int row=weirOffsets[edge][end];if(row<0)continue;var pipe=graph.pipes().get(edge);
             columns[row].set(row);columns[row].set(edgeOffset+edge);columns[edgeOffset+edge].set(row);
@@ -1440,12 +1482,15 @@ final class StepEquations implements SparseNewton.Equations {
             // this edge's rows for every perturbed column of its first node, and the sparsity already declares the
             // actuator row on both endpoints' columns (buildSparsity).
             case MOVER_LAW->solver.lawResidual(graph,edge,flow/suction.density,head,solver.suctions.riseDensity(edge,suction.density),st[a].pressure())/pressureScale;
-            // Cavitation (owner decisions D59 (4), D14, D17 and D20 Q11 A): the suction end stands at the vapour pressure of
-            // the liquid the pump draws plus its breakdown NPSH at the trial's suction volume flow, or at what its supplier
-            // gives at no flow where that is less, on the trial ({@link PassiveStepSolver#suctionLimit}); the head is free, and the hydraulic row with the suction line's sets
-            // the flow. The supplier may be no end of this connection: the sparsity declares its columns on this row and
-            // the block sweep re-assembles it ({@link #remoteSuctions}).
-            case PUMP_SUCTION_LIMIT->(PortStreams.endPressure(model,graph.reservoirs().get(a),pipe.firstPort(),st[a])-solver.suctions.suctionLimit(this,edge,n->st[n],flow/suction.density))/pressureScale;
+            // Cavitation (owner decisions D59 (4), D14, D20 Q11 A and option D of START_HOLD_REVIEW.md): a pump on its suction limit
+            // delivers the flow at which its suction end stands at its limit ({@link MoverSuction#suctionLimit}: the vapour pressure
+            // of the liquid it draws plus its breakdown NPSH at the trial's suction volume flow, or the clean zone's edge), or
+            // nothing where its suction cannot reach the limit even at no flow: max(-flow, (p - limit(Q))/scale), the flow in the
+            // closed-edge row's own unit. D17's delivery to zero as the supplier falls to its floor is the zero-flow branch, decided
+            // on the trial; the row has a slope in the flow on both branches (the old lesser-of with the supplier's no-flow pressure
+            // was flat above it, and its double root at no flow stalled a 150 kPa crude line's Newton). At a tie the pressure branch.
+            // The head is free, and the hydraulic row with the suction line's sets the flow.
+            case PUMP_SUCTION_LIMIT->{double pressure=(PortStreams.endPressure(model,graph.reservoirs().get(a),pipe.firstPort(),st[a])-solver.suctions.suctionLimit(this,edge,flow/suction.density))/pressureScale;yield -flow>pressure?-flow:pressure;}
             case VALVE_REGULATING->{var valve=(FlowControl.Valve)pipe.control();yield valve.pressureControl()?(st[a].pressure()-valve.targetPressure())/pressureScale:(flow-valve.targetMassFlow(suction.density))/Math.max(.001,valve.targetMassFlow(suction.density));}
             case VALVE_OPEN->head/pressureScale;
             case VALVE_CONFLICT->{double u=fixedOpenings[edge];yield u==0?flow:(head-.5*flow*flow/(suction.density*boreArea(pipe)*boreArea(pipe))*(1/(u*u)-1))/pressureScale;}
@@ -1541,9 +1586,6 @@ final class StepEquations implements SparseNewton.Equations {
                             nodeAccumulate(other,trial,st,tr);nodeTargetRows(other,trial,st,perturbed);
                         }
                     }
-                    // The suction limits this node supplies from beyond their ends (owner decision D17): only their
-                    // actuator row reads this node, and it is the only one of their rows this column declares.
-                    for(int edge:remoteSuctions[node])edgeRows(edge,trial,st,tr,perturbed);
                     write(entryOffsets,entryRows,entries,column,perturbed,f,step);
                     st[node]=baseStates[node];tr[node]=baseTransport[node];pr[node]=basePrepared[node];
                     trial[column]=x[column];

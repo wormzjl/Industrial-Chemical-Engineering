@@ -302,6 +302,8 @@ public final class DataControlRenderer {
         var out = port.outward();
         var medium = port.kind().medium();
         boolean box = false;
+        // A one-block device's socket is on a small case (a valve's positioner or solenoid box): the compact gland.
+        boolean compact = !(level.getBlockEntity(port.owner()) instanceof EquipmentShellBlockEntity);
         if (level.getBlockEntity(port.owner()) instanceof EquipmentShellBlockEntity shell) {
             box = true;
             var socket = shell.shape() == null ? null : SocketGeometry.of(shell.shape(), medium);
@@ -311,7 +313,7 @@ public final class DataControlRenderer {
         }
         var outward = new double[] {out.getStepX(), out.getStepY(), out.getStepZ()};
         return new PortMesh(
-                SocketGeometry.polygons(new double[] {0, 0, 0}, outward, box, medium, detail), out);
+                SocketGeometry.polygons(new double[] {0, 0, 0}, outward, box, medium, detail, compact), out);
     }
 
     /**

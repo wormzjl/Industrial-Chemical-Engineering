@@ -54,7 +54,21 @@ import java.util.Objects;
  */
 public record EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
                              @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty, ExchangerType exchangerType,
-                             BatchStillOptions still, Metallurgy material) {
+                             BatchStillOptions still, Metallurgy material, boolean demister) {
+    /** A shape before shape fields 14: no demister (every structure built before batch 2026-11-17-three-phase-separator's pad). */
+    public EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
+                          @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty,
+                          ExchangerType exchangerType, BatchStillOptions still, Metallurgy material) {
+        this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,material,false);
+    }
+    /**
+     * This drum with a mesh pad under its gas outlet or without one (shape fields 14, batch 2026-11-17-three-phase-separator;
+     * owner: "add an optional demister"): the drum takes twice the gas speed before liquid leaves with the gas
+     * ({@code Separation.DEMISTER}). Not part of the layout: it changes no cell, nozzle or stamp. A drum only.
+     */
+    public EquipmentShape withDemister(boolean value) {
+        return value==demister?this:new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,material,value);
+    }
     public EquipmentShape(Kind kind, double diameter, double tangentLength, Orientation orientation, Heading front, int support,
                           @Nullable ColumnTrays trays, List<Connection> connections, ProcessUnit.Bank bank, boolean boot, int outlet, TowerBank towerBank, MachineDuty duty) {
         this(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,ExchangerType.STANDARD);
@@ -76,21 +90,21 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      * material per structure). The material is not part of the layout: it changes no cell, nozzle or stamp.
      */
     public EquipmentShape withMaterial(Metallurgy value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,value);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,value,demister);
     }
     public EquipmentShape withExchangerType(ExchangerType value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,value,still,material);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,value,still,material,demister);
     }
     public EquipmentShape withTowerBank(TowerBank value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value,duty,exchangerType,still,material);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,value,duty,exchangerType,still,material,demister);
     }
     /** This batch still with options {@code value} (shape fields 11, batch 2026-11-09-batch-distiller). */
     public EquipmentShape withStill(BatchStillOptions value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,value,material);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,front,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,value,material,demister);
     }
     /** This shape facing {@code value}, every other field kept. */
     public EquipmentShape withFront(Heading value) {
-        return new EquipmentShape(kind,diameter,tangentLength,orientation,value,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,material);
+        return new EquipmentShape(kind,diameter,tangentLength,orientation,value,support,trays,connections,bank,boot,outlet,towerBank,duty,exchangerType,still,material,demister);
     }
     public com.wormzjl.icheme.science.fluid.network.CoolingTower coolingTower() {
         return kind==Kind.INDUCED_DRAFT_COOLING_TOWER
@@ -451,7 +465,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
      */
     public EquipmentShape withDuty(MachineDuty value) {
         var design = UnitDesign.of(kind);
-        return new EquipmentShape(kind, design.size(value), design.length(value), orientation, front, support, trays, connections, bank, boot, outlet, towerBank, value, exchangerType, still, material);
+        return new EquipmentShape(kind, design.size(value), design.length(value), orientation, front, support, trays, connections, bank, boot, outlet, towerBank, value, exchangerType, still, material, demister);
     }
 
     /**
@@ -486,7 +500,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
 
     /** This drum with {@code connections} instead of its own. */
     public EquipmentShape withConnections(List<Connection> connections) {
-        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank, duty, exchangerType, still, material);
+        return new EquipmentShape(kind, diameter, tangentLength, orientation, front, support, trays, connections, bank, boot, outlet, towerBank, duty, exchangerType, still, material, demister);
     }
 
     /** A column: its bottoms leave through its skirt to the front (the owner leaves columns alone, 2026-10-25). */
@@ -614,6 +628,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         if (kind != Kind.EXCHANGER && exchangerType != ExchangerType.STANDARD) throw new IllegalArgumentException("Only exchangers have a crossflow configuration");
         Objects.requireNonNull(still, "still");
         if (kind != Kind.BATCH_STILL && !still.equals(BatchStillOptions.DEFAULT)) throw new IllegalArgumentException("Only a batch still has still options");
+        if (demister && kind != Kind.DRUM) throw new IllegalArgumentException("Only a drum has a demister");
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(orientation, "orientation");
         Objects.requireNonNull(front, "front");
@@ -966,7 +981,7 @@ public record EquipmentShape(Kind kind, double diameter, double tangentLength, O
         // A fluid converter's process vessel (batch 2026-11-12-fluid-conversion): an upright cylinder of its shell's height.
         if(kind.converter())return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.CYLINDER,diameter,tangentLength,0,0);
         var form=kind==Kind.TANK?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.CYLINDER:kind==Kind.SPHERE?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.SPHERE:orientation.horizontal()?com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.HORIZONTAL_DRUM:com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.VERTICAL_DRUM;
-        var b=bootPlace();return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(form,diameter,kind==Kind.TANK?fillHeight():kind==Kind.SPHERE?0:tangentLength,b==null?0:b.diameter(),b==null?0:b.length());
+        var b=bootPlace();return com.wormzjl.icheme.science.fluid.network.VesselGeometry.round(form,diameter,kind==Kind.TANK?fillHeight():kind==Kind.SPHERE?0:tangentLength,b==null?0:b.diameter(),b==null?0:b.length()).withDemister(demister);
     }
 
     public double volume() {

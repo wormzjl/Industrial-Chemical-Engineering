@@ -92,9 +92,11 @@ final class FluidFacts {
      *  its wall loss (mm), fouling deposit (m²K/W) and {@code wrecked}, an entry only for a device away from new and clean
      *  (absent: every wall new and clean, none wrecked). A control valve's trim health is in the schema-12 health list.
      *  WP8 of the same batch, under the same unreleased schema: a column unit's tray fouling (0 to 1), wall loss (mm) and
-     *  material of construction by name, after its members (absent: a clean, new carbon steel column). */
-    static final int SCHEMA=29;
-    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 29. */
+     *  material of construction by name, after its members (absent: a clean, new carbon steel column).
+     *  30 (batch 2026-11-17-three-phase-separator): a vessel geometry's {@code demister} after its boot length (absent:
+     *  none). */
+    static final int SCHEMA=30;
+    /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 30. */
     private static final Map<Class<?>,Map<String,String>> ALIASES=Map.of();
     private static final int MAXIMUM_FIELDS=256,MAXIMUM_ITEMS=1<<22,MAXIMUM_TEXTS=1<<20,MAXIMUM_ARRAY=4096,MAXIMUM_CHANNELS=1<<20;
     /** The cadence an island rebuilt from facts starts at (ticks): the shortest the clock allows, as after a merge. */
@@ -403,8 +405,8 @@ final class FluidFacts {
         var type=f.name(com.wormzjl.icheme.science.equipment.ExchangerType.class,com.wormzjl.icheme.science.equipment.ExchangerType.STANDARD);
         return valid(f,"heat unit",()->new HeatUnit(unit,side,area,partner,control,transit,(int)fans,type));
     }
-    private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength());}
-    private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Record f){var form=f.name(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.class,null);double capacity=f.f64(0),height=f.f64(0),d=f.f64(0),l=f.f64(0),bd=f.f64(0),bl=f.f64(0);return valid(f,"vessel geometry",()->new com.wormzjl.icheme.science.fluid.network.VesselGeometry(form,capacity,height,d,l,bd,bl));}
+    private static void geometry(Fields f,com.wormzjl.icheme.science.fluid.network.VesselGeometry g){f.name(g.form()).f64(g.capacity()).f64(g.height()).f64(g.diameter()).f64(g.length()).f64(g.bootDiameter()).f64(g.bootLength()).bool(g.demister());}
+    private static com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry(Record f){var form=f.name(com.wormzjl.icheme.science.fluid.network.VesselGeometry.Form.class,null);double capacity=f.f64(0),height=f.f64(0),d=f.f64(0),l=f.f64(0),bd=f.f64(0),bl=f.f64(0);boolean demister=f.bool(false);return valid(f,"vessel geometry",()->new com.wormzjl.icheme.science.fluid.network.VesselGeometry(form,capacity,height,d,l,bd,bl,demister));}
     private static void control(Fields f,FlowControl control) {
         switch(control) {
             case FlowControl.Passive ignored->f.text("passive").f64(0).f64(0).bool(false).f64(0);
@@ -529,7 +531,7 @@ final class FluidFacts {
         return f.list(t.axis(),(q,id)->q.text(id))
                 .list(t.products(),(q,p)->q.name(p.port()).count(p.index()).doubles(p.recovery()).f64(p.temperature()).f64(p.pressure()))
                 .f64(t.reboilerPerFeed()).doubles(t.pumparoundPerFeed()).f64(t.condenserPerFeed())
-                .record(q->q.doubles(ref.feedFractions()).f64(ref.feedEnthalpy()).f64(ref.enthalpySlope()).doubles(ref.steamRatios()).f64(ref.alpha()).record(p->setpoints(p,ref.setpoints())).f64(ref.feedTemperature()).doubles(ref.steamTemperatures()))
+                .record(q->q.doubles(ref.feedFractions()).f64(ref.feedEnthalpy()).f64(ref.enthalpySlope()).doubles(ref.steamRatios()).f64(ref.alpha()).record(p->setpoints(p,ref.setpoints())).f64(ref.feedTemperature()).doubles(ref.steamTemperatures()).doubles(ref.pumparounds()))
                 .doubles(held).list(Arrays.asList(s.enthalpy()),(q,row)->q.doubles(row)).i64(s.tableTick()).i64(s.applied()).f64(s.solvedCondenser())
                 .list(s.levels(),(q,l)->q.count(l.device()).i64(l.tick()).f64(l.held()).f64(l.rate()).f64(l.molarMass()))
                 .list(s.credits(),(q,c)->q.count(c.device()).i64(c.tick()).record(a->account(a,c.product())))
@@ -547,7 +549,10 @@ final class FluidFacts {
         double reboiler=f.f64(0);var pa=f.doubles(new double[0]);double condenser=f.f64(0);
         var reference=f.record(null,q->{var z=q.doubles(new double[0]);double h=q.f64(0),slope=q.f64(0);var steam=q.doubles(new double[0]);double alpha=q.f64(0);
             var setpoints=q.record(null,p->{try{return setpoints(p);}catch(IllegalArgumentException invalid){return null;}});double feedT=q.f64(Double.NaN);var steamT=q.doubles(new double[0]);
-            try{return new com.wormzjl.icheme.science.plant.column.SplitTable.Reference(z,h,slope,steam,alpha,setpoints,feedT,steamT);}catch(RuntimeException invalid){return null;}});
+            // The pumparound duties it was solved at (batch 2026-11-17-column-cold-feed, L4): a state written before them was solved at its set points'.
+            var duties=q.doubles(null);
+            try{return duties==null?new com.wormzjl.icheme.science.plant.column.SplitTable.Reference(z,h,slope,steam,alpha,setpoints,feedT,steamT)
+                    :new com.wormzjl.icheme.science.plant.column.SplitTable.Reference(z,h,slope,steam,alpha,setpoints,feedT,steamT,duties);}catch(RuntimeException invalid){return null;}});
         var held=f.doubles(new double[0]);var enthalpy=f.list(List.<double[]>of(),q->q.doubles(new double[0])).toArray(new double[0][]);long tableTick=f.i64(0),applied=f.i64(0);double solved=f.f64(0);
         var levels=f.list(List.<ColumnUnit.State.Level>of(),q->{long device=q.count(0),tick=q.i64(0);double amount=q.f64(0),rate=q.f64(0),molar=q.f64(0);return new ColumnUnit.State.Level(device,tick,amount,rate,molar);});
         var credits=f.list(List.<ColumnUnit.State.Credit>of(),q->{long device=q.count(0),tick=q.i64(0);

@@ -212,15 +212,24 @@ class ColumnCycleTest {
         var a = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, ColumnCycle.Rooms.NONE.withReboiler(.25 * reboiler * demand), energy, false);
         assertEquals(Condition.HEATING_SHORT, bound(a));
         assertEquals(.25, a.alpha(), 1e-12, "a quarter of the reboiler's duty: a quarter of the feed");
+        // L2 of batch 2026-11-17-column-cold-feed: a pumparound cooler's room caps its duty and cuts no feed (before L2 this
+        // case was PUMPAROUND_SHORT binding at 0.4 of the feed; now the whole feed, 0.4 of the duty, a notice).
         var b = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, ColumnCycle.Rooms.NONE.withPumparounds(new double[] {.4 * 20_000 * demand}), energy, false);
-        assertEquals(Condition.PUMPAROUND_SHORT, bound(b));
-        assertEquals(0, b.binding().index(), "the first pumparound");
-        assertEquals(.4, b.alpha(), 1e-12);
+        assertNull(bound(b), b.conditions().toString());
+        assertEquals(1, b.alpha());
+        var notice = Condition.find(b.conditions(), Condition.PUMPAROUND_SHORT);
+        assertEquals(Condition.Rank.NOTICE, notice.condition().rank);
+        assertEquals(0, notice.index(), "the first pumparound");
+        assertEquals(.4, notice.value(), 1e-12, "the share of its duty taken");
+        assertEquals(-.4 * 20_000 * demand, b.pumparounds()[0], 1e-6, "it books what its cooler takes");
+        assertFalse(b.tripped());
+        assertEquals(0, b.departure(), 1e-9, "the condenser takes what the pumparound left, as the trip expects");
         var both = ColumnCycle.Rooms.NONE.withReboiler(.6 * reboiler * demand).withPumparounds(new double[] {.4 * 20_000 * demand}).withCondenser(-.7 * heated.condenserPerFeed() * demand);
         var c = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, both, energy, false);
-        assertEquals(Condition.PUMPAROUND_SHORT, bound(c), "the lowest share binds");
-        assertEquals(.4, c.alpha(), 1e-12);
-        assertEquals(3, c.conditions().stream().filter(x -> x.condition().rank == Condition.Rank.LIMIT).count(), "each short utility is listed: " + c.conditions());
+        assertEquals(Condition.HEATING_SHORT, bound(c), "the lowest share binds (before L2: the pumparound's 0.4)");
+        assertEquals(.6, c.alpha(), 1e-12);
+        assertEquals(2, c.conditions().stream().filter(x -> x.condition().rank == Condition.Rank.LIMIT).count(), "each short utility is listed: " + c.conditions());
+        assertNotNull(Condition.find(c.conditions(), Condition.PUMPAROUND_SHORT), "the pumparound's notice beside them");
         var free = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, ColumnCycle.Rooms.NONE, energy, false);
         var before = ColumnCycle.step(heated, setpoints(), 5, feed, List.of(steam), room, energy, false);
         assertEquals(1, free.alpha());
@@ -292,19 +301,170 @@ class ColumnCycleTest {
                 whole.reference(), whole.held(), whole.condenserPerFeed(), Double.POSITIVE_INFINITY));
     }
 
+    /**
+     * L1 of batch 2026-11-17-column-cold-feed: a feed far colder than the table's (the products would carry more energy than
+     * the feed brings and the duties add: the condenser would heat the overhead) passes to the bottoms at its own moles and
+     * energy, exactly; nothing else moves, no steam is taken, no duty owed. Before L1 the cycle tripped and took nothing.
+     */
     @Test
-    void aClosureThatWouldHeatTheOverheadTripsTheColumnAndTakesNothing() {
+    void aClosureThatWouldHeatTheOverheadPassesTheFeedToTheBottoms() {
         var table = table();
-        // A feed far colder than the table's: the products would carry more energy than the feed brings and the duties add.
         var feed = new Account(new double[] {300, 400, 300, 0}, -1e10);
-        var step = ColumnCycle.step(table, setpoints(), 5, feed, List.of(Account.empty(4)), new double[] {1e9, 1e9, 1e9, 1e9, 1e9},
-                (k, n) -> energy(table, k, n), false);
-        assertTrue(step.tripped());
-        assertEquals(Condition.CLOSURE, bound(step));
-        assertEquals("the condenser would heat the overhead", step.binding().text());
-        // The trip binds; beside it stands only rule B's short steam (none here at all), which rule A and the steam's solve read.
-        assertEquals(List.of(step.binding(), new Condition.Active(Condition.STEAM_SHORT, 1, 0, "")), step.conditions(), "the trip and the short steam");
-        assertEquals(0, step.feedMoles(), "a tripped cycle takes nothing");
+        var steam = new Account(new double[] {0, 0, 0, 1000}, -2.3e8);
+        var step = ColumnCycle.step(table, setpoints(), 5, feed, List.of(steam), OPEN, (k, n) -> energy(table, k, n), false);
+        assertFalse(step.tripped(), step.conditions().toString());
+        assertTrue(step.passing());
+        assertEquals(List.of(new Condition.Active(Condition.PASSING, "the condenser would heat the overhead")), step.conditions());
+        assertNull(step.binding(), "nothing bounds the set feed");
+        assertEquals(1, step.alpha());
+        assertEquals(500, step.feedMoles(), 1e-12, "the set demand, 100 mol/s over 5 s");
+        var bottoms = step.products().get(4);
+        assertArrayEquals(step.feed().moles(), bottoms.moles(), 0, "every taken mole to the bottoms");
+        assertEquals(step.feed().energy(), bottoms.energy(), 0, "at the feed's own energy");
+        assertEquals(-1e10 / 2, bottoms.energy(), 0);
+        for (int k = 0; k < 4; k++) assertEquals(0, step.products().get(k).total(), 0, "product " + k + " makes nothing");
+        assertEquals(0, step.steam().getFirst().total(), 0, "no steam is taken");
+        assertEquals(0, step.reboiler(), 0);
+        assertEquals(0, step.condenser(), 0);
+        assertEquals(0, step.solvedCondenser(), 0);
+        assertArrayEquals(new double[] {0}, step.pumparounds(), 0);
+        assertEquals(0, step.departure(), 0);
+    }
+
+    /** L1: a pass is bounded by the feed held and by the bottoms' room, as any cycle, and names them. */
+    @Test
+    void aPassIsBoundByTheFeedHeldAndTheBottomsRoom() {
+        var table = table();
+        double[] room = {1e9, 1e9, 1e9, 1e9, 200};
+        var full = ColumnCycle.step(table, setpoints(), 5, new Account(new double[] {300, 400, 300, 0}, -1e10), List.of(STEAM), room, (k, n) -> energy(table, k, n), false);
+        assertTrue(full.passing());
+        assertEquals(Condition.PRODUCT_FULL, bound(full));
+        assertEquals(4, full.binding().index());
+        assertEquals(.4, full.alpha(), 1e-12);
+        assertEquals(200, full.products().get(4).total(), 1e-9, "the bottoms filled to its room");
+        assertEquals(full.feed().energy(), full.products().get(4).energy(), 0);
+        var short40 = ColumnCycle.step(table, setpoints(), 5, new Account(new double[] {60, 80, 60, 0}, -2e9), List.of(STEAM), OPEN, (k, n) -> energy(table, k, n), false);
+        assertTrue(short40.passing());
+        assertEquals(Condition.FEED_SHORT, bound(short40));
+        assertEquals(.4, short40.alpha(), 1e-12);
+        assertEquals(200, short40.feedMoles(), 1e-9, "all the feed held");
+        assertEquals(-2e9, short40.products().get(4).energy(), 0);
+    }
+
+    /**
+     * L1: a trip whose condenser would not heat (the closure departs from the solved one) passes only on a state whose solve
+     * stands refused; otherwise it holds as before, a solve on its way.
+     */
+    @Test
+    void aRefusedStatePassesATripThatWouldNotHeatAndAnotherHolds() {
+        var table = table();
+        var at = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, (k, n) -> energy(table, k, n), false);
+        double solved = at.solvedCondenser();
+        // The half of the account the cycle takes colder by 0.7 of the solved duty than one that closes on it: the condenser
+        // stands 70 % under the solved duty, still removing heat.
+        assertEquals(1, at.alpha());
+        double colder = FEED.energy() + 2 * (at.condenser() - solved) - 1.4 * Math.abs(solved);
+        var feed = new Account(FEED.moles(), colder);
+        var holds = ColumnCycle.step(table, setpoints(), 5, feed, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE, (k, n) -> energy(table, k, n), false, false);
+        assertTrue(holds.tripped(), holds.conditions().toString());
+        assertTrue(holds.binding().text().startsWith("the condenser duty departs"), holds.binding().text());
+        assertEquals(0, holds.feedMoles(), "a trip holds: a solve is on its way");
+        var passes = ColumnCycle.step(table, setpoints(), 5, feed, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE, (k, n) -> energy(table, k, n), false, true);
+        assertTrue(passes.passing(), passes.conditions().toString());
+        assertEquals(holds.binding().text(), Condition.find(passes.conditions(), Condition.PASSING).text(), "the trip's text");
+        assertEquals(500, passes.feedMoles(), 1e-12);
+        assertEquals(passes.feed().energy(), passes.products().get(4).energy(), 0);
+        // A refused state that runs inside its table runs as before.
+        var runs = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE, (k, n) -> energy(table, k, n), false, true);
+        assertFalse(runs.passing());
+        assertEquals(at.condenser(), runs.condenser(), 0);
+        assertEquals(at.conditions(), runs.conditions());
+    }
+
+    /** L1: a thousand cycles of a feed turning cold and hot close every component and the energy, passing and running. */
+    @Test
+    void aThousandCyclesOfAFeedTurningColdAndHotClose() {
+        var table = table();
+        var random = new Random(20261117);
+        var feed = Account.empty(4);
+        var steam = Account.empty(4);
+        double[] in = new double[4], out = new double[4];
+        double energyIn = 0, energyOut = 0, duties = 0;
+        int passed = 0, ran = 0;
+        for (int cycle = 0; cycle < 1000; cycle++) {
+            double[] arrived = new double[4];
+            // Less than the set demand: the account drains each cycle, so a hot spell runs from its second cycle.
+            for (int i = 0; i < 3; i++) arrived[i] = 500 * (.3 + .02 * random.nextDouble());
+            boolean cold = cycle / 50 % 2 == 1;
+            double arrivedEnergy = 0;
+            for (double n : arrived) arrivedEnergy += n * (cold ? -1e6 : -1.4e5 + 1e3 * random.nextGaussian());
+            feed = feed.plus(new Account(arrived, arrivedEnergy));
+            double s = 200;
+            steam = steam.plus(new Account(new double[] {0, 0, 0, s}, -2.3e5 * s));
+            double[] room = new double[table.products().size()];
+            java.util.Arrays.fill(room, cycle % 89 == 0 ? 50 : 1e9);
+            var step = ColumnCycle.step(table, setpoints(), 5, feed, List.of(steam), room, ColumnCycle.Rooms.NONE, (k, n) -> energy(table, k, n), cycle % 7 == 0, cycle % 5 == 0);
+            if (step.passing()) passed++;
+            else if (!step.tripped() && step.feedMoles() > 0) ran++;
+            for (int i = 0; i < 4; i++) in[i] += step.feed().moles()[i] + step.steam().getFirst().moles()[i];
+            energyIn += step.feed().energy() + step.steam().getFirst().energy();
+            for (var p : step.products()) {
+                for (int i = 0; i < 4; i++) out[i] += p.moles()[i];
+                energyOut += p.energy();
+            }
+            duties += step.reboiler() + step.condenser() + java.util.Arrays.stream(step.pumparounds()).sum();
+            for (int k = 0; k < room.length; k++) assertTrue(step.products().get(k).total() <= room[k] * (1 + 1e-12), "a full buffer is not overfilled");
+            feed = feed.less(step.feed());
+            steam = steam.less(step.steam().getFirst());
+            for (double n : feed.moles()) assertTrue(n >= 0);
+        }
+        assertTrue(passed > 100 && ran > 100, "the feed passed and the column ran: " + passed + ", " + ran);
+        for (int i = 0; i < 4; i++) assertEquals(in[i], out[i], Math.max(in[i], 1) * 1e-12, AXIS.get(i) + " is conserved");
+        assertEquals(energyIn + duties, energyOut, Math.abs(energyOut) * 1e-12, "the energy closes");
+    }
+
+    /**
+     * L2 and L3 of batch 2026-11-17-column-cold-feed: a cooler with room for half its pumparound's duty books half and takes
+     * the whole feed, the energy closing on the condenser; a cooler with no room books nothing and the trip does not fire
+     * (the condenser takes what the pumparound left); with room for all of it the cycle is the one before L2, bit for bit;
+     * and the booked duty leaving the table's by more than 5 % asks a PUMPAROUND solve.
+     */
+    @Test
+    void aShortPumparoundBooksWhatItsCoolerTakesAndKeepsTheFeed() {
+        var table = table();
+        double demand = 500;
+        ColumnCycle.ProductEnergy energy = (k, n) -> energy(table, k, n);
+        var half = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE.withPumparounds(new double[] {.5 * 20_000 * demand}), energy, false);
+        assertEquals(1, half.alpha());
+        assertEquals(500, half.feedMoles(), 1e-12);
+        assertEquals(-.5 * 20_000 * demand, half.pumparounds()[0], 0, "half the duty");
+        double in = half.feed().energy() + half.steam().getFirst().energy(), out = 0;
+        for (var p : half.products()) out += p.energy();
+        assertEquals(out, in + half.reboiler() + half.condenser() + half.pumparounds()[0], Math.abs(out) * 1e-12, "the energy closes on the condenser");
+        assertEquals(table.condenserPerFeed() * demand - .5 * 20_000 * demand, half.solvedCondenser(), 1e-6, "the solved duty plus what the pumparound left");
+        assertEquals(DriftBands.Trigger.PUMPAROUND, DriftBands.check(table, half, 500).orElseThrow().trigger(), "half the duty leaves the band");
+        var none = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE.withPumparounds(new double[] {0}), energy, false);
+        assertFalse(none.tripped(), none.conditions().toString());
+        assertEquals(0, none.pumparounds()[0], 0);
+        assertEquals(0, Condition.find(none.conditions(), Condition.PUMPAROUND_SHORT).value(), 0);
+        assertEquals(500, none.feedMoles(), 1e-12, "a pumparound with no cooling cuts no feed");
+        assertTrue(Math.abs(none.condenser() - table.condenserPerFeed() * demand) > TRIP_DEPARTURE() * Math.abs(table.condenserPerFeed() * demand),
+                "against the solved duty alone it would have tripped: " + none.condenser() + " J against " + table.condenserPerFeed() * demand + " J");
+        // Room for all of it, or no cooler side at all: the cycle before L2, bit for bit.
+        var before = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, energy, false);
+        for (var rooms : List.of(ColumnCycle.Rooms.NONE, ColumnCycle.Rooms.NONE.withPumparounds(new double[] {20_000 * demand}))) {
+            var at = ColumnCycle.step(table, setpoints(), 5, FEED, List.of(STEAM), OPEN, rooms, energy, false);
+            assertEquals(-20_000 * demand, at.pumparounds()[0], 0);
+            assertEquals(before.pumparounds()[0], at.pumparounds()[0], 0);
+            assertEquals(table.condenserPerFeed() * demand, at.solvedCondenser(), 0, "the table's solved duty, exactly");
+            assertEquals(before.condenser(), at.condenser(), 0);
+            assertEquals(List.of(), at.conditions());
+            assertTrue(DriftBands.check(table.reference(), table.held(), at, 500).isEmpty(), "inside every band");
+        }
+    }
+
+    private static double TRIP_DEPARTURE() {
+        return ColumnCycle.TRIP_DEPARTURE;
     }
 
     @Test

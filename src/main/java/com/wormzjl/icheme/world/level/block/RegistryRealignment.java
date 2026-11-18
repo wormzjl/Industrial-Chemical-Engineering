@@ -441,11 +441,11 @@ public final class RegistryRealignment {
         var fitted = plate(sightGlass(FluidDeviceBlock.fittings(present, d), world, d.id()), world, d);
         // A lever's drawn position follows the commit, not a queued toggle (FluidDeviceBlockEntity.refreshGeometry).
         if (FluidDeviceBlock.hasShutoff(present) && FluidDeviceBlock.hasShutoff(fitted)) fitted = fitted.setValue(FluidDeviceBlock.SHUTOFF, present.getValue(FluidDeviceBlock.SHUTOFF));
-        boolean changed = fitted != present;
-        if (changed) {
-            var connected = FluidDeviceBlock.connectedState(fitted, level, at);
-            FluidDeviceBlock.quietly(() -> level.setBlock(at, connected, Block.UPDATE_ALL));
-        }
+        // Its joints too, as the registry draws them: a block whose saved state predates a drawn face (a pipe in front of a
+        // column's nozzle, NOZZLE_JOIN_REVIEW.md) in a chunk loaded before the fluid world opened takes it here.
+        var connected = FluidDeviceBlock.connectedState(fitted, level, at);
+        boolean changed = connected != present;
+        if (changed) FluidDeviceBlock.quietly(() -> level.setBlock(at, connected, Block.UPDATE_ALL));
         if (!(level.getBlockEntity(at) instanceof FluidDeviceBlockEntity entity)) return changed;
         if (entity.fluidIdentity() != d.id()) {
             entity.bind(world, d);

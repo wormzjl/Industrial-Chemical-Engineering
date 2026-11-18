@@ -42,9 +42,7 @@ class FormatsTableTest {
     private static final List<Path> SOURCES = List.of(Path.of("src/main/java"), Path.of("src/test/java"));
 
     /** Rows whose value is a description, not a literal. */
-    private static final Set<String> DESCRIBED = Set.of(
-            // The value names three revisions of V3ColumnLabels joined by ';'; NativeColumnSolverTest checks it.
-            "Native formulation token");
+    private static final Set<String> DESCRIBED = Set.of();
 
     private static final Pattern FIELD = Pattern.compile("`([A-Z]\\w*)#([A-Za-z_]\\w*)`");
     private static final Pattern JAVA_FILE = Pattern.compile("([A-Z]\\w*)\\.java");

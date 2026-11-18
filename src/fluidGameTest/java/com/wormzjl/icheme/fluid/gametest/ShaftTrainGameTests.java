@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
@@ -33,7 +34,7 @@ public final class ShaftTrainGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 12000, batch = "shaft-trains")
     public static void aCreativeMotorDrivesAPumpUntilItsShaftBreaks(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(12, 10, 12));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(12, 10, 12));
         var level = plant.level;
         var world = plant.world;
         String[] failure = {null};
@@ -42,12 +43,12 @@ public final class ShaftTrainGameTests {
         var sequence = helper.startSequence();
         try {
             plant.hold();
-            var pump = plant.place(AssemblyGameTests.Plant.unit(EquipmentShape.Kind.PUMP), 0, 0, 0);
+            var pump = plant.place(PlantBuilder.unit(EquipmentShape.Kind.PUMP), 0, 0, 0);
             // The supply: a water generator one cell beyond the suction's pipe block; the tank one beyond the discharge's.
-            var suction = AssemblyGameTests.Plant.front(pump, Role.SUCTION);
-            var generator = suction.relative(AssemblyGameTests.Plant.out(pump, Role.SUCTION));
-            var discharge = AssemblyGameTests.Plant.front(pump, Role.DISCHARGE);
-            var tank = discharge.relative(AssemblyGameTests.Plant.out(pump, Role.DISCHARGE));
+            var suction = PlantBuilder.front(pump, Role.SUCTION);
+            var generator = suction.relative(PlantBuilder.out(pump, Role.SUCTION));
+            var discharge = PlantBuilder.front(pump, Role.DISCHARGE);
+            var tank = discharge.relative(PlantBuilder.out(pump, Role.DISCHARGE));
             plant.pipe(suction);
             plant.pipe(discharge);
             level.setBlock(generator, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), Block.UPDATE_ALL);
@@ -114,7 +115,7 @@ public final class ShaftTrainGameTests {
      */
     @GameTest(template = "empty", timeoutTicks = 4000, batch = "machine-pages")
     public static void aMachinePageQueuesASpeedEditForTheEngine(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(4, 2, 4)), new BlockPos(-2, -2, -2), new BlockPos(2, 2, 2));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(4, 2, 4)), new BlockPos(-2, -2, -2), new BlockPos(2, 2, 2));
         var level = plant.level;
         var world = plant.world;
         var at = plant.base.immutable();
@@ -168,13 +169,13 @@ public final class ShaftTrainGameTests {
     }
 
     /** The shaft block's axis: the line from it to the creative motor beyond it. */
-    private static net.minecraft.core.Direction.Axis axis(AssemblyGameTests.Plant plant, BlockPos shaft) {
+    private static net.minecraft.core.Direction.Axis axis(PlantBuilder plant, BlockPos shaft) {
         var motor = motor(plant, shaft);
         return net.minecraft.core.Direction.fromDelta(motor.getX() - shaft.getX(), motor.getY() - shaft.getY(), motor.getZ() - shaft.getZ()).getAxis();
     }
 
     /** The creative motor the plant placed beside {@code shaft}. */
-    private static BlockPos motor(AssemblyGameTests.Plant plant, BlockPos shaft) {
+    private static BlockPos motor(PlantBuilder plant, BlockPos shaft) {
         for (var d : net.minecraft.core.Direction.values()) {
             var at = shaft.relative(d);
             if (plant.devices.contains(at) && plant.level.getBlockState(at).is(ModBlocks.CREATIVE_MOTOR.get())) return at;

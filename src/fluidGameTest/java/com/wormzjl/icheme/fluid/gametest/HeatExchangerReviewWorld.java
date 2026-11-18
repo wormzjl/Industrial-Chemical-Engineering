@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
@@ -76,7 +77,7 @@ public final class HeatExchangerReviewWorld {
         var corner = helper.absolutePos(new BlockPos(-110, 0, 48));
         level.getChunk(corner.getX() >> 4, corner.getZ() >> 4);
         var base = new BlockPos(corner.getX(), level.getHeight(Heightmap.Types.WORLD_SURFACE, corner.getX(), corner.getZ()), corner.getZ());
-        var plant = new AssemblyGameTests.Plant(helper, base, new BlockPos(-8, 0, -12), new BlockPos(5 * SPACING, 26, 14));
+        var plant = AssemblyGameTests.plant(helper, base, new BlockPos(-8, 0, -12), new BlockPos(5 * SPACING, 26, 14));
         var rig = new Rig(plant);
         String[] failure = {null};
         try {
@@ -104,20 +105,20 @@ public final class HeatExchangerReviewWorld {
     }
 
     private static final class Rig {
-        final AssemblyGameTests.Plant plant;
+        final PlantBuilder plant;
         final FluidWorldAuthority world;
         final double[] water = FluidDeviceSpec.water(MaterialRuntime.active()).composition();
         /** The registrations to report, by label. */
         final Map<String, Long> watched = new LinkedHashMap<>();
         Vessel internal, lined, cooler, heater, kettle;
 
-        Rig(AssemblyGameTests.Plant plant) {
+        Rig(PlantBuilder plant) {
             this.plant = plant;
             world = plant.world;
         }
 
         static EquipmentShape unit(Kind kind) {
-            return AssemblyGameTests.Plant.unit(kind);
+            return PlantBuilder.unit(kind);
         }
 
         /** A unit of {@code kind} at {@code size} (its main size, m), its length, support and a single bank as designed. */
@@ -155,8 +156,8 @@ public final class HeatExchangerReviewWorld {
             // 4. The fired heater: a feed pump, the convection coil, then the radiant coil.
             var feed = line(heater, Role.CONVECTION_INLET, ModBlocks.FLUID_GENERATOR.get().defaultBlockState());
             generator(feed, 323.15, 1_000_000);
-            pump(feed, AssemblyGameTests.Plant.front(heater, Role.CONVECTION_INLET), .0006);
-            plant.route(AssemblyGameTests.Plant.front(heater, Role.CONVECTION_OUTLET), AssemblyGameTests.Plant.front(heater, Role.RADIANT_INLET));
+            pump(feed, PlantBuilder.front(heater, Role.CONVECTION_INLET), .0006);
+            plant.route(PlantBuilder.front(heater, Role.CONVECTION_OUTLET), PlantBuilder.front(heater, Role.RADIANT_INLET));
             sink(heater, Role.RADIANT_OUTLET, 1_000_000);
             // 5. The kettle: its tubes, its shell's hydrostatic feed and its vapour.
             source(kettle, Role.TUBE_INLET, 423.15, 600_000);
@@ -164,7 +165,7 @@ public final class HeatExchangerReviewWorld {
             generator(headFeed(kettle, 1), 372.15, 101_325);
             sink(kettle, Role.VAPOUR_OUTLET, 101_325);
             // 0.22 kg/s of steam at the atmosphere is 0.36 m³/s: a 0.15 m line carries it at 20 m/s, under 1 kPa.
-            world.resizeLine(id(AssemblyGameTests.Plant.front(kettle, Role.VAPOUR_OUTLET)), .15, d -> PipeSizes.MAX_BORE);
+            world.resizeLine(id(PlantBuilder.front(kettle, Role.VAPOUR_OUTLET)), .15, d -> PipeSizes.MAX_BORE);
             for (var valve : plant.valves.entrySet()) plant.install(valve.getKey(), valve.getValue());
         }
 
@@ -251,12 +252,12 @@ public final class HeatExchangerReviewWorld {
         BlockPos headFeed(Vessel v, int level) {
             var pool = ShapeRasterizer.fluidCells(v.shape()).getLast();
             int y = v.origin().getY() + pool.y() + level;
-            var from = AssemblyGameTests.Plant.front(v, Role.FEED);
+            var from = PlantBuilder.front(v, Role.FEED);
             int west = v.origin().getX() - 4;
             var at = new BlockPos(west, y, from.getZ());
             var hub = at.relative(Direction.EAST);
             plant.route(from, hub);
-            if (!plant.free(at, AssemblyGameTests.Plant.around(hub))) throw new IllegalStateException("No room for the kettle's feed at " + at.toShortString());
+            if (!plant.free(at, PlantBuilder.around(hub))) throw new IllegalStateException("No room for the kettle's feed at " + at.toShortString());
             plant.level.setBlock(at, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), Block.UPDATE_ALL);
             plant.devices.add(at);
             return at;
@@ -291,14 +292,14 @@ public final class HeatExchangerReviewWorld {
          * taken), then {@code end}. Returns the end's position.
          */
         BlockPos line(Vessel v, Role role, BlockState end) {
-            var at = AssemblyGameTests.Plant.front(v, role);
-            var d = AssemblyGameTests.Plant.out(v, role);
+            var at = PlantBuilder.front(v, role);
+            var d = PlantBuilder.out(v, role);
             var tries = new ArrayList<Direction>(List.of(d));
             for (var q : Direction.values()) if (q.getAxis() != d.getAxis()) tries.add(q);
             for (var q : tries) {
-                if (!plant.free(at, AssemblyGameTests.Plant.around(at, at.relative(q)))) break;
+                if (!plant.free(at, PlantBuilder.around(at, at.relative(q)))) break;
                 boolean clear = true;
-                for (int k = 1; k <= 3 && clear; k++) clear = plant.free(at.relative(q, k), AssemblyGameTests.Plant.around(at.relative(q, k - 1), at.relative(q, k + 1)));
+                for (int k = 1; k <= 3 && clear; k++) clear = plant.free(at.relative(q, k), PlantBuilder.around(at.relative(q, k - 1), at.relative(q, k + 1)));
                 if (!clear) continue;
                 plant.pipe(at);
                 for (int k = 1; k <= 2; k++) plant.pipe(at.relative(q, k));

@@ -82,16 +82,32 @@ public final class ColumnSolve {
     }
 
     /**
-     * One solve: why, the design's calculator input, the setpoints, the state taken, the last accepted seed (null: cold), and
-     * the design's condenser, which says what share of its duty the cooling water takes.
+     * One solve: why, the design's calculator input, the setpoints, the state taken, the last accepted seed (null: cold), the
+     * design's condenser, which says what share of its duty the cooling water takes, and each pumparound's duty per mole of
+     * feed to solve at, J (column sign; batch 2026-11-17-column-cold-feed, L4): the set points' at a start or an edit, else
+     * the engine's relaxed duties, which follow the coolers.
      */
-    public record Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed, ColumnComponents.Condenser condenser) {
+    public record Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed, ColumnComponents.Condenser condenser,
+                      double[] pumparounds) {
         public Job {
             Objects.requireNonNull(trigger, "trigger");
             Objects.requireNonNull(design, "design");
             Objects.requireNonNull(setpoints, "setpoints");
             Objects.requireNonNull(taken, "taken");
             Objects.requireNonNull(condenser, "condenser");
+            pumparounds = pumparounds.clone();
+            if (pumparounds.length != setpoints.pumparoundsPerFeed().length) throw new IllegalArgumentException("One duty per pumparound set point");
+            for (double q : pumparounds) if (!Double.isFinite(q)) throw new IllegalArgumentException("Invalid pumparound duty " + q);
+        }
+
+        /** A solve at the set points' pumparound duties. */
+        public Job(DriftBands.Trigger trigger, V3ColumnInput design, Setpoints setpoints, Taken taken, V3NeuralSeed seed, ColumnComponents.Condenser condenser) {
+            this(trigger, design, setpoints, taken, seed, condenser, setpoints.pumparoundsPerFeed());
+        }
+
+        @Override
+        public double[] pumparounds() {
+            return pumparounds.clone();
         }
 
         /** A solve of a water-cooled condenser's column. */
@@ -157,15 +173,20 @@ public final class ColumnSolve {
      * @param note            what the input left out (feed water too cold to enter as steam), the liquids that would settle
      *                        into two with water on the axis (W5 D5), or empty
      * @param advisories      V3's bounded advisory texts of the accepted solve, at most {@link #MAX_ADVISORIES} (W3, step 5)
+     * @param drawCurves      each pumparound's draw liquid as a heat curve from 300 K to its draw tray's temperature at the tray's
+     *                        pressure, on default films (L5 of batch 2026-11-17-column-cold-feed): the stream its cooler meets; one
+     *                        per pumparound, null where the solve gave no liquid there, empty without an inspection. Memory only (D6)
      */
     public record Solved(SplitTable table, double[][] enthalpy, V3NeuralSeed seed, double solvedCondenser, String route, String note, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection,
-                         List<String> advisories) implements Outcome {
+                         List<String> advisories, List<HeatCurve> drawCurves) implements Outcome {
         /** The most advisories a solve carries to the column's conditions. */
         public static final int MAX_ADVISORIES = 4;
         public Solved(SplitTable table,double[][] enthalpy,V3NeuralSeed seed,double duty,String route,String note){this(table,enthalpy,seed,duty,route,note,null);}
         public Solved(SplitTable table,double[][] enthalpy,V3NeuralSeed seed,double duty,String route,String note,com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection){this(table,enthalpy,seed,duty,route,note,inspection,List.of());}
+        public Solved(SplitTable table,double[][] enthalpy,V3NeuralSeed seed,double duty,String route,String note,com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection,List<String> advisories){this(table,enthalpy,seed,duty,route,note,inspection,advisories,List.of());}
         public Solved {
             Objects.requireNonNull(table, "table");
+            drawCurves = java.util.Collections.unmodifiableList(new ArrayList<>(drawCurves));
             advisories = List.copyOf(advisories.subList(0, Math.min(MAX_ADVISORIES, advisories.size())));
             enthalpy = copy(enthalpy);
             if (enthalpy.length != table.products().size()) throw new IllegalArgumentException("One enthalpy row per product");
@@ -349,7 +370,8 @@ public final class ColumnSolve {
         double[] drawRatios = setpoints.drawsPerFeed();
         for (int j = 0; j < design.sideDraws().size(); j++) draws.add(new V3SideDrawSpec(design.sideDraws().get(j).trayNumber(), drawRatios[j] * rate));
         var pumparounds = new ArrayList<V3PumparoundSpec>();
-        double[] paRatios = setpoints.pumparoundsPerFeed();
+        // At the duties the job asks (L4): the set points' at a start or an edit, the relaxed ones that follow the coolers otherwise.
+        double[] paRatios = job.pumparounds();
         for (int j = 0; j < design.pumparounds().size(); j++) {
             var p = design.pumparounds().get(j);
             pumparounds.add(new V3PumparoundSpec(p.returnTray(), p.drawTray(), paRatios[j] * rate, p.split()));
@@ -374,7 +396,7 @@ public final class ColumnSolve {
         int worldWater = world.indexOf(SplitTable.WATER);
         double[] z = new double[world.size()];
         for (int i = 0; i < z.length; i++) z[i] = worldFeed[i] / rate;
-        var reference = new SplitTable.Reference(z, h, feedSlope, steamRatios, rate / setpoints.designFeedRate(), setpoints, t, steamT);
+        var reference = new SplitTable.Reference(z, h, feedSlope, steamRatios, rate / setpoints.designFeedRate(), setpoints, t, steamT, paRatios);
         var solved = SplitTable.of(world, boilingPoints(model.whole().catalog(), packageId, world), input, success.result(), reference);
         // Each product's partial molar enthalpies and the closure on the network's basis.
         double[] pooled = worldFeed.clone();
@@ -439,8 +461,10 @@ public final class ColumnSolve {
         double[] drawTemperatures = new double[inspection == null ? 0 : input.pumparounds().size()];
         for (int j = 0; j < drawTemperatures.length; j++) drawTemperatures[j] = inspection.nodes().get(input.pumparounds().get(j).drawTray()).temperatureKelvin();
         var table = new SplitTable(solved.axis(), solved.products(), solved.reboilerPerFeed(), pa, condenser, reference, solved.held(), cooled, waterBelow, air, flood, drawTemperatures);
+        var curves = new ArrayList<HeatCurve>();
+        for (int j = 0; j < drawTemperatures.length; j++) curves.add(drawCurve(model, inspection.nodes().get(input.pumparounds().get(j).drawTray()), basis, axis, checkpoint));
         return new Solved(table, enthalpy, success.result().warmSeed().orElse(null), solved.condenserPerFeed() * rate,
-                success.diagnostics().solvePath(), note, success.result().inspection().orElse(null), success.result().acceptanceAudit().advisoryEvidence());
+                success.diagnostics().solvePath(), note, success.result().inspection().orElse(null), success.result().acceptanceAudit().advisoryEvidence(), curves);
     }
 
     /**
@@ -455,6 +479,37 @@ public final class ColumnSolve {
         double[] overhead = overhead(inspection, basis, axis);
         double p = inspection.nodes().getFirst().pressurePascal();
         return trim(inspection.nodes().get(1).temperatureKelvin(), receiver, condenser, t -> model.flashTP(t, p, overhead.clone(), checkpoint).enthalpy());
+    }
+
+    /** The coldest a pumparound's draw liquid is sampled at, K: a cooler's water rarely enters colder (L5). */
+    static final double DRAW_CURVE_LOW = 300;
+
+    /**
+     * A pumparound's draw liquid as its cooler meets it (L5 of batch 2026-11-17-column-cold-feed): the draw tray's oil liquid
+     * (V3's inspection node, as {@link #airArea} reads the overhead) at the tray's pressure, from {@link #DRAW_CURVE_LOW} (or
+     * 10 K under the tray where it stands colder) to the tray's temperature, on default films. Null where the tray holds no
+     * oil liquid or the curve does not sample. On the worker, with the solve.
+     */
+    static HeatCurve drawCurve(FluidThermodynamics model, com.wormzjl.icheme.science.column.v3.V3ColumnInspection.Node tray, com.wormzjl.icheme.science.column.v3.V3ComponentBasis basis,
+                               List<String> axis, Runnable checkpoint) {
+        int water = axis.indexOf(SplitTable.WATER);
+        double[] liquid = new double[axis.size()];
+        double total = 0;
+        var x = tray.liquidFractions();
+        for (int c = 0; c < basis.componentCount(); c++) {
+            int i = axis.indexOf(basis.componentId(c));
+            if (i >= 0 && i != water) {
+                liquid[i] += x.get(c);
+                total += x.get(c);
+            }
+        }
+        double top = tray.temperatureKelvin();
+        if (!(total > 0) || !(top > 0)) return null;
+        try {
+            return HeatCurve.sample(model, liquid, tray.pressurePascal(), Math.min(DRAW_CURVE_LOW, top - 10), top, HeatCurve.Films.DEFAULT, checkpoint);
+        } catch (IllegalArgumentException | IllegalStateException none) {
+            return null;
+        }
     }
 
     /** The overhead, mol/s on the axis: the top tray's vapour (V3's inspection node 1) with its water vapour. */

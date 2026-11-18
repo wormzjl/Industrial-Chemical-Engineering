@@ -1,4 +1,4 @@
-# V3 column solver core: problem, equations, Newton, linear algebra, thermo and the Rust library
+# V3 column solver core: problem, equations, Newton, linear algebra and thermo
 
 Up: [code guide](README.md) · the calculator's route, seeds, audit and publication: [column-v3.md](column-v3.md)
 
@@ -11,7 +11,6 @@ Up: [code guide](README.md) · the calculator's route, seeds, audit and publicat
 - A trace component appears or vanishes at a tray (support, floor, reinsertion).
 - Free water on the trays, the condenser's phase branch or the column's steam and water are wrong.
 - The column's PR78 session, its feed flash or its package admission misbehave.
-- You build, load or extend the Rust column library (`icheme_column`, `-Dicheme.native.column`).
 
 ## What it does
 
@@ -19,7 +18,7 @@ The calculator's every rung hands one resolved problem to this core: `V3ColumnPr
 `V3ColumnProblem` (topology, pressures, support, wet set), `V3DegreeOfFreedomLedger` enumerates its unknowns and rows
 and proves the system square and structurally full rank, `V3MeshResidualEvaluator` assembles the MESH residual,
 `V3BlockJacobianAssembler` the stage tri-block Jacobian, and `V3SimultaneousColumnSolver` runs a damped Newton method on
-log flows and kelvin, each step a banded LU solve (`V3BandedPivotedSolver`, optionally in Rust). The thermo boundary
+log flows and kelvin, each step a banded LU solve (`V3BandedPivotedSolver`). The thermo boundary
 (`v3/thermo`) evaluates fugacities, enthalpies and flashes on the shared PR78 kernel; `V3WaterProperties` holds the
 column's water on the shared water module. Support (which component phases are unknowns at a node) and the wet-tray set
 are frozen inside one Newton solve and refreshed between solves. `science/column/still` holds the batch still's own
@@ -57,7 +56,6 @@ snapshot.
 | `V3SolveScratch` (pp) | The banded solver's workspace and the local Jacobian's blocks, one set per calculation (`within`); counts band factorizations by call site (`Factorization`); keeps the untruncated feed flash (`FEED_FLASHES`) | 183 |
 | [`V3BandedMatrix`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedMatrix.java) (`linalg/`) | Band storage | 85 |
 | [`V3BandedPivotedSolver`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/linalg/V3BandedPivotedSolver.java) | Row-equilibrated LU with partial pivoting inside the band (dgbtrf layout); `solve`; `holdsNegativeZero`; the pooled `Workspace` counts entries updated, full-width entries and full-width solves | 479 |
-| [`NativeColumnSolver`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/NativeColumnSolver.java) | The Rust library through JNI: `bandedSolveEnabled`, `bandedSolve`, `expectedSelfTest`, `ABI`, `FORMULATION`, `UNAVAILABLE` | 305 |
 | **Thermo (`v3/thermo`)** | | |
 | [`V3ThermoModel`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3ThermoModel.java), [`V3ThermoDerivatives`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3ThermoDerivatives.java) | The hydrocarbon property boundary (fugacity, enthalpy, TP flash; the phase argument `PengRobinsonKernel.Root`); its optional derivatives | 22, 29 |
 | [`V3PengRobinsonThermo`](../../../src/main/java/com/wormzjl/icheme/science/column/v3/thermo/V3PengRobinsonThermo.java) | The PR78 façade on a registered package: `fromRegisteredPackage`, `flashTP`, `columnIdentity` | 309 |
@@ -73,11 +71,6 @@ snapshot.
 | [`still/StillColumn`](../../../src/main/java/com/wormzjl/icheme/science/column/still/StillColumn.java) | The batch still's column: the bubble-point method (Wang and Henke) with its energy-balance flow update, in pot mode, quasi-steady; `solve`, `Split`, `Profile`, `Bubble`; documented with the still in [batch-still.md](batch-still.md) | 1260 |
 | [`still/StageThermo`](../../../src/main/java/com/wormzjl/icheme/science/column/still/StageThermo.java) | What the still's column reads of its thermo (the basis's constants, a phase's H and V, ln φ at a prepared temperature, a wet liquid's TP split); implemented by the plant layer's `NetworkStageThermo` | 68 |
 
-**`src/main/rust/`** ([README](../../../src/main/rust/README.md), [LAYOUT.md](../../../src/main/rust/LAYOUT.md)): the
-workspace (`Cargo.toml`, 4 jobs by its config), the crate `icheme-math` (`banded.rs` the band LU, `fdlibm/` the fdlibm 5.3
-functions, `pow.rs` the table pow, `fma.rs` a software `fma`, `java.rs` Java's `Math` semantics; tests `bit_tables.rs`,
-`banded_tables.rs`), the crate `icheme-jni` (`lib.rs` the exports, `layout.rs`, `env.rs`, `self_test.rs`) built as
-`icheme_column`, and the vendored `jni-sys`.
 
 ## Main flow
 
@@ -100,8 +93,7 @@ One rung, inside `V3AttemptLoop.solveSingleProblem` ([column-v3.md](column-v3.md
    feed unstable towards a vapour with no split, or an unresolved test, stays `FLASH_NONCONVERGENCE`.
 3. `prepareAttempt`: `V3FloorLift.liftFloorSupport`, then `V3TruncationSupport` and `V3WetTraySet` for this attempt.
 4. `V3SimultaneousColumnSolver.solve`: per iteration `V3MeshResidualEvaluator` (residual), `V3BlockJacobianAssembler.assembleLocal`
-   (or the FD Jacobian), `V3BandedPivotedSolver.solve` (Java, or `NativeColumnSolver.bandedSolve` at the ceiling
-   `band`), the Armijo line search, the fallbacks; at convergence `verifyFinalNewtonCorrection`.
+   (or the FD Jacobian), `V3BandedPivotedSolver.solve`, the Armijo line search, the fallbacks; at convergence `verifyFinalNewtonCorrection`.
 5. Back in the attempt loop: the audit; a floor-support refresh (at most 3) or a wet-set refresh (at most 3) and the
    next attempt.
 
@@ -131,6 +123,10 @@ One rung, inside `V3AttemptLoop.solveSingleProblem` ([column-v3.md](column-v3.md
   drawn with it.
 - **Condenser.** The hydrocarbon branch and the water regime (`NONE`, `FREE_WATER`, `ALL_VAPOR`) are separate; one warm
   correction per rung (`V3AttemptLoop.correctCondenserPhase`).
+- **Returned water.** `V3ColumnInput#refluxFreeWaterMolPerSecond` (`R_w`, default 0, no wire or saved field) is free water
+  a decanting drum returns with the reflux: a liquid water feed to tray one at the drum's enthalpy. It joins the
+  authored profile at tray one only (`W_1 = steam + R_w - F_1`); `WaterCondenserSplit` returns it and decants the rest;
+  the condenser duty books it leaving the drum. Every term sits behind `R_w > 0`. The audit recomputes it from the input.
 - **The PR session** evaluates inside `NumericalBox`. Outside a caloric fit's ends it continues H with the edge Cp,
   keeping value and slope; an accepted extrapolation adds a notice. `V3PengRobinsonSession.kernelFor` builds the shared
   kernel from the package's derived pairs (`DerivedPairs.derive`), so the column and the network solve one equation of
@@ -139,15 +135,7 @@ One rung, inside `V3AttemptLoop.solveSingleProblem` ([column-v3.md](column-v3.md
   supercooled branch below the triple point) and refuse above Tc; the steam's enthalpy and heat capacity hold the
   Shomate fit's end heat capacity past its data, and an accepted state with steam there gets one advisory, never a hold.
   No network class calls it: the network reads the same module functions.
-- **Determinism.** Column numerics use `DeterministicMath`. The Rust library ports those functions and the band LU
-  operation for operation (fdlibm 5.3, software `fma`, Java's `Math` semantics), so a column publishes the same bits at
-  the ceiling `off` and `band` (`NativeColumnSolverTest`).
-- **The Rust library.** The ceiling `-Dicheme.native.column` is `off` (the default: not loaded) or `band` (every
-  `V3BandedPivotedSolver.solve` goes to `nativeBandedSolve`, which gives the Java body's bits); any other name reads as
-  `off` with one log line. Any status but 0 runs that solve on Java; a panic turns the library off for the session. It
-  loads from `icheme.native.path`, else the jar's `natives/<os>-<arch>/` (copied to `<game folder>/IChemE/natives/`
-  under a name with the ABI), else `java.library.path`, and is used only after the handshake (`nativeAbi() == ABI`,
-  `nativeFormulation()` equal to `FORMULATION`, every self-test slot equal in raw bits to `expectedSelfTest()`).
+- **Determinism.** Column numerics use `DeterministicMath`.
 - **Threads.** A calculation's scratch (`V3SolveScratch.within`) is opened at the calculator's entry and dropped when
   it returns; every class here is immutable or attempt-local.
 
@@ -168,8 +156,7 @@ One rung, inside `V3AttemptLoop.solveSingleProblem` ([column-v3.md](column-v3.md
 
 ## Formats
 
-The core saves nothing. The Rust library's layouts and status codes: [LAYOUT.md](../../../src/main/rust/LAYOUT.md);
-saved and wire formats of the column: [FORMATS.md](../FORMATS.md).
+The core saves nothing. Saved and wire formats of the column: [FORMATS.md](../FORMATS.md).
 
 ## Tests and gates
 
@@ -183,7 +170,6 @@ All under `src/test/java/com/wormzjl/icheme/science/column/v3/` unless named; th
 | Free water, steam | `V3WetTraySet`, `V3FreeWaterContinuation`, `V3WaterProperties` | `V3FreeWaterTrayTest`, `V3WaterPhaseQualificationTest`, `V3WaterPropertyDerivativesTest` |
 | PR session, package admission | `V3PengRobinsonSession`, `V3CatalogPropertyPackage` | `V3PengRobinsonKernelTest`, `CrystalPackageConsumersTest`, `RegroupedCrudeTest`, `V3AqueousColumnTest` |
 | Feed flash | `V3FeedFlash`, `V3FeedEngine` | `V3FeedFlashOnePhaseTest`, `V3FeedFlashStabilityTest` (the 181, the 102 and a sample of the 721 states of the review's grid, from `feed-flash-stability-states.tsv`; rule B on the wet 320 K distillate), `V3FeedFlashEquivalenceTest`, `V3PengRobinsonThermoTest`; `ColumnFeedOnePhaseOracleTest` (in `test`) |
-| The Rust library | `src/main/rust`, `NativeColumnSolver`, `build.gradle` (`nativeBuild`, `nativeResources`, `rustCheck`) | `nativeSmoke` runs `NativeColumnSolverTest` (the handshake; the band solve's bits against Java on 1 570 cases; a column at `off` and `band`; skips without a library); `rustCheck` (cargo fmt, clippy, the bit tables); `cargo test` from `src/main/rust` |
 | The still's column | `StillColumn`, `StageThermo` | `BatchStillTest`, `StillHeadTest` ([batch-still.md](batch-still.md)) |
 
 Fixtures: `V3TestInputs`, `V3JacobianOracle` (the FD Jacobian and block extraction), `V3ManufacturedFlash`,
@@ -200,7 +186,6 @@ Column tests run on the game's medium crude preset (`V3TestInputs.mediumCrudeInp
 - `V3TruncatedFlash.Support.PhaseSupport` is the column's own enum, not the kernel's `PhaseSupport`.
 - `V3WaterProperties` and the network share the water module: a change to a module function moves the column and the
   network together (both gate groups list the module in `build.gradle`).
-- A Java method with a Rust twin changes in both in the same batch, or the native ceiling drops below it (AGENTS.md
-  "Native code"). `cargo` runs from `src/main/rust` with at most 4 jobs and counts as one of the two Gradle lanes.
+- The Rust column library (a band LU through JNI, default off) was archived on 2026-11-17: `tools/rust-column-archive/`.
 
 **Snapshot:** `410c37fcb`, 2026-11-16.

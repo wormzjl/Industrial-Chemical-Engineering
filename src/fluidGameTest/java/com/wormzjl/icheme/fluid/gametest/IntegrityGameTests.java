@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
@@ -307,7 +308,7 @@ public final class IntegrityGameTests {
      */
     @GameTest(template = "empty", timeoutTicks = 6000, batch = "integrity_fouling")
     public static void aFouledCoolerMovesLessHeatUntilItIsCleaned(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(16, 10, 16));
         var level = plant.level;
         var world = plant.world;
         String[] failure = {null};
@@ -327,11 +328,11 @@ public final class IntegrityGameTests {
         var sequence = helper.startSequence();
         try {
             plant.hold();
-            var cooler = plant.place(AssemblyGameTests.Plant.unit(EquipmentShape.Kind.AIR_COOLER), 0, 0, 0);
-            var inlet = AssemblyGameTests.Plant.front(cooler, EquipmentShape.Role.PROCESS_INLET);
-            var outlet = AssemblyGameTests.Plant.front(cooler, EquipmentShape.Role.PROCESS_OUTLET);
-            ends[0] = inlet.relative(AssemblyGameTests.Plant.out(cooler, EquipmentShape.Role.PROCESS_INLET)).immutable();
-            ends[1] = outlet.relative(AssemblyGameTests.Plant.out(cooler, EquipmentShape.Role.PROCESS_OUTLET)).immutable();
+            var cooler = plant.place(PlantBuilder.unit(EquipmentShape.Kind.AIR_COOLER), 0, 0, 0);
+            var inlet = PlantBuilder.front(cooler, EquipmentShape.Role.PROCESS_INLET);
+            var outlet = PlantBuilder.front(cooler, EquipmentShape.Role.PROCESS_OUTLET);
+            ends[0] = inlet.relative(PlantBuilder.out(cooler, EquipmentShape.Role.PROCESS_INLET)).immutable();
+            ends[1] = outlet.relative(PlantBuilder.out(cooler, EquipmentShape.Role.PROCESS_OUTLET)).immutable();
             plant.pipe(inlet);
             plant.pipe(outlet);
             plant.devices.add(ends[0]);

@@ -282,7 +282,7 @@ public final class SizingGlass {
             String block = block(id);
             String tag = block == null ? name(x, id) : member(x, id.substring(block.length() + 1));
             items.add(Item.of(id, entry.getValue().rating().lamp(), List.of(Cell.of(tag, Palette.TEXT), Cell.right(Integer.toString(size.count()), Palette.ACCENT), Cell.of(equipment(x, id, size), Palette.MUTED),
-                    Cell.of(sizeText(x, size.count() > 1 ? one(size) : size), Palette.ACCENT)), false));
+                    Cell.of(buildText(x, size.count() > 1 ? one(size) : size, entry.getValue().rating()), Palette.ACCENT)), false));
         }
         return parented(x, items);
     }
@@ -303,7 +303,7 @@ public final class SizingGlass {
         var size = picked == null ? null : size(x, picked, sized);
         if (size == null || UnitSize.built(size) == null) return List.of();
         return List.of(x.text("sizing.requirements") + ": " + name(x, picked),
-                x.text("sizing.build_count", size.count(), equipment(x, picked, size)), x.text("sizing.build_each", sizeText(x, one(size))),
+                x.text("sizing.build_count", size.count(), equipment(x, picked, size)), x.text("sizing.build_each", buildText(x, one(size), sized.units().get(picked).rating())),
                 x.text("sizing.build_material", MaterialsPage.material(x, MaterialsPage.chosen(x, block(picked) == null ? picked : block(picked)))));
     }
 

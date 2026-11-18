@@ -602,10 +602,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
     /** The port this cell offers towards {@code outward}, or null. */
     public ShapeRasterizer.@Nullable Port port(Direction outward) {
         if (shape == null) return null;
-        for (var port : ShapeRasterizer.ports(shape))
-            if (port.cell().x() == cellX && port.cell().y() == cellY && port.cell().z() == cellZ
-                    && port.dx() == outward.getStepX() && port.dy() == outward.getStepY() && port.dz() == outward.getStepZ()) return port;
-        return null;
+        return com.wormzjl.icheme.science.equipment.NozzlePorts.at(shape, cellX, cellY, cellZ, outward.getStepX(), outward.getStepY(), outward.getStepZ());
     }
 
     @Override
@@ -734,6 +731,9 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         // The material of construction (shape fields 13, batch 2026-11-16-fouling-corrosion) by name, only when it is not
         // carbon steel: absent reads carbon steel, so a carbon steel structure's image stays as before the field.
         if (shape.material() != com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL) tag.putString("Material", shape.material().name());
+        // A drum's demister (shape fields 14, batch 2026-11-17-three-phase-separator), only when it has one: absent reads
+        // none, so a drum without a pad keeps the image it had before the field.
+        if (shape.demister()) tag.putBoolean("Demister", true);
     }
 
     /**
@@ -747,6 +747,15 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
             var repairs = new java.util.ArrayList<>(read.repairs());
             var material = ShapeRepair.material("material", tag.getString("Material"), repairs::add);
             read = new ShapeRepair.Read(read.shape().withMaterial(material), read.retired(), repairs);
+        }
+        if (read.shape() != null && tag.getBoolean("Demister")) {
+            // Shape fields 14: absent is no demister with no repair; one saved on a structure that is no drum is dropped, a repair.
+            if (read.shape().drum()) read = new ShapeRepair.Read(read.shape().withDemister(true), read.retired(), read.repairs());
+            else {
+                var repairs = new java.util.ArrayList<>(read.repairs());
+                repairs.add("demister on a " + read.shape().kind().name().toLowerCase(Locale.ROOT) + " -> none");
+                read = new ShapeRepair.Read(read.shape(), read.retired(), repairs);
+            }
         }
         if(read.shape()!=null && tag.contains("ExchangerType")) {
             // An exchanger's type by name (shape fields 9): a name this build does not have reads standard, a repair.

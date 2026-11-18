@@ -102,7 +102,9 @@ the shell.
 
 **The walk** (`AssemblyWalker`, `LevelGround`).
 
-- A run starts at a nozzle's pipe block and follows joined blocks. Only pipes join. A fitting passes along its axis and
+- A run starts at a nozzle's pipe block, the cell in front of its flange face, and continues only from a pipe with a
+  joint towards the nozzle; it meets a structure at a nozzle facing it (`NozzlePorts.at`, the rule a pipe's drawn joint
+  keeps too). It follows joined blocks. Only pipes join. A fitting passes along its axis and
   is recorded as an `Element` with its direction and the pipes before it.
 - A run ends at a structure's nozzle (`AtPort`), a block of three or more joints (`Junction`), a one-block tank,
   generator or void (`Terminal`, outside), an open end, a chunk that is not loaded (`NotLoaded`), or no pipe in front of

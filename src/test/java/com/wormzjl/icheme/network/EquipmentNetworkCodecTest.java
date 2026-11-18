@@ -63,7 +63,8 @@ class EquipmentNetworkCodecTest {
         // icheme-2: the pollution map's payloads joined (WP9).
         // icheme-3: the steam classes gained LP, first, so their ordinals moved; the conversion rules sync and the alarm beacon's payloads (batch 2026-11-15-fluid-interfaces).
         // icheme-5: the constructor's design carries its material of construction (batch 2026-11-16-fouling-corrosion, WP3).
-        assertEquals("icheme-5", NetworkProtocol.VERSION);
+        // icheme-7: a vessel's view carries its carry-over (batch 2026-11-17-three-phase-separator); icheme-6 is another batch's.
+        assertEquals("icheme-7", NetworkProtocol.VERSION);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 
@@ -71,7 +72,7 @@ class EquipmentNetworkCodecTest {
 
     /** The removal group's Repair and its structure state (batch 2026-11-16-fouling-corrosion, WP4, still icheme-5). */
     @Test void repairAndStructureStateRoundTrip() {
-        assertEquals("icheme-5", NetworkProtocol.VERSION);
+        assertEquals("icheme-7", NetworkProtocol.VERSION);
         var repair = new EquipmentNetwork.Repair(AT, AT.north(5), -778, 12);
         assertEquals(repair, roundTrip(EquipmentNetwork.Repair.STREAM_CODEC, repair));
         // RepairAnswer carries a Component, as DeconstructAnswer does: its codec needs the game's bootstrap, so it is not round-tripped here.
@@ -125,12 +126,36 @@ class EquipmentNetworkCodecTest {
         var buffer = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
         try {
             ConstructorPayload.STREAM_CODEC.encode(buffer, ConstructorPayload.of(AT, DRAFT, Action.KEEP));
-            buffer.writerIndex(buffer.writerIndex() - 1 - "CARBON_STEEL".length());
+            // The material's name is followed by the demister's byte (icheme-7).
+            buffer.writerIndex(buffer.writerIndex() - 2 - "CARBON_STEEL".length());
             buffer.writeUtf("TITANIUM", 64);
+            buffer.writeBoolean(false);
             assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL, ConstructorPayload.STREAM_CODEC.decode(buffer).material());
         } finally {
             buffer.release();
         }
+    }
+
+    /**
+     * A drum's demister (icheme-7, shape fields 14): it crosses on the draft, a stored design carries it in its shape and an
+     * Import lands it on the draft; a form that builds no drum keeps the choice and builds without.
+     */
+    @Test
+    void aDemisterCrossesWithTheDraftAndAStoredDesign() {
+        for (var orientation : EquipmentShape.Orientation.values()) {
+            var shape = EquipmentShape.drum(2, 6, orientation, EquipmentShape.Heading.NORTH, EquipmentShape.defaultSupport(2, orientation)).withDemister(true);
+            var sent = new SentDesign("V-1", "", 1, shape, null);
+            var stored = SentDesignTags.read(SentDesignTags.write(List.of(sent), List.of()));
+            assertTrue(stored.whole(), stored.repairs().toString());
+            assertEquals(List.of(sent), stored.designs());
+            var draft = Design.DEFAULT.landed(sent);
+            assertTrue(draft.demister());
+            var read = roundTrip(ConstructorPayload.STREAM_CODEC, ConstructorPayload.of(AT, draft, Action.KEEP));
+            assertTrue(read.demister());
+            assertTrue(read.design(STORED).demister());
+            assertTrue(read.design(STORED).shape(net.minecraft.core.Direction.NORTH).demister());
+        }
+        assertFalse(roundTrip(ConstructorPayload.STREAM_CODEC, ConstructorPayload.of(AT, DRAFT, Action.KEEP)).demister());
     }
 
     @Test

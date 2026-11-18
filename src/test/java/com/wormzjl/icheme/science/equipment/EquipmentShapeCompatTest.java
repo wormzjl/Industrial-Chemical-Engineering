@@ -88,6 +88,9 @@ class EquipmentShapeCompatTest {
         shapes.add(EquipmentShape.unit(Kind.EXCHANGER, 1.5, 6, Heading.EAST, 3).withExchangerType(ExchangerType.CROSSFLOW).withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.CHROME_STEEL));
         shapes.add(EquipmentShape.column(3, new ColumnTrays(20, 15, List.of(8), List.of(21), List.of(new ColumnTrays.Pumparound(8, 6)), COMPONENTS), Heading.WEST,
                 EquipmentShape.minimumSkirt(3)).withMaterial(com.wormzjl.icheme.science.integrity.Metallurgy.NICKEL_ALLOY));
+        // Shape fields 14 (batch 2026-11-17-three-phase-separator): a standing and a lying drum with a demister.
+        shapes.add(EquipmentShape.drum(1.5, 5, Orientation.VERTICAL, Heading.NORTH, 2).withDemister(true));
+        shapes.add(EquipmentShape.drum(2, 6, Orientation.HORIZONTAL, Heading.EAST, EquipmentShape.defaultSupport(2, Orientation.HORIZONTAL)).withDemister(true));
         return shapes;
     }
 
@@ -177,6 +180,67 @@ class EquipmentShapeCompatTest {
         tag.putString("Material", "TITANIUM");
         assertEquals(com.wormzjl.icheme.science.integrity.Metallurgy.CARBON_STEEL, EquipmentConstructorBlockEntity.readDesign(tag, fresh, repairs::add).material());
         assertEquals(List.of("material TITANIUM -> CARBON_STEEL"), repairs);
+    }
+
+    /**
+     * A drum's demister (shape fields 14): saved only when it has one, so a drum without keeps its tags of before the
+     * field; absent reads none with no repair; one saved on a structure that is no drum is dropped and named. Not part of
+     * the layout; only a drum carries it.
+     */
+    @Test
+    void aDemisterIsSavedOnlyWhenADrumHasOne() {
+        for (var orientation : Orientation.values()) {
+            var drum = EquipmentShape.drum(2, 6, orientation, Heading.NORTH, EquipmentShape.defaultSupport(2, orientation));
+            assertFalse(drum.demister());
+            assertFalse(saved(drum).contains("Demister"));
+            var padded = drum.withDemister(true);
+            var tag = saved(padded);
+            assertTrue(tag.getBoolean("Demister"));
+            var read = EquipmentShellBlockEntity.readShape(tag);
+            assertEquals(padded, read.shape());
+            assertTrue(read.repairs().isEmpty(), read.repairs().toString());
+            assertTrue(padded.fluidGeometry().demister());
+            assertEquals(drum.fluidGeometry().withDemister(true), padded.fluidGeometry());
+            assertEquals(ShapeRasterizer.legacyStamp(drum), ShapeRasterizer.legacyStamp(padded), "the demister is not part of the layout");
+            assertEquals(ShapeRasterizer.layoutRevision(drum), ShapeRasterizer.layoutRevision(padded));
+            assertEquals(ShapeRasterizer.layout(drum).shell(), ShapeRasterizer.layout(padded).shell());
+            var old = tag.copy();
+            old.remove("Demister");
+            assertEquals(drum, EquipmentShellBlockEntity.readShape(old).shape());
+        }
+        assertThrows(IllegalArgumentException.class, () -> EquipmentShape.unit(Kind.EXCHANGER, 1.5, 6, Heading.EAST, 3).withDemister(true));
+        var pump = saved(EquipmentShape.unit(Kind.PUMP, .05, 1, Heading.EAST, 0));
+        pump.putBoolean("Demister", true);
+        var read = EquipmentShellBlockEntity.readShape(pump);
+        assertFalse(read.shape().demister());
+        assertEquals(List.of("demister on a pump -> none"), read.repairs());
+    }
+
+    /** A constructor's draft keeps its demister across a save and a load and a form switch, and builds it only on a drum. */
+    @Test
+    void aConstructorKeepsItsDemisterAcrossAReload() {
+        var fresh = EquipmentConstructorBlockEntity.Design.DEFAULT;
+        assertFalse(fresh.demister());
+        var design = fresh.withDemister(true);
+        var tag = new CompoundTag();
+        EquipmentConstructorBlockEntity.writeDesign(tag, design);
+        assertTrue(tag.getBoolean("Demister"));
+        var repairs = new ArrayList<String>();
+        var read = EquipmentConstructorBlockEntity.readDesign(tag, fresh, repairs::add);
+        assertTrue(repairs.isEmpty(), repairs.toString());
+        assertEquals(design, read);
+        assertTrue(read.shape(net.minecraft.core.Direction.NORTH).demister());
+        var plain = new CompoundTag();
+        EquipmentConstructorBlockEntity.writeDesign(plain, fresh);
+        assertFalse(plain.contains("Demister"));
+        assertFalse(EquipmentConstructorBlockEntity.readDesign(plain, fresh, repairs::add).demister());
+        assertTrue(repairs.isEmpty(), repairs.toString());
+        // A form that builds no drum keeps the choice and builds without.
+        var column = new EquipmentConstructorBlockEntity.Design(design.diameter(), design.tangentLength(), VesselPlacement.Form.COLUMN,
+                Math.max(design.support(), EquipmentShape.minimumSkirt(design.diameter())), design.placement(), design.trays(), design.connections(), design.paint(), design.bank(), design.boot(), 0, null, List.of(),
+                design.towerBank(), design.name(), design.duty(), design.exchangerType(), design.still(), design.material(), true);
+        assertTrue(column.demister());
+        assertFalse(column.shape(net.minecraft.core.Direction.NORTH).demister());
     }
 
     private static CompoundTag saved(EquipmentShape shape) {
@@ -562,9 +626,10 @@ class EquipmentShapeCompatTest {
      * The shape fields' revision: the corpus file this build's tags are kept in. Raise it with a shape-field change (2: a
      * column's components; 3: a column's turned nozzles; 4: a column's operating point; 5: a tower's cell bank; 6: a
      * column's member counts; 7: a column's water trim count and its air-then-water condenser; 8: a machine's design
-     * point; 11: a batch still's options; 12: what holds a column's vacuum top; 13: the material of construction).
+     * point; 11: a batch still's options; 12: what holds a column's vacuum top; 13: the material of construction; 14: a
+     * drum's demister).
      */
-    private static final int SHAPE_FIELDS = 13;
+    private static final int SHAPE_FIELDS = 14;
 
     /** A column's components as an image written before the member counts shows them. */
     private static final java.util.regex.Pattern COMPONENTS_BEFORE_UNITS = java.util.regex.Pattern.compile(
@@ -641,6 +706,8 @@ class EquipmentShapeCompatTest {
                     if (!expected.contains("still=")) expected = expected.substring(0, expected.length() - 1) + ", still=" + BatchStillOptions.DEFAULT + "]";
                     // Shape fields 13: a shape saved before the material of construction is carbon steel.
                     if (!expected.contains("material=")) expected = expected.substring(0, expected.length() - 1) + ", material=CARBON_STEEL]";
+                    // Shape fields 14: a shape saved before the demister has none.
+                    if (!expected.contains("demister=")) expected = expected.substring(0, expected.length() - 1) + ", demister=false]";
                     if(!expected.contains("baseSpeed="))expected=expected.replaceAll("(exhaust=[0-9.Ee+-]+)\\]","$1, baseSpeed=0.0]");
                     assertEquals(expected, read.shape().toString(), file.toString());
                 }

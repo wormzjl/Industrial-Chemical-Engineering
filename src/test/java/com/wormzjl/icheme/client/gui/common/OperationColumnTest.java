@@ -199,6 +199,13 @@ public class OperationColumnTest {
                     }
                 var status = AssemblyColumn.display(width);
                 for (var in : inputs()) assertTrue(M.width(OperationColumn.status(in.view(), t).text()) <= status.w(), at + ": the status cut: " + OperationColumn.status(in.view(), t).text());
+                // Every limit naming a two-digit member, with rule A's note: the longest status lines.
+                for (var limit : Condition.values())
+                    if (limit.rank == Condition.Rank.LIMIT)
+                        for (String note : new String[]{"", Condition.RULE_A}) {
+                            var text = OperationColumn.status(new OperationView(Phase.LIMITED, List.of(new Condition.Active(limit, .45, 11, note)), .45, null, "", true, true, setpoints(1, 1, 1, false), null, List.of(), List.of(), null), t).text();
+                            assertTrue(M.width(text) <= status.w(), at + ": the status cut: " + text);
+                        }
                 // The footer: Close, Clean, Apply where the column has a unit (layout B), Close and Apply where it has none.
                 for (var in : List.of(new OperationColumn.Input(stopped(designs().get(1)), false, UNITS.getFirst()),
                         new OperationColumn.Input(OperationView.idle(Phase.STOPPED, "STOPPED", designs().get(1), true), false, UNITS.getFirst()))) {
@@ -302,6 +309,7 @@ public class OperationColumnTest {
         assertEquals("—", ports.get(5)[5], "an opening the valve does not read");
         assertEquals("Draw 1", ports.get(7)[0]);
         var duties = OperationColumn.duties(view, t);
+        assertArrayEquals(new String[]{"Duty", "Booked MW", "Asked MW"}, duties.getFirst());
         assertArrayEquals(new String[]{"Condenser", "-7.32", "-8.51"}, duties.get(1));
         assertEquals("Pumparound 4", duties.getLast()[0]);
         // An air condenser's fans (U2) draw power, not heat: their row reads kW, which its name says.
@@ -342,6 +350,7 @@ public class OperationColumnTest {
         assertArrayEquals(new String[]{"High load", "100 %", "Tray 28"}, byName.get("High load"));
         assertArrayEquals(new String[]{"Set points refused", "—", "—"}, byName.get("Set points refused"));
         assertArrayEquals(new String[]{"Steam short", "95 %", "Steam 2"}, byName.get("Steam short"));
+        assertEquals("95 %", byName.get("Pumparound cooling short")[1], "the share of its duty a short cooler takes");
         assertEquals(List.of(), OperationColumn.conditions(OperationView.idle(Phase.STOPPED, "STOPPED", s), t), "no table where nothing holds");
         assertEquals(Palette.RED, OperationColumn.colour(Condition.Rank.TRIP));
         assertEquals(Palette.WARN, OperationColumn.colour(Condition.Rank.LIMIT));
@@ -449,7 +458,10 @@ public class OperationColumnTest {
         assertEquals("Running; last solve failed", OperationColumn.status(refused, t).text());
         var ruleA = new OperationView(Phase.LIMITED, List.of(new Condition.Active(Condition.STEAM_SHORT, .3, 0, Condition.RULE_A)), .3, null,
                 "LIMITED: steam, 30 %", true, true, s, null, List.of(), List.of(), null);
-        assertEquals("Limited: steam, 30 % of the feed, every input cut", OperationColumn.status(ruleA, t).text());
+        assertEquals("Limited: steam (Steam 1), 30 % of the feed, every input cut", OperationColumn.status(ruleA, t).text());
+        var outlet = new OperationView(Phase.LIMITED, List.of(new Condition.Active(Condition.PRODUCT_FULL, .45, 2, "")), .45, null,
+                "LIMITED: outlet, 45 %", true, true, s, null, List.of(), List.of(), null);
+        assertEquals("Limited: outlet (Product 3), 45 % of the feed", OperationColumn.status(outlet, t).text(), "the full outlet named as the conditions table names it");
         var solving = new OperationView(Phase.RUNNING, List.of(new Condition.Active(Condition.OFF_TABLE, "composition")), 1, DriftBands.Trigger.COMPOSITION,
                 "RE-SOLVING: composition; RUNNING", true, true, s, null, List.of(), List.of(), null);
         assertTrue(OperationColumn.status(solving, t).text().startsWith("Running; solving: "), OperationColumn.status(solving, t).text());

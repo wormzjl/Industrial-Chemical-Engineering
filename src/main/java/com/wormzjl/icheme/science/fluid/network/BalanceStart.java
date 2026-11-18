@@ -369,19 +369,6 @@ final class BalanceStart {
         private double cavitationFloor(int e,double massFlow) {
             return solver.suctions.suctionLimitPressure(graph,e,solver.suctions.breakdown(graph,e,Math.max(0,massFlow)/rho[e][0]));
         }
-        /** Owner decision D17 in the balance: the pressure the suction junction of pump connection {@code e}, on its suction
-         * limit, is anchored at on the balance's pressures {@code p}: the lesser of its floor at its prescribed flow
-         * ({@link #cavitationFloor}) and what
-         * the supplier its suction walk ends at gives at no flow ({@link MoverSuction#suctionSupply}, its static column
-         * from the start state, as the balance holds every column). The Newton's row states the same on its trial
-         * ({@link MoverSuction#suctionLimit}). */
-        private double suctionAnchor(int e,double[] p,Runnable checkpoint) {
-            double floor=cavitationFloor(e,Double.isNaN(prescribed[e])?0:prescribed[e]);var walk=InletPhase.walk(graph,e);
-            if(!(floor<Double.POSITIVE_INFINITY)||walk.via()<0)return floor;
-            int s=walk.node();var link=graph.pipes().get(walk.via());
-            double end=unknown[s]>=0?p[s]:!Double.isNaN(anchor[s])?anchor[s]:PortStreams.endPressure(model,graph,link,s);
-            return Math.min(floor,solver.suctions.suctionSupply(graph,e,s,walk.via(),end,graph.reservoirs().get(s).state()));
-        }
         /** Whether junction {@code node} reads its table at {@code pressure}, not its stated data. */
         private boolean tabled(int node,double pressure){return tableP[node]!=null&&pressure<flashFrom[node];}
         /** Linear interpolation of {@code table} in ln P at {@code pressure}, clamped to the table's range. */
@@ -524,11 +511,12 @@ final class BalanceStart {
          * step does not descend; the last iterate when the budget runs out ({@code converged} false). */
         double[] solve(Runnable checkpoint) {
             double[] p=solveOnce(checkpoint);
-            // The pump modes the balance starts the step in: a pump on its law whose suction junction stands below the bubble
-            // pressure of the liquid it draws goes to its suction limit, the junction anchored there and the pump passing
-            // what arrives. A vapour-locked pump (owner decision D16 A, {@link MoverSuction#vapourLocks}) arrives closed
-            // and the balance never reads one on its own pressures, which its law drained (D15's reading there started
-            // cold random 181's pump closed with its supplier pulled 20 kPa below the floor).
+            // The balance decides no pump's mode (option F2 of START_HOLD_REVIEW.md, batch 2026-11-16-review-plant-sizing): a pump
+            // starts on its law, or closed where it is vapour-locked (owner decision D16 A, {@link MoverSuction#vapourLocks}), and
+            // the pass loop puts it on its suction limit ({@link DeviceModes#cavitates}, {@link DeviceModes#nextMode}, the row of
+            // option D). Deciding it here anchored the suction at the floor and iterated the pump's delivery as what arrived there:
+            // on a short crude suction line that swung between 0 and 1070 kg/s, and a round ended on a discharge junction drained
+            // to the hull's 0.25 kPa, where a one-way valve passes nothing. The rounds below decide pressure valves only.
             for(int round=0;round<4;round++) {
                 boolean changed=false;
                 for(int e=0;e<edges;e++) {
@@ -554,21 +542,6 @@ final class BalanceStart {
                             if(pa<target-.01&&flow(e,pa,endAt(e,1,p))>1e-10){modes.set(e,FlowControl.Mode.VALVE_REGULATING);anchor[a]=target;changed=true;}
                         }
                         continue;
-                    }
-                    if(closed[e]||!(pipe.control() instanceof FlowControl.Mover))continue;
-                    // The floor at the flow its law gives at the balanced pressures (owner decision D20 Q11 A).
-                    double pa=endAt(e,0,p),floor=suctionFloor(e,checkpoint);
-                    boolean onLawWithFloor=mode==FlowControl.Mode.MOVER_LAW&&graph.reservoirs().get(a).junction()&&floor<Double.POSITIVE_INFINITY;
-                    if(onLawWithFloor)floor=cavitationFloor(e,flow(e,pa,endAt(e,1,p)));
-                    boolean below=onLawWithFloor&&pa<floor*(1-1e-9);
-                    if(below) {
-                        modes.set(e,FlowControl.Mode.PUMP_SUCTION_LIMIT);anchor[a]=floor;p[a]=floor;mover[e]=false;suctionLimited[e]=true;prescribed[e]=Math.max(0,inflowExcept(a,e,p));changed=true;
-                    } else if(suctionLimited[e]) {
-                        // Owner decision D17: the anchor never stands above the supplier, read on this balance's pressures,
-                        // where the pump is on its limit and its law drains nothing; the mode above reads the floor alone.
-                        double at=suctionAnchor(e,p,checkpoint);
-                        if(Math.abs(at-anchor[a])>1e-9*Math.abs(at)){anchor[a]=at;p[a]=at;changed=true;}
-                        double q=Math.max(0,inflowExcept(a,e,p));if(Math.abs(q-prescribed[e])>1e-9*Math.max(1,q)){prescribed[e]=q;changed=true;}
                     }
                 }
                 if(!changed)break;

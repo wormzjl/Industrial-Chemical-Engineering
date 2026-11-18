@@ -589,21 +589,28 @@ public final class ConstructorColumn {
      * A drum's side connections as the page shows them: how many and the selected one; its side ({@link
      * EquipmentShape#side}) and each side's word; its place (along a lying drum's axis, else its height) as shown, in m;
      * its offset across the shell and the way it runs (its word, null at 0); whether Add finds a place; a lying drum's
-     * boot (room for one, and whether it has one); the bottom outlet's sides (a standing drum's).
+     * boot (room for one, and whether it has one); the bottom outlet's sides (a standing drum's); whether it has a demister.
      */
     public record Connections(int count, int selected, int side, List<String> words, String station, boolean horizontal, int offset, @Nullable String way,
-                              boolean addable, boolean bootRoom, boolean boot, Outlet outlet) {
+                              boolean addable, boolean bootRoom, boolean boot, Outlet outlet, boolean demister) {
         public Connections {
             words = List.copyOf(words);
+        }
+
+        /** A drum without a demister. */
+        public Connections(int count, int selected, int side, List<String> words, String station, boolean horizontal, int offset, @Nullable String way,
+                           boolean addable, boolean bootRoom, boolean boot, Outlet outlet) {
+            this(count, selected, side, words, station, horizontal, offset, way, addable, bootRoom, boot, outlet, false);
         }
     }
 
     /**
      * The drum's Nozzles page: Side connections (which one, Add and Remove); while it has one, its Faces (a latched
      * selector) and Position (its place along or up the shell, its offset across); a lying drum's Boot, or a standing
-     * drum's Bottom outlet where it turns. Footer: Back, Build. Keys: the settings {@code connection}, {@code station},
-     * {@code offset}; {@code add}, {@code remove}, {@code side:<side>}, {@code boot:off}, {@code boot:on},
-     * {@code outlet:<turn>}.
+     * drum's Bottom outlet where it turns; every drum's Demister (batch 2026-11-17-three-phase-separator: Off and On,
+     * latched). Footer: Back, Build. Keys: the settings {@code connection}, {@code station}, {@code offset}; {@code add},
+     * {@code remove}, {@code side:<side>}, {@code boot:off}, {@code boot:on}, {@code outlet:<turn>}, {@code demister:off},
+     * {@code demister:on}.
      */
     public static Page connections(Connections in, HeatControlColumn.Texts t) {
         var rows = new ArrayList<Column.Row>();
@@ -627,6 +634,9 @@ public final class ConstructorColumn {
                     position("boot:off", t.get(KEY + "boot.off"), !in.boot(), null),
                     new Column.Button("boot:on", t.get(KEY + (in.bootRoom() ? "boot.on" : "boot.none")), !in.boot() && in.bootRoom(), null, in.boot()))))));
         else if (Integer.bitCount(in.outlet().allowed()) > 1) rows.add(outlet(in.outlet(), t));
+        rows.add(new Column.Group(t.get(KEY + "demister"), t.get(KEY + "demister.hint"), List.of(new Column.Buttons(List.of(
+                position("demister:off", t.get(KEY + "demister.off"), !in.demister(), null),
+                position("demister:on", t.get(KEY + "demister.on"), in.demister(), null))))));
         return new Page(rows, List.of(push("back", "back.hint", t), build(t)), true);
     }
 

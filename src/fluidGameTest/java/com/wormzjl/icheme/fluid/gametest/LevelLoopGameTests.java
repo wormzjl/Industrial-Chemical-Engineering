@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.mojang.authlib.GameProfile;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
@@ -95,7 +96,7 @@ public final class LevelLoopGameTests {
 
     /** The loop on a drum holding {@code cycles} control cycles of its feed; {@code blanket}: a blanketed drum; {@code direct}: from empty on the design feed. */
     static void run(GameTestHelper helper, int cycles, boolean blanket, boolean direct) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(16, 24, 16));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(16, 24, 16));
         var state = new State();
         state.cycles = cycles;
         state.blanket = blanket;
@@ -145,7 +146,7 @@ public final class LevelLoopGameTests {
         };
     }
 
-    private static void build(GameTestHelper helper, AssemblyGameTests.Plant plant, State state) {
+    private static void build(GameTestHelper helper, PlantBuilder plant, State state) {
         var level = plant.level;
         var world = plant.world;
         var time = world.time();
@@ -161,14 +162,14 @@ public final class LevelLoopGameTests {
         for (int k = feed.size() - 2; k >= 0; k--) plant.pipe(feed.get(k));
         var feedValve = feed.get(2);
         var meter = feed.get(4);
-        plant.valves.put(feedValve, AssemblyGameTests.Plant.out(drum, Role.SIDE).getOpposite());
+        plant.valves.put(feedValve, PlantBuilder.out(drum, Role.SIDE).getOpposite());
         // The liquid out through the level valve, then 6 m down to a void at 1 atm; the vapour to a void at 1 atm.
         var outlet = line(plant, drum, Role.LIQUID_OUTLET, 2, 6);
         for (int k = 0; k < outlet.size() - 1; k++) plant.pipe(outlet.get(k));
         level.setBlock(outlet.getLast(), ModBlocks.FLUID_VOID.get().defaultBlockState(), Block.UPDATE_ALL);
         plant.devices.add(outlet.getLast());
         var levelValve = outlet.get(1);
-        plant.valves.put(levelValve, AssemblyGameTests.Plant.out(drum, Role.LIQUID_OUTLET));
+        plant.valves.put(levelValve, PlantBuilder.out(drum, Role.LIQUID_OUTLET));
         // The gas side: a vent line to a void at 1 atm, or (blanketed) a nitrogen line of two pipes from a generator to the
         // inlet of the gas blanketing valve on the drum's top flange; the valve is fitted with the sensors.
         var gas = new ArrayList<BlockPos>();
@@ -232,14 +233,14 @@ public final class LevelLoopGameTests {
                     state.licBox = ColumnFailureModesReviewWorld.panel(plant, state.lic, Direction.WEST, false);
                     state.ficBox = ColumnFailureModesReviewWorld.panel(plant, state.fic, Direction.WEST, false);
                 }))
-                .thenWaitUntil(until(helper, world, state, 600, "waiting for the data sockets", () -> ColumnFailureModesReviewWorld.port(plant, drum.origin(), CableMedium.DATA) != null
+                .thenWaitUntil(until(helper, world, state, 600, "waiting for the data sockets", () -> PlantBuilder.port(plant, drum.origin(), CableMedium.DATA) != null
                         && ColumnFailureModesReviewWorld.pipePort(plant, feedValve) != null && ColumnFailureModesReviewWorld.pipePort(plant, levelValve) != null
                         && ColumnFailureModesReviewWorld.pipePort(plant, meter) != null && state.licBox.dataPort() != null && state.ficBox.dataPort() != null))
                 .thenExecute(step(state, "wiring", () -> {
-                    List<DataPort> ports = List.of(state.licBox.dataPort(), ColumnFailureModesReviewWorld.port(plant, drum.origin(), CableMedium.DATA),
+                    List<DataPort> ports = List.of(state.licBox.dataPort(), PlantBuilder.port(plant, drum.origin(), CableMedium.DATA),
                             ColumnFailureModesReviewWorld.pipePort(plant, levelValve), ColumnFailureModesReviewWorld.pipePort(plant, feedValve),
                             ColumnFailureModesReviewWorld.pipePort(plant, meter), state.ficBox.dataPort());
-                    ColumnFailureModesReviewWorld.lay(plant, ports, CableMedium.DATA);
+                    PlantBuilder.lay(plant, ports, CableMedium.DATA);
                     var tank = world.view(state.drum).tank();
                     state.capacity = tank.capacity();
                     state.span = tank.levelHeight();
@@ -509,7 +510,7 @@ public final class LevelLoopGameTests {
             return "no view";
         }
 
-        double flow(FluidWorldAuthority world, BlockPos meter, AssemblyGameTests.Plant plant) {
+        double flow(FluidWorldAuthority world, BlockPos meter, PlantBuilder plant) {
             var r = world.instrumentPipeReading(id(plant, meter));
             return r == null ? Double.NaN : r.massFlow();
         }
@@ -550,9 +551,9 @@ public final class LevelLoopGameTests {
     }
 
     /** {@code cells} cells straight out of {@code role}'s nozzle of {@code drum}, the nozzle's pipe block first, then {@code drop} cells down. */
-    static List<BlockPos> line(AssemblyGameTests.Plant plant, Vessel drum, Role role, int cells, int drop) {
-        var from = AssemblyGameTests.Plant.front(drum, role);
-        var d = AssemblyGameTests.Plant.out(drum, role);
+    static List<BlockPos> line(PlantBuilder plant, Vessel drum, Role role, int cells, int drop) {
+        var from = PlantBuilder.front(drum, role);
+        var d = PlantBuilder.out(drum, role);
         var out = new ArrayList<BlockPos>();
         for (int k = 0; k <= cells; k++) out.add(from.relative(d, k));
         var corner = out.getLast();
@@ -565,7 +566,7 @@ public final class LevelLoopGameTests {
      * Pipes laid as the pipe tool lays a line along {@code along}: each registered with two joints only, back towards
      * {@code from} (by cell) and on along the line, its block bound to that registration.
      */
-    static void lay(AssemblyGameTests.Plant plant, List<BlockPos> cells, Direction[] from, Direction along) {
+    static void lay(PlantBuilder plant, List<BlockPos> cells, Direction[] from, Direction along) {
         var laid = new ArrayList<FluidWorldAuthority.Laid>();
         for (int i = 0; i < cells.size(); i++)
             laid.add(new FluidWorldAuthority.Laid(plant.position(cells.get(i)), face(along),
@@ -588,7 +589,7 @@ public final class LevelLoopGameTests {
         return com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction.valueOf(d.name());
     }
 
-    static long id(AssemblyGameTests.Plant plant, BlockPos at) {
+    static long id(PlantBuilder plant, BlockPos at) {
         return plant.world.at(plant.position(at)).orElseThrow(() -> new IllegalStateException("Nothing registered at " + at.toShortString())).device().id();
     }
 
@@ -600,7 +601,12 @@ public final class LevelLoopGameTests {
     }
 
     /** A sensor of {@code kind} fitted from {@code item} on {@code host}, as a player fits one; its instance. */
-    static UUID fit(AssemblyGameTests.Plant plant, BlockPos host, Sensor.Kind kind, net.minecraft.world.item.Item item) {
+    static UUID fit(PlantBuilder plant, BlockPos host, Sensor.Kind kind, net.minecraft.world.item.Item item) {
+        return fit(plant, host, kind, item, null);
+    }
+
+    /** {@link #fit(PlantBuilder, BlockPos, Sensor.Kind, net.minecraft.world.item.Item)} on mount {@code mount} alone (null: any of the kind's). */
+    static UUID fit(PlantBuilder plant, BlockPos host, Sensor.Kind kind, net.minecraft.world.item.Item item, @org.jetbrains.annotations.Nullable String mount) {
         var level = plant.level;
         var h = InstrumentHosts.at(level, host);
         if (h == null) throw new IllegalStateException("No instrument host at " + host.toShortString());
@@ -609,6 +615,7 @@ public final class LevelLoopGameTests {
         fitter.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(item));
         var why = new ArrayList<String>();
         for (var m : Sensor.mounts(h, kind)) {
+            if (mount != null && !mount.equals(m.id())) continue;
             why.add(m.id() + " at " + m.centre() + (InstrumentHosts.clear(level, h, m) ? "" : " blocked by "
                     + BlockPos.betweenClosedStream(m.bounds()).filter(p -> !level.getBlockState(p).canBeReplaced() && !p.equals(host)).map(p -> p.toShortString() + "=" + level.getBlockState(p).getBlock()).toList()));
             var eye = m.centre().add(m.normal().scale(1.6));
@@ -616,7 +623,7 @@ public final class LevelLoopGameTests {
             fitter.lookAt(EntityAnchorArgument.Anchor.EYES, m.centre());
             plant.world.instruments().requestSensor(fitter, InteractionHand.MAIN_HAND, kind);
             for (var s : plant.world.instruments().allSensors())
-                if (s.key().host() == h.identity() && s.kind() == kind) return s.instance();
+                if (s.key().host() == h.identity() && s.kind() == kind && (mount == null || mount.equals(s.key().mount()))) return s.instance();
         }
         throw new IllegalStateException("The " + kind + " sensor did not fit on " + host.toShortString() + ": mounts " + why);
     }

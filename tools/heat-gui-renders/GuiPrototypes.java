@@ -13,8 +13,10 @@ import com.wormzjl.icheme.client.gui.common.MachineColumn;
 import com.wormzjl.icheme.client.gui.common.PumpCurve;
 import com.wormzjl.icheme.client.gui.common.StillDoor;
 import com.wormzjl.icheme.client.gui.common.ConverterDoor;
+import com.wormzjl.icheme.client.gui.common.VesselSection;
 import com.wormzjl.icheme.client.gui.common.kit.Canvas;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
+import com.wormzjl.icheme.client.gui.common.kit.Format;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.PanelSkin;
 import com.wormzjl.icheme.client.gui.common.kit.Palette;
@@ -67,6 +69,11 @@ public final class GuiPrototypes {
         Files.createDirectories(out);
         var jar = Path.of(args.length > 2 ? args[2] : "build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar");
         HeatDiagramRender.font = Files.exists(jar) ? HeatDiagramRender.GameFont.load(jar) : null;
+        // The valve's Sensor option sheets alone (they need no material catalog).
+        if (System.getProperty("only", "").startsWith("valve-sensor")) {
+            valveSensorSheets(out);
+            return;
+        }
         for (var p : prototypes()) {
             if (!p.file().startsWith(System.getProperty("only", ""))) continue;
             var titles = new ArrayList<>(List.of("Light panel (3a)", "Dark panel (3c)"));
@@ -98,6 +105,8 @@ public final class GuiPrototypes {
         out.addAll(createCoupling());
         out.addAll(controlPanels());
         out.addAll(firedHeater());
+        out.addAll(separator());
+        out.addAll(separation());
         out.addAll(flareStack());
         out.addAll(batchStill());
         out.addAll(fluidConverter());
@@ -1110,6 +1119,12 @@ public final class GuiPrototypes {
         var lying = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.CROSSWISE, 2.5, 8, 2, 4, -2, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         var connections = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
                 new ConstructorColumn.Outlet(0b1011, 0, STANDING)), DIALOG);
+        // The Demister group with a pad (batch 2026-11-17-three-phase-separator; -Donly=equipment-constructor-nozzles): a standing
+        // drum, and a lying drum with its boot.
+        var padded = ConstructorColumn.connections(new ConstructorColumn.Connections(2, 1, 1, STANDING, "4.5", false, -1, "back", true, false, false,
+                new ConstructorColumn.Outlet(0b1011, 0, STANDING), true), DIALOG);
+        var paddedLying = ConstructorColumn.connections(new ConstructorColumn.Connections(1, 0, 1, STANDING, "6.5", true, 0, null, true, true, true,
+                new ConstructorColumn.Outlet(1, 0, STANDING), true), DIALOG);
         var nozzles = ConstructorColumn.nozzles(new ConstructorColumn.Nozzles(7, 2, new ConstructorColumn.Nozzle("pumparound_draw", 1, true, "18.5",
                 new UnitDesign.Line("nozzle.under_out", 12), false, 3, 1), STANDING, 0), DIALOG);
         String volume = DIALOG.get(CONSTRUCTOR + "volume", "20.9", "46.4");
@@ -1140,6 +1155,8 @@ public final class GuiPrototypes {
                         DIALOG.get(CONSTRUCTOR + "blocked", 3), Palette.WARN, Map.of()), true),
                 new Prototype("equipment-constructor-nozzles", 464, 254, (d, s) -> constructorDoor(d, connections, "Vertical drum", null,
                         DIALOG.get(CONSTRUCTOR + "clash.liquid", 2), Palette.WARN, Map.of()), true),
+                new Prototype("equipment-constructor-nozzles-demister", 464, 254, (d, s) -> constructorDoor(d, padded, "Vertical drum", null, volume, Palette.ACCENT, Map.of()), true),
+                new Prototype("equipment-constructor-nozzles-lying-demister", 464, 254, (d, s) -> constructorDoor(d, paddedLying, "Horizontal drum", null, volume, Palette.ACCENT, Map.of()), true),
                 new Prototype("equipment-constructor-column", 464, 254, (d, s) -> {
                     constructorDoor(d, nozzles, "Distillation column", null, DIALOG.get(CONSTRUCTOR + "volume", "1696.5", "792.7"), Palette.ACCENT, Map.of());
                     // The schematic on its glass beside the world (the screen draws the calculator's; here an illustration).
@@ -1387,6 +1404,99 @@ public final class GuiPrototypes {
         d.table(new Rect(box.x(), box.y() + 20, box.w(), box.h() - 20), new int[]{box.w() - 120, 60, 60}, table);
     }
 
+    /**
+     * A drum's Carry-over group (batch 2026-11-17-three-phase-separator, package 4; owner: "B: own group"), from the
+     * shipped builder: a lying drum small for its water, whose boot's water leaves with oil in it, and a standing drum
+     * whose gas is faster than its vapour space allows (one liquid outlet: the gas's meter alone).
+     */
+    static List<Prototype> separator() {
+        var out = new ArrayList<Prototype>();
+        var base = List.of(meter("temperature", "40.0", "°C"), meter("pressure", "2.50", "bar"), new DeviceColumn.Meter("net_flow", "0.0", "kg/h", TEXTS.get("net_flow.hint")));
+        var lying = List.of(new DeviceColumn.Meter("carried_water", "0.0", "%", TEXTS.get("carried_water.hint")),
+                new DeviceColumn.Meter("carried_oil", "39.5", "%", TEXTS.get("carried_oil.hint")), new DeviceColumn.Meter("carried_liquid", "0.0", "%", TEXTS.get("carried_liquid.hint")));
+        var standing = List.of(new DeviceColumn.Meter("carried_liquid", "26.0", "%", TEXTS.get("carried_liquid.hint")));
+        for (boolean boot : new boolean[]{true, false}) {
+            var input = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false,
+                    new DeviceColumn.Level(.5, "885.0", "1770.0", false), null, List.of(), phases("volume", 44, 6, 50, 0), base, null, null).withCarried(boot ? lying : standing);
+            var rows = DeviceColumn.rows(input, TEXTS);
+            out.add(devicePage(boot ? "separator-carry-over-lying-drum" : "separator-carry-over-standing-drum", WINDOW[0], WINDOW[1], rows, (d, k) -> {
+                d.title(boot ? "Lying drum" : "Standing drum");
+                d.name(boot ? "V-101" : "V-102", false);
+                d.tabs(0, "Overview", "Outlets", "Datasheet");
+                d.status("RUNNING", Palette.ACCENT);
+                var box = device(d, input, rows, Map.of());
+                contents(d, box, 0, List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"N-pentane", "62.1", "6.76"}, new String[]{"N-hexane", "37.9", "4.12"}));
+                d.footer(2, "Close", "Mole", "°C", "bar", "/h");
+            }));
+        }
+        return out;
+    }
+
+    /**
+     * A drum's level of separation (batch 2026-11-17-dynamic-settling, law L7; owner: "C: bars and section", D6 C), from the
+     * shipped builders: the group Separation between Readings and Carry-over, one gauge a phase the vessel holds
+     * ({@link DeviceColumn.Input#withSeparation}, {@link Column.Gauge}). Three sheets each on a standing drum half settled
+     * and a lying drum without water over its gas limit: A the gauges alone; B an LED meter a phase (the option not
+     * taken, drawn from {@link Column.Reading} rows); C, the one built, the gauges and the vessel's section on the glass
+     * beside the table ({@link VesselSection}).
+     */
+    static List<Prototype> separation() {
+        record Case(String file, String title, String name, boolean lying, Double[] shares, String carried, DeviceColumn.Phases phases, double level, double oil, double turbid, double water) {}
+        var cases = List.of(
+                new Case("standing", "Standing drum", "V-102", false, new Double[]{1.0, .55, .40}, "0.0", phases("volume", 30, 20, 50, 0), .5, .45, .35, .20),
+                new Case("gas-limit", "Lying drum", "V-103", true, new Double[]{.74, 1.0, null}, "26.0", phases("volume", 50, 0, 50, 0), .5, 1, 0, 0));
+        String[] keys = {"separation_gas", "separation_oil", "separation_water"};
+        int[] layers = {VesselSection.GAS_LAYER, VesselSection.OIL_LAYER, VesselSection.WATER_LAYER};
+        var base = List.of(meter("temperature", "40.0", "°C"), meter("pressure", "2.50", "bar"), new DeviceColumn.Meter("net_flow", "0.0", "kg/h", TEXTS.get("net_flow.hint")));
+        var out = new ArrayList<Prototype>();
+        for (String option : new String[]{"a-bars", "b-meters", "c-section"})
+            for (var k : cases) {
+                var separation = new ArrayList<DeviceColumn.Phase>();
+                var labels = new ArrayList<VesselSection.Label>();
+                for (int i = 0; i < 3; i++) {
+                    if (k.shares()[i] == null) continue;
+                    String value = Format.number(100 * k.shares()[i]);
+                    separation.add(new DeviceColumn.Phase(keys[i], k.shares()[i], value, TEXTS.get(keys[i] + ".hint")));
+                    labels.add(new VesselSection.Label(TEXTS.get(keys[i]) + " " + value + " %", layers[i]));
+                }
+                var input = new DeviceColumn.Input(Kind.RESERVOIR, true, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false,
+                        new DeviceColumn.Level(.5, "885.0", "1770.0", false), null, List.of(), k.phases(), base, null, null)
+                        .withCarried(List.of(new DeviceColumn.Meter("carried_liquid", k.carried(), "%", TEXTS.get("carried_liquid.hint"))));
+                var rows = new ArrayList<>(DeviceColumn.rows(input, TEXTS));
+                if (option.startsWith("b")) {
+                    // The option not taken: a meter a phase, in the shipped group's place.
+                    var meters = new ArrayList<Column.Row>();
+                    for (var ph : separation) meters.add(new Column.Reading("separation:" + ph.key(), TEXTS.get(ph.key()), ph.value(), "%", ph.hint()));
+                    String carryOver = TEXTS.get("device_group.carry_over");
+                    int at = 0;
+                    while (at < rows.size() && !(rows.get(at) instanceof Column.Group g && g.title().equals(carryOver))) at++;
+                    rows.add(at, new Column.Group(TEXTS.get("device_group.separation"), TEXTS.get("separation.hint"), meters));
+                } else {
+                    input = input.withSeparation(separation);
+                    rows = new ArrayList<>(DeviceColumn.rows(input, TEXTS));
+                }
+                var shown = input;
+                var section = new VesselSection.Layers(k.lying(), k.level(), k.oil(), k.turbid(), k.water(), k.lying(), labels);
+                var table = List.of(new String[]{"Component", "Mole %", "kmol"}, new String[]{"N-pentane", "62.1", "6.76"}, new String[]{"N-hexane", "37.9", "4.12"});
+                var page = List.copyOf(rows);
+                out.add(devicePage("separation-" + option + "-" + k.file(), WINDOW[0], WINDOW[1], page, (d, s) -> {
+                    d.title(k.title());
+                    d.name(k.name(), false);
+                    d.tabs(0, "Overview", "Outlets", "Datasheet");
+                    d.status("RUNNING", Palette.ACCENT);
+                    var box = device(d, shown, page, Map.of());
+                    if (option.startsWith("c")) {
+                        int sw = Math.max(110, box.w() * 2 / 5), tw = box.w() - sw - 6;
+                        contents(d, new Rect(box.x(), box.y(), tw, box.h()), 0, table);
+                        d.c.vLine(box.x() + tw + 3, box.y(), box.bottom(), Palette.LINE);
+                        VesselSection.draw(d.c, new Rect(box.right() - sw, box.y(), sw, box.h()), section);
+                    } else contents(d, box, 0, table);
+                    d.footer(2, "Close", "Mole", "°C", "bar", "/h");
+                }));
+            }
+        return out;
+    }
+
     static DeviceColumn.Meter meter(String key, String value, String unit) {
         return new DeviceColumn.Meter(key, value, unit, null);
     }
@@ -1503,6 +1613,72 @@ public final class GuiPrototypes {
                     contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", "2.5"}));
                     d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
                 }));
+    }
+
+    /** The hover as the game draws it: its text at ({@code x}, {@code y}), its frame round it (renderTooltip's look). */
+    static void hover(Door d, String text, int x, int y) {
+        var lines = text.split("\n");
+        int w = 0;
+        for (var line : lines) w = Math.max(w, d.m.width(line));
+        int left = x - 3, top = y - 3, h = lines.length * 10 + 4;
+        d.c.fill(left, top, left + w + 6, top + h, 0xF0100010);
+        d.c.outline(left, top, w + 6, h, 0xFF5000FF);
+        for (int i = 0; i < lines.length; i++) d.c.text(lines[i], x, y + i * 10, 0xFFFFFFFF);
+    }
+
+    /**
+     * The control valve's Sensor group as shipped (batch 2026-11-16-review-plant-sizing, owner's pick A of
+     * VALVE_SENSOR_REVIEW.md), from {@code DeviceColumn.sensors}: no sensor linked, three linked and none selected (NO
+     * SIGNAL: the valve stands open), FT-0012 selected with its hover beside the door column as FluidDeviceScreen places it,
+     * and PT-0007 selected (the set point an upstream pressure); an editor beside a reader, at 464 by 254. Run with
+     * {@code -Donly=valve-sensor}.
+     */
+    static void valveSensorSheets(Path out) throws Exception {
+        String[] labels = {"FT-0012 / FLOW", "PT-0007 / PRESSURE", "FT-0015 / FLOW"};
+        String[] hints = {"Sensor block: 104, 64, -31", "Sensor block: 98, 66, -31\nEquipment: #0042", "Sensor block: 112, 64, -28"};
+        String[] states = {"no sensor linked", "linked, none selected (NO SIGNAL)", "FT-0012 selected, its hover", "PT-0007 selected"};
+        int[][] state = {{0, -1}, {3, -1}, {3, 0}, {3, 1}};
+        var prototypes = new ArrayList<Prototype>();
+        var titles = new ArrayList<String>();
+        for (int st = 0; st < states.length; st++)
+            for (boolean editor : new boolean[]{true, false}) {
+                var choices = new ArrayList<DeviceColumn.SensorChoice>();
+                for (int i = 0; i < state[st][0]; i++) choices.add(new DeviceColumn.SensorChoice(labels[i], hints[i], i == state[st][1], DeviceColumn.SENSOR_KEY + i));
+                titles.add((editor ? "Editor" : "Reader") + " · " + states[st]);
+                prototypes.add(valveSensorPage(choices, state[st][1], editor, st == 2));
+            }
+        for (var skin : List.of(PanelSkin.LIGHT, PanelSkin.DARK)) {
+            var pages = new ArrayList<BufferedImage>();
+            for (var p : prototypes) pages.add(render(p, skin, false));
+            HeatDiagramRender.grid(out.resolve("valve-sensor-" + (skin == PanelSkin.LIGHT ? "light" : "dark") + ".png"), titles, pages);
+        }
+    }
+
+    /** One valve page of the Sensor sheet: {@code selected} the index into {@code choices} (-1: none), its hover shown where {@code hover}. */
+    static Prototype valveSensorPage(List<DeviceColumn.SensorChoice> choices, int selected, boolean editor, boolean hover) {
+        boolean set = selected >= 0, pressure = set && choices.get(selected).label().startsWith("PT");
+        var meters = set ? List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"), meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar"))
+                : List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"), meter("throughput", "4.1", "kg/s"), meter("pressure_change", "-0.35", "bar"));
+        var in = new DeviceColumn.Input(Kind.VALVE, editor, false, true, "bar", "°C", "/s", !set ? DeviceColumn.Valve.UNCONFIGURED : pressure ? DeviceColumn.Valve.PRESSURE : DeviceColumn.Valve.MASS_FLOW,
+                new DeviceColumn.Opening(set ? 0.63 : 1, set ? "Regulating" : ""), false, null, null, DeviceColumn.sensors(choices, editor, TEXTS), phases("volume", 1, 0, 0, 0), meters);
+        var rows = DeviceColumn.rows(in, TEXTS);
+        return new Prototype("valve-sensor", 464, 254, (d, k) -> {
+            d.title("Control valve");
+            d.name("FV-101", editor);
+            d.tabs(0, "Overview");
+            d.status(set ? Door.tr("gui.icheme.fluid.flowing") : TEXTS.get("valve_no_signal"), set ? Palette.MUTED : Palette.WARN);
+            var box = device(d, in, rows, Map.of("massFlow", "2.50", "pressure", "2.00"));
+            contents(d, box, 0, List.of(new String[]{"Component", "Mass %", "kg/s"}, new String[]{"Toluene", "100.0", set ? "2.5" : "4.1"}));
+            if (editor) d.footer(2, "Close", "Apply", "Mass", "°C", "bar", "/s");
+            else d.footer(1, "Close", "Mass", "°C", "bar", "/s");
+            if (!hover) return;
+            // The selected choice's hover beside the door column, level with its row (FluidDeviceScreen: KitDoor.choice).
+            for (var p : Column.place(rows, 10, FluidGuiLayout.DOOR_TOP, FluidGuiLayout.side(d.w) - 10, d.m, Column.Metrics.COMPACT).rows())
+                if (p.row() instanceof Column.Choice c && c.selected()) {
+                    hover(d, c.hint(), p.rect().right() + 6, p.rect().y());
+                    break;
+                }
+        });
     }
 
     /** The valve, the tallest page, in a {@link #WINDOW} window; and in a 1366 by 768 one, where scale 2 still leaves it a bar. */

@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
+import com.wormzjl.icheme.testworld.CrudeUnitPlant;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.network.FluidNetwork;
@@ -83,14 +85,14 @@ public final class ColumnOperationGameTests {
     private static final int MEAN_TICKS = 1200;
 
     private static final class Life {
-        final ColumnOperationReviewWorld.Rig rig;
+        final CrudeUnitPlant.Rig rig;
         final String[] failure = {null};
         Map<Long, double[]> before = Map.of();
         Set<Long> members = Set.of();
         double[] accounts;
         double[] destroyed;
 
-        Life(ColumnOperationReviewWorld.Rig rig) {
+        Life(CrudeUnitPlant.Rig rig) {
             this.rig = rig;
         }
 
@@ -222,13 +224,13 @@ public final class ColumnOperationGameTests {
         ControlLoopGameTests.ViewCapture[] operator = {null};
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(life.failed() || plant.valvesInstalled(), "Waiting for the valves"))
-                .thenWaitUntil(() -> helper.assertTrue(life.failed() || ColumnFailureModesReviewWorld.port(plant, plant.column.origin(), CableMedium.DATA) != null, "Waiting for the column's data socket"))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || PlantBuilder.port(plant, plant.column.origin(), CableMedium.DATA) != null, "Waiting for the column's data socket"))
                 .thenExecute(() -> life.stage(() -> {
-                    var socket = ColumnFailureModesReviewWorld.port(plant, plant.column.origin(), CableMedium.DATA);
+                    var socket = PlantBuilder.port(plant, plant.column.origin(), CableMedium.DATA);
                     host[0] = socket.host();
                     dcs[0] = consoleCell(plant, socket.cell());
                     var console = ColumnFailureModesReviewWorld.panel(plant, dcs[0], Direction.WEST, true);
-                    ColumnFailureModesReviewWorld.lay(plant, List.of(console.dataPort(), socket), CableMedium.DATA);
+                    PlantBuilder.lay(plant, List.of(console.dataPort(), socket), CableMedium.DATA);
                     var entry = AssemblyService.validate(plant.level, plant.controller());
                     life.check(entry != null && entry.status() == AssemblyStore.Status.COMPLETE, "The plant is complete: " + plant.faults());
                     operator[0] = ControlLoopGameTests.operator(plant.level, dcs[0]);
@@ -272,7 +274,7 @@ public final class ColumnOperationGameTests {
     }
 
     /** A free cell, with the one above it, on the ground near {@code near}, for a DCS. */
-    private static BlockPos consoleCell(AssemblyGameTests.Plant plant, BlockPos near) {
+    private static BlockPos consoleCell(PlantBuilder plant, BlockPos near) {
         for (int r = 3; r < 24; r++)
             for (var d : new Direction[]{Direction.WEST, Direction.SOUTH, Direction.NORTH, Direction.EAST}) {
                 var at = new BlockPos(near.getX(), plant.base.getY(), near.getZ()).relative(d, r);
@@ -284,7 +286,7 @@ public final class ColumnOperationGameTests {
         throw new IllegalStateException("No free ground for the DCS near " + near.toShortString());
     }
 
-    private static void command(GameTestHelper helper, AssemblyGameTests.Plant plant, ControlLoopGameTests.ViewCapture operator, long host, ColumnCommands.Action action, List<Double> values) {
+    private static void command(GameTestHelper helper, PlantBuilder plant, ControlLoopGameTests.ViewCapture operator, long host, ColumnCommands.Action action, List<Double> values) {
         plant.world.controls().column(ControlLoopGameTests.menu(helper, operator), new ColumnCommands.Command(host, action, values));
         log("dcs command={} host={}", action, host);
     }
@@ -395,7 +397,7 @@ public final class ColumnOperationGameTests {
         for (var d : life.view().duties()) life.check(Math.abs(d.booked() - d.solved()) <= .01 * Math.abs(d.solved()), "A settled duty is booked as solved: " + d.kind() + d.index() + " " + d.booked() + " of " + d.solved());
         double duty = life.view().duties().stream().filter(d -> d.kind().name().equals("CONDENSER")).mapToDouble(OperationView.Duty::booked).sum();
         double flow = Math.abs(world.view(rig.id(rig.water)).massFlow());
-        double warm = outletTemperature - ColumnOperationReviewWorld.WATER_TEMPERATURE, expected = Math.abs(duty) / (flow * WATER_HEAT_CAPACITY);
+        double warm = outletTemperature - CrudeUnitPlant.WATER_TEMPERATURE, expected = Math.abs(duty) / (flow * WATER_HEAT_CAPACITY);
         log("condenser_W={} condenser_K={} water_kg_s={} warm_K={} expected_K={}", duty, life.unit().setpoints().condenserTemperature(), flow, warm, expected);
         life.check(duty < 0 && flow > 0, "The condenser rejects heat to running water: " + duty + " W, " + flow + " kg/s");
         life.check(Math.abs(warm - expected) <= HEAT_TOLERANCE * expected, "The water warms by Q/(m c_p): " + warm + " K, " + expected + " K expected");

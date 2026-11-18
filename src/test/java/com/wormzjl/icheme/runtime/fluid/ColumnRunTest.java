@@ -63,7 +63,7 @@ class ColumnRunTest {
     private static double sum(double[] n){double s=0;for(double v:n)s+=v;return s;}
 
     private record Rig(EventPathWorld world,ColumnOperation ops,Counting counting,long unit,long feed,long product,long tank,long steamSource,long waterSource,long tube,long shell,long waterValve,
-                       long utilitySource,long utilityTube,long utilityShell,long utilityValve,long fanSide,long motor,ElectricStores stores,ShaftTrains shafts){}
+                       long utilitySource,long utilityTube,long utilityShell,long utilityValve,long fanSide,long motor,ElectricStores stores,ShaftTrains shafts,long source){}
     /** A 3 bar nitrogen feed line into a feed port, a distillate port out to a tank, a table sending everything to the distillate; jobs taking {@code lag} ticks. */
     private Rig rig(int lag){return rig(lag,null);}
     private Rig rig(int lag,Fake solves){return rig(lag,solves,false,false);}
@@ -78,14 +78,15 @@ class ColumnRunTest {
         var n2=EventPathWorld.nitrogen().composition();
         var water=new double[m];water[m-1]=1;
         boolean liquid=pumped||feedSolids!=SlurryFeed.NONE;
-        long generator=liquid?world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,300,300000,water,feedSolids),.05):world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,340,300000,n2),.05);
+        long generator=liquid?world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FlowControl.Passive(),new FluidDeviceSpec(1,300,300000,water,feedSolids),.05):world.place(0,64,0,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,feedTemperature,300000,n2),.05);
         if(pumped)world.place(1,64,0,Kind.PUMP,Direction.EAST,new FlowControl.Pump(.01,500000),null,.05);else world.place(1,64,0,Kind.PIPE,Direction.EAST,lineBore);
         long feedValve=world.place(2,64,0,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),lineBore);
         long productValve=world.place(11,64,0,Kind.VALVE,Direction.EAST,FluidDeviceSpec.nitrogen(world.catalog),lineBore),tank=0,steamSource=0,steamValve=0;
         if(!blocked){
             world.place(12,64,0,Kind.PIPE,Direction.EAST,productBore);
             if(!Double.isNaN(secondValve))world.place(13,64,0,Kind.PIPE,Direction.EAST,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,secondValve,new UUID(1,2),1),null,productBore);
-            tank=world.place(Double.isNaN(secondValve)?13:14,64,0,Kind.RESERVOIR,Direction.EAST);
+            tank=openOutlet?world.place(Double.isNaN(secondValve)?13:14,64,0,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,150000,n2),.05)
+                    :world.place(Double.isNaN(secondValve)?13:14,64,0,Kind.RESERVOIR,Direction.EAST);
         }
         long waterSource=0,waterValve=0;
         // One cooling-water line a condenser shell, each on its own row (S3b: shells in parallel); with a bore for the
@@ -97,7 +98,7 @@ class ColumnRunTest {
         // A reboiler's heating or a pumparound cooler's water (W4): one line on row 20 through an exchanger's tubes, its shell held by the column.
         long utilitySource=0,utilityValve=0;
         if(utility!=null){utilitySource=world.place(0,64,20,Kind.GENERATOR,Direction.EAST,new FluidDeviceSpec(1,utilityTemperature,utilityPressure,water),.05);
-            world.place(1,64,20,Kind.PIPE,Direction.EAST,.05);world.place(5,64,20,Kind.PIPE,Direction.EAST,.05);int end=6;
+            world.place(1,64,20,Kind.PIPE,Direction.EAST,utilityBore);world.place(5,64,20,Kind.PIPE,Direction.EAST,utilityBore);int end=6;
             // With a bore for its valve, a flow station on the return the column sets (W4: a reboiler's tubes in the COLUMN mode).
             if(!Double.isNaN(utilityValveBore)){utilityValve=world.place(6,64,20,Kind.VALVE,Direction.EAST,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,.05,new UUID(6,6),1),null,utilityValveBore);world.place(7,64,20,Kind.PIPE,Direction.EAST,.05);end=8;}
             world.place(end,64,20,Kind.VOID,Direction.EAST,new FluidDeviceSpec(1,300,200000,water),.05);}
@@ -127,7 +128,7 @@ class ColumnRunTest {
             edits.add(new WorldTopologyLedger.Edit(s,new WorldTopologyLedger.Registration(heatSide(s,z+4,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,t)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
         }
         if(utility!=null) {
-            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(.5,3);
+            var passage=com.wormzjl.icheme.science.equipment.HeatSides.tubePassage(.5,3);double area=utilityArea*com.wormzjl.icheme.science.equipment.design.UnitRatings.tubeSurface(.5,3);
             edits.add(new WorldTopologyLedger.Edit(utilityTube,new WorldTopologyLedger.Registration(heatSide(utilityTube,20,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.TUBE,area,utilityShell)),new FluidDeviceSpec(1,utilityTemperature,utilityPressure,water),0)));
             edits.add(new WorldTopologyLedger.Edit(utilityShell,new WorldTopologyLedger.Registration(heatSide(utilityShell,24,passage,new HeatUnit(com.wormzjl.icheme.science.equipment.HeatSides.Unit.EXCHANGER,com.wormzjl.icheme.science.equipment.HeatSides.Side.SHELL,area,utilityTube)).withSuspendedBy(unit),FluidDeviceSpec.nitrogen(world.catalog),0)));
             last=utilityShell;
@@ -173,12 +174,12 @@ class ColumnRunTest {
                                 Double.isNaN(waterBelow)?SplitTable.WATER_NEVER:waterBelow,airArea);
             }
             ops.table(unit,t,s.enthalpy());}
-        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell,waterValve,utilitySource,utilityTube,utilityShell,utilityValve,fanSide,motor,stores,shafts);
+        return new Rig(world,ops,counting,unit,feed,product,tank,steamSource,waterSource,tube,shell,waterValve,utilitySource,utilityTube,utilityShell,utilityValve,fanSide,motor,stores,shafts,generator);
     }
     /** A rig's utility line (W4): a reboiler's heating, or the first pumparound's cooler. */
     private enum Utility { REBOILER, PUMPAROUND }
     /** The rig's utility line, or none; its fluid (water), K and Pa; whether its unit names the side (false: a unit saved before W4). */
-    private Utility utility;private double utilityTemperature=450,utilityPressure=300000,utilityValveBore=Double.NaN;private boolean utilitySaved=true;
+    private Utility utility;private double utilityTemperature=450,utilityPressure=300000,utilityValveBore=Double.NaN,utilityBore=.05,utilityArea=1;private boolean utilitySaved=true;
     /** The rig's reboiler duty and its pumparound's removal, J per mol of feed. */
     private double reboilerPerFeed=400,pumparoundPerFeed=400;
     /** A liquid water feed on the rig's line through a pump, ahead of its boundary valve. */
@@ -201,6 +202,9 @@ class ColumnRunTest {
     private double productBore=.05,lineBore=.05;
     /** A player's flow valve on the rig's product line, kg/s, or NaN for a plain pipe. */
     private double secondValve=Double.NaN;
+    /** The rig's nitrogen feed at its source, K; whether its product line ends in a void at 1.5 bar (a long run) rather than a tank. */
+    private boolean openOutlet;
+    private double feedTemperature=340;
     /** The solids in the rig's feed, and the port its product leaves by. */
     private SlurryFeed feedSolids=SlurryFeed.NONE;private Port productPort=Port.DISTILLATE;
     /** The rig's table for a water feed: everything to the distillate, 1 kJ/mol cooler. */
@@ -667,10 +671,16 @@ class ColumnRunTest {
         java.util.function.Function<ColumnSolve.Job,SplitTable.Flood> flood=j->SplitTable.Flood.NONE;
         /** The duties each table carries beyond the condenser's (W4), or null for none. */
         java.util.function.UnaryOperator<SplitTable> duties;
+        /** The table at the job's pumparound duties (L4), or null: the fake's own. */
+        java.util.function.BiFunction<ColumnSolve.Job,SplitTable,SplitTable> atDuties;
+        /** Each pumparound's draw liquid the table's solve sampled (L5), or null: none, as a table solved before L5. */
+        java.util.function.Function<ColumnSolve.Job,List<com.wormzjl.icheme.science.fluid.network.HeatCurve>> curves;
         final List<ColumnSolve.Job> jobs=new ArrayList<>();final List<Long> asked=new ArrayList<>();
         final TreeMap<Long,List<Runnable>> due=new TreeMap<>();
         /** The service refuses every job asked from {@link #refuseFrom} to before {@link #refuseUntil} (at capacity, a machine's load); never by default. */
         long refuseFrom=Long.MAX_VALUE,refuseUntil=Long.MIN_VALUE;int refused;
+        /** The port the fake's tables send the product to. */
+        Port port=Port.DISTILLATE;
         Fake(long delay){this.delay=delay;}
         public com.wormzjl.icheme.science.column.v3.V3ColumnInput design(ColumnUnit unit){return DESIGN;}
         public boolean submit(long unit,ColumnSolve.Job job,java.util.function.Consumer<ColumnSolve.Outcome> done) {
@@ -678,9 +688,11 @@ class ColumnRunTest {
             if(now>=refuseFrom&&now<refuseUntil){refused++;return false;}
             jobs.add(job);asked.add(now);
             var taken=job.taken();var ratios=new double[taken.steam().size()];for(int j=0;j<ratios.length;j++)ratios[j]=taken.feedRate()>0?taken.steam().get(j).rate()/taken.feedRate():job.setpoints().steamPerFeed()[j];
-            ColumnSolve.Outcome o=frozen.test(job)?new ColumnSolve.Frozen("distillate","Water"):fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios);
+            ColumnSolve.Outcome o=frozen.test(job)?new ColumnSolve.Frozen("distillate","Water"):fail.test(job)?new ColumnSolve.Failed("test refusal"):unfinished.test(job)?new ColumnSolve.Failed("DEADLINE",true):table(model,job.setpoints(),job.trigger()==DriftBands.Trigger.START?job.setpoints().steamPerFeed():ratios,port);
             if(o instanceof ColumnSolve.Solved s&&flood.apply(job).known())o=new ColumnSolve.Solved(s.table().withFlood(flood.apply(job)),s.enthalpy(),null,s.solvedCondenser(),"test","");
             if(o instanceof ColumnSolve.Solved s&&duties!=null)o=new ColumnSolve.Solved(duties.apply(s.table()),s.enthalpy(),null,s.solvedCondenser(),"test","");
+            if(o instanceof ColumnSolve.Solved s&&atDuties!=null)o=new ColumnSolve.Solved(atDuties.apply(job,s.table()),s.enthalpy(),null,s.solvedCondenser(),"test","");
+            if(o instanceof ColumnSolve.Solved s&&curves!=null)o=new ColumnSolve.Solved(s.table(),s.enthalpy(),null,s.solvedCondenser(),"test","",null,List.of(),curves.apply(job));
             var answer=o;
             if(delay==0)done.accept(answer);else due.computeIfAbsent(now+delay,t->new ArrayList<>()).add(()->done.accept(answer));
             return true;
@@ -856,6 +868,42 @@ class ColumnRunTest {
         assertEquals(0,ops.instrument(unit,"REFLUX",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).value(),"no flow");
         assertEquals(0,ops.instrument(unit,"COLUMN_PORT:FEED:0",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.FLOW).value(),"no feed taken");
         assertNotNull(ops.instrument(unit,"COLUMN_PORT:DISTILLATE:0",com.wormzjl.icheme.runtime.instrument.Sensor.Kind.TEMPERATURE),"a product's temperature, the table's");
+    }
+    /**
+     * L0 and L1 of batch 2026-11-17-column-cold-feed: a column started on a feed 40 K colder than its table (the condenser
+     * would heat the overhead, and the state's solve is refused) passes it to the bottoms: every mole and joule taken is in
+     * the bottoms, no duty is booked, and the bottoms leave at the feed's own temperature. When the feed turns hot the column
+     * runs on its table, with no latch.
+     */
+    @Test void aColdFeedPassesToTheBottomsAtItsTemperatureAndAHotOneRuns() {
+        feedTemperature=300;productPort=Port.BOTTOMS;
+        var f=new Fake(0);f.port=Port.BOTTOMS;f.fail=j->j.trigger()!=DriftBands.Trigger.START;
+        var r=rig(0,f);f.world=r.world();var world=r.world();var ops=r.ops();long unit=r.unit();int m=world.model.componentCount();
+        f.runTo(3000);
+        var u=world.ledger.column(unit);var totals=u.totals();
+        assertTrue(ops.last(unit).passing(),ops.status(unit));
+        assertTrue(ops.status(unit).startsWith("PASSING: the condenser would heat the overhead; the feed leaves as bottoms"),ops.status(unit));
+        assertTrue(EquipmentAlarm.column(ops.conditions(unit)).contains(EquipmentAlarm.UPSET),"a passing column makes no products");
+        assertTrue(totals.taken().total()>40,"the column took its feed: "+totals.taken().total()+" mol");
+        for(int i=0;i<m;i++)assertEquals(totals.taken().moles()[i],totals.produced().moles()[i],0,"component "+i+": every taken mole to the bottoms");
+        assertEquals(totals.taken().energy(),totals.produced().energy(),0,"at the feed's own energy");
+        assertEquals(0,totals.reboiler(),0);assertEquals(0,totals.pumparounds(),0);
+        // The condenser's totals hold only the outlet's booking residual, the PH flash's tolerance (L0).
+        assertEquals(0,totals.condenser(),1e-6*Math.abs(totals.taken().energy()),"no duty: "+totals.condenser()+" J");
+        double given=sum(r.counting().moles.getOrDefault(r.product(),new double[m]));
+        assertTrue(given>10,"the bottoms left downstream: "+given+" mol");
+        var bottoms=world.coordinator.snapshots().stream().flatMap(s->s.graph().reservoirs().stream()).filter(n->n.id()==r.product()).findFirst().orElseThrow();
+        assertEquals(300,bottoms.state().temperature(),1,"the bottoms at the feed's temperature, not the table's 330 K");
+        // The feed turns hot: the column runs on its table.
+        var source=world.registry.registrations().get(r.source());
+        world.registry.submit(List.of(new WorldTopologyLedger.Edit(r.source(),new WorldTopologyLedger.Registration(source.device(),new FluidDeviceSpec(1,340,300000,EventPathWorld.nitrogen().composition()),source.revision()+1))),world.ledger.nextIdentity(),null);
+        f.fail=j->false;
+        double before=world.ledger.column(unit).totals().condenser();
+        f.runTo(9000);
+        assertFalse(ops.last(unit).passing(),ops.status(unit));
+        assertTrue(ops.status(unit).startsWith("RUNNING")||ops.status(unit).startsWith("LIMITED"),ops.status(unit));
+        assertTrue(world.ledger.column(unit).totals().condenser()<before-1000,"the condenser removes heat again: "+world.ledger.column(unit).totals().condenser()+" J");
+        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
     }
     /**
      * The table is state the topology unit saves (plan section 12): a world read from its checkpoint resumes the running
@@ -1144,7 +1192,7 @@ class ColumnRunTest {
      * An air-then-water condenser (COOLER_MODEL_PLAN.md section 6, C1b): its trim's water takes the table's share of each
      * cycle's duty, the air the rest; an outlet's booking difference goes by the temperature its port offered the product
      * at, to the water below the 40 °C split and to the air at or above it (the owner's "divide by temperature"). The totals
-     * book every joule; the water took its part or holds it in transit.
+     * book every joule; the water took its part or holds it in transit. Since L0 the difference is the flash's tolerance.
      */
     @Test void anAirThenWaterCondenserDividesItsBookingDifferencesByTemperature() {
         waterShare=.4;
@@ -1157,7 +1205,9 @@ class ColumnRunTest {
             double differences=removed-cycles;boolean cold=offered<com.wormzjl.icheme.science.equipment.HeatSides.AIR_SPLIT_TEMPERATURE;
             System.out.printf(Locale.ROOT,"C1B_BOOKING offered=%.2f K cycles=%.1f J differences=%.1f J water=%.1f J owed=%.1f J%n",offered,cycles,differences,water,owed);
             assertTrue(cycles>10000,"the column's condenser removed heat: "+cycles+" J");
-            assertTrue(Math.abs(differences)>1e-3*cycles,"the outlet's booking differs from its account: "+differences+" J");
+            // L0 (batch 2026-11-17-column-cold-feed): the outlet gives its account's energy, so its booking differs from the
+            // account by the PH flash's tolerance alone (before L0, at the table's 330 K: -35166.6 J; at 305 K: 1048.5 J).
+            assertEquals(0,differences,1e-6*cycles,"the outlet's booking is its account's: "+differences+" J");
             assertEquals(.4*cycles+(cold?differences:0),water+owed,1e-6*removed,"at "+offered+" K the water took its part or it is in transit: water "+water+" J, owed "+owed+" J, cycles "+cycles+" J, differences "+differences+" J");
             assertTrue(world.held.isEmpty(),"no island held: "+world.held);
             // The share and the temperature are state: the topology unit carries them through a save.
@@ -1483,9 +1533,13 @@ class ColumnRunTest {
         double hold=(ColumnOperation.CONDENSER_HOLD_CYCLES*ColumnOperation.CYCLE_TICKS/20.0)*reboilerPerFeed*.5,owed=-utilityHeat(r)[1];
         assertTrue(owed<=hold*1.2,"the heat owed stays near the hold: "+owed+" J of "+hold+" J");
     }
-    /** W4, decision D1: a pumparound cooler whose cooling water is lost cuts the feed, PUMPAROUND short (COOLING LIMITED); with its water its heat closes. */
-    @Test void aShortPumparoundCoolerLimitsTheColumn() {
-        utility=Utility.PUMPAROUND;utilityTemperature=300;
+    /**
+     * W4 and L2 of batch 2026-11-17-column-cold-feed: a pumparound cooler whose cooling water is lost books what it takes
+     * (nothing) and the column keeps its feed: PUMPAROUND short is a notice (COOLING LIMITED), the condenser takes the rest;
+     * with its water its heat closes. Before L2 the loss cut the feed to nothing (LIMITED: pumparound).
+     */
+    @Test void aShortPumparoundCoolerKeepsTheFeed() {
+        utility=Utility.PUMPAROUND;utilityTemperature=300;openOutlet=true;
         var r=rig(0);r.world().runTo(3000);
         var u=r.world().ledger.column(r.unit());var heat=utilityHeat(r);double removed=-u.totals().pumparounds();
         assertTrue(removed>5000,"the pumparound removed heat: "+removed+" J");
@@ -1493,14 +1547,84 @@ class ColumnRunTest {
         closesWithDuties(r);
         r.world().registry.submit(List.of(new WorldTopologyLedger.Edit(r.utilitySource(),null)),r.world().ledger.nextIdentity(),null);
         r.world().runTo(7000);
-        double before=r.world().ledger.column(r.unit()).totals().taken().total();
+        double before=r.world().ledger.column(r.unit()).totals().taken().total(),paBefore=r.world().ledger.column(r.unit()).totals().pumparounds();
         r.world().runTo(8000);
         String status=r.ops().status(r.unit());
-        assertTrue(status.startsWith("LIMITED: pumparound"),status);
-        assertEquals(before,r.world().ledger.column(r.unit()).totals().taken().total(),1e-9,"no feed taken while the pumparound cannot be cooled");
+        assertTrue(status.startsWith("RUNNING")||status.startsWith("LIMITED: outlet"),status);
+        assertTrue(status.contains("pumparound 1's cooler takes 0 % of its duty, the condenser the rest"),status);
+        double taken=r.world().ledger.column(r.unit()).totals().taken().total()-before;
+        assertEquals(.5*50,taken,.5*5,"the column keeps its feed, 0.5 mol/s: "+taken+" mol in 50 s");
+        assertEquals(paBefore,r.world().ledger.column(r.unit()).totals().pumparounds(),1e-9*Math.abs(paBefore),"the cooler takes nothing more");
+        var notice=Condition.find(r.ops().conditions(r.unit()),Condition.PUMPAROUND_SHORT);
+        assertNotNull(notice,r.ops().conditions(r.unit()).toString());
+        assertEquals(0,notice.index(),"the first pumparound");assertEquals(0,notice.value(),1e-9,"none of its duty taken");
         var binding=Condition.binding(r.ops().conditions(r.unit()));
-        assertEquals(Condition.PUMPAROUND_SHORT,binding.condition());assertEquals(0,binding.index(),"the first pumparound");
+        assertTrue(binding==null||binding.condition()!=Condition.PUMPAROUND_SHORT,"a notice binds nothing: "+binding);
         assertTrue(EquipmentAlarm.column(r.ops().conditions(r.unit())).contains(EquipmentAlarm.COOLING_LIMITED));
+        closesWithDuties(r);
+    }
+    /**
+     * L2 and L4 of batch 2026-11-17-column-cold-feed: a pumparound cooler on a narrow cooling-water line takes less than its
+     * duty. The column keeps its feed, reads the notice and solves at the duty relaxed half way to what the cooler takes,
+     * and its table settles within the band (5 %) of what the cooler takes in at most six solves.
+     */
+    @Test void aPumparoundCoolerShortOfItsDutySettlesItsTableOnWhatItTakes() {
+        utility=Utility.PUMPAROUND;utilityTemperature=300;utilityBore=.002;utilityPressure=205000;openOutlet=true;
+        var f=new Fake(0);
+        f.atDuties=(job,t)->{double[] d=job.pumparounds();var ref=t.reference();
+            var reference=new SplitTable.Reference(ref.feedFractions(),ref.feedEnthalpy(),ref.enthalpySlope(),ref.steamRatios(),ref.alpha(),ref.setpoints(),ref.feedTemperature(),ref.steamTemperatures(),d);
+            return new SplitTable(t.axis(),t.products(),0,d,t.condenserPerFeed()-(d.length>0?d[0]:0),reference,t.held());};
+        var r=rig(0,f);f.world=r.world();var world=r.world();
+        f.runTo(30000);
+        var solves=f.asked(DriftBands.Trigger.PUMPAROUND);var table=r.ops().run(r.unit()).table;var last=r.ops().last(r.unit());
+        double duty=table.pumparoundPerFeed()[0],booked=last.pumparounds()[0]/last.feedMoles(),set=-pumparoundPerFeed;
+        System.out.printf(Locale.ROOT,"L4_SETTLE solves=%d set=%.2f table=%.2f booked=%.2f J/mol status=%s%n",solves.size(),set,duty,booked,r.ops().status(r.unit()));
+        for(var j:f.jobs)System.out.println("L4_JOB "+j.trigger()+" "+Arrays.toString(j.pumparounds()));
+        assertTrue(booked>set*.98,"the cooler takes less than its duty: "+booked+" of "+set+" J/mol");
+        assertTrue(!solves.isEmpty()&&solves.size()<=6,"settled in at most six solves: "+solves);
+        assertEquals(booked,duty,DriftBands.PUMPAROUND*Math.abs(duty),"the table within the band of what the cooler takes");
+        assertTrue(last.alpha()>.99,"the column keeps its feed: "+last.alpha());
+        assertTrue(world.held.isEmpty(),"no island held: "+world.held);
+    }
+    /**
+     * L5 of batch 2026-11-17-column-cold-feed: a pumparound cooler's water takes heat from the pumparound's own stream through
+     * its wall. The draw liquid (2000 J/kgK, film 0.4 W/m²K, the fake's) leaves its tray at 400 K at the design circulation
+     * (D3): the set 200 W (400 J/mol at 0.5 mol/s) over a 60 K fall, 1/600 kg/s, 3.3 W/K. On the rig's 56 m² (UA about
+     * 22 W/K, NTU 6.7) the 300 K water could take 333 W and takes the duty; on a tenth of it (NTU 0.67, effectiveness
+     * 0.49) about 164 W, 82 % of the duty: the column keeps its feed and its table settles on what the cooler takes (L4).
+     */
+    @Test void aPumparoundCoolerTakesWhatItsWallMovesFromTheDraw() {
+        double[] taken=new double[2];
+        for(int k=0;k<2;k++) {
+            utility=Utility.PUMPAROUND;utilityTemperature=300;openOutlet=true;utilityArea=k==0?1:.1;
+            var f=new Fake(0);
+            f.atDuties=(job,t)->{double[] d=job.pumparounds();var ref=t.reference();
+                var reference=new SplitTable.Reference(ref.feedFractions(),ref.feedEnthalpy(),ref.enthalpySlope(),ref.steamRatios(),ref.alpha(),ref.setpoints(),ref.feedTemperature(),ref.steamTemperatures(),d);
+                return new SplitTable(t.axis(),t.products(),0,d,t.condenserPerFeed()-(d.length>0?d[0]:0),reference,t.held()).withPumparoundDraw(new double[]{400});};
+            var oil=com.wormzjl.icheme.science.fluid.network.HeatCurve.of(List.of(new double[]{0,280,.4},new double[]{2000*140,420,.4}));
+            f.curves=job->List.of(oil);
+            var r=rig(0,f);f.world=r.world();
+            f.runTo(30000);
+            var table=r.ops().run(r.unit()).table;var last=r.ops().last(r.unit());
+            double duty=table.pumparoundPerFeed()[0],booked=last.pumparounds()[0]/last.feedMoles(),set=-pumparoundPerFeed;taken[k]=booked;
+            System.out.printf(Locale.ROOT,"L5_WALL area=%.1f solves=%d set=%.2f table=%.2f booked=%.2f J/mol status=%s%n",utilityArea,f.asked(DriftBands.Trigger.PUMPAROUND).size(),set,duty,booked,r.ops().status(r.unit()));
+            assertTrue(last.alpha()>.99,"the column keeps its feed: "+last.alpha());
+            assertTrue(r.world().held.isEmpty(),"no island held: "+r.world().held);
+            if(k==0) {
+                assertEquals(set,booked,.02*Math.abs(set),"the whole surface takes the duty");
+                assertNull(Condition.find(r.ops().conditions(r.unit()),Condition.PUMPAROUND_SHORT),r.ops().conditions(r.unit()).toString());
+                assertTrue(f.asked(DriftBands.Trigger.PUMPAROUND).isEmpty(),"no turndown solve");
+            } else {
+                assertEquals(.82*set,booked,.06*Math.abs(set),"a tenth of the surface takes what its wall moves, about 82 % of the duty");
+                assertEquals(booked,duty,DriftBands.PUMPAROUND*Math.abs(duty),"the table within the band of what the cooler takes");
+                // The Operation tab (package 4): the pumparound's duty taken beside the duty its set point asks at the set feed.
+                var pa=r.ops().view(r.unit(),r.world().ledger.onlineTick(),d->Double.NaN).duties().stream().filter(d->d.kind()==com.wormzjl.icheme.science.plant.column.OperationView.DutyKind.PUMPAROUND).findFirst().orElseThrow();
+                assertEquals(set*.5,pa.solved(),1e-9,"asked: the set point at the set 0.5 mol/s");
+                assertEquals(booked*last.feedMoles()/ColumnOperation.CYCLE_TICKS*20,pa.booked(),1e-9*Math.abs(pa.booked()),"taken: what the last cycle booked");
+            }
+            closesWithDuties(r);
+        }
+        assertTrue(taken[1]>taken[0],"the short surface takes less: "+Arrays.toString(taken));
     }
     /**
      * W4: a unit saved before its utility sides (none named) keeps its reboiler's duty free until its next Start, as before

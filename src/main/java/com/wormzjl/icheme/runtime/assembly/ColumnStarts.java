@@ -12,6 +12,7 @@ import com.wormzjl.icheme.science.plant.column.Refusal;
 import com.wormzjl.icheme.science.plant.column.Setpoints;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.science.equipment.NozzlePorts;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import java.util.ArrayList;
@@ -57,8 +58,11 @@ public final class ColumnStarts {
         String dimension = level.dimension().location().toString();
         var o = vessel.origin();
         var nozzles = new ArrayList<PhysicalFluidTopology.Position>();
-        for (var p : ShapeRasterizer.ports(vessel.shape()))
-            nozzles.add(new PhysicalFluidTopology.Position(dimension, o.getX() + p.cell().x() + p.dx(), o.getY() + p.cell().y() + p.dy(), o.getZ() + p.cell().z() + p.dz()));
+        // Each nozzle's pipe block: the cell in front of its flange face, by the rule a pipe's drawing and the assembly walk keep.
+        for (var p : ShapeRasterizer.ports(vessel.shape())) {
+            var front = NozzlePorts.front(p);
+            nozzles.add(new PhysicalFluidTopology.Position(dimension, o.getX() + front.x(), o.getY() + front.y(), o.getZ() + front.z()));
+        }
         var spots = new ArrayList<FluidWorldAuthority.PortSpot>();
         for (var s : entry.report().slots()) {
             var port = port(s.slot());

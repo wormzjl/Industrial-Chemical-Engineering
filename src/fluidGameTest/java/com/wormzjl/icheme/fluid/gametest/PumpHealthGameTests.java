@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.registry.ModItems;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
@@ -41,7 +42,7 @@ public final class PumpHealthGameTests {
 
     @GameTest(template = "empty", timeoutTicks = 6000, batch = "pump-health")
     public static void aCavitatingPumpLosesHealthAndRefusesAKitOnItsCasing(GameTestHelper helper) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(12, 10, 12));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 2, 8)), new BlockPos(-8, -2, -8), new BlockPos(12, 10, 12));
         var level = plant.level;
         var world = plant.world;
         String[] failure = {null};
@@ -52,11 +53,11 @@ public final class PumpHealthGameTests {
         var sequence = helper.startSequence();
         try {
             plant.hold();
-            var pump = plant.place(AssemblyGameTests.Plant.unit(EquipmentShape.Kind.PUMP), 0, 0, 0);
-            var suction = AssemblyGameTests.Plant.front(pump, Role.SUCTION);
-            var generator = suction.relative(AssemblyGameTests.Plant.out(pump, Role.SUCTION));
-            var discharge = AssemblyGameTests.Plant.front(pump, Role.DISCHARGE);
-            var tank = discharge.relative(AssemblyGameTests.Plant.out(pump, Role.DISCHARGE));
+            var pump = plant.place(PlantBuilder.unit(EquipmentShape.Kind.PUMP), 0, 0, 0);
+            var suction = PlantBuilder.front(pump, Role.SUCTION);
+            var generator = suction.relative(PlantBuilder.out(pump, Role.SUCTION));
+            var discharge = PlantBuilder.front(pump, Role.DISCHARGE);
+            var tank = discharge.relative(PlantBuilder.out(pump, Role.DISCHARGE));
             plant.pipe(suction);
             plant.pipe(discharge);
             level.setBlock(generator, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), Block.UPDATE_ALL);

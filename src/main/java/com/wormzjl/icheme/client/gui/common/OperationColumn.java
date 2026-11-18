@@ -215,8 +215,11 @@ public final class OperationColumn {
      */
     public static AssemblyColumn.Status status(OperationView v, HeatControlColumn.Texts t) {
         var binding = v.binding();
+        // The binding member where the condition names one (the outlet that is full, the tray that floods), as the conditions table names it.
         String text = v.phase() == OperationView.Phase.LIMITED && binding != null
-                ? t.get(KEY + "status.limited", t.get(KEY + "limit." + limit(binding.condition())), Math.round(100 * v.alpha()))
+                ? binding.index() >= 0
+                        ? t.get(KEY + "status.limited_member", t.get(KEY + "limit." + limit(binding.condition())), member(binding, t), Math.round(100 * v.alpha()))
+                        : t.get(KEY + "status.limited", t.get(KEY + "limit." + limit(binding.condition())), Math.round(100 * v.alpha()))
                 : t.get(KEY + "status." + v.phase().name().toLowerCase(Locale.ROOT));
         // One line: the phase and the one note that matters most; the engine's line in the hover says the rest.
         if (v.refused()) text = t.get(KEY + "status.failed", text);
@@ -257,10 +260,13 @@ public final class OperationColumn {
         return out;
     }
 
-    /** The duties' table: what the last cycle booked against what the last solve gave at the set feed, MW; an air condenser's fans in kW. */
+    /**
+     * The duties' table: what the last cycle booked against what is asked at the set feed (a pumparound's set point, what its
+     * cooler took beside it), MW; an air condenser's fans in kW.
+     */
     public static List<String[]> duties(OperationView v, HeatControlColumn.Texts t) {
         var out = new ArrayList<String[]>();
-        out.add(new String[]{t.get(KEY + "column.duty"), t.get(KEY + "column.booked"), t.get(KEY + "column.solved")});
+        out.add(new String[]{t.get(KEY + "column.duty"), t.get(KEY + "column.booked"), t.get(KEY + "column.asked")});
         int pumparounds = 0;
         for (var d : v.duties()) if (d.kind() == OperationView.DutyKind.PUMPAROUND) pumparounds++;
         for (var d : v.duties()) {
@@ -285,8 +291,10 @@ public final class OperationColumn {
         out.add(new String[]{t.get(KEY + "column.condition"), t.get(KEY + "column.value"), t.get(KEY + "column.member")});
         for (var a : v.conditions()) {
             var c = a.condition();
-            // A share: a LIMIT's of the set feed, a high load's of flood, the trays' capacity left, the allowance a thin or weeping wall used.
-            boolean share = c.rank == Condition.Rank.LIMIT || c == Condition.HIGH_LOAD || c == Condition.TRAYS_FOULED || c == Condition.THIN_WALL || c == Condition.WEEPING;
+            // A share: a LIMIT's of the set feed, a high load's of flood, the trays' capacity left, the allowance a thin or weeping wall
+            // used, the duty a short pumparound cooler takes.
+            boolean share = c.rank == Condition.Rank.LIMIT || c == Condition.HIGH_LOAD || c == Condition.TRAYS_FOULED || c == Condition.THIN_WALL || c == Condition.WEEPING
+                    || c == Condition.PUMPAROUND_SHORT;
             out.add(new String[]{t.get(KEY + "condition." + c.name().toLowerCase(Locale.ROOT)), share ? fixed(100 * a.value(), 0) + " %" : "—", member(a, t)});
         }
         return out;

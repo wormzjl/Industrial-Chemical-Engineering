@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
@@ -49,7 +50,7 @@ public final class ReliefFlareGameTests {
 
     /** The plant with a flare of tip {@code tipSize}, fed {@code gas} at 5 bar; {@code free}: settled at any pressure from the set pressure up (the tip decides), else at the set pressure. */
     static void run(GameTestHelper helper, double tipSize, double[] feedGas, boolean free) {
-        var plant = new AssemblyGameTests.Plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(24, 40, 16));
+        var plant = AssemblyGameTests.plant(helper, helper.absolutePos(new BlockPos(8, 4, 8)), new BlockPos(-8, -3, -8), new BlockPos(24, 40, 16));
         var level = plant.level;
         var world = plant.world;
         long[] ids = new long[3];
@@ -74,11 +75,11 @@ public final class ReliefFlareGameTests {
             for (int k = feed.size() - 2; k >= 0; k--) plant.pipe(feed.get(k));
             // The flare beside the drum, its gas inlet routed from the valve's outlet cell.
             var flare = plant.place(tip(tipSize), 12, 0, 0);
-            var inlet = AssemblyGameTests.Plant.front(flare, Role.FLARE_GAS);
+            var inlet = PlantBuilder.front(flare, Role.FLARE_GAS);
             var cell = place.port().cell();
             var outlet = new BlockPos(cell.x(), cell.y(), cell.z()).relative(Direction.valueOf(place.port().face().name()));
             var discharge = plant.route(outlet, inlet);
-            ShapeRasterizer.Port gas = AssemblyGameTests.Plant.port(flare, Role.FLARE_GAS);
+            ShapeRasterizer.Port gas = PlantBuilder.port(flare, Role.FLARE_GAS);
             long generator = LevelLoopGameTests.id(plant, feed.getLast());
             TankCharge.run(world, generator, new FluidDeviceSpec(1, 300, FEED, feedGas));
             // A 0.15 m discharge line: the pipe tool's default bore carries about 0.5 kg/s of this gas at the 100 m/s cap, and the drum

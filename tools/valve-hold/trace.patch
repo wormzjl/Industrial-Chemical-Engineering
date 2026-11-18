@@ -1,0 +1,230 @@
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/BalanceStart.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/BalanceStart.java
+index e0cf74f13..c668d2c3e 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/BalanceStart.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/BalanceStart.java
+@@ -208,6 +208,7 @@ final class BalanceStart {
+         for(int round=0;round<Math.max(1,BALANCE_ROUNDS);round++) {
+             net=new BalanceNet(current,buffers,modes,boundaryClosed,checkpoint,solver.constants.heldOpenings);
+             p=net.solve(checkpoint);converged=net.converged;
++            traceBalance(round,net,current,p,modes);
+             if(net.count==0&&net.anchored==0)break;
+             var next=net.seeded(p,checkpoint);
+             if(next==null)break;
+@@ -234,8 +235,30 @@ final class BalanceStart {
+             boolean fwd=boundaryAllowed(current,pipe,1),rev=boundaryAllowed(current,pipe,-1);
+             if(forward>band&&!fwd&&!(reverse<-band&&rev)||reverse<-band&&!rev&&!(forward>band&&fwd)){closed[e]=true;law[e]=0;}
+         }
++        traceBalanceLaw(current,law,converged);
+         return new Start(current,law,closed,List.copyOf(modes),converged);
+     }
++    // TRACE (tools/valve-hold/trace.patch, never committed): the balance's rounds into balance.txt beside SparseNewton's dumps.
++    private static void traceAppend(String text) {
++        var dir=com.wormzjl.icheme.science.fluid.solver.SparseNewton.TRACE_DIR;if(dir==null)return;
++        try{java.nio.file.Files.createDirectories(dir);java.nio.file.Files.writeString(dir.resolve("balance.txt"),text+"\n",java.nio.file.StandardOpenOption.CREATE,java.nio.file.StandardOpenOption.APPEND);}
++        catch(java.io.IOException e){throw new java.io.UncheckedIOException(e);}
++    }
++    private void traceBalance(int round,BalanceNet net,PassiveNetwork current,double[] p,List<FlowControl.Mode> modes) {
++        if(com.wormzjl.icheme.science.fluid.solver.SparseNewton.TRACE_DIR==null)return;
++        var s=new StringBuilder(String.format(Locale.ROOT,"BALANCE (newton file %d) round %d modes %s converged=%s residual=%.6g iterations=%d sweeps=%d count=%d hull=[%.6g, %.6g] scale=%.6g;",
++                com.wormzjl.icheme.science.fluid.solver.SparseNewton.traceCount,round,modes,net.converged,net.finalResidual,net.iterations,net.sweeps,net.count,net.low,net.high,net.scale));
++        for(int i=0;i<p.length;i++)s.append(String.format(Locale.ROOT," n%d%s start %.6g kPa -> %.6g kPa;",i,net.unknown[i]>=0?"(u"+net.unknown[i]+")":"",current.reservoirs().get(i).state().pressure()/1e3,p[i]/1e3));
++        for(int e=0;e<net.edges;e++){var pipe=current.pipes().get(e);s.append(String.format(Locale.ROOT," e%d q=%.6g%s;",e,net.flow(e,net.unknown[pipe.first()]>=0?p[pipe.first()]:!Double.isNaN(net.anchor[pipe.first()])?net.anchor[pipe.first()]:net.endP[e][0],net.unknown[pipe.second()]>=0?p[pipe.second()]:!Double.isNaN(net.anchor[pipe.second()])?net.anchor[pipe.second()]:net.endP[e][1]),Double.isNaN(net.prescribed[e])?"":" (prescribed)"));}
++        traceAppend(s.toString());
++    }
++    private static void traceBalanceLaw(PassiveNetwork current,double[] law,boolean converged) {
++        if(com.wormzjl.icheme.science.fluid.solver.SparseNewton.TRACE_DIR==null)return;
++        var s=new StringBuilder("LAW converged="+converged+";");
++        for(int i=0;i<current.reservoirs().size();i++)s.append(String.format(Locale.ROOT," n%d %.6g kPa;",i,current.reservoirs().get(i).state().pressure()/1e3));
++        for(int e=0;e<law.length;e++)s.append(String.format(Locale.ROOT," e%d %.6g;",e,law[e]));
++        traceAppend(s.toString());
++    }
+     /** The balance of one island on its start states (decision D12's one-way estimate promoted, with every connection's mode): the junction pressures
+      * at which every junction's net inflow vanishes, and the junctions' upwind mixtures at those pressures. */
+     final class BalanceNet {
+@@ -585,6 +608,9 @@ final class BalanceStart {
+             // 1e-6 of the island's largest cap flow: a start, above the floor of a Newton on finite-difference slopes (1e-9 relative).
+             double tolerance=1e-6*Math.max(1,scale);
+             for(int iteration=0;iteration<30;iteration++) {
++                if(com.wormzjl.icheme.science.fluid.solver.SparseNewton.TRACE_DIR!=null){var s=new StringBuilder(String.format(Locale.ROOT,"  balance iteration %d merit %.6g max residual %.6g sweeps %d;",iteration,merit,maximum(residual),sweeps));
++                    for(int i=0;i<nodes;i++)if(unknown[i]>=0)s.append(String.format(Locale.ROOT," n%d %.6g kPa (net %.4g);",i,p[i]/1e3,residual[unknown[i]]));
++                    traceAppend(s.toString());}
+                 checkpoint.run();finalResidual=maximum(residual);
+                 if(finalResidual<=tolerance){converged=true;break;}
+                 iterations++;
+@@ -602,6 +628,9 @@ final class BalanceStart {
+                         if(trialMerit<(1-1e-4*fraction)*merit){System.arraycopy(trial,0,p,0,nodes);System.arraycopy(trialResidual,0,residual,0,count);merit=trialMerit;accepted=true;took=fraction;break;}
+                     }
+                 }
++                if(com.wormzjl.icheme.science.fluid.solver.SparseNewton.TRACE_DIR!=null){var s=new StringBuilder(String.format(Locale.ROOT,"    step accepted=%s fraction=%.4g largest=%.6g kPa;",accepted,took,largest/1e3));
++                    if(step!=null)for(int i=0;i<nodes;i++)if(unknown[i]>=0)s.append(String.format(Locale.ROOT," n%d %+.6g kPa;",i,-step[unknown[i]]/1e3));
++                    traceAppend(s.toString());}
+                 // Where the Newton step does not descend (a cap or a one-way kink), one Gauss-Seidel sweep, kept only where it
+                 // improves on the Newton's point: a sweep across a choked junction's flat range can walk away from a root the
+                 // Newton has all but reached, and then neither method improves on the other.
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/network/StepEquations.java b/src/main/java/com/wormzjl/icheme/science/fluid/network/StepEquations.java
+index 75af8e2e4..e41c94245 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/network/StepEquations.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/network/StepEquations.java
+@@ -1157,6 +1157,43 @@ final class StepEquations implements SparseNewton.Equations {
+             if(evaluated(failed))return f;
+         }
+     }
++    // TRACE (tools/valve-hold/trace.patch, never committed): names and readings for SparseNewton's dump.
++    private String traceNode(int node) {
++        var r=graph.reservoirs().get(node);return "n"+node+(r.junction()?"J":r.kind().name().substring(0,1));
++    }
++    private String traceEdge(int edge) {
++        var p=graph.pipes().get(edge);var c=p.control();
++        String kind=c instanceof FlowControl.Passive?"pipe":c instanceof FlowControl.Mover?"pump":c instanceof FlowControl.ControlValve v?(PortPlan.COLUMN_SENSOR.equals(v.sensor())?"inlet":"charge"):c.getClass().getSimpleName();
++        return "e"+edge+"("+p.first()+">"+p.second()+","+kind+")";
++    }
++    @Override public String traceHeader() {
++        var s=new StringBuilder("StepEquations rateOnly="+solver.rateOnly+" dt="+dt+" modes=");
++        for(int e=0;e<modes.size();e++)s.append(traceEdge(e)).append('=').append(modes.get(e)).append(boundaryClosed[e]?"/closed":"").append(';');
++        s.append(" layout=");for(int i=0;i<layout.length;i++)s.append(traceNode(i)).append(':').append(layout[i]==null?0:layout[i].size()).append(layout[i]==null?"":"/P"+layout[i].pressureVariable()+"/b"+layout[i].componentBalanceCount()).append(';');
++        return s.toString();
++    }
++    @Override public String traceRow(int row) {
++        if(row<edgeOffset){for(int i=layout.length-1;i>=0;i--)if(layout[i]!=null&&row>=offsets[i]){int local=row-offsets[i];int b=layout[i].componentBalanceCount();return traceNode(i)+"."+(local<b?"bal"+local:local==b?"energy":"r"+local);}}
++        if(row<edgeOffset+graph.pipes().size())return traceEdge(row-edgeOffset)+".hyd";
++        for(int e=0;e<controlOffsets.length;e++)if(controlOffsets[e]==row)return traceEdge(e)+".ctl:"+modes.get(e);
++        return "x"+row;
++    }
++    @Override public String traceColumn(int column) {
++        if(column<edgeOffset){for(int i=layout.length-1;i>=0;i--)if(layout[i]!=null&&column>=offsets[i]){int local=column-offsets[i];return traceNode(i)+"."+(local==layout[i].pressureVariable()?"lnP":"v"+local);}}
++        if(column<edgeOffset+graph.pipes().size())return traceEdge(column-edgeOffset)+".q";
++        for(int e=0;e<controlOffsets.length;e++)if(controlOffsets[e]==column)return traceEdge(e)+".head";
++        return "x"+column;
++    }
++    @Override public double traceWeight(int row){return rowWeights==null?1:rowWeights[row];}
++    @Override public String tracePoint(double[] x) {
++        var s=new StringBuilder();
++        try {
++            decode(x);
++            for(int e=0;e<graph.pipes().size();e++){s.append(String.format(java.util.Locale.ROOT,"%s q=%.6g flow=%.6g",traceEdge(e),x[edgeOffset+e],flow(e,x[edgeOffset+e],cachedTransport)));if(controlOffsets[e]>=0)s.append(String.format(java.util.Locale.ROOT," head=%.6g kPa",x[controlOffsets[e]]*100));s.append("; ");}
++            for(int i=0;i<layout.length;i++)s.append(String.format(java.util.Locale.ROOT,"%s P=%.6g kPa; ",traceNode(i),cachedStates[i].pressure()/1e3));
++        }catch(RuntimeException failure){s.append("decode failed ").append(failure.getMessage());}
++        return s.toString();
++    }
+     /** The largest row, each times its {@link #rowWeights} weight. */
+     @Override public double residualNorm(double[] residual) {
+         if(rowWeights==null)return SparseNewton.Equations.super.residualNorm(residual);
+diff --git a/src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java b/src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java
+index 450d95b90..6840712dd 100644
+--- a/src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java
++++ b/src/main/java/com/wormzjl/icheme/science/fluid/solver/SparseNewton.java
+@@ -69,6 +69,36 @@ public final class SparseNewton {
+          * returns.
+          */
+         default double residualNorm(double[] residual){return norm(residual);}
++        /** TRACE (tools/valve-hold/trace.patch): names and readings for the dump; never committed. */
++        default String traceHeader(){return getClass().getSimpleName();}
++        default String traceRow(int row){return "r"+row;}
++        default String traceColumn(int column){return "c"+column;}
++        default double traceWeight(int row){return 1;}
++        default String tracePoint(double[] x){return "";}
++    }
++    /** TRACE (tools/valve-hold/trace.patch, never committed): while set, every Newton solve writes one dump file here. */
++    public static volatile java.nio.file.Path TRACE_DIR;
++    public static int traceCount,traceLimit=120;
++    private static final ThreadLocal<java.io.PrintWriter> TRACE=new ThreadLocal<>();
++    private static java.io.PrintWriter traceOpen(Equations equations,int n) {
++        var dir=TRACE_DIR;if(dir==null||traceCount>=traceLimit)return null;
++        try {
++            java.nio.file.Files.createDirectories(dir);
++            var out=new java.io.PrintWriter(java.nio.file.Files.newBufferedWriter(dir.resolve(String.format(Locale.ROOT,"newton-%03d.txt",traceCount++))));
++            out.println("HEADER "+equations.traceHeader());
++            var row=new StringBuilder("ROWS");for(int i=0;i<n;i++)row.append(' ').append(equations.traceRow(i));out.println(row);
++            var col=new StringBuilder("COLS");for(int i=0;i<n;i++)col.append(' ').append(equations.traceColumn(i));out.println(col);
++            var w=new StringBuilder("W");for(int i=0;i<n;i++)w.append(' ').append(equations.traceWeight(i));out.println(w);
++            return out;
++        }catch(java.io.IOException e){throw new java.io.UncheckedIOException(e);}
++    }
++    private static void traceVector(java.io.PrintWriter out,String tag,double[] v) {
++        if(out==null)return;var s=new StringBuilder(tag);for(double d:v)s.append(' ').append(d);out.println(s);
++    }
++    private static void traceJacobian(java.io.PrintWriter out,int iteration,Pattern pattern,double[] derivatives,int n) {
++        if(out==null)return;
++        out.println("J "+iteration+" "+n);
++        for(int c=0;c<n;c++){var s=new StringBuilder("JC "+c);for(int e=pattern.offsets[c];e<pattern.offsets[c+1];e++)if(derivatives[e]!=0)s.append(' ').append(pattern.rows[e]).append(':').append(derivatives[e]);out.println(s);}
+     }
+     /**
+      * The iteration limit of every Newton the fluid solver runs (a step's pass, its polish, a vessel's closure, the
+@@ -240,6 +270,18 @@ public final class SparseNewton {
+         }
+     }
+     public static Result solve(Equations equations,double[] initial,Settings settings,Runnable checkpoint,Workspace workspace) {
++        var previous=TRACE.get();var out=TRACE_DIR==null?null:traceOpen(equations,initial.length);TRACE.set(out);
++        try {
++            var result=solveTraced(equations,initial,settings,checkpoint,workspace);
++            if(out!=null)out.println("END converged norm="+result.residualNorm()+" iterations="+result.iterations());
++            return result;
++        }catch(RuntimeException failure) {
++            if(out!=null)out.println("END failed "+failure.getMessage());
++            throw failure;
++        }finally{if(out!=null)out.close();TRACE.set(previous);}
++    }
++    private static Result solveTraced(Equations equations,double[] initial,Settings settings,Runnable checkpoint,Workspace workspace) {
++        var trace=TRACE.get();
+         Objects.requireNonNull(equations);Objects.requireNonNull(settings);Objects.requireNonNull(checkpoint);
+         Objects.requireNonNull(workspace).owned();SolverDiagnostics.count(SolverDiagnostics.newtonSolves);
+         int n=equations.size();if(n==0||initial.length!=n)throw new IllegalArgumentException("Invalid equation dimension");
+@@ -254,6 +296,7 @@ public final class SparseNewton {
+         ThermoHold hold=null;
+         for(int iteration=0;iteration<=settings.iterations();iteration++) {
+             checkpoint.run();
++            if(trace!=null){trace.println("N "+iteration+" "+norm+" refresh="+refresh+" preconditioned="+openedPreconditioned);traceVector(trace,"X "+iteration,x);traceVector(trace,"F "+iteration,f);trace.println("P "+iteration+" "+equations.tracePoint(x));}
+             if(norm<=settings.tolerance())return new Result(x,norm,iteration,calls,lastNonzeros,pattern.groups.size());
+             if(iteration==settings.iterations())break;
+             hold=null;
+@@ -266,13 +309,17 @@ public final class SparseNewton {
+             if(refresh) {
+                 calls+=differentiate(equations,x,f,settings.differenceStep(),checkpoint,workspace);
+                 lastNonzeros=workspace.matrix.nonzeroCount();refresh=false;iterationsSinceRefresh=0;
++                traceJacobian(trace,iteration,pattern,workspace.shared.derivatives,n);
+             }
++            if(trace!=null)trace.println("FRESH "+iteration+" "+fresh);
+             double[] rhs=new double[n];for(int row=0;row<n;row++)rhs[row]=-f[row];
+             double[] direction;
+             lastNonzeros=workspace.matrix.nonzeroCount();
+             try{direction=workspace.factorization.solve(rhs,SparseLuSolver.Verification.UNTIL_VERIFIED);}
+-            catch(SparseLuSolver.SolveFailure failure){if(!fresh){SolverDiagnostics.count(SolverDiagnostics.newtonRefreshesFailed);refresh=true;continue;}workspace.invalidate();throw new Nonconvergence("Singular Newton Jacobian: "+failure.getMessage(),x);}
++            catch(SparseLuSolver.SolveFailure failure){if(trace!=null)trace.println("SOLVEFAIL "+iteration+" "+failure.getMessage());if(!fresh){SolverDiagnostics.count(SolverDiagnostics.newtonRefreshesFailed);refresh=true;continue;}workspace.invalidate();throw new Nonconvergence("Singular Newton Jacobian: "+failure.getMessage(),x);}
++            traceVector(trace,"D "+iteration,direction);
+             double alpha=Math.min(1,equations.maximumStep(x,direction));boolean accepted=false;
++            if(trace!=null)trace.println("A "+iteration+" "+alpha);
+             if(!Double.isFinite(alpha)||alpha<=0)throw new Nonconvergence("No feasible Newton direction",x);
+             for(int backtrack=0;backtrack<settings.backtracks();backtrack++,alpha*=.5) {
+                 checkpoint.run();if(backtrack>0)SolverDiagnostics.count(SolverDiagnostics.newtonBacktracks);
+@@ -286,14 +333,16 @@ public final class SparseNewton {
+                     // Acceptance is measured in the same linearized state coordinates as the Newton step.
+                     boolean descent=nextNorm<norm*(1-1e-4*alpha)||nextNorm<=settings.tolerance();
+                     double reduction=nextNorm/norm;
++                    double traceMerit=Double.NaN,traceNextMerit=Double.NaN;
+                     if(!descent) {
+                         double merit=norm(direction),nextMerit;
+                         // A merit probe is only compared against the current merit, never committed.
+                         SolverDiagnostics.count(SolverDiagnostics.newtonMeritProbes);
+                         try{nextMerit=norm(workspace.factorization.solve(next,SparseLuSolver.Verification.NONE));}
+-                        catch(SparseLuSolver.SolveFailure failure){continue;}
+-                        descent=nextMerit<merit*(1-1e-4*alpha);reduction=nextMerit/merit;
++                        catch(SparseLuSolver.SolveFailure failure){if(trace!=null)trace.println("T "+iteration+" "+backtrack+" "+alpha+" "+nextNorm+" meritfail");continue;}
++                        descent=nextMerit<merit*(1-1e-4*alpha);reduction=nextMerit/merit;traceMerit=merit;traceNextMerit=nextMerit;
+                     }
++                    if(trace!=null){trace.println("T "+iteration+" "+backtrack+" "+alpha+" "+nextNorm+" merit="+traceMerit+" nextMerit="+traceNextMerit+" descent="+descent);if(backtrack==0||descent)traceVector(trace,"FT "+iteration+" "+backtrack,next);}
+                     if(descent) {
+                         // Residual evaluation and triangular solves are much cheaper than a new
+                         // colored Jacobian. Keep a contracting chord iteration a little longer;
+@@ -304,10 +353,12 @@ public final class SparseNewton {
+                     }
+                 }catch(IllegalArgumentException outsideDomain){
+                     // A smaller Newton step may stay in the valid domain.
++                    if(trace!=null)trace.println("T "+iteration+" "+backtrack+" "+alpha+" domain "+outsideDomain.getMessage());
+                     if(outsideDomain instanceof ThermoHold met)hold=met;
+                 }
+             }
+             if(!accepted) {
++                if(trace!=null)trace.println("REFUSED "+iteration+" fresh="+fresh);
+                 // A direction that never contracts is the one case where the skipped backward-error
+                 // check matters: pay it here, so a genuinely bad factorization still refreshes.
+                 try{workspace.factorization.verify(rhs,direction);}

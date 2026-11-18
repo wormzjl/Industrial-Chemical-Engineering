@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
+import com.wormzjl.icheme.testworld.CrudeUnitPlant;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.wormzjl.icheme.IChemE;
@@ -44,10 +46,10 @@ public final class TutorialUnitGameTests {
     static final String TEMPLATE = "small_crude";
 
     /** The plant: the template at its whole feed, on the review plant's layout (its first pumparound place) and units. */
-    static ColumnOperationReviewWorld.Options options() {
-        var r = ColumnOperationReviewWorld.Options.REVIEW;
-        return new ColumnOperationReviewWorld.Options(1, TutorialUnitGameTests::input, ColumnComponents.Condenser.EXCHANGER,
-                ColumnOperationReviewWorld.exchanger(ColumnOperationReviewWorld.CONDENSER_SIZE), null, AssemblyGameTests.Plant.unit(Kind.EXCHANGER), null,
+    static CrudeUnitPlant.Options options() {
+        var r = CrudeUnitPlant.Options.REVIEW;
+        return new CrudeUnitPlant.Options(1, TutorialUnitGameTests::input, ColumnComponents.Condenser.EXCHANGER,
+                CrudeUnitPlant.exchanger(CrudeUnitPlant.CONDENSER_SIZE), null, PlantBuilder.unit(Kind.EXCHANGER), null,
                 r.feedBore(), r.steamBore(), 0, 0, false, false, r.layout());
     }
 
@@ -127,7 +129,7 @@ public final class TutorialUnitGameTests {
                 .thenSucceed();
     }
 
-    static OperationView view(ColumnOperationReviewWorld.Rig rig) {
+    static OperationView view(CrudeUnitPlant.Rig rig) {
         return rig.plant.world.columnView(rig.plant.position(rig.plant.column.origin()), id -> Double.NaN);
     }
 
@@ -136,7 +138,7 @@ public final class TutorialUnitGameTests {
     }
 
     /** RUNNING, nothing binding, the whole design feed taken; NOT READY or UPSET fails the test. */
-    static boolean atDesign(ColumnOperationReviewWorld.Rig rig, String[] failure) {
+    static boolean atDesign(CrudeUnitPlant.Rig rig, String[] failure) {
         var view = view(rig);
         if (view == null) return false;
         if (view.phase() == OperationView.Phase.NOT_READY || view.phase() == OperationView.Phase.UPSET) failure[0] = "column " + view.phase() + ": " + view.engine();

@@ -124,7 +124,14 @@ class ConstructorColumnTest {
     static List<ConstructorColumn.Connections> connectionCases() {
         return List.of(connections(0, 0, false, 0, null, false, false, 1), connections(0, 0, true, 0, null, true, false, 1),
                 connections(2, 1, false, 0, null, false, false, 0b1011), connections(6, 5, false, -3, "left", false, false, 1),
-                connections(3, 0, true, 2, "bottom", true, true, 1), connections(3, 2, true, -2, "front", false, false, 1));
+                connections(3, 0, true, 2, "bottom", true, true, 1), connections(3, 2, true, -2, "front", false, false, 1),
+                padded(connections(2, 1, false, 0, null, false, false, 0b1011)), padded(connections(3, 0, true, 2, "bottom", true, true, 1)));
+    }
+
+    /** {@code c} with a demister (batch 2026-11-17-three-phase-separator). */
+    private static ConstructorColumn.Connections padded(ConstructorColumn.Connections c) {
+        return new ConstructorColumn.Connections(c.count(), c.selected(), c.side(), c.words(), c.station(), c.horizontal(), c.offset(), c.way(), c.addable(), c.bootRoom(), c.boot(),
+                c.outlet(), true);
     }
 
     static ConstructorColumn.Nozzles nozzles(String role, boolean placed, boolean turned, int count) {
@@ -386,9 +393,18 @@ class ConstructorColumnTest {
         assertTrue(reactor.get("outlet:3").latched() && reactor.get("outlet:0").active() && !reactor.get("outlet:2").active() && !reactor.get("outlet:2").latched(),
                 "the outlet latched where it faces; a side its design does not allow switched off");
 
-        assertEquals(List.of("connection", "connection-", "connection+", "add", "remove"), slots(ConstructorColumn.connections(connections(0, 0, false, 0, null, false, false, 1), t)));
+        assertEquals(List.of("connection", "connection-", "connection+", "add", "remove", "demister:off", "demister:on"),
+                slots(ConstructorColumn.connections(connections(0, 0, false, 0, null, false, false, 1), t)));
         var none = buttons(ConstructorColumn.connections(connections(0, 0, false, 0, null, false, false, 1), t));
         assertTrue(none.get("add").active() && !none.get("remove").active());
+        // Every drum's Demister: Off latched by default, On latched with a pad; standing and lying alike.
+        assertTrue(none.get("demister:off").latched() && none.get("demister:on").active() && !none.get("demister:on").latched());
+        for (var c : List.of(connections(2, 1, false, 0, null, false, false, 0b1011), connections(3, 0, true, 2, "bottom", true, true, 1))) {
+            var pad = buttons(ConstructorColumn.connections(padded(c), t));
+            assertTrue(pad.get("demister:on").latched() && pad.get("demister:off").active() && !pad.get("demister:off").latched(), "a drum with a pad");
+            assertEquals(t.get(ConstructorColumn.KEY + "demister.on"), pad.get("demister:on").text());
+            assertEquals(t.get(ConstructorColumn.KEY + "demister.off"), pad.get("demister:off").text());
+        }
         var standing = ConstructorColumn.connections(connections(2, 1, false, 0, null, false, false, 0b1011), t);
         assertTrue(slots(standing).containsAll(List.of("station", "offset", "side:0", "outlet:1")));
         assertTrue(buttons(standing).get("side:2").latched() && buttons(standing).get("outlet:1").latched());

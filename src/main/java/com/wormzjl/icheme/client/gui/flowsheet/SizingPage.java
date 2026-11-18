@@ -292,6 +292,23 @@ public final class SizingPage {
         return lamp == Lamp.RED ? Palette.RED : lamp == Lamp.YELLOW ? Palette.WARN : Palette.ACCENT;
     }
 
+    /**
+     * What the player builds, in a few words (the Build list): a centrifugal pump built with its duty reads the rated flow and
+     * head to enter in the constructor, then its discharge ({@link PumpSizing#built(PumpSizing.Size, PumpSizing.Duty)}); any
+     * other size, or a pump with no duty, reads as {@link #sizeText}.
+     */
+    public static String buildText(SheetContext x, @Nullable UnitSize size, com.wormzjl.icheme.science.flowsheet.sizing.Rating rating) {
+        if (size instanceof PumpSizing.Size p) {
+            var built = PumpSizing.built(p, PumpSizing.Duty.of(rating));
+            if (built != null && !built.equals(p.shape())) {
+                var u = x.units();
+                return x.text("sizing.size.pump_duty", number(u.time().display(built.duty().flow() / 3600)), u.time().unit("m³"), number(built.duty().head()),
+                        SheetUnits.number(2, p.discharge()));
+            }
+        }
+        return sizeText(x, size);
+    }
+
     /** A size in a few words: sheet 24's Size column. */
     public static String sizeText(SheetContext x, @Nullable UnitSize size) {
         String text = switch (size) {
@@ -421,7 +438,8 @@ public final class SizingPage {
             case DrumSizing.Size d -> {
                 group.add(Door.entry(KEY + "size/diameter", x.text("sizing.diameter"), "m"));
                 group.add(Door.entry(KEY + "size/length", x.text("sizing.length"), "m"));
-                group.add(new Column.Buttons(List.of(new Column.Button(KEY + "size/boot", x.text("sizing.boot"), edits && held.mode() == SizingFacts.Mode.FIXED, x.text("sizing.boot_hint"), d.boot()))));
+                group.add(new Column.Buttons(List.of(new Column.Button(KEY + "size/boot", x.text("sizing.boot"), edits && held.mode() == SizingFacts.Mode.FIXED, x.text("sizing.boot_hint"), d.boot()),
+                        new Column.Button(KEY + "size/demister", x.text("sizing.demister"), edits && held.mode() == SizingFacts.Mode.FIXED, x.text("sizing.demister_hint"), d.demister()))));
             }
             case TankSizing.Size t -> {
                 group.add(new Column.Setting(KEY + "size/count", x.text("sizing.count"), Integer.toString(t.count()), "", hint, edits));
@@ -769,8 +787,8 @@ public final class SizingPage {
                 default -> null;
             };
             case DrumSizing.Size d -> switch (field) {
-                case "diameter" -> new DrumSizing.Size(d.type(), value, d.length(), d.boot());
-                case "length" -> new DrumSizing.Size(d.type(), d.diameter(), whole, d.boot());
+                case "diameter" -> new DrumSizing.Size(d.type(), value, d.length(), d.boot(), d.demister());
+                case "length" -> new DrumSizing.Size(d.type(), d.diameter(), whole, d.boot(), d.demister());
                 default -> null;
             };
             case TankSizing.Size t -> switch (field) {
@@ -894,7 +912,8 @@ public final class SizingPage {
             if(held.mode()!=SizingFacts.Mode.FIXED)return;
             var type = UnitType.valueOf(key.substring(5));
             if(type!=SizingFacts.UnitFacts.typeOf(size))x.editor().sizing(facts.with(id,held.typed(type).with(initial(type))),null);
-        } else if (key.equals("size/boot") && size instanceof DrumSizing.Size d) keep(x, id, new DrumSizing.Size(d.type(), d.diameter(), d.length(), !d.boot()), null);
+        } else if (key.equals("size/boot") && size instanceof DrumSizing.Size d) keep(x, id, new DrumSizing.Size(d.type(), d.diameter(), d.length(), !d.boot(), d.demister()), null);
+        else if (key.equals("size/demister") && size instanceof DrumSizing.Size d) keep(x, id, d.withDemister(!d.demister()), null);
         else if (key.startsWith("size/") && (key.endsWith("-") || key.endsWith("+")) && size != null) {
             if (held.mode() != SizingFacts.Mode.FIXED) return;
             String field = key.substring(5, key.length() - 1);

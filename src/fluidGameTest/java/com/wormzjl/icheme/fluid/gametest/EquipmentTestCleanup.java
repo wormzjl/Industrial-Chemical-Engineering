@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.mojang.authlib.GameProfile;
 import com.wormzjl.icheme.world.level.block.EquipmentProtection;
 
@@ -19,19 +20,7 @@ final class EquipmentTestCleanup {
     private EquipmentTestCleanup() {}
 
     static void remove(ServerLevel level, BlockPos position) {
-        var state = level.getBlockState(position);
-        if (!EquipmentProtection.cell(state)) {
-            level.removeBlock(position, false);
-            return;
-        }
-        var player =
-                FakePlayerFactory.get(
-                        level, new GameProfile(new UUID(0, 7801), "EquipmentCleanup"));
-        player.setGameMode(GameType.CREATIVE);
-        state.getBlock().playerWillDestroy(level, position, state, player);
-        if (!state.onDestroyedByPlayer(
-                level, position, player, false, level.getFluidState(position)))
-            throw new IllegalStateException("Creative equipment cleanup was refused");
+        com.wormzjl.icheme.testworld.PlantBuilder.removeStructure(level, position);
     }
 
     static void replace(ServerLevel level, BlockPos position, BlockState state) {

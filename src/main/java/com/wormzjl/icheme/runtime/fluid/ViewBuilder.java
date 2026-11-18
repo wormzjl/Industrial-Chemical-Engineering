@@ -248,7 +248,7 @@ final class ViewBuilder {
         var view=new FluidView(id,registration.revision(),snapshot.clock().committedTick(),authority.topology.onlineTick(),status,state,flow,history,devicePressureChange,
                 seconds,routes,filter);
         if(registration.device().kind()==TopologyCompiler.Kind.RESERVOIR&&nodeIndex>=0)view=view.withOutlets(TankOutlets.of(authority.model,snapshot.graph(),nodeIndex,snapshot.lastResult().orElse(null),authority.registry.tankFaces(id)))
-                .withTank(TankOutlets.tank(authority.model,snapshot.graph().reservoirs().get(nodeIndex),snapshot.lastResult().orElse(null)));
+                .withTank(TankOutlets.tank(authority.model,snapshot.graph(),nodeIndex,snapshot.lastResult().orElse(null)));
         if(registration.device().kind()==TopologyCompiler.Kind.PIPE||registration.device().filter()||registration.device().actuator()||registration.device().kind()==TopologyCompiler.Kind.HEAT_SIDE)
             view=view.withPipeInfo(PipePresentation.withBulkSpeed(
                 PipePresentation.inspect(registration.device(),snapshot.graph(),mappings,history,seconds,authority.componentNames.size()),

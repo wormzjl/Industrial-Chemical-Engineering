@@ -249,10 +249,14 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      * 2026-10-21-floating-roof-tanks, {@code fluid-11}): the height its level head stands over (its fill height, for an
      * open tank), whether it is open under a floating roof, and its vent and spill (kg/s, from its VENT and SPILL boundary
      * transfers). fluid-14 adds capacity and top/bottom absolute pressure. Both pressures are null only while empty;
-     * capacity/geometry are still known. Null Tank for a node that is not a vessel.
+     * capacity/geometry are still known. Null Tank for a node that is not a vessel. {@code carried} (batch
+     * 2026-11-17-three-phase-separator) is what the vessel's outlets carried beside their own phase over the last slice,
+     * null where no carry-over law acts on it.
      */
     public record Tank(double levelHeight,boolean open,double ventKgPerSecond,double spillKgPerSecond,
-                       double capacity,Double topPressure,Double bottomPressure,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry) {
+                       double capacity,Double topPressure,Double bottomPressure,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry,
+                       @org.jetbrains.annotations.Nullable CarryOver carried) {
+        public Tank(double levelHeight,boolean open,double ventKgPerSecond,double spillKgPerSecond,double capacity,Double topPressure,Double bottomPressure,com.wormzjl.icheme.science.fluid.network.VesselGeometry geometry){this(levelHeight,open,ventKgPerSecond,spillKgPerSecond,capacity,topPressure,bottomPressure,geometry,null);}
         public Tank(double levelHeight,boolean open,double ventKgPerSecond,double spillKgPerSecond,double capacity,Double topPressure,Double bottomPressure){this(levelHeight,open,ventKgPerSecond,spillKgPerSecond,capacity,topPressure,bottomPressure,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(capacity,levelHeight));}
         public Tank {
             java.util.Objects.requireNonNull(geometry,"Invalid tank presentation: missing geometry");if(Math.abs(geometry.capacity()-capacity)>capacity*1e-8||Math.abs(geometry.height()-levelHeight)>levelHeight*1e-8)throw new IllegalArgumentException("Invalid tank presentation: geometry mismatch");
@@ -268,6 +272,18 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
          * {@link DenseReadings#levelVolume}, which the server's level readers pass ({@code FluidWorldAuthority.denseWeight}). An
          * open vessel stands at the air's pressure and never holds a dense fluid: its display and roof read {@link #level(State)}. */
         public double level(State state,double dense){return state==null?0:geometry.heightAt(DenseReadings.levelVolume(state,dense));}
+    }
+    /**
+     * What a vessel's outlets carried beside their own phase over the last slice ({@code Separation.Carried}): water per
+     * oil and oil per water (m³/m³), and the liquid share of the gas outlet's volume. Null where that law does not act on
+     * the vessel; at least one acts.
+     */
+    public record CarryOver(Double waterInOil,Double oilInWater,Double liquidInGas) {
+        public CarryOver {
+            if(waterInOil==null&&oilInWater==null&&liquidInGas==null||!share(waterInOil)||!share(oilInWater)||!share(liquidInGas))
+                throw new IllegalArgumentException("Invalid carry-over presentation");
+        }
+        private static boolean share(Double value){return value==null||value>=0&&value<=1;}
     }
     /**
      * One connection of a tank, as its page lists it (plan 4.3 under decision D11): the port the connection's end at the

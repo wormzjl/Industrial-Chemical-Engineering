@@ -273,6 +273,11 @@ public final class ControlService {
         hosts.bindMotor(cell, unit);
     }
 
+    /** Whether a controller loop planned control valve {@code valve}'s law at the last cadence (its signal comes over the loop's cables). */
+    public boolean planned(long valve) {
+        return plans.valve(valve) != null;
+    }
+
     /** Connected physical host IDs, independent of chunk loading and menu subscriptions. */
     public Set<Long> connectedHosts(long host) {
         return hosts.connectedHosts(host);

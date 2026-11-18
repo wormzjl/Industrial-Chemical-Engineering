@@ -134,6 +134,11 @@ public final class DialogColumns {
         return t.get("vessel.material", t.get("metallurgy." + material.name().toLowerCase(java.util.Locale.ROOT)), com.wormzjl.icheme.science.equipment.UnitDesign.number(material.allowance()));
     }
 
+    /** The datasheet's demister line (batch 2026-11-17-three-phase-separator, shape fields 14): shown only for a drum that has one. */
+    public static String demister(HeatControlColumn.Texts t) {
+        return t.get("vessel.demister");
+    }
+
     /** A nozzle: what it is for, the phase it draws first, the side it faces as seen from the vessel's front. */
     public record Nozzle(String role, String port, String side) {
     }

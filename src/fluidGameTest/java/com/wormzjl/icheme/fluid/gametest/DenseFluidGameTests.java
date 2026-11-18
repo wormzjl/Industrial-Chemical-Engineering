@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.fluid.gametest;
 
+import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.registry.ModBlocks;
 import com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
@@ -66,12 +67,12 @@ public final class DenseFluidGameTests {
         var axis=new MaterialAxis(new ArrayList<>(catalog.conservedComponents(com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog))));
         double[] n=new double[axis.size()];n[axis.requireIndex(id)]=1;return n;
     }
-    static long identity(AssemblyGameTests.Plant plant,BlockPos at){return ((FluidDeviceBlockEntity)plant.level.getBlockEntity(at)).fluidIdentity();}
-    static void block(AssemblyGameTests.Plant plant,BlockPos at,net.minecraft.world.level.block.state.BlockState state){plant.level.setBlock(at,state,Block.UPDATE_ALL);plant.devices.add(at.immutable());}
+    static long identity(PlantBuilder plant,BlockPos at){return ((FluidDeviceBlockEntity)plant.level.getBlockEntity(at)).fluidIdentity();}
+    static void block(PlantBuilder plant,BlockPos at,net.minecraft.world.level.block.state.BlockState state){plant.level.setBlock(at,state,Block.UPDATE_ALL);plant.devices.add(at.immutable());}
     /** Removes a block the test placed before the plant goes, as a player breaks it. */
-    static void unblock(AssemblyGameTests.Plant plant,BlockPos at){plant.level.removeBlock(at,false);plant.devices.remove(at);}
+    static void unblock(PlantBuilder plant,BlockPos at){plant.level.removeBlock(at,false);plant.devices.remove(at);}
     /** A tank charge whose generator and pipe count as the plant's, so a failure before the charge ends removes them too. */
-    static TankCharge charge(GameTestHelper helper,AssemblyGameTests.Plant plant,BlockPos tank,Direction face,FluidDeviceSpec spec) {
+    static TankCharge charge(GameTestHelper helper,PlantBuilder plant,BlockPos tank,Direction face,FluidDeviceSpec spec) {
         var charge=new TankCharge(helper,plant.world,tank,face,spec);for(var at:charge.blocks())plant.devices.add(at.immutable());return charge;
     }
 
@@ -175,7 +176,7 @@ public final class DenseFluidGameTests {
     }
 
     /** Removes the plant, waits until nothing it placed is registered, and ends the test with its failure, if any. */
-    static void finish(GameTestHelper helper,AssemblyGameTests.Plant plant,net.minecraft.gametest.framework.GameTestSequence sequence,String[] failure) {
+    static void finish(GameTestHelper helper,PlantBuilder plant,net.minecraft.gametest.framework.GameTestSequence sequence,String[] failure) {
         sequence.thenExecute(()->{
                     plant.world.observe(null);
                     try{plant.remove();}catch(RuntimeException e){if(failure[0]==null)failure[0]="removal: "+e;}
@@ -229,9 +230,9 @@ public final class DenseFluidGameTests {
     @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-loop")
     public static void aClosedCarbonDioxideLoopCrossesItsCriticalPointEveryCircuitWithNoHold(GameTestHelper helper) {
         // The two exchangers side by side along x, 7 cells beyond their span apart; the tank 6 cells beyond their far end in z.
-        var shape=AssemblyGameTests.Plant.unit(EquipmentShape.Kind.EXCHANGER);int[] span=span(shape);
+        var shape=PlantBuilder.unit(EquipmentShape.Kind.EXCHANGER);int[] span=span(shape);
         int pitch=span[1]-span[0]+7,far=span[3]+6;
-        var plant=new AssemblyGameTests.Plant(helper,helper.absolutePos(new BlockPos(8,3,8)),new BlockPos(span[0]-8,-3,span[2]-8),new BlockPos(pitch+span[1]+8,span[4]+8,far+8));
+        var plant=AssemblyGameTests.plant(helper,helper.absolutePos(new BlockPos(8,3,8)),new BlockPos(span[0]-8,-3,span[2]-8),new BlockPos(pitch+span[1]+8,span[4]+8,far+8));
         var world=plant.world;String[] failure={null};Vessel[] units=new Vessel[2];BlockPos[] at=new BlockPos[3];long[] tankId={0};int[] closedAt={-1};
         Ledger[] ledger={null};var co2=pure("CarbonDioxide");var water=pure("Water");
         var sequence=helper.startSequence();
@@ -246,10 +247,10 @@ public final class DenseFluidGameTests {
             // The loop (tmp/supercritical-s2/probe/loop-layout.txt replays these routes off-line): the tank's west face to the
             // heater's tube inlet (the pump on that line), the heater's tube outlet to the cooler's tube inlet, the cooler's tube
             // outlet to the tank's east face.
-            var suction=plant.route(tank.west(),AssemblyGameTests.Plant.front(units[0],Role.TUBE_INLET));
+            var suction=plant.route(tank.west(),PlantBuilder.front(units[0],Role.TUBE_INLET));
             pump(plant,suction);
-            plant.route(AssemblyGameTests.Plant.front(units[0],Role.TUBE_OUTLET),AssemblyGameTests.Plant.front(units[1],Role.TUBE_INLET));
-            plant.route(AssemblyGameTests.Plant.front(units[1],Role.TUBE_OUTLET),tank.east(),Set.of(tank));
+            plant.route(PlantBuilder.front(units[0],Role.TUBE_OUTLET),PlantBuilder.front(units[1],Role.TUBE_INLET));
+            plant.route(PlantBuilder.front(units[1],Role.TUBE_OUTLET),tank.east(),Set.of(tank));
             // The charge: a generator beyond one pipe on the south face, touching nothing else.
             at[1]=tank.south();at[2]=at[1].south();
             plant.pipe(at[1]);block(plant,at[2],ModBlocks.FLUID_GENERATOR.get().defaultBlockState());
@@ -323,9 +324,9 @@ public final class DenseFluidGameTests {
         return s;
     }
     /** An exchanger's shell side from a generator at {@code spec} to a void at the atmosphere. */
-    static void utility(AssemblyGameTests.Plant plant,Vessel unit,FluidDeviceSpec spec) {
-        var inlet=AssemblyGameTests.Plant.front(unit,Role.SHELL_INLET);var supply=inlet.relative(AssemblyGameTests.Plant.out(unit,Role.SHELL_INLET));
-        var outlet=AssemblyGameTests.Plant.front(unit,Role.SHELL_OUTLET);var sink=outlet.relative(AssemblyGameTests.Plant.out(unit,Role.SHELL_OUTLET));
+    static void utility(PlantBuilder plant,Vessel unit,FluidDeviceSpec spec) {
+        var inlet=PlantBuilder.front(unit,Role.SHELL_INLET);var supply=inlet.relative(PlantBuilder.out(unit,Role.SHELL_INLET));
+        var outlet=PlantBuilder.front(unit,Role.SHELL_OUTLET);var sink=outlet.relative(PlantBuilder.out(unit,Role.SHELL_OUTLET));
         plant.pipe(inlet);plant.pipe(outlet);
         block(plant,supply,ModBlocks.FLUID_GENERATOR.get().defaultBlockState());block(plant,sink,ModBlocks.FLUID_VOID.get().defaultBlockState());
         TankCharge.run(plant.world,identity(plant,supply),spec);
@@ -337,7 +338,7 @@ public final class DenseFluidGameTests {
      * the item installs it ({@link HeatExchangerReviewWorld}'s pump: its block state, {@code installPipeMover}, the drawn
      * geometry), then powered from the block above (a placed in-line mover's store starts empty, M-04). Returns its identity.
      */
-    static long pump(AssemblyGameTests.Plant plant,List<BlockPos> path) {
+    static long pump(PlantBuilder plant,List<BlockPos> path) {
         for(int i=1;i<path.size()-1;i++) {
             var a=path.get(i-1);var at=path.get(i);var b=path.get(i+1);
             if(a.getY()!=at.getY()||b.getY()!=at.getY()||b.getX()-at.getX()!=at.getX()-a.getX()||b.getZ()-at.getZ()!=at.getZ()-a.getZ())continue;
@@ -372,7 +373,7 @@ public final class DenseFluidGameTests {
      */
     @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-letdown")
     public static void aNitrogenTankAtTwentyMegapascalsLetsDownWithNoHoldAndCools(GameTestHelper helper) {
-        var plant=new AssemblyGameTests.Plant(helper,helper.absolutePos(new BlockPos(4,2,4)),new BlockPos(-4,-2,-4),new BlockPos(8,6,12));
+        var plant=AssemblyGameTests.plant(helper,helper.absolutePos(new BlockPos(4,2,4)),new BlockPos(-4,-2,-4),new BlockPos(8,6,12));
         var world=plant.world;String[] failure={null};
         var source=plant.base;var receiver=plant.base.offset(0,0,4);var line=List.of(source.south(),source.south(2),source.south(3));
         TankCharge[] charges=new TankCharge[2];Ledger[] ledger={null};long[] ids=new long[2];
@@ -464,7 +465,7 @@ public final class DenseFluidGameTests {
      */
     @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-two-nozzles")
     public static void aDenseVesselDrawnThroughItsTopAndBottomGivesTheSameFluidAtBoth(GameTestHelper helper) {
-        var plant=new AssemblyGameTests.Plant(helper,helper.absolutePos(new BlockPos(4,4,4)),new BlockPos(-4,-4,-4),new BlockPos(8,8,8));
+        var plant=AssemblyGameTests.plant(helper,helper.absolutePos(new BlockPos(4,4,4)),new BlockPos(-4,-4,-4),new BlockPos(8,8,8));
         var world=plant.world;String[] failure={null};var tank=plant.base;
         var top=tank.above();var topVoid=top.above();var bottom=tank.below();var bottomVoid=bottom.below();var feed=tank.west();var generator=feed.west();
         Ledger[] ledger={null};long[] ids=new long[3];var co2=pure("CarbonDioxide");
@@ -537,7 +538,7 @@ public final class DenseFluidGameTests {
      */
     @GameTest(template="empty",timeoutTicks=TIMEOUT,batch="dense-fluid-plunger")
     public static void aPlungerPumpDeliversItsDisplacementOfDenseCarbonDioxideAgainstTwentyMegapascals(GameTestHelper helper) {
-        var plant=new AssemblyGameTests.Plant(helper,helper.absolutePos(new BlockPos(12,2,12)),new BlockPos(-16,-2,-16),new BlockPos(28,10,28));
+        var plant=AssemblyGameTests.plant(helper,helper.absolutePos(new BlockPos(12,2,12)),new BlockPos(-16,-2,-16),new BlockPos(28,10,28));
         var world=plant.world;var level=plant.level;String[] failure={null};Ledger[] ledger={null};long[] ids=new long[5];
         com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel[] motor={null},gear={null};double[] suctionTemperature={0},suctionExponent={Double.NaN};FluidThermodynamics.State[] suctionState={null};
         var model=com.wormzjl.icheme.science.machine.PlungerPump.model(2);var law=com.wormzjl.icheme.science.machine.PlungerPump.of(model);
@@ -555,8 +556,8 @@ public final class DenseFluidGameTests {
             suctionExponent[0]=thermo.isentropicExponent(suctionState[0]);
             var pd=EquipmentShape.designed(EquipmentShape.Kind.PLUNGER_PUMP,2,1,EquipmentShape.Heading.NORTH,com.wormzjl.icheme.science.equipment.UnitDesign.of(EquipmentShape.Kind.PLUNGER_PUMP).defaultSupport(2,1),com.wormzjl.icheme.science.equipment.ProcessUnit.Bank.ONE);
             var pump=plant.place(pd,0,0,0);
-            var suction=AssemblyGameTests.Plant.front(pump,Role.SUCTION);var generator=suction.relative(AssemblyGameTests.Plant.out(pump,Role.SUCTION));
-            var discharge=AssemblyGameTests.Plant.front(pump,Role.DISCHARGE);var sink=discharge.relative(AssemblyGameTests.Plant.out(pump,Role.DISCHARGE));
+            var suction=PlantBuilder.front(pump,Role.SUCTION);var generator=suction.relative(PlantBuilder.out(pump,Role.SUCTION));
+            var discharge=PlantBuilder.front(pump,Role.DISCHARGE);var sink=discharge.relative(PlantBuilder.out(pump,Role.DISCHARGE));
             plant.pipe(suction);plant.pipe(discharge);
             block(plant,generator,ModBlocks.FLUID_GENERATOR.get().defaultBlockState());block(plant,sink,ModBlocks.FLUID_VOID.get().defaultBlockState());
             ids[0]=identity(plant,generator);ids[1]=identity(plant,sink);ids[2]=identity(plant,suction);ids[3]=identity(plant,discharge);
@@ -623,7 +624,7 @@ public final class DenseFluidGameTests {
         finish(helper,plant,sequence,failure);
     }
     /** The FE port of {@code vessel}'s terminal box, from its top face (as {@link ElectricGameTests}). */
-    static net.neoforged.neoforge.energy.IEnergyStorage energyPort(AssemblyGameTests.Plant plant,com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel vessel) {
+    static net.neoforged.neoforge.energy.IEnergyStorage energyPort(PlantBuilder plant,com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel vessel) {
         var t=com.wormzjl.icheme.science.equipment.ShapeRasterizer.terminal(vessel.shape());
         if(t==null)throw new IllegalStateException("No terminal box on the "+vessel.shape().kind());
         var port=plant.level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,vessel.origin().offset(t.x(),t.y(),t.z()),Direction.UP);
@@ -632,9 +633,9 @@ public final class DenseFluidGameTests {
     }
     /**
      * A gearbox rated {@code kilowatts} beyond a shaft block on {@code pump}'s driven end, headed so its output faces the pump
-     * (as {@link CreateCouplingGameTests}): the plant's, removed with it. Its input end is left for {@link AssemblyGameTests.Plant#motor}.
+     * (as {@link CreateCouplingGameTests}): the plant's, removed with it. Its input end is left for {@link PlantBuilder#motor}.
      */
-    static com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel gearbox(AssemblyGameTests.Plant plant,com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel pump,double kilowatts) {
+    static com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel gearbox(PlantBuilder plant,com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel pump,double kilowatts) {
         com.wormzjl.icheme.science.equipment.ShapeRasterizer.Shaft driven=null;
         for(var s:com.wormzjl.icheme.science.equipment.ShapeRasterizer.shafts(pump.shape()))if(s.role()==EquipmentShape.ShaftEnd.Role.DRIVEN_INPUT)driven=s;
         if(driven==null)throw new IllegalStateException("No driven end on the "+pump.shape().kind());

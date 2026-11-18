@@ -3,12 +3,20 @@ package com.wormzjl.icheme.science.fluid.network;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import java.util.Objects;
 
-/** Smooth internal vessel geometry. Heights use the main body's bottom, including negative boot heights. */
+/**
+ * Smooth internal vessel geometry. Heights use the main body's bottom, including negative boot heights. {@code demister}:
+ * a drum's mesh pad under its gas outlet ({@link Separation#DEMISTER}); a drum only.
+ */
 public record VesselGeometry(Form form,double capacity,double height,double diameter,double length,
-                             double bootDiameter,double bootLength) {
+                             double bootDiameter,double bootLength,boolean demister) {
     public enum Form { PRISM, CYLINDER, SPHERE, VERTICAL_DRUM, HORIZONTAL_DRUM }
+    /** A vessel without a demister. */
+    public VesselGeometry(Form form,double capacity,double height,double diameter,double length,double bootDiameter,double bootLength){
+        this(form,capacity,height,diameter,length,bootDiameter,bootLength,false);
+    }
     public VesselGeometry {
         Objects.requireNonNull(form);
+        if(demister&&form!=Form.VERTICAL_DRUM&&form!=Form.HORIZONTAL_DRUM)throw new IllegalArgumentException("Only a drum has a demister");
         for(double v:new double[]{capacity,height,diameter,length,bootDiameter,bootLength})
             if(!Double.isFinite(v)||v<0)throw new IllegalArgumentException("Invalid vessel geometry");
         if(capacity<=0||height<=0||form!=Form.PRISM&&diameter<=0||
@@ -24,6 +32,10 @@ public record VesselGeometry(Form form,double capacity,double height,double diam
     public static VesselGeometry round(Form form,double diameter,double length,double bootDiameter,double bootLength){
         double height=switch(form){case CYLINDER->length;case SPHERE,HORIZONTAL_DRUM->diameter;case VERTICAL_DRUM->length+diameter/2;default->throw new IllegalArgumentException("Not round");};
         return new VesselGeometry(form,physicalVolume(form,diameter,length,bootDiameter,bootLength),height,diameter,length,bootDiameter,bootLength);
+    }
+    /** This vessel with a demister or without one. */
+    public VesselGeometry withDemister(boolean value){
+        return value==demister?this:new VesselGeometry(form,capacity,height,diameter,length,bootDiameter,bootLength,value);
     }
     private static double physicalVolume(Form form,double d,double length,double bd,double bl){
         double body=switch(form){case CYLINDER->Math.PI*d*d*length/4;case SPHERE->Math.PI*d*d*d/6;
@@ -56,6 +68,38 @@ public record VesselGeometry(Form form,double capacity,double height,double diam
             default->throw new IllegalStateException();};
         return bootCapacity()+body;
     }
+    /**
+     * The horizontal section at a body-relative elevation, m²: the slope of {@link #volumeAt}, the area a drop settles
+     * across there ({@link Separation}); a boot's own section below the body. The nearest section inside the vessel
+     * beyond its ends.
+     */
+    public double planArea(double h){
+        if(!Double.isFinite(h))throw new IllegalArgumentException("Nonfinite height");
+        if(form==Form.PRISM)return capacity/height;
+        h=Math.clamp(h,-bootDepth(),height);
+        if(h<0){double z=h+bootDepth(),c=bootDiameter/4,r=bootDiameter/2;return z<c?headSection(r,c,z):Math.PI*r*r;}
+        double r=diameter/2;
+        return switch(form){
+            case CYLINDER->Math.PI*r*r;
+            case SPHERE->Math.PI*h*(diameter-h);
+            case HORIZONTAL_DRUM->{double t=h/diameter;yield length*2*Math.sqrt(h*(diameter-h))+Math.PI*diameter*diameter/2*t*(1-t);}
+            case VERTICAL_DRUM->{double c=diameter/4;yield h<c?headSection(r,c,h):h<c+length?Math.PI*r*r:headSection(r,c,height-h);}
+            default->throw new IllegalStateException();};
+    }
+    /**
+     * The section the gas crosses above a liquid level at body-relative elevation {@code level}, m² ({@link Separation}'s
+     * gas law): a standing vessel's whole section, whatever its level; a lying drum's segment above the level, along its
+     * axis.
+     */
+    public double vapourSection(double level){
+        if(!Double.isFinite(level))throw new IllegalArgumentException("Nonfinite height");
+        if(form==Form.PRISM)return capacity/height;
+        double r=diameter/2;
+        return form==Form.HORIZONTAL_DRUM?Math.PI*r*r-segmentArea(r,Math.clamp(level,0,diameter)):Math.PI*r*r;
+    }
+    /** Whether the gas crosses the vessel along a lying axis ({@link Separation#gasLimit}). */
+    public boolean lying(){return form==Form.HORIZONTAL_DRUM;}
+    private static double headSection(double r,double c,double h){return Math.PI*r*r*(2*h/c-h*h/(c*c));}
     static double segmentArea(double r,double h){
         if(h>r)return Math.PI*r*r-segmentArea(r,2*r-h);
         double angle=2*DeterministicMath.asin(Math.sqrt(Math.max(0,h/(2*r))));

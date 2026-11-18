@@ -86,6 +86,58 @@ class DeviceMetersTest {
         assertNull(m.drive());
     }
 
+    /** Batch 2026-11-17-three-phase-separator, package 4: one meter for each outlet the law acts on, percent by volume. */
+    @Test
+    void aVesselsCarryOverReadsInPercentForTheOutletsTheLawActsOn() {
+        var tank = new FluidView.Tank(2, false, 0, 0, 4.0, 101325.0, 120000.0);
+        var view = new FluidView(2, 1, 0, 0, "FULL", null, 0, List.of(), null, 1, List.of(), null, null, List.of(), tank);
+        var m = new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MOLAR,
+                TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_HOUR, true, T);
+        // A lying drum with a boot and a gas outlet: its boot's water leaves with 39.5 % of oil.
+        assertEquals(List.of(meter("carried_water", "0.0", "%", "carried_water.hint"), meter("carried_oil", "39.5", "%", "carried_oil.hint"),
+                meter("carried_liquid", "0.0", "%", "carried_liquid.hint")), m.carried(0.0, .395, 0.0));
+        // A standing drum: one liquid outlet, so the gas's meter alone.
+        assertEquals(List.of(meter("carried_liquid", "26.0", "%", "carried_liquid.hint")), m.carried(null, null, .26));
+        // A vessel the law does not act on: no meter, so no group.
+        assertEquals(List.of(), m.carried(null, null, null));
+    }
+
+    /** Batch 2026-11-17-dynamic-settling: one level of separation for each phase the vessel holds, in percent. */
+    @Test
+    void aVesselsLevelsOfSeparationReadInPercentForThePhasesItHolds() {
+        var tank = new FluidView.Tank(2, false, 0, 0, 4.0, 101325.0, 120000.0);
+        var view = new FluidView(2, 1, 0, 0, "FULL", null, 0, List.of(), null, 1, List.of(), null, null, List.of(), tank);
+        var m = new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.MOLAR,
+                TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_HOUR, true, T);
+        // A standing drum half settled: the gas clean, the oil and the water partly turbid.
+        assertEquals(List.of(new DeviceColumn.Phase("separation_gas", 1.0, "100.0", "separation_gas.hint"), new DeviceColumn.Phase("separation_oil", .55, "55.0", "separation_oil.hint"),
+                new DeviceColumn.Phase("separation_water", .40, "40.0", "separation_water.hint")), m.separation(1.0, .55, .40));
+        // A drum without water: gas and oil.
+        assertEquals(List.of(new DeviceColumn.Phase("separation_gas", .74, "74.0", "separation_gas.hint"), new DeviceColumn.Phase("separation_oil", 1.0, "100.0", "separation_oil.hint")),
+                m.separation(.74, 1.0, null));
+        // No phase: no gauge, so no group.
+        assertEquals(List.of(), m.separation(null, null, null));
+    }
+
+    /** The Carry-over meters read off the view's tank (protocol icheme-7): the server's carry-over, none without it. */
+    @Test
+    void aVesselsCarryOverMetersReadTheViewsTank() {
+        var geometry = com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(4.0, 2);
+        java.util.function.Function<FluidView.Tank, DeviceMeters> meters = tank -> new DeviceMeters(new DeviceMeters.Data(Kind.RESERVOIR,
+                new FluidView(2, 1, 0, 0, "FULL", null, 0, List.of(), null, 1, List.of(), null, null, List.of(), tank), AXIS, WEIGHTS, true, null, false, List.of()),
+                null, PhaseRatioBasis.MOLAR, TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_HOUR, true, T);
+        assertEquals(List.of(meter("carried_water", "0.0", "%", "carried_water.hint"), meter("carried_oil", "39.5", "%", "carried_oil.hint"),
+                meter("carried_liquid", "0.0", "%", "carried_liquid.hint")),
+                meters.apply(new FluidView.Tank(2, false, 0, 0, 4.0, 101325.0, 120000.0, geometry, new FluidView.CarryOver(0.0, .395, 0.0))).carried());
+        assertEquals(List.of(meter("carried_liquid", "26.0", "%", "carried_liquid.hint")),
+                meters.apply(new FluidView.Tank(2, false, 0, 0, 4.0, 101325.0, 120000.0, geometry, new FluidView.CarryOver(null, null, .26))).carried());
+        assertEquals(List.of(), meters.apply(new FluidView.Tank(2, false, 0, 0, 4.0, 101325.0, 120000.0)).carried());
+        // A device that is no tank: no group.
+        var pipe = new DeviceMeters(new DeviceMeters.Data(Kind.PIPE, new FluidView(2, 1, 0, 0, "FULL", null, 0, List.of()), AXIS, WEIGHTS, true, null, false, List.of()),
+                null, PhaseRatioBasis.MOLAR, TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_HOUR, true, T);
+        assertEquals(List.of(), pipe.carried());
+    }
+
     /**
      * S5 of batch 2026-11-15-supercritical-fluids: contents that hold one dense fluid ({@link DeviceMeters#withDense}) name
      * its row in the phases, read "No interface" on a tank's level, and a pump's gas meter reads the head share M(α, p) on

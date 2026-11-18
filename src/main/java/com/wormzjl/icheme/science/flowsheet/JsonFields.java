@@ -98,6 +98,13 @@ final class JsonFields {
         return value == null ? fallback : whole(key, value);
     }
 
+    boolean bool(String key, boolean fallback) {
+        var value = take(key);
+        if (value == null) return fallback;
+        if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) throw damaged(at(key));
+        return value.getAsBoolean();
+    }
+
     boolean bool(String key) {
         var value = need(key);
         if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) throw damaged(at(key));

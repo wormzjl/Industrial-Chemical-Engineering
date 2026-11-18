@@ -160,7 +160,7 @@ public final class V3NeuralRegistry implements V3NeuralInitializer {
         return new V3ColumnInput(input.schemaVersion(),input.packageId(),input.assayId(),new V3ComponentBasis(ids),feed,
                 input.feedTemperatureKelvin(),input.stageCount(),input.feedStageNumber(),input.topPressurePascal(),
                 input.stagePressureDropPascal(),input.specifications(),input.sideDraws(),input.steamFeeds(),input.pumparounds(),
-                input.columnDiameterMetres());
+                input.columnDiameterMetres(),input.refluxFreeWaterMolPerSecond());
     }
     private record Bound(Entry entry,MaterialCatalog originalCatalog,MaterialCatalog view,
             V3ColumnInput original,V3ColumnInput projected,Lumping lumping) implements V3NeuralInitializer {

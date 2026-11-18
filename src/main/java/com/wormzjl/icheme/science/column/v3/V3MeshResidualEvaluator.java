@@ -375,6 +375,10 @@ final class V3MeshResidualEvaluator {
      * its vapour carries {@code W_1 = S - F_1}, so the latent heat of the carried water stays on tray one, and
      * tray two receives none of it. The drum, which has no energy row, takes it in the condenser duty
      * ({@link V3ColumnDutyLedger#condenserDutyWatts}).</p>
+     *
+     * <p>Free water the drum returns with the reflux enters tray one as liquid at the drum's temperature
+     * ({@link V3ColumnProblem#refluxFreeWaterEnthalpyWatts}) and leaves in tray one's vapour, whose water
+     * {@code W_1} it is part of; the condenser duty books the same liquid leaving the drum.</p>
      */
     private double energyResidual(V3DryMeshState state, int node, NodeProperties[] properties) {
         V3ColumnTopology topology = problem.topology();
@@ -387,9 +391,12 @@ final class V3MeshResidualEvaluator {
             double feed = node == topology.feedTrayNumber() ? totalFeedFlow * feedMolarEnthalpyJoulesPerMol : 0.0;
             // A prescribed pumparound duty is a constant source term with no state derivative, so no
             // unknown, equation, or Jacobian block changes when it is present.
-            return liquidIn + vaporIn + feed + freeWaterIn + problem.steamFeedEnthalpyWatts(node)
+            double closure = liquidIn + vaporIn + feed + freeWaterIn + problem.steamFeedEnthalpyWatts(node)
                     + problem.stageHeatWatts(node) - phaseEnergy(state, node, true, properties)
                     - phaseEnergy(state, node, false, properties) - freeWaterEnergy(state, node);
+            // Free water returned with the reflux enters tray one as liquid at the drum's temperature; its vapour is in W_1.
+            return node == 1 && problem.returnsRefluxFreeWater()
+                    ? closure + problem.refluxFreeWaterEnthalpyWatts(state) : closure;
         }
         // The sump is never wet, so free water arriving there leaves it entirely as vapour in W_R.
         return (node == 1 ? organicRefluxFraction() : 1.0 - problem.liquidWithdrawalFraction(state, node - 1)) * phaseEnergy(state, node - 1, true, properties) + reboilerDutyWatts

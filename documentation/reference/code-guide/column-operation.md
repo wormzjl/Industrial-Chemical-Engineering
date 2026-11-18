@@ -37,15 +37,15 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
 | [`Port`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Port.java) | `FEED`, `STEAM`, `OFF_GAS`, `SOUR_WATER`, `DISTILLATE`, `DRAW`, `BOTTOMS`; saved by name; `inlet()`, `gas()` | 19 |
 | [`Setpoints`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Setpoints.java) | The player's numbers, a fact: design and set feed rate, condenser temperature, reflux ratio; reboiler, steam, draws and pumparounds per mole of feed; `of(point)`, `withFeedRate` (capped at the design rate), `intensivelyDiffers`, `compatible` | 78 |
 | [`PortConditions`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/PortConditions.java) | A port's pressure and temperature estimated from the design (`estimate`) | 35 |
-| [`SplitTable`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/SplitTable.java) | The table: `axis`, `products` (`Product`: port, index, recovery by component, temperature, pressure), `reboilerPerFeed`, `pumparoundPerFeed`, `condenserPerFeed`, `reference` (`Reference`), `held`, `condenserWaterPerFeed`, `waterBelow`, `airArea` (`FAN_STEPS` fan speeds), `flood` (`Flood`, `NONE`), `pumparoundDraw`; `of`, `split`, `perFeed`, `product`, `waterShare`, `waterTakes`, `airFeed`, `fans`, `withFlood`, `withPumparoundDraw`, `drawTemperature`, `bottomsTemperature`; `WATER_ALWAYS`, `WATER_NEVER` | 463 |
+| [`SplitTable`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/SplitTable.java) | The table: `axis`, `products` (`Product`: port, index, recovery by component, temperature, pressure), `reboilerPerFeed`, `pumparoundPerFeed`, `condenserPerFeed`, `reference` (`Reference`), `held`, `condenserWaterPerFeed`, `waterBelow`, `airArea` (`FAN_STEPS` fan speeds), `flood` (`Flood`, `NONE`), `pumparoundDraw`; `Reference.pumparounds` (the duties per feed it was solved at); `of`, `split`, `perFeed`, `product`, `waterShare`, `waterTakes`, `airFeed`, `fans`, `withFlood`, `withPumparoundDraw`, `drawTemperature`, `bottomsTemperature`; `WATER_ALWAYS`, `WATER_NEVER` | 463 |
 | [`ColumnCycle`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnCycle.java) | One cycle as arithmetic: `Account`, `Rooms` (what each utility can still pass, the air's most feed, unpowered fans and pumps, the trays' capacity left `trays`, 1 clean; `NONE`, `withTrays`), `Step` (`conditions`, `binding`, `tripped`), `step`; `TRIP_DEPARTURE` | 382 |
 | [`Condition`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Condition.java) | One constant per failure, each in one `Rank` (`NOT_READY`, `NOTICE`, `LIMIT`, `OFF_TABLE`, `TRIP`) with its status word; `Active` (condition, value, index, text); `binding`, `find`; `HIGH_LOAD_FRACTION`, `MAX_TEXT`, `RULE_A` | 133 |
 | [`ColumnStatus`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnStatus.java) | `phase` and `line` from a condition list: one pure formatter | 70 |
 | [`Refusal`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/Refusal.java) | Every Start and first-solve refusal as a constant with its text (`text(parameters)`): `FIRST_SOLVE`, `NO_NOZZLE`, `TOO_MANY_UTILITY_UNITS`, `NO_DRIVER` among them | 48 |
 | [`DriftBands`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/DriftBands.java) | The bands and `Trigger`; `check` (a table's, and a reference's without the closure); `reference` (a refused state as a reference) | 109 |
-| [`ColumnSolve`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnSolve.java) | The worker's job: `Job`, `Taken`, `Steam`, sealed `Outcome` (`Solved` with `advisories`, `MAX_ADVISORIES`; `Failed` with `transientFailure`; `Frozen`, a product holding a crystal); `run`; `frozen` (the crystal test of a product); `calculate` (the one V3 solve of a column's input, for the running column and the sheet's column block alike) with its `ColdStart` (`CLASSICAL`, `LEARNED`); `warm` (the seed screen); `closure` (the condenser duty as the energy closure on one basis); `trim` (an air-then-water condenser's water share), `airArea`; `SUPERHEAT` | 567 |
+| [`ColumnSolve`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnSolve.java) | The worker's job: `Job` (with the pumparound duties it solves at), `Taken`, `Steam`, sealed `Outcome` (`Solved` with `advisories`, `MAX_ADVISORIES`, `drawCurves`: each pumparound's draw liquid, `drawCurve`, from `DRAW_CURVE_LOW`; `Failed` with `transientFailure`; `Frozen`, a product holding a crystal); `run`; `frozen` (the crystal test of a product); `calculate` (the one V3 solve of a column's input, for the running column and the sheet's column block alike) with its `ColdStart` (`CLASSICAL`, `LEARNED`); `warm` (the seed screen); `closure` (the condenser duty as the energy closure on one basis); `trim` (an air-then-water condenser's water share), `airArea`; `SUPERHEAT` | 567 |
 | [`ColumnWater`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/ColumnWater.java) | Where a column's feed water goes and whether its liquids settle, the one rule of the running column and the sheet's column block: `onAxis` (`SHARE`), `settling` (`TRACE`, `Settling`) | 118 |
-| [`OperationView`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/OperationView.java) | What the Operation tab shows: `Phase`, `conditions`, `accepted`, `Stream`, `Duty` (`DutyKind`), `Solve`, `Trays`, `Wear` (tray fouling, wall left, rate, material), `idle`, `binding`, `ruleA`, `refused` | 145 |
+| [`OperationView`](../../../src/main/java/com/wormzjl/icheme/science/plant/column/OperationView.java) | What the Operation tab shows: `Phase`, `conditions`, `accepted`, `Stream`, `Duty` (`DutyKind`; booked, and asked at the set feed: a pumparound's set point), `Solve`, `Trays`, `Wear` (tray fouling, wall left, rate, material), `idle`, `binding`, `ruleA`, `refused` | 145 |
 | [`PortAccounts`](../../../src/main/java/com/wormzjl/icheme/science/plant/port/PortAccounts.java) | The port arithmetic the column and the batch stills share: `CYCLE_TICKS`, `FENCE_TICKS`, `onIsland`, `onWorld`, `mass`, `less`, `idle`, `debit` (with `Overdrawn`), `keep` | 85 |
 
 ## Main flow
@@ -67,13 +67,16 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
    (`Rooms`) and the members' power.
 2. `step` lists every LIMIT that holds with the share of the set feed it allows: `FEED_SHORT`, `PRODUCT_FULL`,
    `COOLING_SHORT` (the water's room; the air's most feed, or `NO_POWER` where some banks have none), `NO_POWER` of
-   each unpowered pump, `HEATING_SHORT`, `PUMPAROUND_SHORT`, `FLOODING`, `STEAM_SHORT` under rule A. The binding one
-   sets `alpha`.
-3. It takes the steam by rule A or B, splits feed and steam by the table, and closes the condenser duty: energy out
-   less energy in, less the reboiler and pumparounds at the table's ratios.
-4. It trips (`CLOSURE`, takes nothing) where the condenser would heat the overhead or depart more than
-   `TRIP_DEPARTURE` from the solved duty; otherwise it adds `HIGH_LOAD` where the worst tray stands at
-   `HIGH_LOAD_FRACTION` of flood or more.
+   each unpowered pump, `HEATING_SHORT`, `FLOODING`, `STEAM_SHORT` under rule A. The binding one sets `alpha`.
+3. It takes the steam by rule A or B, splits feed and steam by the table, and books each pumparound's duty: its set
+   point × the feed taken, up to its cooler's room; a cooler short of it is the notice `PUMPAROUND_SHORT` (its value the
+   share taken), never a feed cut. It closes the condenser duty: energy out less energy in, less the reboiler at the
+   table's ratio and the pumparounds as booked.
+4. It trips (`CLOSURE`) where the condenser would heat the overhead or depart more than `TRIP_DEPARTURE` from the
+   solved duty plus what the pumparounds left it. A trip where the condenser would heat, or of a state standing
+   refused, passes the feed (`PASSING`): the bottoms take the feed's moles and energy as taken, with no duty and no
+   steam, bounded by the feed and the bottoms' room; a table without a bottoms holds instead (takes nothing). Otherwise
+   it adds `HIGH_LOAD` where the worst tray stands at `HIGH_LOAD_FRACTION` of flood or more.
 5. `ColumnStatus.phase` and `line` make the status from the step's conditions.
 
 ## Contracts
@@ -118,15 +121,17 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
   next.
 - **Conditions.** One list of `Condition.Active` per cycle and solve; the status line, the Operation tab and the
   column's alarm channels all read it. LIMITs: `FEED_SHORT`, `STEAM_SHORT`, `PRODUCT_FULL`, `COOLING_SHORT`,
-  `HEATING_SHORT`, `PUMPAROUND_SHORT`, `FLOODING`, `NO_POWER`. OFF_TABLE: `OFF_TABLE` (a solve pending, its trigger as
+  `HEATING_SHORT`, `FLOODING`, `NO_POWER`. OFF_TABLE: `OFF_TABLE` (a solve pending, its trigger as
   text), `SOLVE_REFUSED`. TRIPs: `CLOSURE`, `FROZEN` (a product of the solve holds a crystal, `ColumnSolve.frozen`), `LEAKING`
   (the unit's wall is through, [integrity.md](integrity.md)). NOTICEs: `SETPOINT_REFUSED`, `ADVISORY` (V3's advisory texts, at most
-  `MAX_ADVISORIES`), `FEED_WATER_ROUTED`, `UNMETERED`, `HIGH_LOAD`, `TRAYS_FOULED`, `THIN_WALL`, `WEEPING`. Fouled trays
+  `MAX_ADVISORIES`), `FEED_WATER_ROUTED`, `UNMETERED`, `HIGH_LOAD`, `TRAYS_FOULED`, `THIN_WALL`, `WEEPING`, `PUMPAROUND_SHORT`,
+  `PASSING` (its alarm UPSET). Fouled trays
   divide both flood fractions by `Rooms.trays`, so HIGH LOAD and FLOODING come earlier. `Condition.binding` takes the TRIP, else the LIMIT
   with the lowest share (the first of equal ones). No limit asks a solve. Engine state, saved nowhere.
 - **Status words** (`ColumnStatus`): STARTING or NOT READY before a table; UPSET for a TRIP, LIMITED for a LIMIT, else
   RUNNING; `LIMITED: <word>, N %` (the binding condition's word: `condenser`, `reboiler`, `flooding`, `power`, …),
-  `RE-SOLVING: <trigger>; …`, then the refusals and notices. Start refusals are said after `NOT READY: `.
+  `RE-SOLVING: <trigger>; …`, then the refusals and notices. A passing cycle reads RUNNING, `PASSING: <trip text>; the
+  feed leaves as bottoms`. Start refusals are said after `NOT READY: `.
 - **Rule B** (the default) takes what steam there is; `STEAM_SHORT` with share 1, so it binds only where nothing else
   does, and the drifting steam ratio asks a STEAM_RATIO solve. **Rule A** (set by a refused STEAM_RATIO solve): steam
   limits the whole take, feed and steam cut together at the table's ratio (`RULE_A`). A successful STEAM_RATIO solve
@@ -134,6 +139,10 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
   refused state's bands.
 - **Set points.** `Setpoints.intensivelyDiffers` decides a SETPOINT solve; a change of feed rate alone is not one,
   because the column's equations are homogeneous in their extensive inputs (only THROUGHPUT reads the rate).
+- **Pumparound duty.** The cycle asks each pumparound its set point; its cooler decides what it takes. Booked off the
+  table's duty by more than `PUMPAROUND`, the engine solves at the duty relaxed half way from the table's to the booked
+  one (`ColumnOperation.relaxed`, `PUMPAROUND_RELAXATION`, at most the set point, at least `PUMPAROUND_FLOOR` of it): a
+  short cooler settles its table in a few solves, its draw trays hotter and the condenser larger.
 
 ## Laws and constants
 
@@ -145,10 +154,11 @@ and plans the ports, is `runtime/fluid/ColumnOperation` ([column-run.md](column-
 | COMPOSITION | the feed's shares over `COMPOSITION` from the reference, summed |
 | ENTHALPY | the feed's specific enthalpy over `ENTHALPY_KELVIN` of its own slope from the reference |
 | STEAM_RATIO | a steam's ratio over `STEAM_RATIO` from the solved one, relative to the larger of solved and set |
+| PUMPAROUND | a pumparound's booked duty per feed over `PUMPAROUND` from the reference's, relative to the larger |
 | THROUGHPUT | the fed share of the design rate over `THROUGHPUT` from the table's `alpha` |
 | CLOSURE | the closed condenser duty over `CLOSURE` from the solved one |
 
-The second form, `check(reference, held, step, demand)`, checks the first five against any reference without the
+The second form, `check(reference, held, step, demand)`, checks the first six against any reference without the
 closure: it decides whether a state stands inside a refused state's bands. `SETPOINT` comes first in the engine's
 cycle; `START` is the first solve.
 

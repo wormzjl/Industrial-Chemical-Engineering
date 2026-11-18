@@ -12,8 +12,12 @@ final class ReviewBatch {
 
     private ReviewBatch() {}
 
-    /** Whether {@code batch} is filtered out of this run; its test then succeeds at once and places nothing. */
+    /**
+     * Whether {@code batch} is filtered out of this run; its test then succeeds at once and places nothing. Either way the
+     * test's start controls leave the world ({@link AssemblyGameTests#clearStartControls}): a review world is opened by hand.
+     */
     static boolean skipped(GameTestHelper helper, String batch) {
+        AssemblyGameTests.clearStartControls(helper);
         var only = System.getProperty(PROPERTY, "");
         if (only.isBlank() || only.equals(batch)) return false;
         helper.succeed();

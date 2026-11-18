@@ -282,6 +282,35 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
     }
     /** Whether the shown aqueous liquid is named water (plan N7, {@link DeviceColumn#aqueousIsWater}). */
     public boolean aqueousWater(){return DeviceColumn.aqueousIsWater(amounts()[1],data.components().indexOf("Water"));}
+    /**
+     * A vessel's Carry-over meters (batch 2026-11-17-three-phase-separator, package 4), percent by volume: the water its
+     * oil outlet draws per volume of oil, the oil its water outlet draws per volume of water, the share of its gas
+     * outlet's volume drawn as the vessel's contents. Null for an outlet the separation law does not act on: no meter.
+     */
+    public List<DeviceColumn.Meter> carried(@Nullable Double waterInOil,@Nullable Double oilInWater,@Nullable Double liquidInGas){
+        var rows=new ArrayList<DeviceColumn.Meter>();
+        if(waterInOil!=null)rows.add(new DeviceColumn.Meter("carried_water",value(100*waterInOil),"%",tr("carried_water.hint")));
+        if(oilInWater!=null)rows.add(new DeviceColumn.Meter("carried_oil",value(100*oilInWater),"%",tr("carried_oil.hint")));
+        if(liquidInGas!=null)rows.add(new DeviceColumn.Meter("carried_liquid",value(100*liquidInGas),"%",tr("carried_liquid.hint")));
+        return List.copyOf(rows);
+    }
+    /**
+     * A vessel's levels of separation (batch 2026-11-17-dynamic-settling, law L7), 0 to 1: the gas's, the oil's, the
+     * water's. Null for a phase the vessel does not hold: no gauge. The view does not carry them yet.
+     */
+    public List<DeviceColumn.Phase> separation(@Nullable Double gas,@Nullable Double oil,@Nullable Double water){
+        var rows=new ArrayList<DeviceColumn.Phase>();
+        if(gas!=null)rows.add(new DeviceColumn.Phase("separation_gas",gas,value(100*gas),tr("separation_gas.hint")));
+        if(oil!=null)rows.add(new DeviceColumn.Phase("separation_oil",oil,value(100*oil),tr("separation_oil.hint")));
+        if(water!=null)rows.add(new DeviceColumn.Phase("separation_water",water,value(100*water),tr("separation_water.hint")));
+        return List.copyOf(rows);
+    }
+    /** The Carry-over meters of the view's vessel ({@link FluidView.Tank#carried()}); none where no law acts on it. */
+    public List<DeviceColumn.Meter> carried(){
+        var tank=data.view().tank();
+        if(tank==null||tank.carried()==null)return List.of();
+        var c=tank.carried();return carried(c.waterInOil(),c.oilInWater(),c.liquidInGas());
+    }
     /** A tank's Level group: its fill (NaN while unknown), and its contents of its capacity in litres. */
     public DeviceColumn.Level level(){
         if(!tank()||converter()!=null)return null;

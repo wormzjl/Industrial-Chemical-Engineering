@@ -103,6 +103,11 @@ public interface Skin {
         splitFill(c, new Rect(r.x() + 1, r.y() + 1, r.w() - 2, r.h() - 2), amounts, colours);
     }
 
+    /** A {@link Column.Gauge}'s bar {@code r}: filled to {@code share} (0 to 1) of its width in {@code colour}, in the split bar's window. */
+    default void gauge(Canvas c, Rect r, double share, int colour) {
+        split(c, r, new double[]{share, 1 - share}, new int[]{colour, 0x00000000});
+    }
+
     /** The shares of a split bar inside {@code r}; the last ends at the right edge, so rounding leaves no gap. */
     static void splitFill(Canvas c, Rect r, double[] amounts, int[] colours) {
         double total = 0;

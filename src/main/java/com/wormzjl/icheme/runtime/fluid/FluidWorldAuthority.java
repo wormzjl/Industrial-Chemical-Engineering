@@ -81,6 +81,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     final Set<Long> unboundBindings=new HashSet<>();
     /** The chunk binding: what a chunk load binds and queues, and the chunks each recorded structure spans (code base review R8). */
     private final ChunkBinding chunks=new ChunkBinding(this);
+    /** The nozzles of the recorded structures that are no fluid device, which a pipe's drawn faces meet (NOZZLE_JOIN_REVIEW.md). */
+    final StructureNozzles nozzles=new StructureNozzles();
     /** Engine-owned presentation: loaded devices and open menus, updated on their island's bucket only. */
     final FluidPresentation<com.wormzjl.icheme.world.inventory.FluidDeviceMenu> presentation;
     /** Complete immutable snapshots from the last bucket; bounded by loaded/open devices, never player replies. */
@@ -124,7 +126,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         var savedTopology=data.world().orElseGet(()->WorldTopologyLedger.Snapshot.empty(catalog));savedTopology.basis().requireCurrent(catalog);
         FluidPropertyReloadGuard.validateSolids(catalog.solids(),data.checkpoint(),savedTopology);observedSolidData=catalog;
         topology=new WorldTopologyLedger(savedTopology);
-        topology.builds().structures().forEach((origin,structure)->chunks.indexStructure(origin,structure,true));
+        topology.builds().structures().forEach((origin,structure)->{chunks.indexStructure(origin,structure,true);nozzles.index(origin,structure,true);});
         presentation=new FluidPresentation<>(new PresentationHost(),topology.onlineTick());
         var settings=new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,options.adaptiveCadence(),options.initialCadenceTicks(),options.certificates()).withTime(options.time());
         // Island clocks read the world's online tick: one epoch increment per tick advances every island.
@@ -185,7 +187,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
                 id->{var island=registry.owner(id);if(island!=null)runtime.coordinator().portsMoved(island);},com.wormzjl.icheme.science.fluid.conversion.ConversionRuntime::active);
         // A tag rule names the fluid registry's tags (W3), read without the hash.
         converters.tags(FluidWorldAuthority::fluidTags);
-        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,IslandCoordinator.Ports.both(stills,IslandCoordinator.Ports.both(ejectors,converters))));
+        stills.refresh();runtime.coordinator().ports(IslandCoordinator.Ports.both(columns,IslandCoordinator.Ports.both(stills,IslandCoordinator.Ports.both(ejectors,IslandCoordinator.Ports.both(converters,new Separators(runtime.coordinator()))))));
         stills.solves((pot,island,job,done)->{
             var at=registrations().get(pot);if(at==null)return false;
             var dimension=net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION,net.minecraft.resources.ResourceLocation.parse(at.device().position().dimension()));
@@ -323,8 +325,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
     /** Records the structure whose origin is {@code origin}; null removes it. A load of a chunk of its box queues it for its re-alignment. */
     public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure) {
-        owned();var old=topology.structure(origin);if(old!=null)chunks.indexStructure(origin,old,false);
-        topology.structure(origin,structure);if(structure!=null)chunks.indexStructure(origin,structure,true);data.setDirty();
+        owned();var old=topology.structure(origin);if(old!=null){chunks.indexStructure(origin,old,false);nozzles.index(origin,old,false);}
+        topology.structure(origin,structure);if(structure!=null){chunks.indexStructure(origin,structure,true);nozzles.index(origin,structure,true);}data.setDirty();
         // The far silhouettes follow the registry (W10): its subscribers see the change at the next presentation bucket.
         if(!Objects.equals(old,structure))silhouettes.changed(origin.dimension());
     }

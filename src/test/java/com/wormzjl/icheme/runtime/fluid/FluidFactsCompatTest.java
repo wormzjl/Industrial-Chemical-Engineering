@@ -153,7 +153,37 @@ class FluidFactsCompatTest {
         world.runTo(world.ledger.onlineTick()+20);
         pipeFittings(world);
         plungerPumps(world);
+        demisters(world);
         world.runTo(world.ledger.onlineTick()+20);return world;
+    }
+    /**
+     * Facts schema 30 (batch 2026-11-17-three-phase-separator): a standing drum, 1 m by 3 m, with a demister in its spec's
+     * vessel geometry. Every other vessel has none.
+     */
+    private static void demisters(EventPathWorld world) {
+        var g=VesselGeometry.round(VesselGeometry.Form.VERTICAL_DRUM,1,3,0,0).withDemister(true);
+        world.place(138,64,0,Kind.RESERVOIR,Direction.EAST,new FluidDeviceSpec(g.capacity(),298.15,101325,FluidDeviceSpec.nitrogen(CATALOG).composition(),SlurryFeed.NONE,g.height(),false,g,null),.05);
+    }
+    /** The vessels whose geometry has a demister: what schema 30 carries. */
+    private static long demisters(WorldTopologyLedger.Snapshot world){return world.active().values().stream().filter(r->r.spec().geometry().demister()).count();}
+    /**
+     * Facts schema 30: a spec's demister survives an exact load and a facts-only rebuild, and round-trips the facts record;
+     * an image written before it (schema 29) reads every vessel without one.
+     */
+    @Test void aDemisterSurvivesBothLoadsAndAnOlderImageReadsNone() throws IOException {
+        var world=corpusWorld();var saved=image(world);
+        assertEquals(1,demisters(world.ledger.snapshot()));
+        for(var restored:List.of(load(saved,key->key.on(model),CATALOG),load(edited(saved,tag->tag.putInt("StateFormat",Integer.MAX_VALUE)),key->key.on(model),CATALOG))) {
+            assertEquals(1,demisters(restored.world().orElseThrow()),"the demister is a fact: "+restored.route());
+            assertEquals(1,restored.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.inventory().geometry().demister()).count(),
+                    "the engine's vessel carries it: "+restored.route());
+        }
+        var registration=world.ledger.active().values().stream().filter(r->r.spec().geometry().demister()).findFirst().orElseThrow();
+        var section=FluidFacts.section(f->FluidFacts.registration(f,registration));
+        var read=FluidFacts.read(section,0,section.length,"a drum with a demister",r->FluidFacts.registration(r,null));
+        assertEquals(registration.spec(),read.spec());assertTrue(read.spec().geometry().demister());
+        var older=load(read(CORPUS.resolve("schema-29")),key->key.on(model),CATALOG).world().orElseThrow();
+        assertEquals(0,demisters(older),"a spec written before schema 30 has no demister");
     }
     /**
      * Facts schema 28 (batch 2026-11-15-supercritical-fluids, S8): a plunger pump casing, a PP-10 (10 m³/h at 300 rpm, relief
@@ -1276,6 +1306,8 @@ class FluidFactsCompatTest {
                 assertEquals(expected.getProperty("breached",""),breached(ledger),folder+": breached vessels");
                 // Schema 29 wrote the walls' facts and the specs' materials; an older image has new, clean carbon steel walls.
                 assertEquals(expected.getProperty("walls",""),walls(ledger),folder+": walls");
+                // Schema 30 wrote a vessel geometry's demister; an older image has none.
+                assertEquals(Long.parseLong(expected.getProperty("demisters","0")),demisters(ledger),folder+": demisters");
                 long vessels=rebuilt.checkpoint().islands().stream().flatMap(e->e.snapshot().graph().reservoirs().stream()).filter(n->n.kind()==PassiveNetwork.NodeKind.RESERVOIR).count();
                 // Schema 18 wrote whether a vessel's wall is rigid; an older image reads every vessel a bag.
                 assertEquals(Long.parseLong(expected.getProperty("rigid","0")),rigid(rebuilt.checkpoint()),folder+": rigid vessels");
@@ -1426,6 +1458,7 @@ class FluidFactsCompatTest {
         props.setProperty("fittings",fittings(loaded.world().orElseThrow()));
         props.setProperty("breached",breached(loaded.world().orElseThrow()));
         props.setProperty("walls",walls(loaded.world().orElseThrow()));
+        props.setProperty("demisters",Long.toString(demisters(loaded.world().orElseThrow())));
         props.setProperty("vessels",Long.toString(contents(loaded.checkpoint()).values().stream().filter(v->v instanceof PassiveNetwork.Inventory).count()));
         props.setProperty("rigid",Long.toString(rigid(loaded.checkpoint())));
         props.setProperty("vacuumPumps",vacuumPumps(loaded.world().orElseThrow()));

@@ -15,6 +15,38 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-11-18
+
+On `claude/column-testing-sizing-26b5b9`. Formats: fluid facts schema 30, checkpoint state format 53, equipment shape fields 14, protocol `icheme-7`, a new saved flag `icheme_column_test_world` (format 1); see `documentation/reference/FORMATS.md`.
+
+### Added
+
+- World type "IChemE column test" (`2026-11-16-review-plant-sizing`, `COLUMN_TEST_WORLD.md`; `c2000be8b`, `c4d5f93cc`): a superflat creative world with the daylight, weather and mob spawning cycles off, in which a crude unit sized by the process simulator (column, condenser, receiver, pumps, pumparound coolers, charge pump on a flow-regulating drive, residue exchanger, two fired heaters) is built at spawn on the first load and started. The plant builder is the mod's package `testworld/`; the review GameTests build through it. Chat messages say when the start ends or stops.
+- Three-phase separator (`2026-11-17-three-phase-separator`; packages 1, 2 and the sizer of 4): drums settle gas, oil and water by their size: the settling speed, a layer's settling number, what each outlet carries (`Separation`, `72476637e`), carried as a slice input of the phase draws (`24e9867b7`); drops of 0.5 mm water in oil and 0.2 mm oil in water (`6b1018ccf`); Souders and Brown's gas limit for standing and lying vessels, falling with a standing vessel's gas space (`e394260ab`); an optional demister on a drum (`4fd766c56`); the sizer's rows `DRUM_SETTLE_WATER` and `DRUM_SETTLE_OIL` (`7bc29657d`); the drum page's Carry-over group and its data (`f1f4a6d25`, `bd16ff83c`).
+- Column on a cold feed (`2026-11-17-column-cold-feed`; packages 0 to 4): a column's product leaves at its account's energy (`c4cc8ca79`); a feed too cold to solve passes to the bottoms (`69726bddb`); a pumparound's duty follows what its cooler's wall takes from the draw (`6f6dbe148`, `b8cffebb6`); the Operation tab shows each pumparound's duty taken and asked (`e69f02204`).
+- Dynamic settling (`2026-11-17-dynamic-settling`; packages 1a and G, no vessel reads the law yet): the band law in `Separation` (`9b25df078`) and the drum page's Separation group (`7a51f5e84`). The vessel section drawing stays in `src/test` until a screen draws it (`2dbcf2424`).
+- Control valve sensor selector (`2026-11-16-review-plant-sizing`, `VALVE_SENSOR_REVIEW.md`; `c4066b9fc`): a control valve regulates only on a linked sensor the player selects.
+- Drive trim (`LOAD_HOLD_REVIEW.md`; `58d4d5f34`): a flow-regulating drive whose pump has a regulating flow valve in its series lowers its speed until the valve keeps 5 % of the pump's rise.
+
+### Changed
+
+- Review plant sized by the process simulator (`2026-11-16-review-plant-sizing`): the crude column review world at full scale with a crude unit, internal lines at their sized bores, the furnace lit before any feed, the charge pump on its drive's flow regulation at a 1.5 bar supply (`4b1be1358`, `48f1ed7bc`, `fe91582ae`, `fb15c5223`). A sized pump is built with its duty, Auto honours the 20 % spare, and the Build list shows flow and head (`PUMP_DRIVE_FLOW_REVIEW.md`).
+- One rule for a pipe meeting a nozzle; column nozzles draw joined (`489b172d3`).
+- Drawings: the control valve's positioner on a bracket with a feedback lever, a compact data gland, instrument cables in straight four-sided legs (`cf5803384`); a heat exchanger's temperature probes get the transmitter head (`e2ebe75e8`).
+- The column's Limited line names the binding outlet ("Limited: outlet (Product 3), 45 % of the feed", `04bc5bb7b`).
+- Rust column library archived (`2026-11-17-rust-solver-archive`; `b6a8a4993`): it leaves the build for `tools/rust-column-archive/`; no twin rule remains.
+
+### Fixed
+
+- Valve hold (`VALVE_HOLD_REVIEW.md`, `VALVE_HOLD_TRACE.md`): a flow valve moved into regulating starts its pass on the balance's flows only where that balance converged (`e75044d7c`); a pass that fails with nothing else to change solves its regulating flow valves open (`2919f7b83`).
+- Start hold (`START_HOLD_REVIEW.md`; `5f18ad79a`): the pump's suction-limit row without the supplier clip, the series rule, the retry start from the carried point, and the balance decides no pump's mode.
+- Load hold (`LOAD_HOLD_REVIEW.md`; `a333e7b55`): a solve continues from the committed interval across a drive's speed step (20 evaluations where it took over 4000).
+- Fired heater: a lit coil whose still contents stand below its set point keeps its design duty's fuel burning; the still-tube demand reads the coil's own node (`ec3d5eee5`, `e8f9dabf4`).
+
+### Planned, documents only
+
+- Column internal hydraulics (`2026-11-17-column-internal-hydraulics`): the plan and `tools/column-hydraulics`.
+
 ## [0.34.4] - 2026-11-17
 
 ### Changed

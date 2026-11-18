@@ -18,6 +18,11 @@ public final class DriftBands {
     public static final double ENTHALPY_KELVIN = 1;
     /** A steam inlet's ratio to the feed, relative. */
     public static final double STEAM_RATIO = .02;
+    /**
+     * A pumparound's duty per mole of feed booked against the one its table was solved at, relative to the larger (batch
+     * 2026-11-17-column-cold-feed, L4): a cooler that takes less or more than the table's duty asks a solve nearer what it takes.
+     */
+    public static final double PUMPAROUND = .05;
     /** The throughput relative to the design rate. */
     public static final double THROUGHPUT = .2;
     /** The closed condenser duty against the solved one, relative. */
@@ -30,7 +35,7 @@ public final class DriftBands {
 
     /** Why a column solves: the band left, or another cause. */
     public enum Trigger {
-        START, SETPOINT, COMPONENT, COMPOSITION, ENTHALPY, STEAM_RATIO, THROUGHPUT, CLOSURE
+        START, SETPOINT, COMPONENT, COMPOSITION, ENTHALPY, STEAM_RATIO, PUMPAROUND, THROUGHPUT, CLOSURE
     }
 
     /** A trigger and the value that crossed its band. */
@@ -50,7 +55,7 @@ public final class DriftBands {
     }
 
     /**
-     * The first band of the state {@code step} took (component, composition, enthalpy, steam ratio, throughput) it leaves round
+     * The first band of the state {@code step} took (component, composition, enthalpy, steam ratio, pumparound, throughput) it leaves round
      * {@code reference}, whose solve held the components {@code held}; empty while it stays inside. The closure is the table's,
      * not the state's: W2 asks this of a refused state.
      */
@@ -86,6 +91,12 @@ public final class DriftBands {
             double scale = Math.max(ratios[j], j < set.length ? set[j] : 0);
             if (scale > 0 && Math.abs(ratio - ratios[j]) / scale > STEAM_RATIO) return Optional.of(new Crossing(Trigger.STEAM_RATIO, (ratio - ratios[j]) / scale));
         }
+        // Each pumparound's duty booked per mole of feed against the state's (L4): a state with no duties known has no band.
+        double[] duties = reference.pumparounds(), booked = step.pumparounds();
+        for (int j = 0; j < booked.length && j < duties.length; j++) {
+            double q = booked[j] / fed, scale = Math.max(Math.abs(q), Math.abs(duties[j]));
+            if (scale > 0 && Math.abs(q - duties[j]) > PUMPAROUND * scale) return Optional.of(new Crossing(Trigger.PUMPAROUND, (q - duties[j]) / scale));
+        }
         double alpha = designDemand > 0 ? fed / designDemand : 0;
         if (Math.abs(alpha - reference.alpha()) > THROUGHPUT) return Optional.of(new Crossing(Trigger.THROUGHPUT, alpha));
         return Optional.empty();
@@ -95,7 +106,8 @@ public final class DriftBands {
      * The state {@code step} took as a reference for {@link #check(SplitTable.Reference, boolean[], ColumnCycle.Step, double)}
      * (W2: a refused state): its feed's shares and specific enthalpy, each steam's ratio, its throughput against
      * {@code designDemand}, at set points {@code setpoints}; {@code enthalpySlope} is the feed's, J/(mol K) (0: unknown, no
-     * enthalpy band). Its temperatures are unknown.
+     * enthalpy band), each pumparound's duty it booked per mole of feed (none where it booked none: a trip's or a pass's state).
+     * Its temperatures are unknown.
      */
     public static SplitTable.Reference reference(ColumnCycle.Step step, double designDemand, Setpoints setpoints, double enthalpySlope) {
         double fed = step.feedMoles();
@@ -103,7 +115,9 @@ public final class DriftBands {
         for (int i = 0; i < z.length; i++) z[i] = fed > 0 ? z[i] / fed : 0;
         double[] ratios = new double[step.steam().size()];
         for (int j = 0; j < ratios.length; j++) ratios[j] = fed > 0 ? step.steam().get(j).total() / fed : 0;
+        double[] duties = fed > 0 ? step.pumparounds().clone() : new double[0];
+        for (int j = 0; j < duties.length; j++) duties[j] /= fed;
         return new SplitTable.Reference(z, fed > 0 ? step.feed().energy() / fed : 0, enthalpySlope, ratios, designDemand > 0 ? fed / designDemand : 0, setpoints,
-                Double.NaN, new double[ratios.length]);
+                Double.NaN, new double[ratios.length], duties);
     }
 }
