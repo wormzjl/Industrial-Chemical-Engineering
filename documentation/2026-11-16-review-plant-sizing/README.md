@@ -375,3 +375,8 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   `mod_version`, `VesselSection` to `src/test` (the only class new on this branch that the game does not reach), the
   translation commit and the final lane. Code guide: the chapters were updated with each package; the `VesselSection`
   row of `client-screens.md` says where the class stands.
+- Pump speed and the shut valve, 2026-11-18 (owner: "fix it"; main thread: options A and (ii)): a sized pump is built
+  at its design speed (`PumpSizing.builtSpeed`, D21: the charge pump at 900 rpm, NPSH3_r 3.24 m instead of 15.8 m) and
+  the NPSH rows read that law; a creative motor with no set speed turns at its train's design speed; a flow-regulating
+  drive idles at 0.1 while a flow valve in its pump's series stands shut, and the trim runs on every driver
+  (`PUMP_SPEED_SHUT_VALVE_REVIEW.md`, review; branch `claude/pump-speed-shut-valve-6020f0`).

@@ -100,8 +100,11 @@ Outside the package: [`science/equipment/SentDesign`](../../../src/main/java/com
   `COLUMN_SOLVES`. A column with a vacuum pump has a `vacuum_pump` member in `BlockSizing`.
 - **Pumps** (`PumpSizing`): NPSH available over the liquid's p_v, or over zero pressure where it has none;
   `PUMP_NPSH_WORLD` against the greater of the clean zone's edge and 0.85 NPSH3 (`ReleasePressure.limit` as heads over
-  p_v; no row where neither exists), `PUMP_NPSH` against NPSH3 plus its margin. A drum liquid saturated with gas has the
-  head over its vapour pressure. On one dense suction (`State.dense()`) `PUMP_DENSITY` (SHOULD) reads its reduced density
+  p_v; no row where neither exists), `PUMP_NPSH` against NPSH3 plus its margin. NPSH3 is the built pump's own law
+  (`requiredNpsh(size, flow)`): rated at the bore's flow at its design speed `builtSpeed`, the duty speed (`Npsh.dutySpeed`,
+  owner D21, rated NPSH3 at most 3.3 m) rounded down to the constructor's 100 rpm grid, 2950 rpm up to 0.0275 m³/s, 1000 rpm
+  at 0.2 m³/s. `built(Size, Duty)` gives the pump that speed as its base speed (none at 2950 rpm); the Build list shows it.
+  A drum liquid saturated with gas has the head over its vapour pressure. On one dense suction (`State.dense()`) `PUMP_DENSITY` (SHOULD) reads its reduced density
   against 0.86, the lightest suction pumps run on carbon dioxide; no other suction reads it.
 - **Plunger pumps** (`PumpSizing.Plunger`, the Pump tile's `PLUNGER` type): `PUMP_RATED` reads the spared flow against
   the model's displacement times its clearance's share at the rise (`PlungerPump.volumetricEfficiency` on `Load.pressure`

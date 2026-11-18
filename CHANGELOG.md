@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+- On `claude/pump-speed-shut-valve-6020f0` (batch `2026-11-16-review-plant-sizing`, `PUMP_SPEED_SHUT_VALVE_REVIEW.md`): a sized pump is built at its design speed (owner D21; `687dfd5fa`) and its NPSH rows read that pump; a creative motor with no set speed turns at its train's design speed; a flow-regulating drive idles at its lowest speed while a flow valve in its pump's series stands shut, and the drive's trim runs on every driver, a creative motor included (`4902d1c5a`). No format changes.
+
 ## [0.35.0] - 2026-11-18
 
 On `claude/column-testing-sizing-26b5b9`. Formats: fluid facts schema 30, checkpoint state format 53, equipment shape fields 14, protocol `icheme-7`, a new saved flag `icheme_column_test_world` (format 1); see `documentation/reference/FORMATS.md`.
