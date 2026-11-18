@@ -116,7 +116,7 @@
   "fluid_device.heat": {
     "stops": [
       { "anchor": "title" },
-      { "anchor": "side:0" },
+      { "anchor": "tab:overview" },
       { "anchor": "glass" },
       { "anchor": "group:device_group.phases" },
       { "anchor": "group:device_group.readings" },

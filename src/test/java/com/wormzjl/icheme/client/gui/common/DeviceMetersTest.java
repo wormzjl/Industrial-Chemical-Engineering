@@ -42,13 +42,13 @@ class DeviceMetersTest {
     @Test
     void aValveReadsItsInletAndThroughputInKelvinAndKilopascal() {
         var state = state(200000, 300, 0.002, 2.0, new double[]{0.002, 0, 0}, new double[][]{{20, 5}, {0, 0}, {0, 0}}, 0.002);
-        var view = new FluidView(1, 1, 0, 0, "STEADY: flowing", state, 2.0, List.of(), -50000.0, 1, List.of(), null, null, List.of(), null);
+        var view = new FluidView(1, 1, 0, 0, "STEADY: flowing", state, 2.0, List.of(), 50000.0, 1, List.of(), null, null, List.of(), null);
         var m = new DeviceMeters(new DeviceMeters.Data(Kind.VALVE, view, AXIS, WEIGHTS, true, null, false, List.of()), null, PhaseRatioBasis.VOLUME,
                 TemperatureUnit.KELVIN, PressureUnit.KILOPASCAL, FlowRateUnit.PER_SECOND, false, T);
         // A valve's node: its temperature, 300 K; its inlet pressure, 200 kPa; its throughput by moles, 2 kg/s of 2 kg that
-        // holds 25 mol: 2 · 25 / 2 / 1000 = 0.025 kmol/s; its pressure change, -50 kPa. No tank, pipe, drive or instrument.
+        // holds 25 mol: 2 · 25 / 2 / 1000 = 0.025 kmol/s; its pressure drop, 50 kPa. No tank, pipe, drive or instrument.
         assertEquals(List.of(meter("temperature", "300.0", "K", null), meter("inlet_pressure", "200.0000", "kPa", null),
-                meter("throughput", "0.0250", "kmol/s", "throughput.hint"), meter("pressure_change", "-50.0000", "kPa", null)), m.meters());
+                meter("throughput", "0.0250", "kmol/s", "throughput.hint"), meter("pressure_drop", "50.0000", "kPa", null)), m.meters());
         // The phases by volume, from the node's own contents; no aqueous liquid, so it is not named water.
         var phases = m.phases();
         assertEquals("volume", phases.basis());
@@ -216,7 +216,7 @@ class DeviceMetersTest {
         // 80 %; the shaft power 10 kW; the efficiency, the fluid's 5 / 1000 · 300 000 = 1500 W over the shaft's 10 000 W, 15 %.
         // Then the instruments: a pressure probe at 2.5 bar, and a temperature probe that cannot read.
         assertEquals(List.of(meter("temperature", "50.0", "°C", null), meter("suction_pressure", "1.500000", "bar", null),
-                meter("throughput", "15.0", "kmol/min", "throughput.hint"), meter("pressure_change", "3.000000", "bar", null),
+                meter("throughput", "15.0", "kmol/min", "throughput.hint"), meter("pressure_rise", "3.000000", "bar", null),
                 meter("head", "30.6", "m", "head.hint"), meter("speed_share", "80.0", "%", null), meter("shaft_power", "10.0", "kW", null),
                 meter("efficiency", "15.0", "%", "efficiency.hint"), meter("pressure_probe", "2.500000", "bar", null),
                 meter("temperature_probe", "—", "", "reading.unavailable")), m.meters());

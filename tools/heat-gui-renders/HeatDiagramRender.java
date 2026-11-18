@@ -1,3 +1,4 @@
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram;
 import com.wormzjl.icheme.client.gui.common.HeatControlColumn;
 import com.wormzjl.icheme.client.gui.common.HeatDiagram;
@@ -48,7 +49,7 @@ import javax.imageio.ImageIO;
  * {@code java -Djava.awt.headless=true -cp build/classes/java/main tools/heat-gui-renders/HeatDiagramRender.java src/main/resources/assets/icheme/lang/en_us.json tmp/heat-gui-renders build/moddev/artifacts/neoforge-21.1.219-client-extra-aka-minecraft-resources.jar}
  */
 public final class HeatDiagramRender {
-    static final int SCALE = 2, WIDTH = 464, HEIGHT = 254;
+    static final int SCALE = 2, WIDTH = Integer.getInteger("panelWidth", 464), HEIGHT = Integer.getInteger("panelHeight", 254);
     static Map<String, String> lang;
     static GameFont font;
 
@@ -110,7 +111,7 @@ public final class HeatDiagramRender {
         canvas.fill(0, 0, w, h, PanelSkin.LIGHT.screen().glass());
         var unit = com.wormzjl.icheme.science.equipment.HeatSides.Unit.valueOf(c.unit());
         var side = com.wormzjl.icheme.science.equipment.HeatSides.Side.valueOf(c.side());
-        var sheet = new HeatFlowsheet(HeatDiagram.of(unit, side, c.design()), HeatDiagram.roles(unit, side));
+        var sheet = HeatFlowsheet.forDevice(unit, side, c.design());
         sheet.fit(pad, pad, HeatDiagram.WIDTH, HeatDiagram.HEIGHT);
         sheet.draw(canvas, data());
         canvas.count(c.file() + " drawing");
@@ -181,14 +182,17 @@ public final class HeatDiagramRender {
 
     /** Illustrative readings: a stream's temperature (°C) and flow (kg/s). */
     private static String value(HeatDiagram.Value v) {
-        var t = Map.of("port:SHELL_INLET", 20.0, "port:SHELL_OUTLET", 37.5, "part:shell_outlet_tee", 30.0, "part:shell_inlet_tee", 20.0, "port:TUBE_INLET", 90.0,
-                "port:TUBE_OUTLET", 72.6, "port:PROCESS_INLET", 85.0, "port:PROCESS_OUTLET", 80.0, "port:CONVECTION_INLET", 50.0, "air", 25.0);
+        var t = new HashMap<>(Map.of("port:SHELL_INLET", 20.0, "port:SHELL_OUTLET", 37.5, "part:shell_outlet_tee", 30.0, "part:shell_inlet_tee", 20.0, "port:TUBE_INLET", 90.0,
+                "port:TUBE_OUTLET", 72.6, "port:PROCESS_INLET", 85.0, "port:PROCESS_OUTLET", 80.0, "port:CONVECTION_INLET", 50.0, "air", 25.0));
+        t.put("port:CONVECTION_OUTLET",80.0);
+        t.put("port:RADIANT_INLET",80.0);
+        t.put("port:RADIANT_OUTLET",200.0);
         var f = Map.of("port:SHELL_INLET", 9.8, "part:shell_bypass_valve", 7.4, "port:TUBE_INLET", 5.9, "part:tube_bypass_valve", 1.2, "port:PROCESS_INLET", 13.5,
                 "port:CONVECTION_INLET", 4.0, "port:RADIANT_INLET", 4.0, "port:FEED", 2.1, "port:VAPOUR_OUTLET", 1.2, "port:LIQUID_OUTLET", 0.9);
         for (var s : v.sources()) {
             switch (v.show()) {
                 case DUTY -> {
-                    return "433.0 kW";
+                    return s.equals("coil:RADIANT") ? "1000.0 kW" : s.equals("coil:CONVECTION") ? "240.0 kW" : "433.0 kW";
                 }
                 case TEMPERATURE -> {
                     if (t.containsKey(s)) return String.format(Locale.ROOT, s.equals("air") ? "Air at %.1f °C" : "%.1f °C", t.get(s));
@@ -506,8 +510,8 @@ public final class HeatDiagramRender {
         // The drawing's HMI screen, above the legend where the drawing has line parts (controlWell).
         var unit = com.wormzjl.icheme.science.equipment.HeatSides.Unit.valueOf(c.unit());
         var side = com.wormzjl.icheme.science.equipment.HeatSides.Side.valueOf(c.side());
-        var diagram = HeatDiagram.of(unit, side, c.design());
-        var sheet = new HeatFlowsheet(diagram, HeatDiagram.roles(unit, side));
+        var sheet = HeatFlowsheet.forDevice(unit, side, c.design());
+        var diagram = sheet.diagram;
         boolean legend = diagram.parts().stream().anyMatch(HeatDiagram.Part::line);
         var slots = FluidGuiLayout.control(WIDTH);
         int legendY = controlBottom - 12, wellBottom = legend ? legendY - 6 : controlBottom;
@@ -515,13 +519,14 @@ public final class HeatDiagramRender {
         // The title row: the server's title (vessel and side) and the theme key with its contrast sign.
         int themeWidth = 18;
         String vessel = c.unit().equals("FIRED_HEATER") ? "vertical_heater" : c.unit().toLowerCase(Locale.ROOT);
-        String title = tr("gui.icheme.heat_side.title", tr("gui.icheme.vessel.title." + vessel), tr("gui.icheme.heat_side." + c.side().toLowerCase(Locale.ROOT)));
+        String title = c.unit().equals("FIRED_HEATER") ? tr("gui.icheme.vessel.title." + vessel) : tr("gui.icheme.heat_side.title", tr("gui.icheme.vessel.title." + vessel), tr("gui.icheme.heat_side." + c.side().toLowerCase(Locale.ROOT)));
         skin.title(canvas, 10, 10, m.cut(title, WIDTH - 36 - themeWidth));
         skin.iconKey(canvas, new Rect(WIDTH - 10 - themeWidth, 5, themeWidth, 18), Skin.Icon.THEME, false);
-        var tabs = FluidGuiLayout.tabs(WIDTH, 2);
+        var tabs = FluidGuiLayout.tabs(WIDTH, 3);
         skin.button(canvas, new Rect(tabs.get(0).x(), 29, tabs.get(0).width(), 18), tr("gui.icheme.fluid.overview"), Skin.Press.REST, false);
         skin.button(canvas, new Rect(tabs.get(1).x(), 29, tabs.get(1).width(), 18), tr("gui.icheme.fluid.control"), Skin.Press.CURRENT, false);
-        skin.status(canvas, new Rect(10, 59, WIDTH - 20, 9), "Holding 45.0 °C · steady since 12 s", Palette.ACCENT);
+        skin.button(canvas, new Rect(tabs.get(2).x(), 29, tabs.get(2).width(), 18), tr("gui.icheme.fluid.datasheet"), Skin.Press.REST, false);
+        skin.status(canvas, new Rect(10, 59, WIDTH - 20, 9), c.unit().equals("FIRED_HEATER") ? "Firing to 200.0 °C" : "Holding 45.0 °C · steady since 12 s", Palette.ACCENT);
         skin.hDivider(canvas, 8, WIDTH - 8, HEIGHT - 49);
         var footer = FluidGuiLayout.footer(WIDTH);
         String[] footerText = {tr("gui.icheme.fluid.close"), tr("gui.icheme.fluid.apply"), tr("gui.icheme.fluid.mole_basis_short"), "°C", "kPa", "/s"};
@@ -554,6 +559,14 @@ public final class HeatDiagramRender {
         var heat = new FluidView.Heat(c.unit(), c.side(), c.paired(), 318, -1e6, c.unit().equals("AIR_COOLER") ? 1.0 : null, c.unit().equals("AIR_COOLER") ? 1.2e4 : null,
                 c.unit().equals("FIRED_HEATER") ? 1.0 : null, c.unit().equals("FIRED_HEATER") ? 473.15 : null, c.unit().equals("FIRED_HEATER") ? 2e6 : null,
                 c.unit().equals("EXCHANGER") ? 0.25 : null).with(c.actuator(), c.effort(), "NONE", c.unit().equals("EXCHANGER") ? ports : List.of(), c.lines());
+        if (c.unit().equals("FIRED_HEATER")) {
+            var furnacePorts = List.of(new FluidView.Port("CONVECTION_INLET", 323.15, 225000., 4, new double[3][1], new double[3]),
+                    new FluidView.Port("CONVECTION_OUTLET", 353.15, 215000., 4, new double[3][1], new double[3]),
+                    new FluidView.Port("RADIANT_INLET", 353.15, 213000., 4, new double[3][1], new double[3]),
+                    new FluidView.Port("RADIANT_OUTLET", 473.15, 190000., 4, new double[3][1], new double[3]));
+            heat = new FluidView.Heat(c.unit(), c.side(), true, 473.15, 1e6, null, null, 1., 473.15, 2e6, null)
+                    .with("burners", .5, "NONE", furnacePorts, null).withPartnerCoil(new FluidView.Coil(240000, null, .0006, null));
+        }
         // The side's deposit (batch 2026-11-16-fouling-corrosion, WP5): every heat side reads one; a kettle's pool is a vessel.
         if (!c.file().equals("kettle-pool")) heat = heat.withFouling(c.unit().equals("AIR_COOLER") ? 4e-4 : 1.5e-3);
         // The unit's UA and clean UA (D16), W/K: an exchanger at 43 % behind its deposits, a kettle at 75 %, an air cooler
@@ -562,7 +575,7 @@ public final class HeatDiagramRender {
             heat = c.unit().equals("AIR_COOLER") ? heat.withConductance(61_200.0, 68_000.0) : c.unit().equals("KETTLE") ? heat.withConductance(30_000.0, 40_000.0) : heat.withConductance(18_400.0, 42_500.0);
         boolean controllable = !c.unit().equals("FIRED_HEATER") && !(c.unit().equals("KETTLE") && c.side().equals("SHELL"));
         var applied = controllable ? new HeatUnit.Control(c.mode(), c.mode() == HeatUnit.Mode.RATIO ? 0.5 : 318.15, 0, 0.25) : null;
-        var input = new HeatControlColumn.Input(heat, applied, c.edit(), controllable, c.mode(), c.powerOn(), "°C");
+        var input = new HeatControlColumn.Input(heat, applied, c.edit(), controllable, c.mode(), c.powerOn(), TemperatureUnit.CELSIUS);
         HeatControlColumn.Texts texts = (key, a) -> tr("gui.icheme.fluid." + key, a);
         List<Column> columns;
         if (slots.split()) {

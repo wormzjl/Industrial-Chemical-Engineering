@@ -19,6 +19,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import com.wormzjl.icheme.science.equipment.ShapeRepair;
 import com.wormzjl.icheme.science.equipment.EquipmentRefresh;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.NozzleBore;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.PipeSizes;
@@ -344,7 +345,7 @@ public final class EquipmentShellBlockEntity extends ModelledBlockEntity impleme
         Component unit = Component.translatable("gui.icheme.vessel.title." + shape.kind().name().toLowerCase(Locale.ROOT));
         // A unit's heat side names its side (batch 2026-10-27-heat-exchanger-design).
         var heat = FluidWorldAuthority.find(player.server).map(world -> world.registrations().get(identity)).map(record -> record.device().heat()).orElse(null);
-        Component title = heat == null ? unit : Component.translatable("gui.icheme.heat_side.title", unit, Component.translatable("gui.icheme.heat_side." + heat.side().name().toLowerCase(Locale.ROOT)));
+        Component title = heat == null || heat.side() == HeatSides.Side.CONVECTION || heat.side() == HeatSides.Side.RADIANT ? unit : Component.translatable("gui.icheme.heat_side.title", unit, Component.translatable("gui.icheme.heat_side." + heat.side().name().toLowerCase(Locale.ROOT)));
         player.openMenu(new MenuProvider() {
             public Component getDisplayName() {
                 return title;

@@ -1,5 +1,7 @@
 package com.wormzjl.icheme.client.gui.common;
 
+import com.wormzjl.icheme.science.assembly.ExchangerBlueprint;
+import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.client.PortColours;
 import com.wormzjl.icheme.client.gui.common.AssemblyDiagram.Align;
 import com.wormzjl.icheme.client.gui.common.HeatDiagram.Part;
@@ -41,6 +43,13 @@ public final class HeatFlowsheet {
     private int x, y, w = HeatDiagram.WIDTH, h = HeatDiagram.HEIGHT;
     private @Nullable FlowsheetPainter painter;
 
+    public static HeatFlowsheet forDevice(HeatSides.Unit unit, HeatSides.Side side, ExchangerBlueprint.Design lines) {
+        if (unit == HeatSides.Unit.FIRED_HEATER) {
+            var furnace = HeatDiagram.furnace();
+            return new HeatFlowsheet(furnace, furnace.pills().stream().map(HeatDiagram.Pill::role).toList());
+        }
+        return new HeatFlowsheet(HeatDiagram.of(unit, side, lines), HeatDiagram.roles(unit, side));
+    }
     /** The drawing of {@code diagram}; {@code own} the roles of the side whose screen it is on (its pills in the accent). */
     public HeatFlowsheet(HeatDiagram diagram, List<String> own) {
         this.diagram = diagram;

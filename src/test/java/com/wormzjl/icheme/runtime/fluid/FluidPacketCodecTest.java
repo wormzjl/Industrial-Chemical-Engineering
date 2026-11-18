@@ -164,7 +164,7 @@ class FluidPacketCodecTest {
     @Test void theProtocolIsFluidNineteenWithDistinctStaticAndLivePayloads() {
         // One protocol for every registrar since icheme-1 (codebase review P3-22); the fluid menu payloads were fluid-24.
         // icheme-2: the pollution map's payloads joined (WP9).
-        assertEquals("icheme-7",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
+        assertEquals("icheme-9",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
         var ids=java.util.Set.of(FluidNetwork.EditPayload.TYPE.id(),FluidNetwork.RecoverPayload.TYPE.id(),FluidNetwork.StaticPayload.TYPE.id(),FluidNetwork.LivePayload.TYPE.id());
         assertEquals(4,ids.size());
         var base=generatorMenu("");int count=base.components().size();
@@ -238,7 +238,7 @@ class FluidPacketCodecTest {
     /** W7: the machine page's view, edit and driver payloads round-trip; a view with a bad number is refused on read. */
     @Test void theMachinePayloadsRoundTripOnTheirOwnRegistrar() {
         // The machine payloads ride on the one protocol since icheme-1 (P3-22); they were machine-4. icheme-2 since WP9, icheme-3 since the fluid interfaces batch, icheme-5 since the material of construction (batch 2026-11-16-fouling-corrosion).
-        assertEquals("icheme-7",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
+        assertEquals("icheme-9",com.wormzjl.icheme.network.NetworkProtocol.VERSION);
         var settings=new ShaftUnit.Settings(true,com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW,.8,0,0);
         var view=new MachineView(7,com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR,"RUNNING",2950,24900,26700,534,settings,
                 com.wormzjl.icheme.science.machine.ShaftTrain.Trip.NONE,30000,2950,2,true,.72,370,"FV-101",0,2.9,40e5,4e5,null);
@@ -360,6 +360,12 @@ class FluidPacketCodecTest {
         assertArrayEquals(n[0],copy.port("SHELL_INLET").phaseMoles()[0]);assertArrayEquals(new double[]{.0098,0,.02},copy.port("SHELL_INLET").phaseVolumes());
         assertEquals(lines,copy.lines());assertEquals(7.4,copy.lines().part("shell_bypass_valve").massFlow());
         assertEquals(3e-4,copy.fouling());assertEquals(41_250.5,copy.ua());assertEquals(58_000.25,copy.uaClean());
+        var partner = new FluidView.Coil(320000, null, 0.0004, new FluidView.Integrity(.2,.04,"EROSION",1200.,"CARBON_STEEL"));
+        var furnace = new FluidView.Heat("FIRED_HEATER","RADIANT",true,550,700000,null,null,1.,550.,1000000.,null).withPartnerCoil(partner);
+        var paired = new FluidNetwork.MenuData(TopologyCompiler.Kind.HEAT_SIDE,view.withHeat(furnace),base.controls(),base.components(),base.presets(),"",base.materialNames(),base.molecularWeights());
+        var received = FluidNetwork.MenuData.of(paired.staticData(0),FluidNetwork.decodeLive(new Gson().toJson(live(paired)))).view().heat();
+        assertEquals(partner, received.coil("CONVECTION"));
+        assertEquals(700000, received.coil("RADIANT").heatWatt());
         var unknown=new FluidView.Heat("EXCHANGER","SHELL",true,303.15,-433_000,null,null,null,null,null,.42);
         assertNull(unknown.ua());assertNull(unknown.uaClean());assertNull(unknown.withFouling(1e-4).ua(),"the deposit alone sets no UA");
         assertThrows(IllegalArgumentException.class,()->unknown.withConductance(-1.0,1.0));assertThrows(IllegalArgumentException.class,()->unknown.withConductance(1.0,Double.NaN));

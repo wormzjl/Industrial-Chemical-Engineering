@@ -64,7 +64,7 @@ class EquipmentNetworkCodecTest {
         // icheme-3: the steam classes gained LP, first, so their ordinals moved; the conversion rules sync and the alarm beacon's payloads (batch 2026-11-15-fluid-interfaces).
         // icheme-5: the constructor's design carries its material of construction (batch 2026-11-16-fouling-corrosion, WP3).
         // icheme-7: a vessel's view carries its carry-over (batch 2026-11-17-three-phase-separator); icheme-6 is another batch's.
-        assertEquals("icheme-7", NetworkProtocol.VERSION);
+        assertEquals("icheme-9", NetworkProtocol.VERSION);
         var request = new EquipmentNetwork.Deconstruct(AT, AT.north(5), 12345, 99);
         assertEquals(request, roundTrip(EquipmentNetwork.Deconstruct.STREAM_CODEC, request));
 
@@ -72,7 +72,7 @@ class EquipmentNetworkCodecTest {
 
     /** The removal group's Repair and its structure state (batch 2026-11-16-fouling-corrosion, WP4, still icheme-5). */
     @Test void repairAndStructureStateRoundTrip() {
-        assertEquals("icheme-7", NetworkProtocol.VERSION);
+        assertEquals("icheme-9", NetworkProtocol.VERSION);
         var repair = new EquipmentNetwork.Repair(AT, AT.north(5), -778, 12);
         assertEquals(repair, roundTrip(EquipmentNetwork.Repair.STREAM_CODEC, repair));
         // RepairAnswer carries a Component, as DeconstructAnswer does: its codec needs the game's bootstrap, so it is not round-tripped here.

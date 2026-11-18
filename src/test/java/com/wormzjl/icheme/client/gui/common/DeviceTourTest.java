@@ -1,5 +1,6 @@
 package com.wormzjl.icheme.client.gui.common;
 
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
 import com.wormzjl.icheme.client.gui.common.kit.Column;
 import com.wormzjl.icheme.client.gui.common.kit.Measure;
 import com.wormzjl.icheme.client.gui.common.kit.Rect;
@@ -99,7 +100,7 @@ public class DeviceTourTest {
             // An exchanger side with its lines checked: Check lines stands under what acts.
             var lined = new HeatControlColumn.Input(HeatControlColumnTest.heat("EXCHANGER", "TUBE", true, "bypass", 0.2, new com.wormzjl.icheme.runtime.fluid.FluidView.Lines("CHECKED", 1, List.of()), List.of()),
                     new com.wormzjl.icheme.runtime.fluid.HeatUnit.Control(com.wormzjl.icheme.runtime.fluid.HeatUnit.Mode.OUTLET_TEMPERATURE, 330, 0, 0), edit, true,
-                    com.wormzjl.icheme.runtime.fluid.HeatUnit.Mode.OUTLET_TEMPERATURE, true, "C");
+                    com.wormzjl.icheme.runtime.fluid.HeatUnit.Mode.OUTLET_TEMPERATURE, true, TemperatureUnit.CELSIUS);
             out.add(new Sample("control lines" + who, "control", DeviceTour.Layout.HEAT, List.of("overview", "control"), edit, false, true, w -> HeatControlColumnTest.place(lined, T, FluidGuiLayout.control(w))));
             var drive = new DeviceColumn.Drive("MOTOR 30 kW", "RUNNING · 2950 rpm", true, false);
             var suction = new DeviceColumn.Suction("6.0", "2.0", "0", "100", "—");
@@ -114,7 +115,7 @@ public class DeviceTourTest {
                 }
             for (var valve : List.of(DeviceColumn.Valve.MASS_FLOW, DeviceColumn.Valve.VOLUME_FLOW, DeviceColumn.Valve.PRESSURE, DeviceColumn.Valve.UNCONFIGURED))
                 out.add(overview("valve " + valve + who, DeviceTour.Layout.VALVE, overview, edit, false, input(Kind.VALVE, edit, false, valve, new DeviceColumn.Opening(0.4, "Holding flow"),
-                        false, null, null, List.of(), phases(), meters("temperature", "inlet_pressure", "throughput", "pressure_change"), null, null)));
+                        false, null, null, List.of(), phases(), meters("temperature", "inlet_pressure", "throughput", "pressure_drop"), null, null)));
             for (boolean junction : new boolean[]{true, false}) {
                 var tabs = junction ? List.of("overview", "connections") : overview;
                 var pipe = input(Kind.PIPE, edit, false, DeviceColumn.Valve.NONE, null, false, null, junction ? "Junction · 3 connections" : null, List.of(), phases(),

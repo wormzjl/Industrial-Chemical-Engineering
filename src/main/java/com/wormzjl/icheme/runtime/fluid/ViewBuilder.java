@@ -142,6 +142,23 @@ final class ViewBuilder {
         if(index==null||index.snapshot!=snapshot){index=new ViewIndex(snapshot);viewIndexes.put(island,index);}
         return index;
     }
+    /** The other coil can belong to another island with a different committed interval. */
+    private FluidView.Coil partnerCoil(long id, Map<Long,IslandCoordinator.Snapshot> islands) {
+        Long owner = authority.registry.owner(id);
+        if (owner == null) return null;
+        var ix = index(owner, islands);
+        long pipeId = PhysicalFluidTopology.sideIdentity(id);
+        var edge = ix.pipes.get(pipeId);
+        if (edge == null) return null;
+        var law = ix.snapshot.graph().pipes().get(edge).heat();
+        double seconds = ix.snapshot.lastResult().map(PassiveIntervalSolver.Result::advancedSeconds).orElse(0.0);
+        Double dutyLimit = law instanceof FiredCoil coil ? coil.duty() : null;
+        Double deposit = authority.integrity.kindOf(id) == Integrity.Kind.HEAT_SIDE ? authority.integrity.fouling(id) : null;
+        var registration = authority.registrations().get(id);
+        return new FluidView.Coil(seconds > 0 ? ix.heat(pipeId) / seconds : 0, dutyLimit, deposit,
+                registration == null ? null : wall(id, registration));
+    }
+
     /**
      * The liquid-like weight of what device {@code id} shows, on the server's own state of the island {@code islands} presents
      * ({@link DenseReadings}): a node's contents, else the stream its pipes moved over the last interval (each side from the
@@ -314,6 +331,7 @@ final class ViewBuilder {
                 if(tubes!=null)for(var p:tubes.graph().pipes())if(p.id()==tube)conductance=conductance(p.heat());
             }
             if(conductance!=null)view=view.withHeat(view.heat().withConductance(conductance.ua(),conductance.clean()));
+            if (heat.burners() && heat.partner() != 0) view = view.withHeat(view.heat().withPartnerCoil(partnerCoil(heat.partner(), islands)));
         }
         // A batch still's pot (batch 2026-11-09-batch-distiller, W3): its status and alarms on the status line, an electric one's power.
         if(registration.device().stillPot()) {
