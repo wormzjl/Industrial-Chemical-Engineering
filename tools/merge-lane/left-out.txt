@@ -346,7 +346,6 @@ com.wormzjl.icheme.LayeringTest.layersReferenceOnlyWhatTheLayeringAllows  # 1.1 
 com.wormzjl.icheme.science.flowsheet.FlowsheetColumnTest.theSampleClosesInTwoPasses  # 1.1 s, no failure in 20 lanes
 com.wormzjl.icheme.runtime.fluid.ColumnRunTest.withoutItsValveACondensersWaterRunsAsBefore  # 1.1 s, no failure in 20 lanes
 com.wormzjl.icheme.client.gui.common.StillDoorTest.thePotsDoorFitsAtEveryWidthWithItsBoxesInLine  # 1.1 s, no failure in 16 lanes
-com.wormzjl.icheme.runtime.fluid.ColumnRunTest.aColumnsOutletFeedsAnother  # 1.1 s, no failure in 20 lanes
 com.wormzjl.icheme.runtime.instrument.GaugeAccessoriesTest.levelPadsRemainDistinctAcrossNativeSizesAndHeadingsAndCoversAreClosed  # 1.1 s, no failure in 21 lanes
 com.wormzjl.icheme.client.gui.flowsheet.SheetEditorTest.aNameInUseOrEmptyIsRefusedAndChangesNothing  # 1.1 s, no failure in 20 lanes
 com.wormzjl.icheme.science.fluid.network.SteamEjectorConnectionTest.aShutDischargePassesNothing  # 1.1 s, no failure in 15 lanes

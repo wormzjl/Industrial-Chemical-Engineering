@@ -450,15 +450,39 @@ class ColumnRunTest {
         world.runTo(40);
         long first=world.ledger.reserve(2),second=first+1,feed=world.ledger.nextIdentity(),outlet=feed+1,inlet=feed+2,product=feed+3;
         var g=new PipeResistanceGeometry(world.registry.registrations().get(feedValve).device().geometry());var none=new double[0];
-        var a=new Setpoints(firstRate,firstRate,330,1,0,none,none,none);var b=new Setpoints(secondRate,secondRate,330,1,0,none,none,none);
+        var a=new Setpoints(firstRate,firstRate,330,1,0,none,none,none);
+        var upstream=table(model,a);
+        var upstreamPrices=upstream.enthalpy();
+        var distillate=upstream.table().products().getFirst();
+        var fractions=upstream.table().reference().feedFractions();
+        double delivered=0;
+        for(int i=0;i<m;i++)delivered+=fractions[i]*upstreamPrices[0][i];
+        // The line transports the distillate account's enthalpy through adiabatic valves.
+        // Recover its temperature at each port's pressure, including the downstream inlet.
+        double outletPressure=distillate.pressure(),inletPressure=150_000;
+        var atOutlet=model.equilibriumPH(distillate.temperature(),outletPressure,delivered,fractions.clone(),()->{});
+        var atInlet=model.equilibriumPH(distillate.temperature(),inletPressure,delivered,fractions.clone(),()->{});
+        assertNotNull(atOutlet,"the upstream product at the generator pressure");
+        assertNotNull(atInlet,"the upstream product at the downstream inlet pressure");
+        // The second column removes 1 kJ/mol from that feed. Price the product by its recovered PH state.
+        var secondProduct=model.equilibriumPH(atInlet.temperature(),outletPressure,atInlet.enthalpy()-1000,fractions.clone(),()->{});
+        assertNotNull(secondProduct,"the downstream product at the generator pressure");
+        var b=new Setpoints(secondRate,secondRate,secondProduct.temperature(),1,0,none,none,none);
+        var secondReference=new SplitTable.Reference(fractions,atInlet.enthalpy(),30,none,1,b,atInlet.temperature(),none);
+        var secondTable=new SplitTable(model.components(),
+                List.of(new SplitTable.Product(Port.DISTILLATE,0,distillate.recovery(),secondProduct.temperature(),outletPressure)),
+                0,none,secondProduct.enthalpy()-atInlet.enthalpy(),secondReference,upstream.table().held());
+        var secondPrices=new double[1][m];
+        Arrays.fill(secondPrices[0],secondProduct.enthalpy());
         world.ledger.column(new ColumnUnit(first,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,a,List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,outlet,outletValve,Account.empty(m))),ColumnUnit.Totals.empty(m),0));
         world.ledger.column(new ColumnUnit(second,new PhysicalFluidTopology.Position(EventPathWorld.DIM,inletAt+3,70,0),true,b,List.of(new ColumnUnit.Station(Port.FEED,0,inlet,inletValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,product,productValve,Account.empty(m))),ColumnUnit.Totals.empty(m),0));
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
-                new WorldTopologyLedger.Edit(outlet,new WorldTopologyLedger.Registration(port(outlet,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0)),
-                new WorldTopologyLedger.Edit(inlet,new WorldTopologyLedger.Registration(port(inlet,inletAt,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
-                new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,inletAt+6,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))),product+1,null);
+                new WorldTopologyLedger.Edit(outlet,new WorldTopologyLedger.Registration(port(outlet,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,atOutlet.temperature(),outletPressure,n2),0)),
+                new WorldTopologyLedger.Edit(inlet,new WorldTopologyLedger.Registration(port(inlet,inletAt,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,atInlet.temperature(),inletPressure,n2),0)),
+                new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,inletAt+6,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,secondProduct.temperature(),outletPressure,n2),0))),product+1,null);
         ops.refresh();world.columns=ops;
-        var s=table(model,a);ops.table(first,s.table(),s.enthalpy());s=table(model,b);ops.table(second,s.table(),s.enthalpy());
+        ops.table(first,upstream.table(),upstreamPrices);
+        ops.table(second,secondTable,secondPrices);
         return new Chain(world,ops,counting,first,second,feed,outlet,inlet,product);
     }
     /** One column's outlet into another's inlet: two port valves in series, or one valve bounding both. The lower target wins, each column's books stay exact, and neither gives what it does not hold (owner 2026-11-02, "Lower target wins"). */
