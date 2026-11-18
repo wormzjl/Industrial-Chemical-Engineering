@@ -89,6 +89,7 @@ class IntegrityTest {
         final List<Double> ledgerAtRestate = new ArrayList<>();
         WorldTopologyLedger ledger;
         double air;
+        int airReads;
 
         @Override
         public boolean restate(long id) {
@@ -117,6 +118,7 @@ class IntegrityTest {
         }
 
         public double corrosiveAir(PhysicalFluidTopology.Position at) {
+            airReads++;
             return air;
         }
 
@@ -279,6 +281,7 @@ class IntegrityTest {
         rig.booked();
         rig.cadence(MachineHealth.CADENCE);
         assertEquals(Integrity.EVALUATIONS, rig.integrity.evaluations());
+        assertEquals(Integrity.EVALUATIONS, rig.host.airReads);
         double first = CorrosionLaw.outside(Metallurgy.CARBON_STEEL, 2);
         assertTrue(first > 0);
         for (long id = 1; id <= count; id++)
@@ -289,14 +292,14 @@ class IntegrityTest {
         for (long id = 1; id <= count; id++) assertEquals(first, rig.integrity.wall(id).rate(), 1e-12);
         rig.cadence(MachineHealth.CADENCE);
         assertEquals(count, rig.integrity.evaluations(), "nothing new to read");
-        // A new span and new air: the next 256 from the cursor, wrapping to the first.
+        // A new span and new air: each scan moves up to 256 independently.
         rig.host.air = 4;
         rig.booked();
+        int airReads = rig.host.airReads;
         rig.cadence(MachineHealth.CADENCE);
         assertEquals(count + Integrity.EVALUATIONS, rig.integrity.evaluations());
+        assertEquals(airReads + Integrity.EVALUATIONS, rig.host.airReads);
         double second = CorrosionLaw.outside(Metallurgy.CARBON_STEEL, 4);
-        for (long id = 1; id <= count; id++)
-            assertEquals(id <= Integrity.EVALUATIONS ? second : first, rig.integrity.wall(id).rate(), 1e-12, "vessel " + id + " after the new span");
         rig.cadence(MachineHealth.CADENCE);
         for (long id = 1; id <= count; id++) assertEquals(second, rig.integrity.wall(id).rate(), 1e-12);
     }
@@ -318,6 +321,30 @@ class IntegrityTest {
         rig.booked();
         rig.cadence(MachineHealth.CADENCE);
         assertEquals(clean, rig.integrity.wall(VESSEL).rate(), 1e-12);
+    }
+
+    @Test
+    void corrosiveAirFailsAnIdleWallWithoutASolveAndCanBeSwitchedOff() {
+        var rig = plant(1, nitrogen(101325), 0, 0, false);
+        var metal = Metallurgy.CARBON_STEEL;
+        double initial = metal.allowance() - 0.001;
+        assertTrue(rig.integrity.set(VESSEL, initial, 0, false));
+        rig.host.air = 5;
+        rig.cadence(MachineHealth.CADENCE);
+        var wall = rig.integrity.wall(VESSEL);
+        double rate = CorrosionLaw.outside(metal, 5);
+        assertEquals(rate, wall.rate(), 1e-12);
+        assertEquals(initial, wall.loss(), 1e-12, "the exposure starts at the sample");
+        rig.settings = new Integrity.Settings(true, 200, false, true, true, 100);
+        rig.cadence(20 * 3600);
+        assertEquals(0, rig.integrity.wall(VESSEL).rate());
+        assertEquals(initial, rig.integrity.wall(VESSEL).loss(), 1e-12);
+        rig.settings = Integrity.Settings.DEFAULT;
+        rig.cadence(MachineHealth.CADENCE);
+        rig.cadence(20 * 3600);
+        assertEquals(initial + rate / 200, rig.integrity.wall(VESSEL).loss(), 1e-12);
+        assertEquals(List.of(VESSEL), rig.host.closed);
+        assertEquals(0, rig.integrity.evaluations(), "no process result was booked or evaluated");
     }
 
     @Test

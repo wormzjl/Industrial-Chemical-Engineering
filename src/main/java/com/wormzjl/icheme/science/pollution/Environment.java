@@ -22,7 +22,7 @@ public interface Environment {
      *
      * @param airShare the share of the cube's volume that holds air, in [0, 1]
      * @param open the cube is at or above the surface (ventilated)
-     * @param loaded the cube's chunk is loaded; an unloaded cube keeps its amounts and passes nothing
+     * @param loaded the cube's terrain is available from a live or saved chunk; a cube without terrain keeps its amounts
      */
     record Cell(double airShare, boolean open, boolean loaded) {
         public static final Cell UNLOADED = new Cell(0, false, false);

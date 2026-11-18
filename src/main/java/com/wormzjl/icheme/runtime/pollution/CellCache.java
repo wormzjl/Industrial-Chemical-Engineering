@@ -9,10 +9,9 @@ import java.util.Arrays;
  * A dimension's last cell reads, kept as sorted parallel arrays (key, cell, tick), and the snapshot a pass reads. No
  * Minecraft type: the world is reached through {@link World}. Server thread only.
  *
- * <p>The rules are {@code PollutionService}'s: a cube outside the dimension's height or of a chunk not loaded now is
- * unloaded for the pass; a read younger than {@code freshTicks} is used again; at most {@code budget} cubes are read a
- * pass, the core first, then the rest of the wanted cubes, each in key order; a cube over the budget uses its older read,
- * or is unloaded for the pass; the cache keeps only reads of wanted cubes.</p>
+ * <p>A reading stays fresh while its source (live or stored) is unchanged. At most {@code budget} cubes are read per pass,
+ * the core first. A cube over budget uses its last reading when available. The cache keeps only readings of wanted
+ * cubes, including misses, which are retried after the freshness interval or as soon as their chunk loads.</p>
  */
 public final class CellCache {
     /** The world as a snapshot reads it. */
@@ -20,15 +19,20 @@ public final class CellCache {
         /** Whether the cube's chunk is loaded now. */
         boolean chunkLoaded(long cube);
 
-        /** A fresh read of the cube's section; {@link Cell#loaded()} false when it cannot be read. */
-        Cell read(long cube);
+        /** A fresh read of the cube's live or saved section. */
+        Reading read(long cube);
     }
+
+    record Reading(Cell cell, int centreY) {
+        static final Reading UNKNOWN = new Reading(Cell.UNLOADED, 8);
+    }
+
+    private record Sample(Reading reading, int tick, boolean live) {}
 
     private static final Cell[] SHARED = new Cell[2 * (CubeKey.SECTION_BLOCKS + 1)];
 
     private long[] keys = new long[0];
-    private Cell[] cells = new Cell[0];
-    private int[] ticks = new int[0];
+    private Sample[] samples = new Sample[0];
 
     /**
      * The one loaded cell of {@code air} air blocks out of {@link CubeKey#SECTION_BLOCKS}, open or not: cells are values,
@@ -45,9 +49,9 @@ public final class CellCache {
     }
 
     /** The kept read of a cube, or {@code null}. */
-    public Cell get(long cube) {
+    Reading get(long cube) {
         int i = Arrays.binarySearch(keys, cube);
-        return i < 0 ? null : cells[i];
+        return i < 0 ? null : samples[i].reading();
     }
 
     public int size() {
@@ -56,8 +60,7 @@ public final class CellCache {
 
     public void clear() {
         keys = new long[0];
-        cells = new Cell[0];
-        ticks = new int[0];
+        samples = new Sample[0];
     }
 
     /**
@@ -68,16 +71,14 @@ public final class CellCache {
             boolean raining, int minimumY, int maximumY) {
         int n = wanted.length;
         // The kept reads of the wanted cubes, aligned with them.
-        Cell[] kept = new Cell[n];
-        int[] keptTicks = new int[n];
+        Sample[] kept = new Sample[n];
         for (int w = 0, o = 0; w < n && o < keys.length; ) {
             if (keys[o] < wanted[w]) {
                 o++;
             } else if (keys[o] > wanted[w]) {
                 w++;
             } else {
-                kept[w] = cells[o];
-                keptTicks[w] = ticks[o];
+                kept[w] = samples[o];
                 w++;
                 o++;
             }
@@ -87,51 +88,46 @@ public final class CellCache {
         int[] left = {budget};
         for (int c = 0, w = 0; c < core.length; c++) {
             while (wanted[w] != core[c]) w++;
-            out[w] = visit(wanted[w], w, kept, keptTicks, now, freshTicks, left, world, minimumY, maximumY);
+            out[w] = visit(wanted[w], w, kept, now, freshTicks, left, world, minimumY, maximumY);
             done[w] = true;
         }
         for (int w = 0; w < n; w++) {
-            if (!done[w]) out[w] = visit(wanted[w], w, kept, keptTicks, now, freshTicks, left, world, minimumY, maximumY);
+            if (!done[w]) out[w] = visit(wanted[w], w, kept, now, freshTicks, left, world, minimumY, maximumY);
         }
         int size = 0;
-        for (Cell cell : kept) if (cell != null) size++;
+        for (Sample sample : kept) if (sample != null) size++;
         long[] nextKeys = new long[size];
-        Cell[] nextCells = new Cell[size];
-        int[] nextTicks = new int[size];
+        Sample[] nextSamples = new Sample[size];
         for (int w = 0, t = 0; w < n; w++) {
             if (kept[w] != null) {
                 nextKeys[t] = wanted[w];
-                nextCells[t] = kept[w];
-                nextTicks[t] = keptTicks[w];
+                nextSamples[t] = kept[w];
                 t++;
             }
         }
         keys = nextKeys;
-        cells = nextCells;
-        ticks = nextTicks;
+        samples = nextSamples;
         return new Snapshot(wanted, out, raining, minimumY, maximumY);
     }
 
-    private static Cell visit(long cube, int w, Cell[] kept, int[] keptTicks, int now, int freshTicks, int[] left,
+    private static Cell visit(long cube, int w, Sample[] kept, int now, int freshTicks, int[] left,
             World world, int minimumY, int maximumY) {
         int y = CubeKey.y(cube);
-        if (y < minimumY || y > maximumY || !world.chunkLoaded(cube)) {
+        if (y < minimumY || y > maximumY) {
             return Cell.UNLOADED;
         }
-        Cell cached = kept[w];
-        if (cached != null && now - keptTicks[w] < freshTicks) {
-            return cached;
+        boolean live = world.chunkLoaded(cube);
+        Sample cached = kept[w];
+        if (cached != null && cached.live() == live && now - cached.tick() < freshTicks) {
+            return cached.reading().cell();
         }
         if (left[0] <= 0) {
-            return cached != null ? cached : Cell.UNLOADED;
+            return cached != null ? cached.reading().cell() : Cell.UNLOADED;
         }
         left[0]--;
-        Cell read = world.read(cube);
-        if (read.loaded()) {
-            kept[w] = read;
-            keptTicks[w] = now;
-        }
-        return read;
+        Reading read = world.read(cube);
+        kept[w] = new Sample(read, now, live);
+        return read.cell();
     }
 
     /** A pass's environment: the wanted cubes' cells, aligned with their sorted keys; any other cube is unloaded. */

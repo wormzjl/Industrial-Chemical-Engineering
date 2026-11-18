@@ -15,6 +15,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -23,6 +24,7 @@ import java.util.function.Function;
 public final class SavedEquipment {
     private record Legacy(@Nullable EquipmentShape shape, Set<Long> searched) {}
     private final Map<Position, Legacy> legacy = new HashMap<>();
+    private final Map<String, List<Long>> unrecordedNodes = new HashMap<>();
 
     SavedEquipment() {}
 
@@ -48,6 +50,26 @@ public final class SavedEquipment {
     /** A build, refresh or removal supersedes any reading of the old shell tags at this origin. */
     void invalidate(Position origin) {
         legacy.remove(origin);
+        unrecordedNodes.remove(origin.dimension());
+    }
+
+    /** Constructed registrations that still need a shell record to identify their structure. */
+    public static List<Long> unrecordedFluidNodes(FluidWorldAuthority world, String dimension) {
+        return world.savedEquipment().unrecordedNodes.computeIfAbsent(dimension, key -> world.registrations().values().stream()
+                .filter(r -> r.device().position().dimension().equals(key) && Integrity.constructed(r))
+                .filter(r -> !recordedFluidNode(world, r.device().position()))
+                .map(r -> r.device().id()).sorted().toList());
+    }
+
+    private static boolean recordedFluidNode(FluidWorldAuthority world, Position at) {
+        int cx = at.x() >> 4, cz = at.z() >> 4;
+        for (var origin : world.structuresInChunks(at.dimension(), cx, cx, cz, cz)) {
+            var saved = world.structure(origin);
+            if (saved == null || !saved.shape().fluidDevice()) continue;
+            var node = new ShapeRasterizer.Cell(at.x() - origin.x(), at.y() - origin.y(), at.z() - origin.z());
+            if (ShapeRasterizer.fluidCells(saved.shape()).contains(node)) return true;
+        }
+        return false;
     }
 
     /** Recheck legacy shapes and misses whose fallback search read this newly loaded chunk. */

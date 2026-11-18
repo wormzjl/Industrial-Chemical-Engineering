@@ -1,8 +1,13 @@
 package com.wormzjl.icheme.runtime.pollution;
 
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.science.pollution.CubeKey;
+import com.wormzjl.icheme.science.pollution.ExplosionLaw;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import com.wormzjl.icheme.science.pollution.PollutionSettings;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -10,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -116,6 +122,18 @@ class BlastsTest {
         assertEquals(2.0 * PollutionField.CUBE_AIR_MOLES, Blasts.burntAmount(5.0, 1.0, closed), 1e-6);
         assertEquals(1.2 * 0.5 * PollutionField.CUBE_AIR_MOLES, Blasts.burntAmount(1.2, 0.5, closed), 1e-6);
         assertEquals(1.0 * closed * PollutionField.CUBE_AIR_MOLES, Blasts.burntAmount(1.0, 0.0, closed), 1e-9, "floored at the closed share, as the index is");
+    }
+
+    @Test
+    void aBlastUsesTheSavedShellAcrossAChunkEdge() {
+        var drum = EquipmentShape.drum(3, 3, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
+        var shell = ShapeRasterizer.layout(drum).shell().stream()
+                .max(java.util.Comparator.comparingInt(ShapeRasterizer.Cell::x)).orElseThrow();
+        var origin = new BlockPos(15 - shell.x(), 64, -20);
+        var shellBlock = origin.offset(shell.x(), shell.y(), shell.z());
+        double reach = ExplosionLaw.reach(4, ExplosionLaw.BREACH_POWER);
+        assertEquals(shellBlock, Breaches.closestShell(origin, drum, Vec3.atCenterOf(shellBlock.east(4)), reach));
+        assertNull(Breaches.closestShell(origin, drum, Vec3.atCenterOf(shellBlock.east(5)), reach));
     }
 
     @Test

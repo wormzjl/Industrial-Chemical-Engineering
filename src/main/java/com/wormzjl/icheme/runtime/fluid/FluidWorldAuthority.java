@@ -1075,7 +1075,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         @Override public double corrosiveAir(PhysicalFluidTopology.Position at) {
             if(!IChemE.pollutionEnabled())return 0;
             var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
-            return service.isEmpty()?0:service.get().index(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),com.wormzjl.icheme.science.pollution.Channel.CORROSIVE);
+            return service.isEmpty()?0:service.get().measuredIndex(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),com.wormzjl.icheme.science.pollution.Channel.CORROSIVE);
         }
         @Override public com.wormzjl.icheme.science.integrity.CorrosionStandard standard(List<String> compounds){return standards.apply(compounds);}
         /** A weeping wall (WP4) marks its device's loaded shell cell; the cell sends a change to the clients that track it. Never loads a chunk. */

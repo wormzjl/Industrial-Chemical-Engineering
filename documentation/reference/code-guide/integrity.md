@@ -75,9 +75,11 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
    movers and trims) and `Integrity.booked` (keeps the result and its end tick; no arithmetic).
 2. At the cadence (`MachineHealth.CADENCE`), after the health's: discovery sweeps at most 4096 registrations; every record
    books `rate × Δt / year` and a flowing heat side its deposit (`FoulingLaw.step`), Δt in process seconds at the time
-   factor; at most 256 records whose island booked a new span are evaluated round-robin from a cursor: the digest of the
-   vessel's node or of the hotter end of a heat side's passage or a machine's connection, the inside rate, the corrosive
-   air (`PollutionService.index`, `CORROSIVE`), a heat side's erosion on an island that moved solids. A wall through fails
+   factor. One round-robin evaluates up to 256 records whose island booked a new span: the digest of the vessel's node or
+   the hotter end of a heat side's passage or a machine's connection, the inside rate and a heat side's erosion on an island
+   that moved solids. Another round-robin samples corrosive air (`PollutionService.measuredIndex`, `CORROSIVE`) for up to
+   256 registered walls regardless of their islands' bookings or their chunks' presence. Both `corrosion.enabled` and
+   `corrosion.external` must be on to book outside wear. A wall through fails
    once: a vessel's spec is breached, a heat side's spec is breached (its passage compiles closed) and its holdup released,
    a machine's health is breached. The facts go to the ledger.
 3. A repair or cleaning is queued (`queueStructureRepair`, `queueClean`) and applied at the tick drain: `WRECKED`,

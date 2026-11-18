@@ -40,7 +40,8 @@ import java.util.Map;
  * property only while lit; Create's blaze burner, by its {@code blaze} property's name, only while fading, kindled or
  * seething), found by the section's palette first ({@code maybeHas}) and only then by a scan of that one section; an entity
  * in the cube that burns or is of the entity tag {@code icheme:ignition_sources}; the plant's own flames
- * ({@link FluidWorldAuthority#flames}). And any explosion inside a flammable cube ({@link #detonated}): its position is
+ * ({@link FluidWorldAuthority#flames}), including in unloaded chunks. Any explosion inside a flammable cube
+ * ({@link #detonated}) also ignites it: its position is
  * queued and ignites the cube at the next pass. A failed pass counts toward the blasts' switch-off ({@link Blasts#failed}).</p>
  */
 public final class Ignition {
@@ -168,7 +169,7 @@ public final class Ignition {
             while (!detonations.isEmpty()) {
                 var d = detonations.poll();
                 long cube = PollutionService.cube(d.at());
-                if (ignites(service.index(d.dimension(), cube, Channel.COMBUSTIBLE))) {
+                if (ignites(service.measuredIndex(d.dimension(), cube, Channel.COMBUSTIBLE))) {
                     blasts.ignite(d.dimension(), cube, d.at(), now);
                 }
             }
@@ -204,24 +205,22 @@ public final class Ignition {
             int i = (start + k) % n;
             long cube = field.key(i);
             var cell = service.cell(key, cube);
-            double air = cell.loaded() ? cell.airShare() : 1.0;
-            if (!ignites(PollutionField.index(field.amount(i, Channel.COMBUSTIBLE), air, settings)) || blasts.waits(key, cube)) {
+            if (!cell.loaded()
+                    || !ignites(PollutionField.index(field.amount(i, Channel.COMBUSTIBLE), cell.airShare(), settings))
+                    || blasts.waits(key, cube)) {
                 continue;
             }
             int x = CubeKey.x(cube);
             int y = CubeKey.y(cube);
             int z = CubeKey.z(cube);
             LevelChunk chunk = loaded(level, x, z);
-            if (chunk == null) {
-                continue;
-            }
             if (searched >= CUBE_BUDGET) {
                 next = i;
                 break;
             }
             searched++;
-            BlockPos at = blockSource(chunk, x, y, z);
-            if (at == null) {
+            BlockPos at = chunk == null ? null : blockSource(chunk, x, y, z);
+            if (at == null && chunk != null) {
                 at = entitySource(level, x, y, z);
             }
             if (at == null && world != null) {

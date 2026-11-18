@@ -8,7 +8,7 @@ import java.util.Set;
  * for the same column during one step.
  */
 public interface GroundEnvironment {
-    /** The column's chunk is loaded; an unloaded column keeps its amounts and passes nothing. */
+    /** The column's surface is known from live or saved terrain. An unknown column keeps its amounts and passes nothing. */
     boolean loaded(long column);
 
     /** The column's surface is mostly water: the ground spreads faster across its faces. */

@@ -29,7 +29,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `CubeKey` | A cube as a long, packed as `SectionPos.asLong`; `offset`, `inside(key, minY, maxY)`. |
 | `PollutionField` | Immutable sorted keys and amounts. `step` (one pass), `burn`, `capped` (drops cubes outside the height, booked dissipated), `index`. `CUBE_AIR_MOLES` ≈ 167 400. |
 | `PollutionSettings` | Exchange 0.12 per face and 20 s, half-lives 300 s open and 3600 s enclosed, rain factor 4, settling 0.05, cutoff 1e-3, at most 8192 cubes. |
-| `Environment`, `Cell`, `MapEnvironment` | A cube's air share, open to the sky or not, loaded or not. |
+| `Environment`, `Cell`, `MapEnvironment` | A cube's air share, whether it is above the surface and whether its terrain is known. |
 | `PollutionLedger` | Per channel: `RELEASED`, `DECAYED`, `DISSIPATED`, `BURNT`, `GROUND`; `closure` = released − stored − the rest. |
 | `ExplosionLaw` | `flammable` (index ≥ 1), `burntIndex` (at most 2), `energy`, `tntKilograms`, `power`, `strengthAt(power, distance)`, `reach`. |
 | `Exposure` | Levels at 0.1, 0.3, 1 and 3; the effects and damage of each kind. |
@@ -40,16 +40,17 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `GroundSnapshot`, `GroundEffects` | The published ground: column → one byte (the map's scale); growth stops at index ≥ 0.3; the water acts on the toxic table at the ground index. |
 | `MapColumns` | The map overlay's summary: per chunk column the largest index of each kind, one byte each (steps of 0.02, 255 = 5.1 or more); the 32-chunk radius, the cap of 4096 columns (nearest first), the square's colour and alpha. |
 | **Runtime (`runtime/pollution/`)** | |
-| `PollutionService` | One per server, server thread. `tick` (pass every 100 ticks, effects every 20, ignition every 10, blasts every tick), `release`, `burn`, `index`, `field`, `cell`. Cells are read with `getChunkNow` only. |
+| `PollutionService` | One per server, server thread. `tick` (pass every 100 ticks, effects every 20, ignition every 10, blasts every tick), `release`, `burn`, `index`, `field`, `cell`. Damage reads `measuredIndex` from cubes with known air volumes. |
+| `PollutionTerrain`, `CellCache`, `WaterCache` | Terrain snapshots from live sections or the existing saved chunk palettes and surface heightmaps through `SavedChunkData`. A missing heightmap can be derived from its saved block states. Reads never ticket or generate a chunk. |
 | `PollutionEngine` | One dimension: installed field and ground, their ledgers, pending releases and deposits, the pass in flight (`begin`, `complete`, `failed`), `burn`. |
 | `PollutionStore` | `icheme_pollution` on the overworld, for every dimension. Never throws. |
 | `PollutionCommands` | `/icheme pollution get|add|clear|ledger`. |
 | `PollutionEffects` | Status effects, damage, corroded armour, dust particles; at most 256 cubes a pass; `water`: a swimmer in a polluted column. |
 | `GroundGrowth` | Crop, tree and bonemeal events on polluted ground. |
 | `GroundSoil`, `world/level/block/PollutedSoilBlock` | The picks on the world pass (kills, then spoils, along a 4-block walk; plain `setBlock`); the soil's recovery on its random tick. |
-| `Ignition`, `Blasts` | Ignition sources in flammable cubes; the burn, `Level.explode`, the chain queue. |
+| `Ignition`, `Blasts` | Ignition sources in flammable cubes, combustion and the chain queue. Vanilla explosions require live terrain across their footprint. |
 | `BurstPipes` | A one-block device a blast destroys: the mark, the release, one sound per cube and tick. |
-| `Breaches` | Constructed equipment in a blast: a `Detonate` listener, one breach per structure. |
+| `Breaches` | The vanilla `Detonate` listener and pollution blasts share the structure damage law. Recorded builds supply shell geometry. Unrecorded registrations from older saves use saved shell cells in the blast footprint. |
 | `PollutionMeters`, `MonitorSignals` | The handheld meter's server side (with the worn respirator's segment); the fixed monitor's lamp and alarm levels. |
 | `RespiratorGear` | `worn(Player)`: the helmet slot's respirator, else a Curios slot's; `protect`: the levels a pass uses for effects and damage, and the filter load, booked by the cube the player stands in. |
 | `PollutionMaps` | The map overlay's server side: subscriptions by player, one answer on request and one per pass, access by `pollution.mapOverlay`. |
@@ -68,8 +69,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 ## Main flow
 
 1. **Release.** `Releases` reads an island's booked boundary transfers, maps its compound list onto the world's by name and calls `PollutionService.release(dimension, position, channel, amount)`. The release waits in the engine's pending list. A release outside the dimension's height is dropped.
-2. **Pass.** Every 100 ticks `begin` hands the installed field, the pending releases and the cells of the active cubes to a worker (`PollutionField.step`). The service builds the cells on the server thread: `PollutionEngine.core()` and `KeySets.cubeFaces` give the wanted cubes as a sorted `long[]`; `CellCache.snapshot` reads at most 256 sections (the core first), keeps reads 60 s in sorted arrays with shared `Cell`s, and answers the step from an array environment. The ground's columns go the same way (`groundWanted`, `WaterCache`, `GroundEnvironment.sorted`). Process time per pass is 5 s × `fluid.timeScale`.
-3. **Step.** Releases are added; each face exchanges `k × min(φa, φb) × (index difference)` with k = min(1/7, 0.12 × dt/20) and φ the air share; each open, loaded cube also drifts `r × min(φa, φb) / φa` of its amounts to the cube above, whatever the index there, with r = min(1/7, `riseShare` × dt/20), `riseShare` 0.12 (config `pollution.riseShare`; above the top it is `DISSIPATED`, into a closed or unloaded cube nothing, into a new cube in the same front slot as the face share); particulate settles 0.05 downward and to `GROUND` at a floor; each amount decays by its half-life (rain ×4 for corrosive and particulate); an amount below the cutoff with no neighbour above it is dropped and booked `DISSIPATED`; above 8192 cubes the smallest are dropped.
+2. **Pass.** Every 100 ticks `begin` hands the installed field, pending releases and terrain of the active cubes to a worker (`PollutionField.step`). The server thread reads at most 256 sections (the core first) and 256 ground columns, sharing each saved chunk read across both snapshots. The caches retain readings for 60 s and refresh when a source changes between live and saved. Positions over budget use their last reading. Terrain that has never been generated or cannot be read remains unavailable. Process time per pass is 5 s × `fluid.timeScale`.
+3. **Step.** Releases are added. Each face exchanges `k × min(φa, φb) × (index difference)` with k = min(1/7, 0.12 × dt/20) and φ the air share. An open cube with known terrain drifts `r × min(φa, φb) / φa` of its amounts to the cube above if the destination terrain is available and permits flow. Here r = min(1/7, `riseShare` × dt/20), and `pollution.riseShare` defaults to 0.12. Drift above the world's height books `DISSIPATED`. Particulate settles 0.05 downward and to `GROUND` at a floor. Each amount decays by its half-life (rain ×4 for corrosive and particulate). An amount below the cutoff with no neighbour above it is dropped and booked `DISSIPATED`. Above 8192 cubes the smallest are dropped.
 4. **Install.** `complete` replaces the field and the ledger. Burns made while the pass was in flight are applied again to its result.
 5. **Read.** `PollutionEffects`, `Ignition`, `PollutionMeters`, the monitor's block entity and `ControlHosts.readMonitor` read `index` of the installed field. None of them steps it.
 
@@ -98,7 +99,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 ## The ground
 
 - Deposits: the spill law only (`PollutionService.deposit`, queued like a release); the amount is the sum of its channels' amounts, which the air ledger books `RELEASED` and `GROUND` each. The air's settling does not reach the ground store (owner, 2026-11-18: off for now); the ground gives the air nothing.
-- Each pass, on the worker with the air: land; spread to the four face columns (5e-4 per 20 s, ×4 in rain, ×4 across a water face, each face at most 0.2), amounts and compounds by the same donor share; decay, loaded columns only (half-life 4 h, ÷4 in rain); truncate below index 1e-4 (booked decayed); cap at 16 384 columns (lowest peak first, booked capped).
+- Each pass lands deposits, spreads to the four face columns (5e-4 per 20 s, ×4 in rain, ×4 across a water face, each face at most 0.2) and decays the column (half-life 4 h, ÷4 in rain). Spread and decay use columns with known terrain. Amounts and compounds move by the same donor share. The pass truncates below index 1e-4 (booked decayed) and caps at 16 384 columns (lowest peak first, booked capped).
 - Water columns: a surface mostly water (9 of 16 samples), read at most 256 columns a pass and cached.
 - `GroundSnapshot` is installed with the field; the map, the meter, `GroundGrowth` and `PollutionEffects.water` read only it.
 - `clear` books the cleared ground as capped.
@@ -107,9 +108,9 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 
 ## Ignition, blasts and breaches
 
-- A cube ignites when its combustible index is ≥ 1 and it holds a source: a block of the tag `icheme:ignition_sources` (a `lit` state only while lit), a burning entity or one of the entity tag, any explosion, or one of the plant's flames (`FluidWorldAuthority.flames`: a flare, a fired heater, a fired still, an engine or gas turbine, from cached views).
+- A cube with known air volume ignites at a combustible index ≥ 1. A tagged live block (while lit if it has a `lit` state), a burning or tagged entity, or a detonation can trigger ignition. The plant's cached flames (`FluidWorldAuthority.flames`, a flare, a fired heater or still, an engine or gas turbine) can ignite clouds in unloaded chunks.
 - The blast burns up to index 2. Energy: 44 kJ per mole of mixture, yield 3 %, TNT 4.6 MJ/kg; power = 4 × (m/50 kg)^(1/3), capped by `pollution.explosionPowerCap`. Below power 0.5 the pocket burns without a blast.
-- Each flammable face neighbour follows 3 ticks later; at most 4 blasts a tick and dimension.
+- Each flammable face neighbour with known terrain follows 3 ticks later, with at most 4 blasts per tick and dimension. Vanilla explosions use a live footprint for terrain, fire and entity damage. The combustion ledger, chain and registry-based equipment damage also run when the blast reaches unloaded chunks.
 - A one-block fluid device breaks as an ordinary block (resistance 3.5) and releases what it holds.
 - Constructed equipment loses no block. A blast of strength ≥ 2 at one of its cells (`strengthAt`) sets `FluidDeviceSpec.breached` on its closed vessels: the graph sees them open (`vented()`), through the registry's respecify edit, so they keep their contents and then vent and spill by the open-vessel law. A machine with a health record fails; heat sides close and release their holdup once. Every device of the structure is wrecked (`Integrity.wreck`): the Equipment Constructor refuses to repair it, it is deconstructed and rebuilt ([integrity.md](integrity.md)). Not breached: still pots, kettle shells, members of a running column.
 
@@ -159,7 +160,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - One cube filled alone loses about 84 % in one pass: 0.12 to each face and 0.12 more upward. A test that needs an index after a pass fills the cube and its neighbours.
 - `PollutionService.tick` returns early when pollution is off; the meters and the monitor's ticker run outside it so they can show "off".
 - A burn must go through `PollutionEngine.burn`, never straight to the field: a pass in flight would overwrite it.
-- Equipment cells have a resistance of 3.6e6, so `onBlockExploded` never fires for them in a vanilla blast. The breach comes from the `Detonate` listener.
+- Equipment cells have a resistance of 3.6e6. The plant damage collector checks the shell against the blast falloff and keeps the strongest hit per structure per tick. For an older build without a structure record, it looks for saved shell cells in reach and checks each affected device against its own shell tag and registration identity.
 - A layout refresh that rebuilds a spec must carry `breached` (`StructureRegistration`), or a reload repairs the vessel.
 - Pollution code never loads a chunk and never throws to its caller. A new entry point gets its own guard and log line.
 - `Math.log10` and its like are banned here as everywhere (`DeterministicMathSourceTest`).
