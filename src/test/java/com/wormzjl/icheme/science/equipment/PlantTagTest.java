@@ -1,6 +1,5 @@
 package com.wormzjl.icheme.science.equipment;
 
-import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -51,15 +50,13 @@ class PlantTagTest {
         assertEquals(101, PlantTag.next("P", Set.of("P-2147483647", "P-99999999999")));
     }
 
-    /** A tag is a name as the player's are: unchanged by the cleaning, accepted by the registry's record. */
+    /** A tag is a name as the player's are: unchanged by the cleaning (the registry's record: WorldTopologyLedgerTest). */
     @Test
     void aTagIsAValidName() {
-        var drum = EquipmentShape.drum(3, 3, EquipmentShape.Orientation.VERTICAL, EquipmentShape.Heading.NORTH, 0);
         for (var kind : EquipmentShape.Kind.values()) {
             var tag = PlantTag.tag(kind, Set.of());
             assertEquals(tag, DeviceName.clean(tag));
             assertTrue(DeviceName.valid(tag));
-            assertEquals(tag, new WorldTopologyLedger.Structure(drum, Paint.DEFAULT, "", tag).name());
         }
         // The longest tag a plausible world reaches is far inside the name's length.
         assertTrue(("TK-" + Integer.MAX_VALUE).length() <= DeviceName.MAX);

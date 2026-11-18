@@ -4461,7 +4461,7 @@
   "tutorial.icheme.tour.vessel.datasheet.2": "Size lists the sizes chosen when it was built, and those that follow from them.",
   "tutorial.icheme.tour.vessel.datasheet.3": "The glass lists each nozzle, a point where a pipe joins, with what it is for and which way it faces.",
   "tutorial.icheme.tour.vessel.datasheet.4": "Moving parts makes the fans and shafts of every unit turn or stand still; it changes only what you see.",
-  "tutorial.icheme.tour.vessel.datasheet.5": "Apply sends the name typed at the top.",
+  "tutorial.icheme.tour.vessel.datasheet.5": "Apply sends the name typed at the top, and a new structure starts with a tag such as P-101.",
   "tutorial.icheme.tour.machine.overview.1": "This page runs one machine on a shaft: a motor, a turbine, an engine, a generator or a gearbox.",
   "tutorial.icheme.tour.machine.overview.2": "This switch stops the machine or runs it again; then press Apply.",
   "tutorial.icheme.tour.machine.overview.3": "Regulate holds a speed you type, or follows the pump or compressor this machine turns; then press Apply.",

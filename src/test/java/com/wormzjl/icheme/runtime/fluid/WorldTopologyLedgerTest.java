@@ -278,4 +278,13 @@ class WorldTopologyLedgerTest {
         assertArrayEquals(saved.constructed().moles(),next.moles());
         var decoded=FluidCheckpointCodec.decodeTopology(FluidCheckpointCodec.encodeTopology(saved),saved.onlineTick(),NO_RECOVERIES);assertEquals(saved.basis(),decoded.basis());
     }
+    /** A default plant tag (batch 2026-11-18-default-equipment-names) of every kind is a name the registry's record accepts. */
+    @Test void everyPlantTagIsAValidStructureName() {
+        var drum=com.wormzjl.icheme.science.equipment.EquipmentShape.drum(3,3,com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation.VERTICAL,com.wormzjl.icheme.science.equipment.EquipmentShape.Heading.NORTH,0);
+        for(var kind:com.wormzjl.icheme.science.equipment.EquipmentShape.Kind.values()) {
+            var tag=com.wormzjl.icheme.science.equipment.PlantTag.tag(kind,Set.of());
+            assertTrue(WorldTopologyLedger.named(tag),tag);
+            assertEquals(tag,new WorldTopologyLedger.Structure(drum,com.wormzjl.icheme.science.equipment.Paint.DEFAULT,"",tag).name());
+        }
+    }
 }
