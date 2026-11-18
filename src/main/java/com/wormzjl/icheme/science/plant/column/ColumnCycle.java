@@ -20,6 +20,11 @@ import java.util.Objects;
 public final class ColumnCycle {
     /** Trip when the closed condenser duty departs from the solved one by more than this share (plan section 6). */
     public static final double TRIP_DEPARTURE = .5;
+    /**
+     * The share of the table's condenser duty the pumparounds may take over past the duties the table was solved at
+     * (package 6 of batch 2026-11-17-column-cold-feed): the rest still condenses the reflux.
+     */
+    public static final double PUMPAROUND_TAKEOVER = .9;
 
     private ColumnCycle() {
     }
@@ -359,14 +364,30 @@ public final class ColumnCycle {
         // (L2 of batch 2026-11-17-column-cold-feed): a short cooler books what it takes, a NOTICE with the share taken, and the
         // feed goes on. The table's own duty (the one it was solved at) is what the solved condenser closed with.
         double[] pa = table.pumparoundPerFeed(), asked = setpoints.pumparoundsPerFeed();
+        double[] solvedDuty = new double[pa.length], want = new double[pa.length];
+        boolean[] cooler = new boolean[pa.length];
+        double extra = 0;
+        for (int j = 0; j < pa.length; j++) {
+            solvedDuty[j] = pa[j] * fed;
+            want[j] = j < asked.length ? asked[j] * fed : solvedDuty[j];
+            double r = rooms.pumparound(j);
+            pa[j] = want[j] < 0 && r < Double.POSITIVE_INFINITY ? Math.max(want[j], -Math.max(0, r)) : want[j];
+            cooler[j] = pa[j] != want[j];
+            extra += Math.max(0, solvedDuty[j] - pa[j]);
+        }
+        // The column's side (package 6): the pumparounds take over the condenser's duty, never more, and the overhead keeps
+        // 1 - PUMPAROUND_TAKEOVER of its solved duty for its reflux. Cooling past the table's own duties beyond that is cut
+        // evenly; at a design point (the table solved at the set points) there is none.
+        double allowed = PUMPAROUND_TAKEOVER * Math.max(0, -table.condenserPerFeed() * fed), cut = extra > allowed ? allowed / extra : 1;
         double paTotal = 0, left = 0;
         for (int j = 0; j < pa.length; j++) {
-            double solvedDuty = pa[j] * fed, want = j < asked.length ? asked[j] * fed : solvedDuty, r = rooms.pumparound(j);
-            pa[j] = want < 0 && r < Double.POSITIVE_INFINITY ? Math.max(want, -Math.max(0, r)) : want;
-            if (pa[j] != want) conditions.add(new Condition.Active(Condition.PUMPAROUND_SHORT, pa[j] / want, j,
-                    String.format(java.util.Locale.ROOT, "pumparound %d's cooler takes %.0f %% of its duty, the condenser the rest", j + 1, 100 * pa[j] / want)));
+            double over = Math.max(0, solvedDuty[j] - pa[j]);
+            if (cut < 1 && over > 0) pa[j] = solvedDuty[j] - cut * over;
+            if (pa[j] != want[j]) conditions.add(new Condition.Active(Condition.PUMPAROUND_SHORT, pa[j] / want[j], j, cooler[j] && !(cut < 1 && over > 0)
+                    ? String.format(java.util.Locale.ROOT, "pumparound %d's cooler takes %.0f %% of its duty, the condenser the rest", j + 1, 100 * pa[j] / want[j])
+                    : String.format(java.util.Locale.ROOT, "pumparound %d takes %.0f %% of its duty: the column's heat", j + 1, 100 * pa[j] / want[j])));
             paTotal += pa[j];
-            left += solvedDuty - pa[j];
+            left += solvedDuty[j] - pa[j];
         }
         double condenser = out - energyIn - reboiler - paTotal;
         // The condenser closes the balance; the trip compares it with the solved duty plus what the pumparounds left (L3), so a

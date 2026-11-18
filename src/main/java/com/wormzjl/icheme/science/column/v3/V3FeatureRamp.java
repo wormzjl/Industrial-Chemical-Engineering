@@ -215,7 +215,7 @@ final class V3FeatureRamp {
                             condensationCapacityWatts(previous, thermo, cappedTray),
                             rampStep.heatFraction() * trayDutyWatts(input, cappedTray)),
                             "condensation-capped at tray " + (cappedTray + 1) + " on the continuation path",
-                            "cold/heat-cap/heat-" + input.pumparounds().size());
+                            V3ColumnOutcome.CONDENSATION_CAP_PATH + input.pumparounds().size());
                 }
             }
             List<V3SideDrawSpec> draws = rampStep.drawFraction() == 0.0 ? List.of() : input.sideDraws().stream()
@@ -670,7 +670,7 @@ final class V3FeatureRamp {
         throw new PathDependentHeatBound(
                 V3HeatFeasibility.condenserBoundDetail(cooling, baseCondenserDuty, heating),
                 "cooling above the base condenser duty measured on the continuation path",
-                "cold/heat-condenser-bound/heat-" + input.pumparounds().size());
+                V3ColumnOutcome.CONDENSER_BOUND_PATH + input.pumparounds().size());
     }
 
     /** First tray whose arriving vapor cannot release the duty of the next heat rung; zero when none. */
