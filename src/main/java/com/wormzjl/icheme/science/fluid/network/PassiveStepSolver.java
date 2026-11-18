@@ -392,7 +392,14 @@ public final class PassiveStepSolver {
      */
     private Result solve(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {
         var entry=carry;
-        try{return solvePasses(inputGraph,dt,checkpoint,rateOnly,acceptedEndpointModes);}
+        try {
+            var mixing=JunctionMixing.begin(inputGraph);
+            if(mixing==null)return solvePasses(inputGraph,dt,checkpoint,rateOnly,acceptedEndpointModes);
+            var result=solvePasses(mixing.working,dt,checkpoint,rateOnly,acceptedEndpointModes);
+            return new Result(result.states(),result.massFlows(),dt,result.numerical(),result.modes(),result.devicePressureChanges(),
+                    result.pumpWorkJoule(),result.externalMoles(),result.externalEnergyJoule(),mixing.book(result.inventories()),
+                    result.boundaries(),result.pipeTransfers(),result.filters(),result.observations(),result.towers());
+        }
         catch(RuntimeException failed){carry=entry;throw failed;}
     }
     private Result solvePasses(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {

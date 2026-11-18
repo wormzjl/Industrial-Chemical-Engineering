@@ -97,10 +97,9 @@ public final class InventoryEquilibrium {
         var inventory=node.inventory();var solids=inventory.solids().oneSizePerSolid();
         if(solids!=inventory.solids())inventory=inventory.with(inventory.moles(),inventory.internalEnergy(),solids);
         if(node.junction()) {
-            // A junction's buffer is a stock of its solids; its state carries the same populations at its own amount scale.
-            if(inventory==node.inventory())return node;
-            var held=node.state().solids();
-            var state=held.empty()?node.state():node.state().withSolids(solids.scale(held.massKg()/solids.massKg()));
+            var moving=node.state().solids().oneSizePerSolid();
+            if(inventory==node.inventory() && moving==node.state().solids())return node;
+            var state=node.state().withSolids(moving);
             return new PassiveNetwork.Reservoir(node.id(),node.elevation(),state,node.kind(),inventory);
         }
         FluidThermodynamics.State state=null;RuntimeException unclosed=null;

@@ -394,15 +394,25 @@ public final class PassiveIntervalSolver {
         List<PassiveNetwork.Reservoir> nodes=null;List<ConservativeTransport.BoundaryTransfer> booked=null;
         for(int i=0;i<graph.reservoirs().size();i++) {
             var node=graph.reservoirs().get(i);if(node.fixed())continue;
-            var held=node.inventory().moles();double total=0;for(double amount:held)total+=amount;
+            var held=node.inventory().movingMoles();
+            double total=0;for(double amount:held)total+=amount;
             double[] kept=null;
             for(int c=0;c<held.length;c++)if(held[c]>0&&held[c]<TRACE_FLUSH_FRACTION*total){if(kept==null)kept=held.clone();kept[c]=0;}
             if(kept==null)continue;
             checkpoint.run();
             var removed=new double[held.length];
             for(int c=0;c<held.length;c++)removed[c]=kept[c]-held[c];
-            var old=node.state();var state=model.flashTP(old.temperature(),old.pressure(),kept,checkpoint);
+            var old=node.state();
+            var stream=kept;
+            if(node.junction()) {
+                stream=PhaseLayout.totalAmounts(old);
+                double streamTotal=PhaseLayout.sum(stream);
+                for(int c=0;c<stream.length;c++)if(removed[c]!=0 && stream[c]<TRACE_FLUSH_FRACTION*streamTotal)stream[c]=0;
+            }
+            var state=model.flashTP(old.temperature(),old.pressure(),stream,checkpoint);
             if(!old.solids().empty())state=state.withSolids(old.solids());
+            var reserve=node.inventory().reserve();
+            if(reserve!=null){var retained=reserve.moles();for(int c=0;c<kept.length;c++)kept[c]+=retained[c];}
             if(nodes==null){nodes=new ArrayList<>(graph.reservoirs());booked=new ArrayList<>();}
             nodes.set(i,new PassiveNetwork.Reservoir(node.id(),node.elevation(),state,node.kind(),
                     node.inventory().with(kept,node.inventory().internalEnergy(),node.inventory().solids())));

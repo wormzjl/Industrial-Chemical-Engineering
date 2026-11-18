@@ -265,6 +265,7 @@ public final class ConservativeTransport {
         var populationKeys=List.copyOf(populationBasis.keySet());int conserved=components+populationKeys.size();
         int[] index=new int[nodes];Arrays.fill(index,-1);int count=0;
         double[] molecularWeight=model.molecularWeights();
+        double[] participating=new double[nodes];
         double[][] old=new double[nodes][],fractions=new double[nodes][conserved];
         double[] endMass=new double[nodes],incoming=new double[nodes],outgoing=new double[nodes];
         // Decision D54: a vessel holding no fluid (at the bag's resolution, D59 (2)) that nothing reaches in this step keeps
@@ -364,9 +365,11 @@ public final class ConservativeTransport {
             // An emptying vessel's pinned flows take exactly what it held and what reached it: it ends with nothing.
             if(emptying!=null&&emptying[node]!=null)endMass[node]=0;
             else if(!(endMass[node]>0)||!Double.isFinite(endMass[node]))throw new SparseNewton.Nonconvergence("Candidate overdraws a reservoir");
-            add(columns,row,row,endMass[node]+dt*outgoing[node]);
-            for(int c=0;c<components;c++)rhs[c][row]=old[node][c]*molecularWeight[c];
-            for(int c=0;c<populationKeys.size();c++)rhs[components+c][row]=reservoir.inventory().solids().mass(populationKeys.get(c));
+            double share=participating[node]=reservoir.junction() && (emptying==null || emptying[node]==null)
+                    ? JunctionMixing.share(endMass[node],incoming[node],dt,model.time()) : 1;
+            add(columns,row,row,endMass[node]*share+dt*outgoing[node]);
+            for(int c=0;c<components;c++)rhs[c][row]=old[node][c]*molecularWeight[c]*share;
+            for(int c=0;c<populationKeys.size();c++)rhs[components+c][row]=reservoir.inventory().solids().mass(populationKeys.get(c))*share;
             // What a melting junction holds of the crystal melts with what arrives (D61).
             if(meltAt[node]!=null)for(int k=0;k<populationKeys.size();k++)if(meltAt[node][k]!=null)melt(rhs,components,row,k,meltAt[node][k],rhs[components+k][row],melted[node],true);
         }
@@ -469,9 +472,21 @@ public final class ConservativeTransport {
             for(int c=components;c<conserved;c++){double w=solved[c][index[node]];if(w<0||!Double.isFinite(w))throw new SparseNewton.Nonconvergence("Negative solid reconstruction");fractions[node][c]=w;total+=w;}
             if(Math.abs(total-1)>1e-8)throw new SparseNewton.Nonconvergence("Junction mass continuity does not close");
             if(reservoir.junction()) {
-                ownedMoles[node]=new double[components];for(int c=0;c<components;c++)ownedMoles[node][c]=endMass[node]*fractions[node][c]/molecularWeight[c];
+                double share=participating[node], active=endMass[node]*share;
+                ownedMoles[node]=new double[components];
+                for(int c=0;c<components;c++)ownedMoles[node][c]=(1-share)*old[node][c]+active*fractions[node][c]/molecularWeight[c];
                 var owned=new ArrayList<SolidInventory.Population>();
-                for(int c=0;c<populationKeys.size();c++){var source=populationBasis.get(populationKeys.get(c));owned.add(new SolidInventory.Population(source.material(),source.size(),endMass[node]*fractions[node][components+c]));}
+                for(int k=0;k<populationKeys.size();k++) {
+                    var source=populationBasis.get(populationKeys.get(k));
+                    double reserve=(1-share)*reservoir.inventory().solids().mass(source.key());
+                    if(meltAt[node]!=null && meltAt[node][k]!=null) {
+                        int component=meltAt[node][k].component();
+                        ownedMoles[node][component]+=reserve/molecularWeight[component];
+                        melted[node][k]+=reserve;
+                        reserve=0;
+                    }
+                    owned.add(new SolidInventory.Population(source.material(),source.size(),reserve+active*fractions[node][components+k]));
+                }
                 ownedSolids[node]=new SolidInventory(owned);
             }
             double mass=reservoir.junction()?PhaseLayout.sum(PhaseLayout.totalAmounts(candidate.get(node)))/molesPerKg:endMass[node];
@@ -684,7 +699,24 @@ public final class ConservativeTransport {
             var oldNode=graph.reservoirs().get(node);var state=states.get(node);
             if(frozen&&oldNode.junction()){inventories.add(oldNode.inventory());continue;}
             // A junction's buffer record holds endMass*w and its energy field in enthalpy form (m*h).
-            if(oldNode.junction()){inventories.add(oldNode.inventory().with(ownedMoles[node],energy[node],ownedSolids[node]));continue;}
+            if(oldNode.junction()) {
+                var stock=oldNode.inventory();
+                var booked=stock.with(ownedMoles[node],energy[node],ownedSolids[node]);
+                double share=participating[node];
+                if(share>0 && share<1 && incoming[node]*dt>share*endMass[node]
+                        && (emptying==null || emptying[node]==null)
+                        && (!Arrays.equals(old[node],ownedMoles[node]) || energy[node]!=stock.internalEnergy())) {
+                    // This accepted step has mixed a backed parcel of fluid. Keep the untouched fluid separate
+                    // so later steps do not repeatedly introduce its old composition into the flowing stream.
+                    double retainedShare=1-Math.max(JunctionMixing.MINIMUM_CIRCULATING_SHARE,share);
+                    var unmixed=old[node].clone();
+                    for(int c=0;c<unmixed.length;c++)unmixed[c]*=retainedShare;
+                    double solidHeat=stock.solids().moments().enthalpy(oldNode.state().temperature(),oldNode.state().pressure());
+                    booked=booked.withReserve(new PassiveNetwork.JunctionReserve(unmixed,retainedShare*(stock.internalEnergy()-solidHeat)));
+                }
+                inventories.add(booked);
+                continue;
+            }
             if(oldNode.fixed()){inventories.add(oldNode.inventory());continue;}
             var booked=oldNode.inventory().with(moles[node],energy[node],state.solids());
             // Batch 2026-11-10-rigid-reservoir (owner: "Resevoir should be rigid when it's filled once (except the floating roof

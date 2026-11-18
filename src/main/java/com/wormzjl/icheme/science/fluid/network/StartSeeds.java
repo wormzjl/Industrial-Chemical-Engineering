@@ -162,7 +162,9 @@ final class StartSeeds {
                 var node=graph.reservoirs().get(j);boolean empty=holdsNoFluidVessel(node);if(!(node.junction()&&!node.fixed()&&!vesselsOnly||empty))continue;
                 var current=result==null?seeds:result;var seed=current.get(j);
                 if(empty&&!dry(node,seed))continue;
-                double[] n=node.inventory().moles().clone();double heldMass=solver.molarMass(n),mass=heldMass,weighted=heldMass*node.state().temperature(),heat=0;boolean arrives=false;
+                var stockMoles=node.inventory().moles();
+                double[] n=empty?stockMoles.clone():new double[stockMoles.length];
+                double heldMass=solver.molarMass(stockMoles),mass=empty?heldMass:0,weighted=mass*node.state().temperature(),heat=0;boolean arrives=false;
                 for(int edge=0;edge<flows.length;edge++) {
                     var pipe=graph.pipes().get(edge);double flow=flows[edge];
                     if(!(Math.abs(flow)>0)||(flow>=0?pipe.second():pipe.first())!=j||!boundaryAllowed(graph,pipe,flow))continue;
@@ -190,7 +192,12 @@ final class StartSeeds {
                 if(!(heldMass>0))continue;
                 // The stock as the junction's rows mix it (D46): the buffer's amounts and its energy field (enthalpy form), fluid only.
                 var buffer=node.inventory();var at=node.state();
-                double stock=buffer.internalEnergy()-buffer.solids().moments().enthalpy(at.temperature(),at.pressure());
+                double share=JunctionMixing.share(heldMass+buffer.solids().massKg(),mass/dt,dt,model.time());
+                for(int c=0;c<n.length;c++)n[c]+=share*stockMoles[c];
+                heldMass*=share;
+                mass+=heldMass;
+                weighted+=heldMass*at.temperature();
+                double stock=share*(buffer.internalEnergy()-buffer.solids().moments().enthalpy(at.temperature(),at.pressure()));
                 double scale=seed.mass()/mass,enthalpy=(stock+heat)*scale;
                 for(int c=0;c<n.length;c++)n[c]*=scale;
                 FluidThermodynamics.State engine;
@@ -200,12 +207,22 @@ final class StartSeeds {
                 // that keeps at least half its stock over the step is stated by that stock: its seed is the stock's mixture
                 // whatever it is laid out for (stocked).
                 boolean stocked=stocked(j,seed,seeds,heldMass,mass);
-                if(!stocked&&laidOutFor(phaseCode(model.folded(engine,true)),phaseCode(seed)))continue;
+                // The phase mask alone also fits an isothermal change of mixture. Start the amounts
+                // on the same incoming composition as the implicit rows when that change is resolved.
+                boolean front = false;
+                var currentAmounts = PhaseLayout.totalAmounts(seed);
+                for (int c = 0; c < n.length; c++) {
+                    if (Math.abs(n[c]-currentAmounts[c])*model.molecularWeight(c) > 1e-6*seed.mass()) {
+                        front = true;
+                        break;
+                    }
+                }
+                if(!stocked && !front && Math.abs(engine.temperature()-seed.temperature()) <= .5 && laidOutFor(phaseCode(model.folded(engine,true)),phaseCode(seed)))continue;
                 // The engine's answer is the start of the junction's own split, not its verdict (D26): its rows decide the phase.
                 var own=StepPhaseRules.junctionSplit(model,n,enthalpy,solver.molarMass(n),seed.pressure(),engine,checkpoint);
                 if(own==null)continue;
                 var mixture=model.folded(own,true);
-                if(!stocked&&laidOutFor(phaseCode(mixture),phaseCode(seed)))continue;
+                if(!stocked && !front && Math.abs(mixture.temperature()-seed.temperature()) <= .5 && laidOutFor(phaseCode(mixture),phaseCode(seed)))continue;
                 if(result==null)result=new ArrayList<>(seeds);
                 result.set(j,mixture.withSolidState(seed.solids(),seed.solidMoments()));changed=true;
             }

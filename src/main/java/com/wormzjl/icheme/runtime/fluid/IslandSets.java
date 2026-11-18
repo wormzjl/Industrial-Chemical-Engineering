@@ -116,6 +116,8 @@ public final class IslandSets {
         if(same(from,to))return n;
         var i=n.inventory();
         var inventory=new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),from,to),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),to),i.tower(),i.rigid()).withBlanket(i.blanket());
+        if(i.reserve()!=null)inventory=inventory.withReserve(new PassiveNetwork.JunctionReserve(
+                amounts(i.reserve().moles(),from,to),i.reserve().enthalpy()));
         return new PassiveNetwork.Reservoir(n.id(),n.elevation(),state(n.state(),from,to),n.kind(),inventory);
     }
     /** A graph on {@code to}: every node ({@link #node}); its connections carry no amounts. */
@@ -176,8 +178,11 @@ public final class IslandSets {
     /** {@link #paddedNode} on the axis {@code map} of {@code from} onto {@code world}, made once for a whole island (code base review R1). */
     private static PassiveNetwork.Reservoir paddedNode(PassiveNetwork.Reservoir n,int[] map,FluidThermodynamics world) {
         var i=n.inventory();
-        return new PassiveNetwork.Reservoir(n.id(),n.elevation(),cut(n.state(),map,world.compounds().size()),n.kind(),
-                new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),map,world.componentCount(),"amounts"),i.internalEnergy(),i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower(),i.rigid()).withBlanket(i.blanket()));
+        var inventory=new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),map,world.componentCount(),"amounts"),i.internalEnergy(),
+                i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower(),i.rigid()).withBlanket(i.blanket());
+        if(i.reserve()!=null)inventory=inventory.withReserve(new PassiveNetwork.JunctionReserve(
+                amounts(i.reserve().moles(),map,world.componentCount(),"junction reserve"),i.reserve().enthalpy()));
+        return new PassiveNetwork.Reservoir(n.id(),n.elevation(),cut(n.state(),map,world.compounds().size()),n.kind(),inventory);
     }
     private static PassiveNetwork paddedGraph(PassiveNetwork g,int[] map,FluidThermodynamics world) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(g.reservoirs().size());

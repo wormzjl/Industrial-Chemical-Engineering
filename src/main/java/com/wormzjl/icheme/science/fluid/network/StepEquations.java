@@ -1666,9 +1666,10 @@ final class StepEquations implements SparseNewton.Equations {
         // A junction's solid moments are its owned stock's, mixed with what arrives like its fluid; a rate-only solve
         // holds them at the stock's own (see junctionInflow).
         var inventory=graph.reservoirs().get(node).inventory();
-        double retained=(solver.molarMass(oldAmounts[node])+inventory.solids().massKg())/dt,total=incomingMass[node]+retained;
+        double stock = solver.molarMass(oldAmounts[node]) + inventory.solids().massKg();
+        double share = mixingShare(node, stock), retained = share * stock / dt, total = incomingMass[node] + retained;
         var solids=solidMix;System.arraycopy(solidIncoming[node],0,solids,0,3);var held=heldKept[node]!=null?heldKept[node]:startMoments(node);
-        for(int c=0;c<3;c++)solids[c]=solver.rateOnly?held[c]/(retained*dt):(solids[c]+held[c]/dt)/total;
+        for(int c=0;c<3;c++)solids[c]=solver.rateOnly?held[c]/stock:(solids[c]+held[c]*share/dt)/total;
         layout[node].solidRows(st[node],x,offsets[node],solids,true,f);
     }
     /**
@@ -1682,20 +1683,26 @@ final class StepEquations implements SparseNewton.Equations {
      * at its owned inventory's, its pressure algebraic, and the reconstruction books its accumulation as a
      * pseudo-boundary (frozen junctions).
      */
+    private double mixingShare(int node, double stock) {
+        if (solver.rateOnly || solver.emptyings != null && solver.emptyings[node] != null) return 1;
+        return JunctionMixing.share(stock, incomingMass[node], dt, model.time());
+    }
+
     private double junctionInflow(int node) {
         var inventory=graph.reservoirs().get(node).inventory();var held=oldAmounts[node];
-        double heldMass=solver.molarMass(held)+inventory.solids().massKg(),total=incomingMass[node]+heldMass/dt;
+        double heldMass=solver.molarMass(held)+inventory.solids().massKg();
+        double share=mixingShare(node,heldMass),total=incomingMass[node]+share*heldMass/dt;
         if(solver.rateOnly) {
             junctionWeight=1;
             for(int c=0;c<fractions.length;c++)fractions[c]=held[c]*model.molecularWeight(c)/heldMass;
             return inventory.internalEnergy()/heldMass;
         }
-        junctionWeight=total*dt/Math.max(heldMass,1e-300);
+        junctionWeight=share+incomingMass[node]*dt/heldMass;
         // Owner decision D61: what the junction's own stock melts joins its fluid, with the crystal's offset.
         var melt=heldMelt[node];
         for(int c=0;c<fractions.length;c++)
-            fractions[c]=(incoming[node][c]+(melt==null?held[c]:held[c]+melt[c])/dt)*model.molecularWeight(c)/total;
-        return (incomingEnergy[node]+(melt==null?inventory.internalEnergy():inventory.internalEnergy()+heldMeltEnergy[node])/dt)/total;
+            fractions[c]=(incoming[node][c]+(melt==null?held[c]:held[c]+melt[c])*share/dt)*model.molecularWeight(c)/total;
+        return (incomingEnergy[node]+(melt==null?inventory.internalEnergy():inventory.internalEnergy()+heldMeltEnergy[node])*share/dt)/total;
     }
     /** Whether this edge can carry a change of {@code node}'s decoded state into the other
      * endpoint's rows: the transported amounts and enthalpy are the donor's, a junction's

@@ -44,6 +44,48 @@ class SolidConservationTest {
         assertEquals(external,received,1e-9);
         assertEquals(result.pipeTransfers().getFirst().forward().solids().massKg(),received,1e-9);
     }
+    @Test void alternatingHotSlurryAndColdWaterCloseTheJunctionLedgerAcrossFlowChanges() {
+        var initial = water(150_000);
+        var run = new PipeResistance.Geometry(1, .05, .000045, 0);
+        var graph = PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(List.of(
+                new PassiveNetwork.Reservoir(1, 0, initial, PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2, 0, initial, PassiveNetwork.NodeKind.JUNCTION),
+                new PassiveNetwork.Reservoir(3, 0, initial, PassiveNetwork.NodeKind.VOID)),
+                List.of(new PassiveNetwork.Pipe(4, 0, 1, run), new PassiveNetwork.Pipe(5, 1, 2, run))), model);
+        var original = graph.reservoirs().get(1).inventory();
+        double energy = 0, solids = 0;
+        double[] external = new double[model.componentCount()];
+        var solver = new PassiveIntervalSolver(model);
+        PassiveIntervalSolver.Result previous = null;
+        for (int step = 0; step < 4; step++) {
+            boolean slurry = step % 2 == 0;
+            var source = model.flashTP(slurry ? 350 : 320, slurry ? 162_000 : 154_000,
+                    com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(initial), () -> {});
+            if (slurry) source = source.withSolids(particles(.5));
+            var nodes = new ArrayList<>(graph.reservoirs());
+            nodes.set(0, new PassiveNetwork.Reservoir(1, 0, source, PassiveNetwork.NodeKind.GENERATOR));
+            graph = new PassiveNetwork(nodes, graph.pipes());
+            solver.replayStart(graph, previous);
+            previous = solver.solve(graph, .5, PassiveIntervalSolver.Settings.defaults(), () -> {});
+            graph = previous.graph();
+            assertTrue(previous.averageMassFlows()[0] > 0);
+            for (var boundary : previous.boundaries()) {
+                energy += boundary.totalEnergyJoule();
+                solids += boundary.solidDirection()*boundary.solids().massKg();
+                var moles = boundary.moles();
+                for (int c = 0; c < moles.length; c++) external[c] += moles[c];
+            }
+            var stock = graph.reservoirs().get(1).inventory();
+            assertTrue(stock.solids().massKg() > 0);
+            assertEquals(solids, stock.solids().massKg()-original.solids().massKg(), 1e-10);
+            assertEquals(energy, stock.internalEnergy()-original.internalEnergy(), 1e-7*Math.max(1, Math.abs(energy)));
+            var before = original.moles();
+            var now = stock.moles();
+            for (int c = 0; c < now.length; c++)
+                assertEquals(external[c], now[c]-before[c], 1e-9*Math.max(1, before[c]));
+        }
+    }
+
     @Test void filterCapturesEveryPopulationAndPassesOnlyFluid() {
         var source=water(160000).withSolids(particles(100));
         var pipe=new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(1,.05,.000045,0)).withFilter(InlineFilter.empty());
