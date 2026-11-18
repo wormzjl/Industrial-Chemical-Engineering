@@ -229,9 +229,9 @@ Display data only, on the existing publication. On the wire: one unsigned byte a
 0.02 m/s, 0 to 5.1 m/s (faster reads 5.1; the fastest crossing is reached at 0.25 m/s in a 0.1 m window and 0.75 m/s in
 a 0.3 m one). The record holds the speed already rounded, so a sample equals its round trip. (My first note to the
 parent said 0.05 m/s steps to 12.75 m/s; 0.02 m/s keeps the slow end, where the crossing time changes most.)
-**Protocol number: not changed.** The rules (FORMATS.md, COLLABORATION.md) give this batch `icheme-9` (`icheme-8` is
-reserved by the solute batch), reserved by a documentation-only commit on main. `NetworkProtocol#VERSION` stays
-`icheme-7` and FORMATS.md is unchanged until the parent's word.
+**No protocol number.** The payload changed without a number by the owner's rule for display-only data ("these kind
+of visual changes doesn't need a number"): `NetworkProtocol#VERSION` stays `icheme-7`, nothing is reserved, and
+FORMATS.md is unchanged (its sight glass row names the registrar, not the bytes).
 
 **The law (`SightGlassGeometry`, Minecraft-free).** Bubble speed along the flow
 v = max(0, u) + 0.25·rise (rise +1 up, -1 down, 0 horizontal), held between a crossing of the window diameter D in

@@ -644,6 +644,7 @@ public final class FluidNetwork {
         };}
     }
     /** Server to client: a sight glass's colour, bubble strength and flow direction, never process or menu contents. */
+    /** The speed byte (batch 2026-11-18-equipment-reflections) came without a protocol number: display-only data (owner). */
     public record SightGlassPayload(Target target,PipePresentation.SightGlass sample) implements CustomPacketPayload {
         public static final Type<SightGlassPayload> TYPE=new Type<>(ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID,"sight_glass_display"));
         public static final StreamCodec<RegistryFriendlyByteBuf,SightGlassPayload> STREAM_CODEC=new StreamCodec<>() {

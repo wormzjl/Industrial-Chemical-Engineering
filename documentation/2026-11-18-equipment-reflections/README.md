@@ -14,7 +14,7 @@ B is a view-dependent reflection pass in the mod's own shader over the chunk-mes
   over the last quarter of the range. Depth pull measured in `ReflectionDepthTest` (0 failing pixels in 180 cases).
   21 plain sprites got LabPBR `_flat` maps. Selected tests on the final code: 52 + 4 classes, 407 tests, 0 failures;
   the seven new or changed classes before them. `REFLECTION_PASS_REVIEW.md`.
-- 2026-11-18, part 3 (owner: "Improve sight glass bubble animation, it should be moving with the fluid direction"): bubbles carried by the published speed with the rise on vertical runs, a stratified horizontal run, stretch with speed, phase kept by integration; the `sight_glass` shader and its switch; the speed byte on the sight glass display (protocol number pending); `SightGlassMotionTest`; `tools/sight-glass-frames/`; review section 12.
+- 2026-11-18, part 3 (owner: "Improve sight glass bubble animation, it should be moving with the fluid direction"): bubbles carried by the published speed with the rise on vertical runs, a stratified horizontal run, stretch with speed, phase kept by integration; the `sight_glass` shader and its switch; the speed byte on the sight glass display (no protocol number: owner, display-only data); `SightGlassMotionTest`; `tools/sight-glass-frames/`; review section 12.
 
 ## Documents
 
@@ -31,7 +31,6 @@ and 63 sprite files; `tools/pbr-textures/equipment_textures.py`; `tools/reflecti
 
 ## Open items
 
-- Part 3 (sight glass bubbles): the wire protocol number. The rules give `icheme-9`, to be reserved on main; `NetworkProtocol#VERSION` stays `icheme-7` and FORMATS.md unchanged until the parent says so.
 - A dev-client look at the sight glass bubbles (owner's call).
 
 - A dev-client look (owner's call): the look in daylight, at night and in rain, near and at the range edge, with Sodium,
