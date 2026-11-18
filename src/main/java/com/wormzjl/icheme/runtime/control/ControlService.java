@@ -269,6 +269,11 @@ public final class ControlService {
         hosts.bindColumn(cell);
     }
 
+    /** {@link ControlHosts#bindCreativeMotor}. */
+    public void bindCreativeMotor(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos, net.minecraft.core.Direction facing, ShaftUnit unit) {
+        hosts.bindCreativeMotor(level, pos, facing, unit);
+    }
+
     public void bindMotor(EquipmentShellBlockEntity cell, ShaftUnit unit) {
         hosts.bindMotor(cell, unit);
     }

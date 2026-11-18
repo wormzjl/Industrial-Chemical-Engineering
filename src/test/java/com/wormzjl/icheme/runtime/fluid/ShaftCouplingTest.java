@@ -521,14 +521,34 @@ class ShaftCouplingTest {
      */
     @Test
     void aDefaultCreativeMotorTurnsItsPumpAtItsDesignSpeed() {
-        assertEquals(1, slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0).getLast(), 1e-9, "SPEED: share 1.0");
-        var regulated = slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .02);
+        assertEquals(1, slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.SPEED, 0, false).getLast(), 1e-9, "SPEED: share 1.0, no link needed");
+        var regulated = slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .02, true);
         for (double s : regulated) assertTrue(s <= 1 + 1e-9, "REGULATE_FLOW: at most 1.0, " + regulated);
         assertEquals(1, regulated.getLast(), 1e-9, "at its top, short of the set flow: " + regulated);
     }
 
-    /** The speed share of a pump rated 0.01 m³/s, 50 m at 1000 rpm on a creative motor with no set speed in {@code mode}, each 5 s. */
-    private List<Double> slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow) {
+    /**
+     * A creative motor regulates only a machine its data cables reach, as a motor does (part C of PUMP_SPEED_SHUT_VALVE_REVIEW.md):
+     * with no link it says NO DATA LINK and holds at most its last speed, so from rest it stands; linked, it reaches the set flow.
+     */
+    @Test
+    void aCreativeMotorRegulatesOnlyOverItsDataLink() {
+        var status = new String[1];
+        var unlinked = slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .006, false, status);
+        assertTrue(status[0].startsWith("NO DATA LINK"), status[0]);
+        for (double s : unlinked) assertEquals(0, s, 0, "no link: it holds its last speed, at rest " + unlinked);
+        var linked = slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode.REGULATE_FLOW, .006, true, status);
+        assertFalse(status[0].contains("NO DATA LINK"), status[0]);
+        assertTrue(linked.getLast() > .1, "linked: it regulates " + linked);
+    }
+
+    private List<Double> slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow, boolean link) {
+        return slowPumpShares(mode, setFlow, link, new String[1]);
+    }
+
+    /** The speed share of a pump rated 0.01 m³/s, 50 m at 1000 rpm on a creative motor with no set speed in {@code mode}, each 5 s,
+     * data-linked to the pump where {@code link}; {@code status} gets the drive's last status. */
+    private List<Double> slowPumpShares(com.wormzjl.icheme.science.machine.ShaftTrain.Mode mode, double setFlow, boolean link, String[] status) {
         var rig = new Rig();
         var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
         long first = ledger.reserve(3);
@@ -553,7 +573,7 @@ class ShaftCouplingTest {
             }
 
             public Set<Long> linked(long motor) {
-                return Set.of();
+                return link ? Set.of(1L) : Set.of();
             }
         });
         var slow = new CentrifugalPump(.01, 50, .7, 1000);
@@ -565,6 +585,7 @@ class ShaftCouplingTest {
             rig.run(5);
             out.add(((FlowControl.Machine) rig.coordinator.observe(1).lastResult().orElseThrow().graph().pipes().get(0).control()).speed());
         }
+        status[0] = trains.view(first).status();
         return out;
     }
 
@@ -610,7 +631,8 @@ class ShaftCouplingTest {
         return trimRig(false, setFlow, cadences, branch, phases);
     }
 
-    /** {@link #trimRig(double, int, Branch, double...)} on a creative motor with no set speed where {@code creative}, no data link. */
+    /** {@link #trimRig(double, int, Branch, double...)} on a creative motor with no set speed where {@code creative}, linked to the
+     * pump by data as a motor is. */
     private List<Booked> trimRig(boolean creative, double setFlow, int cadences, Branch branch, double... phases) {
         double litres = phases[0];
         var rig = new Rig();
@@ -639,7 +661,7 @@ class ShaftCouplingTest {
             }
 
             public Set<Long> linked(long motor) {
-                return creative ? Set.of() : Set.of(1L);
+                return Set.of(1L);
             }
         });
         var supply = water(101325);
@@ -747,7 +769,7 @@ class ShaftCouplingTest {
         shutValveIdles(false);
     }
 
-    /** {@link #aShutValveInThePumpsSeriesIdlesTheDrive} on a creative motor with no set speed and no data link: the same law. */
+    /** {@link #aShutValveInThePumpsSeriesIdlesTheDrive} on a creative motor with no set speed, linked by data: the same law. */
     @Test
     void aShutValveInThePumpsSeriesIdlesACreativeDrive() {
         shutValveIdles(true);

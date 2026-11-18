@@ -942,7 +942,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         boolean steamShort = (turbine || valve != null) && sent > 0 && run.steamFlow < .99 * sent;
         boolean idleSupply = turbine && run.admission == 0 && run.drop > 0;
         String automatic=null;double requestedRpm=Double.NaN;boolean trimmed=false;
-        if(d.kind()==ShaftNetwork.Kind.MOTOR&&d.settings().mode()!=ShaftTrain.Mode.SPEED) {
+        // A motor and a creative motor regulate a driven machine their data cables reach (part C of PUMP_SPEED_SHUT_VALVE_REVIEW.md:
+        // the creative motor is a data host as a motor is): one path, the trim included.
+        if((d.kind()==ShaftNetwork.Kind.MOTOR||d.kind()==ShaftNetwork.Kind.CREATIVE_MOTOR)&&d.settings().mode()!=ShaftTrain.Mode.SPEED) {
             var linked=host.linked(d.id());
             var candidates=train.driven().stream().map(m->topology.shaft(m.id())).filter(Objects::nonNull).filter(u->u.fluid()>0&&linked.contains(u.fluid())).toList();
             automatic=candidates.isEmpty()?"NO DATA LINK":candidates.size()>1?"MULTIPLE DUTIES":null;
@@ -956,12 +958,6 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                     if(Double.isFinite(trim)) {share=trimmed(trim,state.speed()*member.ratio()/candidates.getFirst().designSpeed());trimmed=true;}
                     requestedRpm=share*candidates.getFirst().designSpeed()/member.ratio();}
             }
-        } else if(d.settings().mode()==ShaftTrain.Mode.REGULATE_FLOW&&!train.driven().isEmpty()) {
-            // Any other flow-regulating driver (a creative motor, a turbine) regulates its first machine, which needs no data link:
-            // the same trim as a motor's, else its own secant (ShaftTrain.regulated).
-            var member=train.driven().getFirst();var unit=topology.shaft(member.id());var sample=run.duty(member.id());
-            double trim=sample==null||unit==null||!(unit.designSpeed()>0)?Double.NaN:sample.trimSpeed();
-            if(Double.isFinite(trim)){requestedRpm=trimmed(trim,state.speed()*member.ratio()/unit.designSpeed())*unit.designSpeed()/member.ratio();trimmed=true;}
         }
         // A prime mover's supply is the net shaft power its last fired fuel gave; fuel arriving holds an unloaded set at speed.
         boolean prime = d.kind().primeMover() && primeMovers != null;
@@ -975,8 +971,9 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
         var driver = driver(d, !motor || electric.powered(d.id()));
+        // The top: a motor's MAXIMUM_RPM, a creative motor's set speed (its train's design speed with none set).
         if(Double.isFinite(requestedRpm))driver=driver.atSpeed(Math.clamp(requestedRpm,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,
-                driver.drive()==ShaftTrain.Drive.VARIABLE_MOTOR?com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM:Double.POSITIVE_INFINITY));
+                driver.drive()==ShaftTrain.Drive.VARIABLE_MOTOR?com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM:driver.setSpeed()));
         var step = ShaftTrain.step(driver, state.speed(), measure);
         if(automatic!=null&&driver.running()&&driver.powered()&&step.trip()==ShaftTrain.Trip.NONE)
             step=new ShaftTrain.Step(Math.min(state.speed(),step.speed()),ShaftTrain.Trip.NONE,automatic+" / LAST SPEED",0,state.speed()>0?step.electricPower():0);

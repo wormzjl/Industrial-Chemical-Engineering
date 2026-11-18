@@ -179,6 +179,20 @@ public final class DataPorts {
     }
 
     /**
+     * A creative motor's data socket (PUMP_SPEED_SHUT_VALVE_REVIEW.md, part C): on its terminal box's gland, turned with its
+     * shaft's {@code facing} ({@link CreativeMotorGeometry#socket}); an actuator socket of its shaft unit {@code unit}, as a
+     * motor's ({@link #motor}).
+     */
+    public static DataPort creativeMotor(Level level, BlockPos owner, Direction facing, long unit, UUID identity) {
+        var s = CreativeMotorGeometry.socket(facing.ordinal());
+        var outward = Direction.values()[CreativeMotorGeometry.socketOutward(facing.ordinal())];
+        var centre =
+                new Vec3(owner.getX() + s[0] / 16, owner.getY() + s[1] / 16, owner.getZ() + s[2] / 16)
+                        .add(Vec3.atLowerCornerOf(outward.getNormal()).scale(.005));
+        return create(identity, DataPort.Kind.ACTUATOR, unit, level, owner, centre, outward);
+    }
+
+    /**
      * A fixed pollution monitor's socket (WP10): on the analyser box's back, opposite its front, as the controller's
      * ({@link #panel}); a sensor socket of host {@code host}.
      */

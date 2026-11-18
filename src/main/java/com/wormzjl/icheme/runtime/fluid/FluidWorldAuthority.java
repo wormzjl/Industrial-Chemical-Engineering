@@ -1589,10 +1589,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // a wiring change (ControlHosts.bindMotor, DataPorts.refresh): binding on chunk load and on unit creation would miss
         // both. It reads the ledger's shaft map (one copy, as before) without ShaftTrains.units()'s second copy, in the same
         // order; only the motors act. A motor-only index belongs with the ledger's shaft accessors (machines lane, B-M1).
-        if(topology.onlineTick()%100==0) for(var motor:topology.shafts().values()) if(motor.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR) {
+        // A creative motor is a data host too (part C of PUMP_SPEED_SHUT_VALVE_REVIEW.md): its socket stands on its block.
+        if(topology.onlineTick()%100==0) for(var motor:topology.shafts().values()) if(motor.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.MOTOR||motor.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR) {
             var motorLevel=server.getLevel(dimension(motor.position().dimension()));
             var pos=new BlockPos(motor.position().x(),motor.position().y(),motor.position().z());
-            if(motorLevel!=null&&motorLevel.hasChunkAt(pos)&&motorLevel.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity cell)controls().bindMotor(cell,motor);
+            if(motorLevel==null||!motorLevel.hasChunkAt(pos))continue;
+            if(motor.kind()==com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATIVE_MOTOR){var state=motorLevel.getBlockState(pos);if(state.getBlock() instanceof com.wormzjl.icheme.world.level.block.CreativeMotorBlock)controls().bindCreativeMotor(motorLevel,pos,state.getValue(com.wormzjl.icheme.world.level.block.CreativeMotorBlock.FACING),motor);}
+            else if(motorLevel.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity cell)controls().bindMotor(cell,motor);
         }
         controls().tick(topology.onlineTick());
         presentation.tick(topology.onlineTick());
