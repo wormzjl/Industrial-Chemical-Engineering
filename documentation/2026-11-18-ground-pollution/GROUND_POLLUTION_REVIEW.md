@@ -32,7 +32,6 @@ Batch `2026-11-18-ground-pollution`, branch `claude/water-intake-outfall-0e90c8`
 
 - **Air to ground deposition: off for now** (owner, 2026-11-18). Turning it on takes: `PollutionField.settle` returning what it books `GROUND` by chunk column (the merge into a `TreeMap<Long, Double>` at its three ground bookings, removed in this rework), those deposits added to the pass's ground deposits in `PollutionEngine.Pass.run`, and the closure test stating deposited = the whole air `GROUND` total. No format change; no config switch.
 - The reading of "other blocks" (G4b): A vegetation only (built); B also logs; C a wider list.
-- The polluted soil texture: A grey ash (placeholder in place), B brown with crust, C dark with an oily sheen.
 - G3 option B: a map page of the mod's own (see below).
 - G5 delivery: an open package after the solute batch's WP2.
 
@@ -57,6 +56,7 @@ Batch `2026-11-18-ground-pollution`, branch `claude/water-intake-outfall-0e90c8`
 | G4b random rounding | Picks per pass = expected picks rounded up or down at random with the right mean | A plain round of 0.295 × index gives no pick at all below index 1.7 |
 | G4b walk start | The block at the motion-blocking height (the first free position, where a flower or crop stands) and three below | A flower or crop does not block motion |
 | G4b water plants | Kelp and seagrass are reached only where the water is shallow and become water | The walk is 4 blocks from above the surface |
+| Polluted soil texture (owner, 2026-11-18: "C: dark oily") | Option C, dark soil with an oily violet sheen, drawn by `tools/polluted-soil-texture/` | Options A grey ash (the placeholder before) and B brown with crust were not picked |
 | Field Guide | Only the polluted soil's "serves" line | The guide has no pollution chapter |
 | GameTest batches | The growth test and the spoiling test in batches of their own | Tests of one batch run together, and each clears the dimension's pollution |
 

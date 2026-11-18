@@ -13,6 +13,10 @@ Purpose: ground pollution stored by chunk column, with a compound inventory, spr
 - [GROUND_POLLUTION_PLAN.md](GROUND_POLLUTION_PLAN.md): the model, every constant, the steps.
 - [GROUND_POLLUTION_REVIEW.md](GROUND_POLLUTION_REVIEW.md): the build, the numbers, the options taken, G5 held, not seen in a client.
 
+## Tools
+
+- [tools/polluted-soil-texture/](../../tools/polluted-soil-texture/README.md): the polluted soil texture and its option sheet.
+
 ## History
 
 - 2026-11-18: G1 (`93537c4f0`) `GroundField`, `GroundSettings`, `GroundLedger`, `GroundEnvironment`; settling returns deposits by column (both reworked later the same day).
@@ -36,3 +40,4 @@ Purpose: ground pollution stored by chunk column, with a compound inventory, spr
 - No pollution chapter in the Field Guide for the sentence the brief asked.
 - Not checked in a client: the overlay and its key, the meter, growth, spoiling and water effects in a live world, the soil's look.
 - Tools: `tools/heat-gui-renders/GuiPrototypes.pollutionMap`.
+- 2026-11-18: the owner picked the polluted soil texture C ("C: dark oily"), installed; its tool moved to `tools/polluted-soil-texture/`.
