@@ -30,7 +30,7 @@ There is no separate column calculator any more: `column_calculator_v3` is an al
   was by compound list, before any solve and at any temperature.
 - **Placed column.** `ColumnSolve.run` (the worker's solve, `ProcessSolveJobs.ColumnUnitCommand`) catches the exception
   as an `IllegalArgumentException` and returns `Failed("Package icheme:refinery admits crystal phases [...]")`.
-  `ColumnOperation` installs no table: the column's status reads SOLVE_REFUSED ("first solve refused: ..."), the cycle
+  `ColumnOperation` installs no table: the column's condition is SOLVE_REFUSED with the exception's text as its reason, the cycle
   takes nothing, and a state inside the refused state's bands is never asked again. A column whose feed holds any CO2
   (an intake's air would bring it) stood still for good. This was the "hard lock".
 - **Simulator column block** (and its sizing, `ColumnSizing`): the same exception from `ColumnSolve.calculate` failed
