@@ -20,9 +20,9 @@ import java.util.Map;
 /**
  * One-block fluid devices a blast destroys (batch 2026-11-15-pollution-system, WP6a, S5; owner 2026-11-15: a pipe releases
  * its contents only when an explosion destroys it, and has no damage meter). {@code FluidDeviceBlock.onBlockExploded} marks
- * the position for the length of its removal ({@link #exploded}); its {@code onRemove} then lets out what the device held
- * ({@link #burst}, {@link FluidWorldAuthority#releaseContents}) before the registration leaves. A player's break is never
- * marked and releases nothing.
+ * the position for the length of its removal ({@link #exploded}); its {@code onRemove} queues the same rupture as a
+ * saved-terrain blast ({@link FluidWorldAuthority#removeRupturedDevice}). The engine releases what the device held when
+ * the removal commits. A player's break releases nothing.
  *
  * <p>The burst sound ({@code icheme:pipe_burst_gas}, {@code _liquid}, {@code _empty}): at most one per cube and tick, so a
  * chain of blasts does not stack hundreds; played after the level ticks ({@link #flush}) at the cube's largest burst, by the
@@ -117,13 +117,12 @@ public final class BurstPipes {
         }
     }
 
-    /** {@code FluidDeviceBlock.onRemove} at a marked position, before device {@code id} leaves: its contents to the air, and its sound. */
-    public static void burst(ServerLevel level, BlockPos position, FluidWorldAuthority world, long id) {
+    /** The engine committed a rupture. Aggregate the sound with any other bursts in its cube this tick. */
+    public static void released(ServerLevel level, BlockPos position, Releases.Spilled spilled) {
         try {
-            var spilled = world.releaseContents(id);
-            heard(level, position, spilled == null ? Releases.Spilled.NONE : spilled);
+            heard(level, position, spilled);
         } catch (RuntimeException failure) {
-            failed("burst", failure);
+            failed("sound queue", failure);
         }
     }
 

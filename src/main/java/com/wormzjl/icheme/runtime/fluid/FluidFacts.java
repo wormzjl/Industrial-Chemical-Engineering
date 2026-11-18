@@ -95,7 +95,7 @@ final class FluidFacts {
      *  material of construction by name, after its members (absent: a clean, new carbon steel column).
      *  30 (batch 2026-11-17-three-phase-separator): a vessel geometry's {@code demister} after its boot length (absent:
      *  none). */
-    static final int SCHEMA=32;
+    static final int SCHEMA=33;
     // Schema 31 belongs to the unmerged solute batch. Its additional facts cannot be read on this branch.
     static boolean readsSchema(int schema){return schema>=1 && schema<=SCHEMA && schema!=31;}
     /** Renamed or removed enum constants, per enum: the saved name to the current one. None at schema 30. */
@@ -277,6 +277,9 @@ final class FluidFacts {
             Builder stores(Map<Long,com.wormzjl.icheme.science.machine.ElectricStore.Facts> value){stores=value;return this;}
             Builder health(Map<Long,Double> value){health=value;return this;}
             Builder builds(WorldTopologyLedger.Builds value){builds=value;return this;}
+            void ruptures(Map<PhysicalFluidTopology.Position,Set<Long>> value){
+                if(!value.isEmpty())builds=new WorldTopologyLedger.Builds(builds.paints(),builds.structures(),builds.racks(),builds.names(),value);
+            }
             Builder stills(List<StillUnit> value){stills=value;return this;}
             Builder converters(List<ConverterUnit> value){converters=value;return this;}
             /** Schema 29: the walls' facts; empty for a world written before them (every wall new and clean). */
@@ -475,7 +478,10 @@ final class FluidFacts {
         var speeds=new ArrayList<ShaftUnit>();for(var u:shafts.values())if(u.state()!=null)speeds.add(u);speeds.sort(Comparator.comparingLong(ShaftUnit::id));
         var held=new ArrayList<Long>();for(var r:active.values())if(r.device().held())held.add(r.device().id());for(var u:shafts.values())if(u.held())held.add(u.id());Collections.sort(held);
         return section(f->f.list(events,(q,event)->{uuid(q,event.id());q.count(event.tick());
-            q.list(event.edits(),(e,edit)->e.count(edit.id()).list(edit.replacement()==null?List.<WorldTopologyLedger.Registration>of():List.of(edit.replacement()),FluidFacts::registration));
+            q.list(event.edits(),(e,edit)->{
+                e.count(edit.id()).list(edit.replacement()==null?List.<WorldTopologyLedger.Registration>of():List.of(edit.replacement()),FluidFacts::registration);
+                if(edit.rupture())e.bool(true);
+            });
             var touched=new ArrayList<>(event.touched());Collections.sort(touched);q.list(touched,(t,id)->t.count(id));
             var recovery=event.recovery();
             q.list(recovery==null?List.<WorldTopologyLedger.Recovery>of():List.of(recovery),(r,v)->r.count(v.filterId()).list(v.player()==null?List.<UUID>of():List.of(v.player()),FluidFacts::uuid));
@@ -494,7 +500,7 @@ final class FluidFacts {
             var events=f.list(List.<WorldTopologyLedger.Event>of(),q->{
                 var id=required(uuid(q),q,"event identity");long tick=q.count(0);
                 var edits=q.list(List.of(),e->{long device=e.count(0);var replacement=e.list(List.of(),FluidFacts::registration);if(replacement.size()>1)throw e.invalid("two replacements");
-                    return valid(e,"edit",()->new WorldTopologyLedger.Edit(device,replacement.isEmpty()?null:replacement.getFirst()));});
+                    boolean rupture=e.bool(false);return valid(e,"edit",()->new WorldTopologyLedger.Edit(device,replacement.isEmpty()?null:replacement.getFirst(),rupture));});
                 var touched=new HashSet<Long>();for(long t:q.list(List.<Long>of(),t->t.count(0)))if(!touched.add(t))throw q.invalid("duplicate touched device");
                 var recovery=q.list(List.of(),r->{long filter=r.count(0);var player=r.list(List.of(),FluidFacts::uuid);return valid(r,"recovery",()->new WorldTopologyLedger.Recovery(filter,player.isEmpty()?null:player.getFirst()));});
                 var holding=new HashSet<Long>();for(long h:q.list(List.<Long>of(),h->h.count(0)))if(!holding.add(h))throw q.invalid("duplicate held edit");

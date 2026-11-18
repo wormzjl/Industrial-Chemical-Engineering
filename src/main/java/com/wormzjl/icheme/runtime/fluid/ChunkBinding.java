@@ -25,6 +25,73 @@ import java.util.*;
 final class ChunkBinding {
     private final FluidWorldAuthority authority;
     ChunkBinding(FluidWorldAuthority authority){this.authority=authority;}
+    private record Chunk(String dimension,long coordinates) {}
+
+    private final Map<Chunk,Set<PhysicalFluidTopology.Position>> rupturedCells = new HashMap<>();
+    private final Set<Chunk> awaitingFull = new LinkedHashSet<>();
+
+    /** A retained chunk can re-enter FULL without another Load event. Revisit only marked promotions. */
+    void ruptureTicket(String dimension,long coordinates,boolean becomingFull) {
+        var key = new Chunk(dimension,coordinates);
+        if (!becomingFull) awaitingFull.remove(key);
+        else if (rupturedCells.containsKey(key)) awaitingFull.add(key);
+    }
+
+    void reconcileFullChunks() {
+        if (awaitingFull.isEmpty()) return;
+        for (var key : List.copyOf(awaitingFull)) {
+            var level = authority.serverLevel(key.dimension());
+            if (level == null) {
+                awaitingFull.remove(key);
+                continue;
+            }
+            var at = new net.minecraft.world.level.ChunkPos(key.coordinates());
+            var chunk = level.getChunkSource().getChunkNow(at.x,at.z);
+            if (chunk != null) {
+                awaitingFull.remove(key);
+                reconcileRuptures(level,chunk);
+            }
+        }
+    }
+
+    void indexRupture(PhysicalFluidTopology.Position pos) {
+        var key = new Chunk(pos.dimension(),net.minecraft.world.level.ChunkPos.asLong(pos.x() >> 4,pos.z() >> 4));
+        rupturedCells.computeIfAbsent(key,k -> new LinkedHashSet<>()).add(pos);
+    }
+
+    /** Only remove the retired identity. Forget its mark when the chunk on disk no longer contains it. */
+    private void reconcileRuptures(net.minecraft.server.level.ServerLevel level,net.minecraft.world.level.chunk.LevelChunk chunk) {
+        var key = new Chunk(level.dimension().location().toString(),chunk.getPos().toLong());
+        var positions = rupturedCells.get(key);
+        if (positions == null) return;
+        Map<BlockPos,net.minecraft.nbt.CompoundTag> savedCells = null;
+        for (var it = positions.iterator(); it.hasNext();) {
+            var p = it.next();
+            var pos = new BlockPos(p.x(),p.y(),p.z());
+            var retired = authority.topology.rupturesAt(p);
+            var entity = chunk.getBlockEntity(pos);
+            if (entity instanceof FluidDeviceBlockEntity pipe && retired.contains(pipe.fluidIdentity()) && authority.at(p).isEmpty()) {
+                authority.instruments().recover(pipe.fluidIdentity(),level,pos,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(pipe.getBlockState()),pipe.instruments().recoverOnBreak());
+                int flags = net.minecraft.world.level.block.Block.UPDATE_CLIENTS | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
+                FluidDeviceBlock.quietly(() -> level.setBlock(pos,pipe.getBlockState().getFluidState().createLegacyBlock(),flags));
+                continue;
+            }
+            if (retired.stream().anyMatch(authority.topology::pending)) continue;
+            if (savedCells == null) {
+                var saved = SavedChunkData.read(level,chunk.getPos().x,chunk.getPos().z);
+                if (saved == null || !(saved.get("block_entities") instanceof net.minecraft.nbt.ListTag entries)
+                        || !entries.isEmpty() && entries.getElementType() != net.minecraft.nbt.Tag.TAG_COMPOUND) continue;
+                savedCells = SavedChunkData.blockEntities(saved);
+            }
+            var savedCell = savedCells.get(pos);
+            if (savedCell == null || !retired.contains(savedCell.getLong("FluidIdentity"))) {
+                authority.topology.forgetRupture(p);
+                it.remove();
+            }
+        }
+        if (positions.isEmpty()) rupturedCells.remove(key);
+    }
+
     /** Equipment whose remaining chunks must load before its complete structure can be registered. */
     private final Map<PhysicalFluidTopology.Position,EquipmentStructure.Vessel> unboundStructures=new LinkedHashMap<>();
     /** Registrations whose chunk loaded, by dimension, each queued once until the re-alignment checks it (REGISTRY_FIRST_PLAN.md 4.2). */
@@ -55,6 +122,7 @@ final class ChunkBinding {
         var at=new net.minecraft.world.level.ChunkPos(chunk);
         var loaded=level.getChunkSource().getChunkNow(at.x,at.z);if(loaded==null)return;
         String name=dimension.location().toString();
+        reconcileRuptures(level,loaded);
         for(var cell:List.copyOf(loaded.getBlockEntitiesPos())) {
             var block=loaded.getBlockState(cell).getBlock();
             if(!(block instanceof FluidDeviceBlock)&&!(block instanceof EquipmentShellBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.PipeRackBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ControlPanelBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.ConduitBlock)&&!(block instanceof com.wormzjl.icheme.world.level.block.AlarmBeaconBlock))continue;
@@ -120,5 +188,5 @@ final class ChunkBinding {
         IChemE.LOGGER.warn("fluid_realign held={} reason=NO_LEVEL: their dimensions have no level; /icheme devices held lists them",edits.size());
     }
     /** At close: the equipment waiting for its chunks, both re-alignment queues and the structures' chunk index. */
-    void clear(){unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();}
+    void clear(){awaitingFull.clear();rupturedCells.clear();unboundStructures.clear();realignment.clear();realigning.clear();shaftRealignment.clear();shaftRealigning.clear();structureChunks.clear();}
 }

@@ -20,7 +20,7 @@ import java.util.List;
 interface FactsSection {
     /** The sections in stream order: the registry (schema 1), the columns (6), the machines (10 to 12), the build facts (15),
      *  the batch stills (16), the fluid converters (24) and the walls (29). */
-    List<FactsSection> ALL=List.of(new RegistryFacts(),new ColumnFacts(),new MachineFacts(),new BuildFacts(),new StillFacts(),new ConverterFacts(),new IntegritySection());
+    List<FactsSection> ALL=List.of(new RegistryFacts(),new ColumnFacts(),new MachineFacts(),new BuildFacts(),new StillFacts(),new ConverterFacts(),new IntegritySection(),new RuptureFacts());
     /** Writes this section's fields of the root record {@code f} from {@code s}. */
     void write(Fields f,WorldTopologyLedger.Snapshot s);
     /** Reads this section's fields of the root record {@code f}, each at its default when the record ends before it, into {@code world}. */

@@ -244,14 +244,7 @@ public final class Blasts {
             return;
         }
         if (power >= MINIMUM_POWER) {
-            double x = blast.x() + 0.5, y = blast.y() + 0.5, z = blast.z() + 0.5;
-            if (vanillaAreaLoaded(level, new Vec3(x, y, z), (float) power)) {
-                boolean keep = keepBlocks;
-                level.explode(null, x, y, z, (float) power, !keep,
-                        keep || !blockDamage ? Level.ExplosionInteraction.NONE : Level.ExplosionInteraction.BLOCK);
-            } else {
-                Breaches.collect(level, new Vec3(x, y, z), (float) power);
-            }
+            applyDamage(level, new Vec3(blast.x() + 0.5, blast.y() + 0.5, blast.z() + 0.5), (float) power, blockDamage);
         }
         if (IChemE.calculationLoggingEnabled()) {
             IChemE.LOGGER.info("pollution status=BLAST dimension={} cube={},{},{} index={} air={} power={} burnt={}", key.location(),
@@ -259,6 +252,18 @@ public final class Blasts {
         }
         for (long neighbour : chain(cube, k -> service.measuredIndex(key, k, Channel.COMBUSTIBLE))) {
             ignite(key, neighbour, centre(level, service, neighbour), now + CHAIN_TICKS);
+        }
+    }
+
+    /** Dispatch a pollution blast with the configured block-damage permission. */
+    public static void applyDamage(ServerLevel level, Vec3 centre, float power, boolean blockDamage) {
+        boolean keep = keepBlocks;
+        boolean damage = blockDamage && !keep;
+        if (vanillaAreaLoaded(level, centre, power)) {
+            level.explode(null, centre.x, centre.y, centre.z, power, !keep,
+                    damage ? Level.ExplosionInteraction.BLOCK : Level.ExplosionInteraction.NONE);
+        } else {
+            PlantExplosion.detonate(level, centre, power, damage);
         }
     }
 

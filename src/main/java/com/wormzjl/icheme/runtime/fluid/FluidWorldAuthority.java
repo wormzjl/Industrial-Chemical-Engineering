@@ -235,6 +235,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public static void start(MinecraftServer server) {
         if(SERVERS.containsKey(server))throw new IllegalStateException("Duplicate fluid world authority");
         var world=new FluidWorldAuthority(server);SERVERS.put(server,world);
+        // A facts-only restore can drop the queued removal while retaining its intent and the pre-fence stock.
+        for(var entry:world.topology.builds().ruptures().entrySet()) {
+            var p=entry.getKey();
+            world.chunks.indexRupture(p);
+            var existing=world.at(p).orElse(null);
+            if(existing!=null&&entry.getValue().contains(existing.device().id()))world.placement.remove(existing.device().id(),true);
+        }
         var early=EARLY_CHUNKS.remove(server);
         if(early!=null)for(var loaded:early)world.loadedChunk(loaded.dimension(),loaded.chunk());
         world.chunks.holdWithoutLevel();
@@ -1146,20 +1153,36 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * booked here: the removal books a vessel's contents as removed, as before. Returns the masses, or {@link Releases.Spilled#NONE}.
      */
     public Releases.Spilled releaseContents(long id) {
-        owned();if(closed||releases==null)return Releases.Spilled.NONE;
-        var r=registrations().get(id);Long owner=r==null?null:registry.owner(id);if(owner==null)return Releases.Spilled.NONE;
-        var snapshot=storedIsland(owner);int n=model.componentCount();double[] gas=new double[n],liquid=new double[n],dense=new double[n];boolean node=false;
-        for(var reservoir:snapshot.graph().reservoirs()) {
-            if(reservoir.id()!=id)continue;node=true;if(reservoir.fixed())return Releases.Spilled.NONE;
-            // By its state's phases; one dense fluid (P2 of batch 2026-11-16-supercritical-followups, item 16) by its liquid-like
-            // weight, whatever slot holds it (DenseReadings.release).
-            DenseReadings.release(reservoir.inventory().moles(),reservoir.state(),gas,liquid,dense);
-            break;
+        owned();
+        var r=registrations().get(id);
+        return r==null?Releases.Spilled.NONE:emit(contents(r,null));
+    }
+
+    private record ReleasedStock(PhysicalFluidTopology.Position at,double[] gas,double[] liquid,Releases.Spilled spill) {}
+
+    private Releases.Spilled emit(ReleasedStock stock) {
+        if(stock==null)return Releases.Spilled.NONE;
+        releases.contents(stock.at(),stock.gas(),stock.liquid());
+        return stock.spill();
+    }
+
+    private ReleasedStock contents(WorldTopologyLedger.Registration r,PassiveNetwork.Reservoir aligned) {
+        if(closed||releases==null)return null;
+        long id=r.device().id();
+        Long owner=registry.owner(id);
+        var snapshot=aligned!=null||owner==null?null:storedIsland(owner);
+        if(aligned==null&&snapshot==null)return null;
+        int n=model.componentCount();double[] gas=new double[n],liquid=new double[n],dense=new double[n];
+        if(aligned==null) {
+            for(var node:snapshot.graph().reservoirs())if(node.id()==id){aligned=node;break;}
         }
-        if(!node) {
+        if(aligned!=null) {
+            if(aligned.fixed())return null;
+            DenseReadings.release(aligned.inventory().moles(),aligned.state(),gas,liquid,dense);
+        } else {
             var result=snapshot.lastResult().orElse(null);var g=r.device().geometry();
             double volume=g.length()*Math.max(1,g.channels())*Math.PI*g.diameter()*g.diameter()/4;
-            if(result==null||!(volume>0))return Releases.Spilled.NONE;
+            if(result==null||!(volume>0))return null;
             for(var view:registry.pipeViews(id)) {
                 PipeTransfer moved=null;for(var t:result.pipeTransfers())if(t.pipeId()==view.pipeId()){moved=t;break;}
                 if(moved==null)continue;
@@ -1177,9 +1200,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // what the burst is heard as (dense carbon dioxide flashes whole: gas; a dense heavy cut stays on the ground: liquid).
         // Every other liquid is heard as before (DenseReadings.heard).
         var spilled=DenseReadings.heard(gas,liquid,releases.volatileMoles(dense),model.molecularWeights());
-        if(!(spilled.gasKilograms()+spilled.liquidKilograms()>0))return Releases.Spilled.NONE;
-        releases.contents(r.device().position(),gas,liquid);
-        return spilled;
+        if(!(spilled.gasKilograms()+spilled.liquidKilograms()>0))return null;
+        return new ReleasedStock(r.device().position(),gas,liquid,spilled);
     }
     /** The pumps' health (W10b): a repair kit queues its event here. */
     public MachineHealth health(){owned();return health;}
@@ -1584,6 +1606,32 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public int diverterOutlet(long id){owned();return placement.diverterOutlet(id);}
     /** Reading committed static configuration never advances or materialises process state. */
     public Optional<PhysicalFluidTopology.Device> committedDevice(long id){owned();var record=topology.active().get(id);return record==null?Optional.empty():Optional.of(record.device());}
+    public void ruptureChunkTicket(String dimension,long chunk,boolean becomingFull) {
+        owned();chunks.ruptureTicket(dimension,chunk,becomingFull);
+    }
+    /** A previously ruptured standalone block still awaiting durable removal from its chunk. */
+    public boolean hasRuptureAt(PhysicalFluidTopology.Position position) {
+        owned();
+        return !topology.rupturesAt(position).isEmpty() && registry.at(position).isEmpty();
+    }
+
+    public boolean wasRuptured(PhysicalFluidTopology.Position position,long id) {
+        owned();return topology.rupturesAt(position).contains(id);
+    }
+
+    /** Remove this exact registered standalone device once. The pending cell removal shares its topology checkpoint. */
+    public boolean removeRupturedDevice(PhysicalFluidTopology.Position position,long id) {
+        owned();
+        var record=registry.at(position).orElse(null);
+        if(closed||record==null||record.device().id()!=id||!record.device().position().equals(position)
+                ||position.lane()!=0||record.device().port()||!record.device().ports().isEmpty())return false;
+        placement.remove(id,true);
+        topology.rupture(position,id);
+        chunks.indexRupture(position);
+        data.setDirty();
+        return true;
+    }
+
     public void remove(long id){owned();placement.remove(id);}
     /**
      * Holds registration {@code id}, or releases it (decision S11, REGISTRY_FIRST_PLAN.md 4.1): held, it keeps what it holds
@@ -1640,6 +1688,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     private void tick() {
         owned();if(closed)return;refreshProperties();topology.tick();
+        chunks.reconcileFullChunks();
         if (topology.onlineTick() >= nextWaterCheck) {
             WaterIntakes.recheck(this);
             nextWaterCheck = topology.onlineTick() + WaterIntakes.RECHECK_TICKS;
@@ -2202,6 +2251,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
     }
     private final class RegistryHost implements PhysicalRegistry.Host {
+        @Override public Runnable prepareRupture(WorldTopologyLedger.Registration r,PassiveNetwork.Reservoir stock) {
+            var measured=contents(r,stock);
+            return ()->{
+                var spilled=emit(measured);
+                var level=serverLevel(r.device().position().dimension());
+                if(level!=null)com.wormzjl.icheme.runtime.pollution.BurstPipes.released(level,cell(r),spilled);
+            };
+        }
         public IslandCoordinator coordinator(){return runtime.coordinator();}
         public void topology(String name,Set<UUID> events,Set<Long> affected,List<IslandCoordinator.Replacement> replacements,long committed,long online,
                              Map<Long,PassiveNetwork.Reservoir> additions,Set<Long> removals,Map<Long,InlineFilter> releasedFilters,Runnable commit) {

@@ -14,8 +14,9 @@ public final class WorldTopologyLedger {
         public Registration {Objects.requireNonNull(device);Objects.requireNonNull(spec);if(revision<0)throw new IllegalArgumentException("Negative device revision");}
     }
     /** A null replacement removes that identity. Movement uses removal plus a new identity. */
-    public record Edit(long id,Registration replacement) {
-        public Edit {if(id<=0||replacement!=null&&replacement.device.id()!=id)throw new IllegalArgumentException("Invalid physical edit");}
+    public record Edit(long id,Registration replacement,boolean rupture) {
+        public Edit(long id,Registration replacement){this(id,replacement,false);}
+        public Edit {if(id<=0||replacement!=null&&(replacement.device.id()!=id||rupture))throw new IllegalArgumentException("Invalid physical edit");}
     }
     public record Recovery(long filterId,UUID player) {public Recovery{if(filterId<=0)throw new IllegalArgumentException("Invalid recovery identity");}}
     public record Event(UUID id,long tick,List<Edit> edits,Set<Long> touched,Recovery recovery) {
@@ -91,24 +92,34 @@ public final class WorldTopologyLedger {
      * changed. While they are unchanged, every snapshot shares one instance, so a save compares them by reference
      * ({@link FluidCheckpointCodec#sameWorldBody}).</p>
      */
-    public record Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures,Map<Long,RackFrame> racks,Map<Long,String> names) {
+    public record Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures,Map<Long,RackFrame> racks,Map<Long,String> names,
+                         Map<PhysicalFluidTopology.Position,Set<Long>> ruptures) {
+        public Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures,Map<Long,RackFrame> racks,Map<Long,String> names) {
+            this(paints,structures,racks,names,Map.of());
+        }
         public static final Builds NONE=new Builds(Map.of(),Map.of(),Map.of(),Map.of());
         /** Facts with no device names. */
         public Builds(Map<Long,LinePaint> paints,Map<PhysicalFluidTopology.Position,Structure> structures,Map<Long,RackFrame> racks){this(paints,structures,racks,Map.of());}
         public Builds {
             paints=Map.copyOf(paints);structures=Map.copyOf(structures);racks=Map.copyOf(racks);names=Map.copyOf(names);
+            var copies=new HashMap<PhysicalFluidTopology.Position,Set<Long>>();ruptures.forEach((p,ids)->copies.put(p,Set.copyOf(ids)));ruptures=Map.copyOf(copies);
+            var removedIds=new HashSet<Long>();
+            for(var e:ruptures.entrySet()) {
+                if(e.getKey().lane()!=0||e.getValue().isEmpty())throw new IllegalArgumentException("Invalid ruptured cell "+e);
+                for(long id:e.getValue())if(id<=0||!removedIds.add(id))throw new IllegalArgumentException("Invalid destroyed identity "+id);
+            }
             for(var e:names.entrySet())if(e.getKey()<=0||!named(e.getValue()))throw new IllegalArgumentException("Invalid device name of "+e.getKey());
             for(var e:paints.entrySet())if(e.getKey()<=0||e.getValue().bare())throw new IllegalArgumentException("Invalid line paint of "+e.getKey());
             for(var origin:structures.keySet())if(origin.lane()!=0)throw new IllegalArgumentException("A structure's origin is a block, not a rack lane");
             for(long id:racks.keySet())if(id<=0)throw new IllegalArgumentException("Invalid rack frame of "+id);
         }
-        public boolean empty(){return paints.isEmpty()&&structures.isEmpty()&&racks.isEmpty()&&names.isEmpty();}
+        public boolean empty(){return paints.isEmpty()&&structures.isEmpty()&&racks.isEmpty()&&names.isEmpty()&&ruptures.isEmpty();}
         /** These facts with the paints, rack frames and names of only the identities in {@code ids}. Unchanged: this. */
         Builds keeping(Set<Long> ids) {
             if(ids.containsAll(paints.keySet())&&ids.containsAll(racks.keySet())&&ids.containsAll(names.keySet()))return this;
             var nextPaints=new HashMap<>(paints);nextPaints.keySet().retainAll(ids);var nextRacks=new HashMap<>(racks);nextRacks.keySet().retainAll(ids);
             var nextNames=new HashMap<>(names);nextNames.keySet().retainAll(ids);
-            return new Builds(nextPaints,structures,nextRacks,nextNames);
+            return new Builds(nextPaints,structures,nextRacks,nextNames,ruptures);
         }
     }
     /** Whether {@code name} is a device's name as its rule writes it ({@link com.wormzjl.icheme.science.equipment.DeviceName#clean}), and not empty. */
@@ -227,6 +238,7 @@ public final class WorldTopologyLedger {
             if(constructed.moles().length!=count||destroyed.moles().length!=count)throw new IllegalArgumentException("Topology accounting axis mismatch");
             for(var registration:active.values())if(registration.spec().composition().length!=count)throw new IllegalArgumentException("Topology device axis mismatch");
             for(var event:events)for(var edit:event.edits())if(edit.replacement()!=null&&edit.replacement().spec().composition().length!=count)throw new IllegalArgumentException("Topology event axis mismatch");
+            for(var retired:builds.ruptures().values())for(long id:retired)if(id>=nextIdentity)throw new IllegalArgumentException("Unallocated rupture identity "+id);
             var positions=new HashSet<PhysicalFluidTopology.Position>();
             for(var entry:active.entrySet()){if(entry.getKey()!=entry.getValue().device.id()||entry.getKey()>=nextIdentity)throw new IllegalArgumentException("Invalid active physical identity/position");for(var cell:entry.getValue().device.cells())if(!positions.add(cell))throw new IllegalArgumentException("Invalid active physical identity/position");}
             long last=-1;var ids=new HashSet<UUID>();
@@ -326,6 +338,7 @@ public final class WorldTopologyLedger {
     private final HashMap<PhysicalFluidTopology.Position,Structure> structures=new HashMap<>();
     private final HashMap<Long,RackFrame> racks=new HashMap<>();
     private final HashMap<Long,String> names=new HashMap<>();
+    private final Map<PhysicalFluidTopology.Position,Set<Long>> ruptures=new HashMap<>();
     private Builds builds;
     private Snapshot shared;private long sharedVersion;
     public WorldTopologyLedger(Snapshot restored) {
@@ -335,20 +348,30 @@ public final class WorldTopologyLedger {
         // Every queued event must apply to the registry before it, in order, as when it was queued.
         for(var event:restored.events){check(latest,latestAt,event.edits);apply(latest,latestAt,event.edits);events.add(event);}
         recoveries.putAll(restored.recoveries);columns.putAll(restored.columns);shafts.putAll(restored.shafts);for(var u:shafts.values())shaftAt.put(u.position(),u.id());stores=restored.stores;health=restored.health;integrity=restored.integrity;stills.putAll(restored.stills);converters.putAll(restored.converters);
-        paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());racks.putAll(restored.builds.racks());names.putAll(restored.builds.names());builds=restored.builds;
+        paints.putAll(restored.builds.paints());structures.putAll(restored.builds.structures());racks.putAll(restored.builds.racks());names.putAll(restored.builds.names());ruptures.putAll(restored.builds.ruptures());builds=restored.builds;
         shared=restored;sharedVersion=version;
     }
     private void owned(){if(Thread.currentThread()!=owner)throw new IllegalStateException("World topology belongs to the server thread");}
     /** The ledger as a checkpoint saves it. While the ledger is unchanged every snapshot shares the same immutable parts. */
     public Snapshot snapshot() {
         owned();
-        if(builds==null)builds=new Builds(paints,structures,racks,names);
+        if(builds==null)builds=new Builds(paints,structures,racks,names,ruptures);
         if(sharedVersion!=version){shared=new Snapshot(onlineTick,nextIdentity,Map.copyOf(active),List.copyOf(events),constructed,destroyed,basis,Map.copyOf(recoveries),restated,Map.copyOf(columns),Map.copyOf(shafts),stores,health,builds,Map.copyOf(stills),Map.copyOf(converters),integrity);sharedVersion=version;}
         else if(shared.onlineTick!=onlineTick||shared.builds!=builds)shared=new Snapshot(onlineTick,shared.nextIdentity,shared.active,shared.events,shared.constructed,shared.destroyed,shared.basis,shared.recoveries,shared.restated,shared.columns,shared.shafts,shared.stores,shared.health,builds,shared.stills,shared.converters,shared.integrity);
         return shared;
     }
+    Set<Long> rupturesAt(PhysicalFluidTopology.Position pos){owned();return ruptures.getOrDefault(pos,Set.of());}
+    void rupture(PhysicalFluidTopology.Position pos,long destroyedId) {
+        owned();
+        if (destroyedId<=0) throw new IllegalArgumentException("Invalid destroyed device");
+        var missing=new HashSet<>(rupturesAt(pos));
+        missing.add(destroyedId);
+        ruptures.put(pos,Set.copyOf(missing));
+        builds=null;
+    }
+    void forgetRupture(PhysicalFluidTopology.Position pos){owned();if(ruptures.remove(pos)!=null)builds=null;}
     /** The build facts as the next snapshot holds them. */
-    public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures,racks,names);return builds;}
+    public Builds builds(){owned();if(builds==null)builds=new Builds(paints,structures,racks,names,ruptures);return builds;}
     /** A count that moves with every change of the registry's facts (a commit, an identity, a recovery, a column), so a reader can tell when what it derived is stale. Build facts leave it alone. */
     public long version(){owned();return version;}
     /** The paint of line {@code id}, or null for a bare line: a live read, no copy. */

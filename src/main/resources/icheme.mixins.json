@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "com.wormzjl.icheme.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["EquipmentChunkMixin"],
+  "mixins": ["EquipmentChunkMixin", "PlantExplosionMixin"],
   "injectors": {"defaultRequire": 1}
 }

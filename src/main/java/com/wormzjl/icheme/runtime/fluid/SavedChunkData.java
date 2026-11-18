@@ -35,18 +35,21 @@ public final class SavedChunkData {
         var address = new Address(level.dimension().location().toString(), x, z);
         var contents = entities.get(address);
         if (contents == null) {
-            contents = new HashMap<>();
             var chunk = read(level, x, z);
-            if (chunk != null) {
-                for (Tag entry : chunk.getList("block_entities", Tag.TAG_COMPOUND)) {
-                    var entity = (CompoundTag) entry;
-                    contents.put(new BlockPos(entity.getInt("x"), entity.getInt("y"), entity.getInt("z")), entity);
-                }
-            }
+            contents = chunk == null ? Map.of() : blockEntities(chunk);
             if (entities.size() >= 32) entities.remove(entities.keySet().iterator().next());
             entities.put(address, contents);
         }
         var entity = contents.get(pos);
         return entity == null ? null : entity.copy();
     }
+    static Map<BlockPos,CompoundTag> blockEntities(CompoundTag chunk) {
+        var contents = new HashMap<BlockPos,CompoundTag>();
+        for (Tag entry : chunk.getList("block_entities", Tag.TAG_COMPOUND)) {
+            var entity = (CompoundTag) entry;
+            contents.put(new BlockPos(entity.getInt("x"), entity.getInt("y"), entity.getInt("z")), entity);
+        }
+        return contents;
+    }
+
 }

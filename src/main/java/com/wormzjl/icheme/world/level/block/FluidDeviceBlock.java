@@ -321,13 +321,26 @@ public sealed class FluidDeviceBlock extends BaseEntityBlock {
      * leaves ({@link com.wormzjl.icheme.runtime.pollution.BurstPipes}). A player's break releases nothing.
      */
     @Override public void onBlockExploded(BlockState state,Level level,BlockPos position,Explosion explosion) {
-        if(level instanceof ServerLevel serverLevel)com.wormzjl.icheme.runtime.pollution.BurstPipes.exploded(serverLevel,position,()->super.onBlockExploded(state,level,position,explosion));
+        if(level instanceof ServerLevel serverLevel)com.wormzjl.icheme.runtime.pollution.BurstPipes.exploded(serverLevel,position,()->{
+            if(explosion instanceof com.wormzjl.icheme.runtime.pollution.PlantExplosion) {
+                // Cascading neighbour notifications can read an absent chunk. The registry updates adjacent pipes' faces.
+                if(level.setBlock(position,Blocks.AIR.defaultBlockState(),Block.UPDATE_CLIENTS|Block.UPDATE_KNOWN_SHAPE))
+                    wasExploded(level,position,explosion);
+            } else super.onBlockExploded(state,level,position,explosion);
+        });
         else super.onBlockExploded(state,level,position,explosion);
     }
     @Override protected void onRemove(BlockState state,Level level,BlockPos position,BlockState replacement,boolean moved) {
         if(!registered&&state.getBlock()!=replacement.getBlock()&&level instanceof ServerLevel serverLevel)FluidWorldAuthority.find(serverLevel.getServer()).ifPresent(world->{
-            // A blast's removal (WP6a): what the device holds goes to the air before its registration leaves; the ledger books its removal as before.
-            var p=Positions.of(level,position);world.at(p).ifPresent(r->{if(com.wormzjl.icheme.runtime.pollution.BurstPipes.marked(serverLevel,position))com.wormzjl.icheme.runtime.pollution.BurstPipes.burst(serverLevel,position,world,r.device().id());boolean drops=!(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)||h.instruments().recoverOnBreak();world.instruments().recover(r.device().id(),level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);world.remove(r.device().id());});
+            var p = Positions.of(level,position);
+            world.at(p).ifPresent(r -> {
+                long id = r.device().id();
+                boolean drops = !(level.getBlockEntity(position) instanceof com.wormzjl.icheme.runtime.instrument.Instrument.Holder h)
+                        || h.instruments().recoverOnBreak();
+                world.instruments().recover(id,level,position,com.wormzjl.icheme.runtime.instrument.InstrumentHosts.legacy(state),drops);
+                if (com.wormzjl.icheme.runtime.pollution.BurstPipes.marked(serverLevel,position)) world.removeRupturedDevice(p,id);
+                else world.remove(id);
+            });
         });
         super.onRemove(state,level,position,replacement,moved);
     }

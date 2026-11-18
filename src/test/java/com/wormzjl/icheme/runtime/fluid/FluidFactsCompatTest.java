@@ -130,6 +130,10 @@ class FluidFactsCompatTest {
         world.ledger.rack(lane,new WorldTopologyLedger.RackFrame(Direction.EAST,WorldTopologyLedger.RackShape.STRAIGHT));
         // Facts schema 15, last: the laid pipe's name (W5c C4), with a letter outside ASCII.
         world.ledger.name(laid,"Feed é line");
+        // One retired block awaiting physical cleanup in a sleeping chunk (schema 33).
+        var breakAt=new PhysicalFluidTopology.Position(EventPathWorld.DIM,3000,64,3000);
+        world.ledger.rupture(breakAt,world.ledger.reserve(1));
+        world.ledger.rupture(breakAt,world.ledger.reserve(1));
         stills(world);
         world.runTo(880);
         ejector(world);
@@ -1282,6 +1286,40 @@ class FluidFactsCompatTest {
         world.runTo(600);world.assertKeptUp("the two lines");
         return world;
     }
+    @Test void aQueuedRuptureAndAnOrdinaryRemovalKeepTheirDifferentIntentsAfterRestart() {
+        var world = new EventPathWorld();
+        long ruptured = world.place(0, 64, 0, Kind.RESERVOIR, Direction.EAST);
+        long ordinary = world.place(8, 64, 0, Kind.PIPE, Direction.EAST);
+        world.runTo(20);
+        var position = world.ledger.active().get(ruptured).device().position();
+        var rupture = new WorldTopologyLedger.Edit(ruptured, null, true);
+        var removal = new WorldTopologyLedger.Edit(ordinary, null);
+        var queued = world.registry.submit(List.of(rupture, removal), world.ledger.nextIdentity(), null);
+        world.ledger.rupture(position, ruptured);
+
+        var restored = load(image(world), key -> key.on(model), CATALOG);
+        assertEquals(FluidCheckpointStore.Route.EXACT, restored.route(), restored.reason());
+        var saved = restored.world().orElseThrow();
+        assertEquals(Map.of(position, Set.of(ruptured)), saved.builds().ruptures());
+        assertEquals(List.of(queued), saved.events());
+        assertTrue(saved.events().getFirst().edits().getFirst().rupture());
+        assertFalse(saved.events().getFirst().edits().getLast().rupture());
+
+        var reopened = new EventPathWorld(1, saved, restored.checkpoint().islands());
+        reopened.runTo(40);
+        assertTrue(reopened.ledger.events().isEmpty());
+        assertEquals(1, reopened.committedRemovals.stream().filter(ids -> ids.contains(ruptured)).count());
+        assertEquals(1, reopened.committedRemovals.stream().filter(ids -> ids.contains(ordinary)).count());
+    }
+
+    @Test void pendingRupturesSurviveRestartAndOldSavesHaveNone() throws IOException {
+        var saved=image(corpusWorld());
+        var position=new PhysicalFluidTopology.Position(EventPathWorld.DIM,3000,64,3000);
+        var exact=load(saved,key->key.on(model),CATALOG).world().orElseThrow().builds().ruptures();
+        assertEquals(2,exact.get(position).size());
+        assertTrue(load(read(CORPUS.resolve("schema-32")),key->key.on(model),CATALOG).world().orElseThrow().builds().ruptures().isEmpty());
+    }
+
     /**
      * Every corpus image rebuilds from its facts to the registry, vessel count and stock it was written with. The image
      * of this build's schema must exist (AGENTS.md: a facts-schema change adds one); when it is missing the test writes
