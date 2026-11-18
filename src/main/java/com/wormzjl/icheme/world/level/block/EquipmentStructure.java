@@ -206,10 +206,16 @@ public final class EquipmentStructure {
 
     /** The identities registered at {@code vessel}'s nodes. */
     static List<Long> heldAtNodes(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+        return registrationsAtNodes(world, Positions.of(level, vessel.origin()), vessel.shape()).stream()
+                .filter(id -> id > 0).toList();
+    }
+
+    /** The registered identities in the shape's fluid node order, with 0 for a missing node. */
+    public static List<Long> registrationsAtNodes(FluidWorldAuthority world, PhysicalFluidTopology.Position origin, EquipmentShape shape) {
         var ids = new ArrayList<Long>();
-        for (var node : nodes(vessel)) {
-            var held = Positions.of(level, node);
-            heldAt(world, held).ifPresent(r -> ids.add(r.device().id()));
+        for (var cell : ShapeRasterizer.fluidCells(shape)) {
+            var at = new PhysicalFluidTopology.Position(origin.dimension(), origin.x() + cell.x(), origin.y() + cell.y(), origin.z() + cell.z());
+            ids.add(heldAt(world, at).map(r -> r.device().id()).orElse(0L));
         }
         return ids;
     }

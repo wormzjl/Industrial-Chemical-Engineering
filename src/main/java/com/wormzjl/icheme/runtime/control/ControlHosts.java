@@ -6,6 +6,7 @@ import com.wormzjl.icheme.runtime.instrument.*;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
 import com.wormzjl.icheme.science.equipment.*;
 import com.wormzjl.icheme.science.fluid.network.*;
+import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.*;
 
 import net.minecraft.core.BlockPos;
@@ -88,12 +89,8 @@ final class ControlHosts {
     }
 
     private BuiltInInputs.Binding equipmentBinding(Position origin, EquipmentShape shape) {
-        var ids = new ArrayList<Long>();
-        for (var cell : ShapeRasterizer.fluidCells(shape)) {
-            var node = new Position(origin.dimension(), origin.x() + cell.x(), origin.y() + cell.y(), origin.z() + cell.z());
-            ids.add(world.at(node).map(r -> r.device().id()).orElse(0L));
-        }
-        long primary = ids.stream().filter(i -> i > 0).findFirst().orElse(0L);
+        var ids = EquipmentStructure.registrationsAtNodes(world, origin, shape);
+        long primary = ids.isEmpty() ? 0 : ids.getFirst();
         return new BuiltInInputs.Binding(primary, shape, origin, ids);
     }
 
@@ -105,10 +102,10 @@ final class ControlHosts {
     void bind(InstrumentHosts.Host host) {
         if (host.entity() instanceof EquipmentShellBlockEntity shell && shell.shape() != null) {
             var origin = position(shell.getLevel().dimension().location().toString(), shell.origin());
-            var binding = equipmentBinding(origin, shell.shape());
-            if (binding.node(0) > 0) {
+            var recorded = world.structure(origin);
+            var binding = equipmentBinding(origin, recorded == null ? shell.shape() : recorded.shape());
+            if (!binding.nodes().isEmpty()) {
                 long primary = binding.host();
-                remember(binding);
                 if (host.identity() != primary) {
                     if (shell.instruments().dataPort() != null
                             && !facts.wired(shell.instruments().dataPort().id())) {
@@ -116,13 +113,11 @@ final class ControlHosts {
                         shell.instruments().dataPort(null);
                         syncPort(host);
                     }
-                    var cell = ShapeRasterizer.fluidCells(shell.shape()).getFirst();
-                    var pos = shell.origin().offset(cell.x(), cell.y(), cell.z());
-                    if (shell.getLevel().getBlockEntity(pos)
-                            instanceof EquipmentShellBlockEntity first)
-                        bind(new InstrumentHosts.Host(primary, first, List.of(), false));
+                    // Bind both node IDs in the engine. The primary cell refreshes its own socket on load.
+                    if (primary > 0) remember(binding);
                     return;
                 }
+                remember(binding);
             }
         }
         var r = world.registrations().get(host.identity());
