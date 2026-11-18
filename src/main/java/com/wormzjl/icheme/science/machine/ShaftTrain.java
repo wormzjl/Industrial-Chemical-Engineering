@@ -52,7 +52,8 @@ public final class ShaftTrain {
 
     /**
      * A driver as the player set it: {@code ratedPower} W, {@code designSpeed} rpm, a motor's {@code poles}; {@code setPoint}
-     * a share of the design speed (0: 1, reading A19), a creative motor's rpm (0: {@link #CREATIVE_SPEED});
+     * a share of the design speed (0: 1, reading A19), a creative motor's rpm (0: {@link #CREATIVE_SPEED}; the engine gives a
+     * creative motor with none its train's design speed, {@code ShaftTrains.creativeSpeed});
      * {@code powerLimit} a creative motor's W (0: {@link #CREATIVE_LIMIT}); {@code powered} whether a motor's store holds
      * energy (W5: false stops it, {@code NO POWER}).
      */
@@ -71,8 +72,9 @@ public final class ShaftTrain {
                 throw new IllegalArgumentException("Invalid driver");
         }
 
-        /** The speed the driver aims at before any limit, rpm. */
-        public Driver atSpeed(double rpm){return new Driver(drive,ratedPower,designSpeed,poles,running,Mode.SPEED,rpm/designSpeed,powerLimit,trip,powered);}
+        /** The driver at speed {@code rpm} before any limit: its set point that speed's share of its design, a creative motor's or a
+         * Create coupling's the rpm itself (as {@link #setSpeed} reads it). */
+        public Driver atSpeed(double rpm){return new Driver(drive,ratedPower,designSpeed,poles,running,Mode.SPEED,drive==Drive.CREATIVE||drive==Drive.CREATE?rpm:rpm/designSpeed,powerLimit,trip,powered);}
         public double setSpeed() {
             if (drive == Drive.CREATE) return setPoint;
             if (drive == Drive.FUEL) return Math.min(1, setPoint > 0 ? setPoint : 1) * designSpeed;

@@ -143,7 +143,7 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         private final com.wormzjl.icheme.science.machine.PositiveDisplacement frame;
         private final double head, density, suction, kappa;
         /** The machine's speed share in the booked slice, and the drop of the flow valve that regulated in its series there, Pa
-         * (NaN for none, or where the measured flow stood above the set flow). */
+         * ({@link #SHUT} for a shut one, NaN for none, or where the measured flow stood above the set flow). */
         private final double speed, valveDrop;
         private double flowSpeed, pressureSpeed;
         private boolean flowSolved, pressureSolved;
@@ -194,9 +194,13 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
          * regulated and the measured flow stood at or below the set flow, the speed share whose curve gives, at the measured
          * flow, the booked rise less the valve's drop with {@link com.wormzjl.icheme.science.machine.SpeedControl#VALVE_TRIM_MARGIN}
          * of it left on the valve: {@code rise(Q, s) (1 - margin) = rise_now - drop}, both in Pa. Never above the booked speed
-         * (a valve already under the margin asks for none). NaN where no such valve regulated: the flow secant decides.
+         * (a valve already under the margin asks for none). A shut flow valve in the series ({@link #SHUT}) passes no flow at any
+         * speed, so the speed asked is {@link com.wormzjl.icheme.science.machine.Motor#LOWEST_SPEED}: the same steps down, the
+         * measure still the flow, so the valve's opening hands the speed back to the trim or the secant. NaN where no such valve
+         * regulated or stood shut: the flow secant decides.
          */
         double trimSpeed() {
+            if (law != null && valveDrop == SHUT) return com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED;
             if (law == null || !(valveDrop >= 0) || !(speed > 0)) return Double.NaN;
             double rise = (head - valveDrop) / (1 - com.wormzjl.icheme.science.machine.SpeedControl.VALVE_TRIM_MARGIN);
             return com.wormzjl.icheme.science.machine.SpeedControl.requiredSpeed(law, flow, rise, density, suction, kappa, com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED, speed);
@@ -853,19 +857,27 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         return d != null && d.state() != null && d.state().speed() > 0 && run.trip == ShaftTrain.Trip.NONE;
     }
 
+    /** {@link #seriesValveDrop} of a shut flow valve: it takes the whole rise at any speed. */
+    static final double SHUT = Double.POSITIVE_INFINITY;
+
     /** Whether {@code unit} is its train's first driven member: the one a regulating driver reads (reading A31). */
     /**
-     * The drop of a flow valve (mass or volume flow, any sensor) that regulated in the booked slice and carries one flow with
-     * connection {@code mover} by the junction balances ({@link com.wormzjl.icheme.science.fluid.network.ControlConstraints#inSeries}),
-     * Pa: the valve's own read at the slice's end ({@code PipeObservation.valveDrop}, its node side against its line side). NaN
-     * for none.
+     * The flow valve (mass or volume flow, any sensor; an automated shutoff valve too) in the booked slice that carries one flow
+     * with connection {@code mover} by the junction balances ({@link com.wormzjl.icheme.science.fluid.network.ControlConstraints#inSeries}):
+     * where one regulated, its drop, Pa, the valve's own read at the slice's end ({@code PipeObservation.valveDrop}, its node side
+     * against its line side); where one stood shut, {@link #SHUT}: closed on its own target of no flow (a player's 0, a shutoff
+     * valve shut), not a valve closed by a reverse drive, which a faster pump opens; NaN for none.
      */
     static double seriesValveDrop(PassiveIntervalSolver.Result result, int mover) {
         var graph = result.graph();
         for (int v = 0; v < graph.pipes().size(); v++) {
-            if (!(graph.pipes().get(v).control() instanceof FlowControl.ControlValve valve) || valve.pressureControl()
-                    || result.endpointModes().get(v) != FlowControl.Mode.VALVE_REGULATING
+            if (!(graph.pipes().get(v).control() instanceof FlowControl.ControlValve valve) || valve.pressureControl() || valve.bare()) continue;
+            var mode = result.endpointModes().get(v);
+            boolean closed = mode == FlowControl.Mode.CLOSED && valve.targetMassFlow(1) == 0;
+            if (mode != FlowControl.Mode.VALVE_REGULATING && !closed
                     || !com.wormzjl.icheme.science.fluid.network.ControlConstraints.inSeries(graph, mover, v)) continue;
+            // A shut valve passes no flow, so no other valve in the series regulates.
+            if (closed) return SHUT;
             long id = graph.pipes().get(v).id();
             for (var o : result.observations()) if (o.pipe() == id && Double.isFinite(o.valveDrop())) return o.valveDrop();
         }
@@ -890,6 +902,17 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
             }
         }
         if (moved != null) publish(moved);
+    }
+
+    /**
+     * The trim (owner D4): a flow valve in the pump's series holds the flow (or, shut, passes none), so the drive lowers its speed
+     * share from {@code current} towards {@code trim} ({@link Duty#trimSpeed}) at most one step per decision, never up, a move
+     * inside the deadband held; the decision's request is that share, without the flow secant (its measure stays the flow, for
+     * when the valve opens).
+     */
+    private static double trimmed(double trim, double current) {
+        double next=Math.max(trim,current-com.wormzjl.icheme.science.machine.SpeedControl.LARGEST_STEP);
+        return next>=current||current-next<=ShaftTrain.SPEED_DEADBAND?current:next;
     }
 
     /** One driver step; true when the train's speed or trip changed. */
@@ -929,17 +952,16 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
                 run.target=sample==null?Double.NaN:flow?sample.setFlow():sample.setPressure();
                 if(!(run.target>0))automatic="NO DUTY TARGET";
                 else if(sample!=null){double share=flow?sample.flowSpeed():sample.pressureSpeed();var member=train.driven().stream().filter(m->m.id()==candidates.getFirst().id()).findFirst().orElseThrow();
-                    // The trim (owner D4): a flow valve in the pump's series holds the flow, so the drive lowers its speed until the
-                    // valve keeps only the margin, at most one step per decision, never up, a move inside the deadband held; this
-                    // decision's request is that speed, without the flow secant (its measure stays the flow, for when the valve opens).
                     double trim=flow?sample.trimSpeed():Double.NaN;
-                    if(Double.isFinite(trim)) {
-                        double current=state.speed()*member.ratio()/candidates.getFirst().designSpeed();
-                        double next=Math.max(trim,current-com.wormzjl.icheme.science.machine.SpeedControl.LARGEST_STEP);
-                        share=next>=current||current-next<=ShaftTrain.SPEED_DEADBAND?current:next;trimmed=true;
-                    }
+                    if(Double.isFinite(trim)) {share=trimmed(trim,state.speed()*member.ratio()/candidates.getFirst().designSpeed());trimmed=true;}
                     requestedRpm=share*candidates.getFirst().designSpeed()/member.ratio();}
             }
+        } else if(d.settings().mode()==ShaftTrain.Mode.REGULATE_FLOW&&!train.driven().isEmpty()) {
+            // Any other flow-regulating driver (a creative motor, a turbine) regulates its first machine, which needs no data link:
+            // the same trim as a motor's, else its own secant (ShaftTrain.regulated).
+            var member=train.driven().getFirst();var unit=topology.shaft(member.id());var sample=run.duty(member.id());
+            double trim=sample==null||unit==null||!(unit.designSpeed()>0)?Double.NaN:sample.trimSpeed();
+            if(Double.isFinite(trim)){requestedRpm=trimmed(trim,state.speed()*member.ratio()/unit.designSpeed())*unit.designSpeed()/member.ratio();trimmed=true;}
         }
         // A prime mover's supply is the net shaft power its last fired fuel gave; fuel arriving holds an unloaded set at speed.
         boolean prime = d.kind().primeMover() && primeMovers != null;
@@ -953,7 +975,8 @@ public final class ShaftTrains implements IslandCoordinator.Shafts {
         // power this step decided (reading A59); one that runs short stops here (NO POWER) and restarts on the cadence.
         boolean motor = d.kind() == ShaftNetwork.Kind.MOTOR && electric != null;
         var driver = driver(d, !motor || electric.powered(d.id()));
-        if(Double.isFinite(requestedRpm))driver=driver.atSpeed(Math.clamp(requestedRpm,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM));
+        if(Double.isFinite(requestedRpm))driver=driver.atSpeed(Math.clamp(requestedRpm,driver.designSpeed()*com.wormzjl.icheme.science.machine.Motor.LOWEST_SPEED,
+                driver.drive()==ShaftTrain.Drive.VARIABLE_MOTOR?com.wormzjl.icheme.science.machine.Motor.MAXIMUM_RPM:Double.POSITIVE_INFINITY));
         var step = ShaftTrain.step(driver, state.speed(), measure);
         if(automatic!=null&&driver.running()&&driver.powered()&&step.trip()==ShaftTrain.Trip.NONE)
             step=new ShaftTrain.Step(Math.min(state.speed(),step.speed()),ShaftTrain.Trip.NONE,automatic+" / LAST SPEED",0,state.speed()>0?step.electricPower():0);
