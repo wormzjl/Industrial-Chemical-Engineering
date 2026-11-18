@@ -216,7 +216,8 @@ class FluidFactsCompatTest {
      * Batch 2026-11-18-water-intake-outfall, option A: a saved gas intake (wet air) and a saved water intake each stand again
      * as their own block, chosen by {@code FluidWorldAuthority.waterIntake} from their stored contents alone, and no saved
      * byte of a gas intake moves: the gas intake of an image written before this batch (schema 30) re-encodes to the same
-     * bytes, and the gas intake placed today writes the same record.
+     * bytes. The gas intake placed today draws the air with carbon dioxide (batch 2026-11-18-co2-column-input): the saved one
+     * keeps its own air, a fact, and the new one differs from it only by the carbon dioxide its nitrogen gave up.
      */
     @Test void aSavedGasIntakeAndASavedWaterIntakeStandAgainAsTheirOwnBlocks() throws IOException {
         var older=load(read(CORPUS.resolve("schema-30")),key->key.on(model),CATALOG).world().orElseThrow();
@@ -228,8 +229,14 @@ class FluidFactsCompatTest {
         var reread=FluidFacts.read(bytes,0,bytes.length,"a gas intake",r->FluidFacts.registration(r,null));
         assertArrayEquals(bytes,FluidFacts.section(f->FluidFacts.registration(f,reread)),"a gas intake's record re-encodes byte for byte");
         var today=Placement.intake(saved.device().id(),saved.device().position(),saved.device().facing(),saved.device().geometry().diameter(),model);
-        assertEquals(saved.spec(),today.spec(),"the gas intake placed today stores the same contents");
-        assertArrayEquals(bytes,FluidFacts.section(f->FluidFacts.registration(f,new WorldTopologyLedger.Registration(today.device(),today.spec(),saved.revision()))),"and writes the same bytes");
+        assertEquals(saved.device(),today.device(),"the gas intake placed today is the same device");
+        var ids=model.components();double[] was=saved.spec().composition(),now=today.spec().composition();
+        int co2=ids.indexOf("CarbonDioxide"),nitrogen=ids.indexOf("Nitrogen");
+        assertEquals(0,was[co2],"the saved air holds no carbon dioxide");
+        assertTrue(now[co2]>0,"the new air holds carbon dioxide");
+        for(int i=0;i<ids.size();i++)if(i!=co2&&i!=nitrogen)assertEquals(was[i],now[i],"only nitrogen and carbon dioxide move: "+ids.get(i));
+        assertEquals(was[nitrogen],now[nitrogen]+now[co2],1e-15,"the carbon dioxide is nitrogen's");
+        assertTrue(FluidWorldAuthority.gasIntake(today),"the new air stands as the gas intake");
         var water=Placement.waterIntake(9,saved.device().position(),saved.device().facing(),.05,CATALOG,false);
         var section=FluidFacts.section(f->FluidFacts.registration(f,water));
         var back=FluidFacts.read(section,0,section.length,"a water intake",r->FluidFacts.registration(r,null));

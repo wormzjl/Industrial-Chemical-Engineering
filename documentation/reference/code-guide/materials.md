@@ -56,7 +56,7 @@ model continues, value and slope continuous.
 | [`CoefficientTranslations`](../../../src/main/java/com/wormzjl/icheme/science/material/CoefficientTranslations.java) | The volume translations of a package without a spine (`of`) and `pureLiquidVolume` on the kernel's `Root.LIQUID` root (`pureKernel`) | 72 |
 | [`SpinePackageData`](../../../src/main/java/com/wormzjl/icheme/science/material/SpinePackageData.java) | A spine package's components, pairs, translations, ideal gas and formation datum as numbers (`formationEnthalpies`, `formationRevision`); read by the network's `HydrocarbonModel` and the engine's `PackageBinding` | 149 |
 | [`MaterialCoverage`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialCoverage.java) | A grade (`qualified`, `estimated_declared_error`, `research_only`, `unavailable`) and its evidence; required on spine and crystal records | 41 |
-| [`CrystalPhasesUnavailable`](../../../src/main/java/com/wormzjl/icheme/science/material/CrystalPhasesUnavailable.java), [`IdealGasFitUnavailable`](../../../src/main/java/com/wormzjl/icheme/science/material/IdealGasFitUnavailable.java) | Typed refusals: a consumer without crystal equations given a package with crystals; a consumer of the fits given a spine package | 37, 29 |
+| [`CrystalPhasesUnavailable`](../../../src/main/java/com/wormzjl/icheme/science/material/CrystalPhasesUnavailable.java), [`IdealGasFitUnavailable`](../../../src/main/java/com/wormzjl/icheme/science/material/IdealGasFitUnavailable.java) | Typed refusals: a projected neural inference view given a package with crystals; a consumer of the fits given a spine package | 39, 29 |
 | [`TrainedPhysics`](../../../src/main/java/com/wormzjl/icheme/science/material/TrainedPhysics.java) | The phase physics a neural model was trained on, as values (`read`); `compare`, `matches` on the request's active compounds (`RELATIVE_TOLERANCE`, `GRID_INTERVALS`, `PAIR_TOLERANCE`); nested `Water` | 269 |
 | [`JsonFields`](../../../src/main/java/com/wormzjl/icheme/science/material/JsonFields.java) | The one reader of typed JSON fields (`MAX_TEXT`); `revision`, `token`; every message starts with the field label | 93 |
 | [`MaterialAxis`](../../../src/main/java/com/wormzjl/icheme/science/material/MaterialAxis.java) | Ordered identity axis, `MAX_CONSERVED_COMPONENTS`; `project` refuses to drop nonzero material | 40 |
@@ -91,8 +91,8 @@ model continues, value and slope continuous.
    identities), presets, solids, fuels and the network record. It returns only a fully valid catalog.
 4. **`apply`** calls `MaterialRuntime.publish` (a volatile write). `IChemE.onServerStopped` calls `reset()`.
 5. **Consumers.**
-   - Column: `V3CatalogPropertyPackage` copies a `Package` into its components; it refuses a non-`pr78` package, a
-     package with crystals (`CrystalPhasesUnavailable`) and a spine package (`IdealGasFitUnavailable`)
+   - Column: `V3CatalogPropertyPackage` copies a `Package` into its components; it refuses a non-`pr78` package and a
+     spine package (`IdealGasFitUnavailable`); a package with crystals builds, and the crystal equilibrium of its products decides
      ([column-v3.md](column-v3.md)). Its kernel is derived like the network's.
    - Network: `FluidThermodynamics.on` runs each island on the network package restricted to its compounds
      (`restrict`), with water in the cubic (`withWater`) and pairs from `DerivedPairs`; a spine package takes
@@ -199,8 +199,8 @@ six light ends, the 12 cuts; the column presets' package), `tjl20_methane_nitrog
 package `refinery` (`refinery-tier1-r5`: the 24 Tier 1 compounds, CarbonDioxide, Ethanol, the rare gases Argon, Neon,
 Helium, Krypton and Xenon, the CO2-I crystal; 51 compounds, the world list with water 52; the rare gases' pairs in
 `dwsim_refinery_pr78_rare_gases`). `FluidMaterialCatalog.NETWORK_PACKAGE` is `icheme:refinery`; the runtime
-reads the network record (`networkPackage(catalog)`). The column refuses `refinery` itself (its crystal) and runs on
-views without CO2. Record counts: components 52, properties 52 (`cubic_water` among them: water's record for the
+reads the network record (`networkPackage(catalog)`). The column runs on `refinery` and its views, CO2 among its
+components. Record counts: components 52, properties 52 (`cubic_water` among them: water's record for the
 cubic, critical constants, a Mathias-Copeman alpha, group counts), interactions 4, methods 1, group_interactions 2
 (`eppr78_2022`, `modified_unifac_dortmund`), crystals 2 (`crystal_carbon_dioxide_i`, `crystal_ice_ih`), water 1
 (`water-iapws95-shomate-r4`, with `datum_vaporization_enthalpy`), packages 3, assays 4 (the generated grades of

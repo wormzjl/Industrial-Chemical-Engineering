@@ -160,9 +160,11 @@ Test tree: `V3HollandExample32` with `IndependentHollandMeshOracle`, `HollandB12
   `PROPERTY_OUT_OF_RANGE`, `INITIALIZATION_FAILURE`, `LINEAR_SOLVE_FAILURE`, `NONCONVERGENCE`,
   `ACCEPTANCE_AUDIT_FAILURE`, `INTERNAL_ERROR`. Hydraulics cannot fail a request: a failure there publishes the first
   accepted state with a warning.
-- **Packages.** The column is vapour-liquid without crystal equations: it refuses a package with crystals or a reference
-  spine, typed (`CrystalPhasesUnavailable`, `IdealGasFitUnavailable`, `REJECTED_INPUT`), even when the network runs that
-  package; it runs on views without them.
+- **Packages.** The column is vapour-liquid without crystal equations. It builds a package that admits crystals (the
+  network's `refinery` with CO2-I, CO2 a column component): whether a compound solidifies is the crystal equilibrium of
+  each solved product on the network's thermo (`ColumnSolve.frozen`), which gives `ColumnSolve.Frozen` in the world and
+  `column.frozen` in the simulator. It refuses a reference spine package, typed (`IdealGasFitUnavailable`,
+  `REJECTED_INPUT`), even when the network runs that package; it runs on views without one.
 - **Identity.** `datasetRevision()` is `V3PengRobinsonThermo.columnIdentity(catalog, packageId)`: the package's
   `scientificRevision`, then `;` and the identity of the pairs the column evaluates (`DerivedPairs.Result.identity`), at
   most `MaterialCatalog.MAX_IDENTITY` characters; a lens keeps the bare scientific revision. Seeds, digests, the

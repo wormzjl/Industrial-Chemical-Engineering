@@ -24,6 +24,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Changed
 
+- CO2 as a column input (`2026-11-18-co2-column-input`): a new gas intake's dry air holds carbon dioxide at 314 ppm (U.S. Standard Atmosphere 1976), nitrogen the balance; a placed intake keeps its saved air. A column (placed or in the simulator) whose feed holds CO2 solves instead of being refused for the refinery package's dry-ice crystal; whether dry ice forms is the crystal equilibrium of its products and of its coldest tray, and the frozen finding names the compound, where, the temperature and the crystal.
 - Wall budget default (`2026-11-16-review-plant-sizing`; owner, 2026-11-18: "make it configurable and 3s default"): `fluid.wallBudgetMilliseconds` defaults to 3000 (was 2000; range 100 to 60000 as before), from one constant, `IslandCoordinator.Settings.DEFAULT_HARD_BUDGET_NANOS`, which the test rigs read too. A config file written before keeps its 2000 until it is edited.
 
 ## [0.35.1] - 2026-11-18
