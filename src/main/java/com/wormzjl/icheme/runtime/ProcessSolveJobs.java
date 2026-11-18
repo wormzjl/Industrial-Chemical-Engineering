@@ -147,7 +147,7 @@ public final class ProcessSolveJobs {
         }
     }
     /** {@code result}: the next field and ledger, empty when the step failed; {@code detail} names the failure. */
-    public record PollutionSolveResult(Optional<com.wormzjl.icheme.science.pollution.PollutionField.Result> result,String detail) implements ProcessSolveResult {
+    public record PollutionSolveResult(Optional<com.wormzjl.icheme.runtime.pollution.PollutionEngine.Outcome> result,String detail) implements ProcessSolveResult {
         public PollutionSolveResult {Objects.requireNonNull(result);Objects.requireNonNull(detail);}
     }
 }

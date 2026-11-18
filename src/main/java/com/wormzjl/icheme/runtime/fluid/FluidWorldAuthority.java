@@ -175,7 +175,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             releases=new Releases(topology,model.components(),new com.wormzjl.icheme.science.pollution.HazardStandard(hazards[0],hazards[1],hazards[2],hazards[3],hazards[4],hazards[5]),
                     atoms,Releases.so2Reference(hazards[1],atoms),flares,id->runtime.coordinator().model(id).components(),runtime.coordinator()::time,new Releases.Sink(){
                         @Override public void release(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount){releasePollution(at,channel,amount);}
-                        @Override public void ground(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount){groundPollution(at,channel,amount);}});
+                        @Override public void deposit(PhysicalFluidTopology.Position at,double[] amounts,List<com.wormzjl.icheme.science.pollution.GroundField.Compound> compounds){depositPollution(at,amounts,compounds);}});
             shafts.releases(releases);
         } catch(RuntimeException failure) {
             IChemE.LOGGER.error("pollution status=RELEASES_OFF detail={}",String.valueOf(failure));
@@ -1059,12 +1059,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
             if(level.getBlockEntity(pos) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)shell.weeping(id,on);
         }
     }
-    /** A pollution release (WP4) to the pollution service of this server; nothing while the service is off. */
-    /** What a waste outfall leaves on the ground (batch 2026-11-18-water-intake-outfall): the pollution ledger's {@code GROUND}, never the field. */
-    private void groundPollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {
+    /** What the spill law leaves on the ground (batch 2026-11-18-ground-pollution): a deposit on the pollution service's ground, never the air field. */
+    private void depositPollution(PhysicalFluidTopology.Position at,double[] amounts,List<com.wormzjl.icheme.science.pollution.GroundField.Compound> compounds) {
         var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
-        if(service.isPresent())service.get().ground(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),channel,amount);
+        if(service.isPresent())service.get().deposit(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),amounts,compounds);
     }
+    /** A pollution release (WP4) to the pollution service of this server; nothing while the service is off. */
     private void releasePollution(PhysicalFluidTopology.Position at,com.wormzjl.icheme.science.pollution.Channel channel,double amount) {
         var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
         if(service.isPresent())service.get().release(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),channel,amount);

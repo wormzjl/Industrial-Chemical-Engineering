@@ -3,6 +3,12 @@ package com.wormzjl.icheme.runtime.pollution;
 import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.CubeKey;
 import com.wormzjl.icheme.science.pollution.Environment;
+import com.wormzjl.icheme.science.pollution.GroundEnvironment;
+import com.wormzjl.icheme.science.pollution.GroundField;
+import com.wormzjl.icheme.science.pollution.GroundLedger;
+import com.wormzjl.icheme.science.pollution.GroundSettings;
+import com.wormzjl.icheme.science.pollution.GroundSnapshot;
+import com.wormzjl.icheme.science.pollution.MapColumns;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import com.wormzjl.icheme.science.pollution.PollutionLedger;
 import com.wormzjl.icheme.science.pollution.PollutionSettings;
@@ -31,9 +37,13 @@ public final class PollutionEngine {
     /** The most (cube, channel) entries waiting for a pass; a release of a new entry beyond it is dropped and counted. */
     public static final int MAXIMUM_PENDING = 65_536;
 
-    /** One pass: the step over an immutable snapshot. {@link #run} is what the worker calls. */
+    /**
+     * One pass: the air step, then the ground step (batch 2026-11-18-ground-pollution, G2) over immutable snapshots, on one
+     * worker. The ground takes the pending deposits and what the air step settled. {@link #run} is what the worker calls.
+     */
     public record Pass(PollutionField field, PollutionLedger ledger, List<Release> releases, Environment environment,
-            double seconds, PollutionSettings settings) {
+            double seconds, PollutionSettings settings, GroundField ground, GroundLedger groundLedger,
+            List<GroundField.Deposit> deposits, GroundEnvironment groundEnvironment, GroundSettings groundSettings) {
         public Pass {
             Objects.requireNonNull(field, "field");
             Objects.requireNonNull(ledger, "ledger");
@@ -43,10 +53,55 @@ public final class PollutionEngine {
             if (!(seconds > 0.0) || !Double.isFinite(seconds)) {
                 throw new IllegalArgumentException("pass seconds must be finite and positive: " + seconds);
             }
+            Objects.requireNonNull(ground, "ground");
+            Objects.requireNonNull(groundLedger, "groundLedger");
+            deposits = List.copyOf(deposits);
+            Objects.requireNonNull(groundEnvironment, "groundEnvironment");
+            Objects.requireNonNull(groundSettings, "groundSettings");
         }
 
-        public PollutionField.Result run() {
-            return PollutionField.step(field, ledger, releases, environment, seconds, settings);
+        public Outcome run() {
+            var air = PollutionField.step(field, ledger, releases, environment, seconds, settings);
+            List<GroundField.Deposit> landing = deposits;
+            if (!air.deposits().isEmpty()) {
+                var all = new ArrayList<GroundField.Deposit>(deposits.size() + air.deposits().size());
+                all.addAll(deposits);
+                all.addAll(air.deposits());
+                landing = all;
+            }
+            var groundResult = GroundField.step(ground, groundLedger, landing, groundEnvironment, seconds, groundSettings);
+            return new Outcome(air, groundResult);
+        }
+    }
+
+    /** A pass's result: the air field's and the ground's. */
+    public record Outcome(PollutionField.Result air, GroundField.Result ground) {
+        public Outcome {
+            Objects.requireNonNull(air, "air");
+            Objects.requireNonNull(ground, "ground");
+        }
+    }
+
+    /** The deposits of one column waiting for a pass: amounts summed, compounds summed by channel and name. */
+    private static final class PendingColumn {
+        final double[] amounts = new double[Channel.values().length];
+        final TreeMap<String, double[]> compounds = new TreeMap<>();
+
+        void add(double[] a, List<GroundField.Compound> list) {
+            for (int c = 0; c < amounts.length; c++) amounts[c] += a[c];
+            for (var compound : list) {
+                compounds.computeIfAbsent(compound.name(), k -> new double[amounts.length])[compound.channel().ordinal()] += compound.moles();
+            }
+        }
+
+        GroundField.Deposit deposit(long column) {
+            var list = new ArrayList<GroundField.Compound>();
+            for (var e : compounds.entrySet()) {
+                for (int c = 0; c < amounts.length; c++) {
+                    if (e.getValue()[c] > 0.0) list.add(new GroundField.Compound(e.getKey(), Channel.values()[c], e.getValue()[c]));
+                }
+            }
+            return new GroundField.Deposit(column, amounts, list);
         }
     }
 
@@ -64,6 +119,11 @@ public final class PollutionEngine {
 
     private PollutionField field = PollutionField.EMPTY;
     private PollutionLedger ledger = PollutionLedger.EMPTY;
+    private GroundField ground = GroundField.EMPTY;
+    private GroundLedger groundLedger = GroundLedger.EMPTY;
+    private GroundSettings groundSettings = GroundSettings.DEFAULT;
+    private GroundSnapshot groundSnapshot = GroundSnapshot.EMPTY;
+    private final TreeMap<Long, PendingColumn> pendingDeposits = new TreeMap<>();
     private final TreeMap<PendingKey, Double> pending = new TreeMap<>();
     private Pass inFlight;
     /** A {@link #clear} while a pass was in flight: its result and its releases are dropped when it ends. */
@@ -104,16 +164,25 @@ public final class PollutionEngine {
         pending.put(key, sum);
     }
 
-    /**
-     * Takes the pending releases into a pass over {@code environment}; empty while a pass is in flight, or when nothing is
-     * stored and nothing waits.
-     */
+    /** {@link #begin(Environment, GroundEnvironment, double, PollutionSettings, GroundSettings)} with every column loaded and the default ground constants. */
     public Optional<Pass> begin(Environment environment, double seconds, PollutionSettings settings) {
+        return begin(environment, GroundEnvironment.open(environment.raining()), seconds, settings, GroundSettings.DEFAULT);
+    }
+
+    /**
+     * Takes the pending releases and deposits into a pass over {@code environment} and {@code groundEnvironment}; empty
+     * while a pass is in flight, or when nothing is stored and nothing waits.
+     */
+    public Optional<Pass> begin(Environment environment, GroundEnvironment groundEnvironment, double seconds,
+            PollutionSettings settings, GroundSettings groundSettings) {
         if (inFlight != null || idle()) {
             return Optional.empty();
         }
-        var pass = new Pass(field, ledger, pending(), environment, seconds, settings);
+        this.groundSettings = Objects.requireNonNull(groundSettings, "groundSettings");
+        var pass = new Pass(field, ledger, pending(), environment, seconds, settings, ground, groundLedger,
+                pendingDeposits(), groundEnvironment, groundSettings);
         pending.clear();
+        pendingDeposits.clear();
         inFlight = pass;
         discardInFlight = false;
         burntInFlight.clear();
@@ -149,22 +218,44 @@ public final class PollutionEngine {
     }
 
     /**
-     * Books {@code amount} of {@code channel} straight to the ground ({@link PollutionLedger#grounded}; batch
-     * 2026-11-18-water-intake-outfall): the installed ledger at once, and again on the result of a pass in flight, which
-     * was stepped from the ledger before it. Nothing enters the field. A non-finite or non-positive amount is ignored.
+     * Puts {@code amounts} (air-mole equivalents, four channels) and {@code compounds} on the ground of {@code column}
+     * (batch 2026-11-18-ground-pollution; what a waste outfall or a spill leaves on the ground). The air ledger books the
+     * amounts {@code RELEASED} and {@code GROUND} at once ({@link PollutionLedger#grounded}), and again on the result of a
+     * pass in flight, which was stepped from the ledger before it; the deposit waits for the next pass, which lands it in
+     * the ground field. Nothing enters the air field. A deposit with a non-finite or negative value is ignored and counted;
+     * a new column beyond {@link #MAXIMUM_PENDING} is dropped and counted.
      */
-    public void ground(Channel channel, double amount) {
-        if (channel == null || !(amount > 0.0) || !Double.isFinite(amount)) {
-            if (!(amount == 0.0)) ignored++;
+    public void deposit(long column, double[] amounts, List<GroundField.Compound> compounds) {
+        GroundField.Deposit deposit;
+        try {
+            deposit = new GroundField.Deposit(column, amounts, compounds);
+        } catch (RuntimeException invalid) {
+            ignored++;
             return;
         }
-        ledger = ledger.grounded(channel, amount);
-        if (inFlight != null && !discardInFlight) groundInFlight[channel.ordinal()] += amount;
+        boolean any = false;
+        for (double a : amounts) any |= a > 0.0;
+        for (var c : deposit.compounds()) any |= c.moles() > 0.0;
+        if (!any) {
+            return;
+        }
+        if (!pendingDeposits.containsKey(column) && pendingDeposits.size() >= MAXIMUM_PENDING) {
+            dropped++;
+            return;
+        }
+        pendingDeposits.computeIfAbsent(column, k -> new PendingColumn()).add(amounts, deposit.compounds());
+        for (Channel channel : Channel.values()) {
+            double amount = amounts[channel.ordinal()];
+            if (!(amount > 0.0)) continue;
+            ledger = ledger.grounded(channel, amount);
+            if (inFlight != null && !discardInFlight) groundInFlight[channel.ordinal()] += amount;
+        }
     }
 
     /** Installs the pass's result. A result with no pass in flight is ignored; one of a pass a {@link #clear} overtook is dropped. */
-    public void complete(PollutionField.Result result) {
-        Objects.requireNonNull(result, "result");
+    public void complete(Outcome outcome) {
+        Objects.requireNonNull(outcome, "outcome");
+        var result = outcome.air();
         if (inFlight == null) {
             return;
         }
@@ -188,6 +279,9 @@ public final class PollutionEngine {
         for (Channel channel : Channel.values()) book = book.grounded(channel, groundInFlight[channel.ordinal()]);
         java.util.Arrays.fill(groundInFlight, 0.0);
         ledger = book;
+        ground = outcome.ground().field();
+        groundLedger = outcome.ground().ledger();
+        groundSnapshot = GroundSnapshot.of(ground, groundSettings);
     }
 
     /** The pass failed: its releases wait again, the field stays, and the failure counts. Also counts a failure before any pass began. */
@@ -220,6 +314,9 @@ public final class PollutionEngine {
         for (var release : pass.releases()) {
             pending.merge(new PendingKey(release.key(), release.channel()), release.amount(), Double::sum);
         }
+        for (var deposit : pass.deposits()) {
+            pendingDeposits.computeIfAbsent(deposit.column(), k -> new PendingColumn()).add(deposit.amounts(), deposit.compounds());
+        }
     }
 
     /**
@@ -235,6 +332,20 @@ public final class PollutionEngine {
         ledger = PollutionLedger.of(book);
         field = PollutionField.EMPTY;
         pending.clear();
+        // The ground too: what it stored is booked capped (removed by a rule, not by its own decay).
+        double[] groundBook = groundLedger.channels();
+        int groundTotals = GroundLedger.Total.values().length;
+        for (Channel channel : Channel.values()) {
+            groundBook[channel.ordinal() * groundTotals + GroundLedger.Total.CAPPED.ordinal()] += ground.stored(channel);
+        }
+        var groundCompounds = new TreeMap<String, double[]>(groundLedger.compounds());
+        for (var e : ground.entries()) {
+            groundCompounds.computeIfAbsent(e.name(), k -> new double[groundTotals])[GroundLedger.Total.CAPPED.ordinal()] += e.moles();
+        }
+        groundLedger = GroundLedger.of(groundBook, groundCompounds);
+        ground = GroundField.EMPTY;
+        groundSnapshot = GroundSnapshot.EMPTY;
+        pendingDeposits.clear();
         burntInFlight.clear();
         java.util.Arrays.fill(groundInFlight, 0.0);
         if (inFlight != null) {
@@ -242,8 +353,21 @@ public final class PollutionEngine {
         }
     }
 
-    /** The load: the saved field, ledger and pending releases; no pass in flight. */
+    /** The load: the saved air field, ledger and pending releases, with no ground. */
     public void restore(PollutionField field, PollutionLedger ledger, List<Release> pending) {
+        restore(field, ledger, pending, GroundField.EMPTY, GroundLedger.EMPTY, List.of());
+    }
+
+    /** The load: the saved air field, ledger and pending releases, and the ground's; no pass in flight. */
+    public void restore(PollutionField field, PollutionLedger ledger, List<Release> pending, GroundField ground,
+            GroundLedger groundLedger, List<GroundField.Deposit> groundPending) {
+        this.ground = Objects.requireNonNull(ground, "ground");
+        this.groundLedger = Objects.requireNonNull(groundLedger, "groundLedger");
+        this.groundSnapshot = GroundSnapshot.of(ground, groundSettings);
+        this.pendingDeposits.clear();
+        for (var deposit : groundPending) {
+            pendingDeposits.computeIfAbsent(deposit.column(), k -> new PendingColumn()).add(deposit.amounts(), deposit.compounds());
+        }
         this.field = Objects.requireNonNull(field, "field");
         this.ledger = Objects.requireNonNull(ledger, "ledger");
         this.pending.clear();
@@ -258,6 +382,56 @@ public final class PollutionEngine {
     /** The installed field (before the pass in flight, if any). */
     public PollutionField field() {
         return field;
+    }
+
+    /** The installed ground (before the pass in flight, if any). */
+    public GroundField ground() {
+        return ground;
+    }
+
+    public GroundLedger groundLedger() {
+        return groundLedger;
+    }
+
+    /** The ground's published bytes, for the server-thread readers (map, meter, world effects). */
+    public GroundSnapshot groundSnapshot() {
+        return groundSnapshot;
+    }
+
+    /** The deposits waiting for the next pass, one per column, ascending. */
+    public List<GroundField.Deposit> pendingDeposits() {
+        var out = new ArrayList<GroundField.Deposit>(pendingDeposits.size());
+        for (var e : pendingDeposits.entrySet()) out.add(e.getValue().deposit(e.getKey()));
+        return Collections.unmodifiableList(out);
+    }
+
+    /** What a save writes as pending deposits: the waiting ones and those of the pass in flight. */
+    public List<GroundField.Deposit> pendingDepositsForSave() {
+        if (inFlight == null || discardInFlight) {
+            return pendingDeposits();
+        }
+        var merged = new TreeMap<Long, PendingColumn>();
+        for (var e : pendingDeposits.entrySet()) merged.computeIfAbsent(e.getKey(), k -> new PendingColumn()).add(e.getValue().amounts, e.getValue().deposit(e.getKey()).compounds());
+        for (var d : inFlight.deposits()) merged.computeIfAbsent(d.column(), k -> new PendingColumn()).add(d.amounts(), d.compounds());
+        var out = new ArrayList<GroundField.Deposit>(merged.size());
+        for (var e : merged.entrySet()) out.add(e.getValue().deposit(e.getKey()));
+        return Collections.unmodifiableList(out);
+    }
+
+    /** The columns the next pass's ground environment must describe: the ground's and the pending deposits', and their four neighbours, ascending. */
+    public Set<Long> groundWanted() {
+        var core = new TreeSet<Long>();
+        for (int i = 0; i < ground.size(); i++) core.add(ground.column(i));
+        core.addAll(pendingDeposits.keySet());
+        var out = new TreeSet<Long>(core);
+        for (long column : core) {
+            int x = MapColumns.x(column), z = MapColumns.z(column);
+            out.add(MapColumns.column(x - 1, z));
+            out.add(MapColumns.column(x + 1, z));
+            out.add(MapColumns.column(x, z - 1));
+            out.add(MapColumns.column(x, z + 1));
+        }
+        return out;
     }
 
     public PollutionLedger ledger() {
@@ -289,10 +463,11 @@ public final class PollutionEngine {
         return Collections.unmodifiableList(out);
     }
 
-    /** Nothing stored and nothing waiting. */
+    /** Nothing stored and nothing waiting, in the air or on the ground. */
     public boolean idle() {
-        return field.size() == 0 && pending.isEmpty();
+        return field.size() == 0 && pending.isEmpty() && ground.size() == 0 && pendingDeposits.isEmpty();
     }
+
 
     public boolean inFlight() {
         return inFlight != null;

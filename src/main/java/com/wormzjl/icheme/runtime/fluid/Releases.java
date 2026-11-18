@@ -6,6 +6,8 @@ import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.plant.port.PortAccounts;
 import com.wormzjl.icheme.science.pollution.Channel;
+import com.wormzjl.icheme.science.pollution.GroundField;
+
 import com.wormzjl.icheme.science.pollution.HazardStandard;
 import java.util.*;
 import java.util.function.LongFunction;
@@ -21,8 +23,9 @@ import java.util.function.Supplier;
  * <ul>
  * <li>An open vessel's {@code VENT}: its gas, at its roof. Not a closed vessel's (its gas blanketing valve's vent, owner:
  * not counted for now) and not a batch still's pot (its vent and spill go to the still's head).</li>
- * <li>An open vessel's {@code SPILL}: the volatile share of its liquid ({@link HazardStandard#volatileMoles}), at its foot.
- * The rest of the liquid and its solids stay on the ground; this package books them nowhere.</li>
+ * <li>An open vessel's {@code SPILL}: the spill law ({@link #spill}): the volatile share of its liquid
+ * ({@link HazardStandard#volatileMoles}) to the air at its foot; the rest of the liquid and its solids to the ground there
+ * (batch 2026-11-18-ground-pollution).</li>
  * <li>A chimney's tip (its void's {@code EXCHANGE}): its gas and, as particulate, the solids it carries, above its top cell.</li>
  * <li>A flare's tip: while its flame holds ({@link Flares}), the combustion products only: one SO2 per sulphur atom (corrosive,
  * at SO2's reference) and soot ({@link #SOOT_YIELD} of the carbon burnt, by the flame's soot index); while it is out, its gas
@@ -33,10 +36,13 @@ import java.util.function.Supplier;
  * <li>A one-time {@code FLUSH} of a node's trace components: its gas, at the node. A certificate is not issued on an interval
  * that flushed ({@code IslandCertificate}), so a replay never carries one and a flush is booked once.</li>
  * <li>A cooling tower's {@code ATMOSPHERE}: what its plume carries, at its top.</li>
- * <li>A waste outfall's void ({@code EXCHANGE}, batch 2026-11-18-water-intake-outfall): the spill law on all it discharged
- * ({@link #outfall}): its vapour to the air at its own cube; the liquid it leaves on the ground (toxic and corrosive) and the
- * solids it carries (particulate: a liquid sets them down, unlike a chimney's gas) to the ledger's {@code GROUND} there,
- * never the field.</li>
+ * <li>A waste outfall's void ({@code EXCHANGE}, batch 2026-11-18-water-intake-outfall): the same spill law on all it
+ * discharged, at its own cube: a boundary transfer carries no phase, so a compound volatile at 25 C goes whole.</li>
+ * </ul>
+ * What the spill law leaves on the ground is a deposit ({@link Sink#deposit}): its toxic and corrosive amounts, its
+ * solids as particulate (a liquid sets them down, unlike a chimney's gas), and each compound with a hazard under the
+ * channel of its larger term; never the air field. A device a blast destroys spills its liquid the same way.
+ * <ul>
  * </ul>
  * Each amount is in air-mole equivalents of its channel. Nothing is saved; no fluid fact, state or reference changes. A
  * fault here is caught and logged ({@link #booked}): it never stops the bookings after it.
@@ -48,10 +54,11 @@ public final class Releases {
         void release(PhysicalFluidTopology.Position position, Channel channel, double amount);
 
         /**
-         * {@code amount} of {@code channel} left on the ground at {@code position}: the pollution ledger's {@code GROUND},
-         * never the air (a waste outfall's rest, batch 2026-11-18-water-intake-outfall). None by default.
+         * What the spill law left on the ground at {@code position} (batch 2026-11-18-ground-pollution): four channel
+         * amounts in air-mole equivalents and the compounds, each under the channel it moves with. Never the air. None by
+         * default.
          */
-        default void ground(PhysicalFluidTopology.Position position, Channel channel, double amount) {}
+        default void deposit(PhysicalFluidTopology.Position position, double[] amounts, List<GroundField.Compound> compounds) {}
     }
 
     /** A flare tip's flame over the span just booked: whether it holds, and its soot index, 0 to 1 ({@code Flare#soot}). */
@@ -217,7 +224,7 @@ public final class Releases {
                     var node = nodes.get(key.node());
                     gas(above(at, node == null ? 0 : node.inventory().levelHeight()), world);
                 }
-                case SPILL -> gas(above(at, 0), standard.volatileMoles(world));
+                case SPILL -> spill(above(at, 0), world, solids);
                 case FLUSH -> gas(above(at, 0), world);
                 case ATMOSPHERE -> {
                     var tower = r.spec().tower();
@@ -239,14 +246,8 @@ public final class Releases {
                             emit(tip, Channel.PARTICULATE, products[1]);
                         } else gas(tip, world);
                     } else if (FluidWorldAuthority.outfall(r)) {
-                        // A waste outfall (batch 2026-11-18-water-intake-outfall, owner: "Ground only"): what evaporates to
-                        // the air at its own cube; the rest of the liquid and the solids it carries to the ground there.
-                        var cube = above(at, 0);
-                        var split = outfall(standard, world);
-                        gas(cube, split[0]);
-                        grounded(cube, Channel.TOXIC, standard.toxic(split[1]));
-                        grounded(cube, Channel.CORROSIVE, standard.corrosive(split[1]));
-                        grounded(cube, Channel.PARTICULATE, HazardStandard.particulate(solids));
+                        // A waste outfall (owner: "Ground only"): the spill law at its own cube.
+                        spill(above(at, 0), world, solids);
                     } else emit(above(at, 0), Channel.CORROSIVE, sulfur(world, formulas) / so2Reference);
                 }
                 default -> {
@@ -269,13 +270,46 @@ public final class Releases {
     /**
      * A device a blast destroyed (batch 2026-11-15-pollution-system, WP6a, S5): its gas {@code gasMoles} whole and the
      * volatile share of its liquid {@code liquidMoles} ({@link HazardStandard#volatileMoles}, as a spill), both on the world
-     * axis, at {@code at}. The rest of the liquid stays on the ground, as a spill's does.
+     * axis, at {@code at}. The rest of the liquid goes to the ground, as a spill's does ({@link #spill}).
      */
     public void contents(PhysicalFluidTopology.Position at, double[] gasMoles, double[] liquidMoles) {
         if (gasMoles.length != axis.size() || liquidMoles.length != axis.size())
             throw new IllegalArgumentException("Releases: contents of " + gasMoles.length + " and " + liquidMoles.length + " compounds on an axis of " + axis.size());
         gas(at, gasMoles);
-        gas(at, standard.volatileMoles(liquidMoles));
+        spill(at, liquidMoles, 0);
+    }
+
+    /**
+     * The spill law (batch 2026-11-18-ground-pollution: one law for an open vessel's spill, a waste outfall and a destroyed
+     * device's liquid): {@code moles} (world axis) split into what evaporates at 25 C ({@link #outfall}), to the air at
+     * {@code at}, and the rest, with {@code solids} kg, to the ground there ({@link #ground}).
+     */
+    private void spill(PhysicalFluidTopology.Position at, double[] moles, double solids) {
+        var split = outfall(standard, moles);
+        gas(at, split[0]);
+        ground(at, split[1], solids);
+    }
+
+    /**
+     * A deposit on the ground at {@code at}: the toxic and corrosive amounts of {@code rest} (world axis), {@code solids}
+     * kg as particulate, and each compound with a toxic or corrosive term under the channel of the larger (a compound
+     * with neither, water above all, is not kept: it carries no hazard).
+     */
+    private void ground(PhysicalFluidTopology.Position at, double[] rest, double solids) {
+        var amounts = new double[Channel.values().length];
+        amounts[Channel.TOXIC.ordinal()] = standard.toxic(rest);
+        amounts[Channel.CORROSIVE.ordinal()] = standard.corrosive(rest);
+        amounts[Channel.PARTICULATE.ordinal()] = solids > 0 && Double.isFinite(solids) ? HazardStandard.particulate(solids) : 0;
+        var compounds = new ArrayList<GroundField.Compound>();
+        for (int i = 0; i < rest.length; i++) {
+            if (!(rest[i] > 0) || !Double.isFinite(rest[i])) continue;
+            double toxic = standard.term(Channel.TOXIC, i, rest[i]), corrosive = standard.term(Channel.CORROSIVE, i, rest[i]);
+            if (!(toxic > 0) && !(corrosive > 0)) continue;
+            compounds.add(new GroundField.Compound(axis.get(i), toxic >= corrosive ? Channel.TOXIC : Channel.CORROSIVE, rest[i]));
+        }
+        boolean any = !compounds.isEmpty();
+        for (double a : amounts) any |= a > 0 && Double.isFinite(a);
+        if (any) sink.deposit(at, amounts, compounds);
     }
 
     /** What liquid {@code liquidMoles} (world axis) gives the air as a spill ({@link HazardStandard#volatileMoles}): a new array. */
@@ -365,9 +399,6 @@ public final class Releases {
         return new double[][]{vapour, rest};
     }
 
-    private void grounded(PhysicalFluidTopology.Position at, Channel channel, double amount) {
-        if (amount > 0 && Double.isFinite(amount)) sink.ground(at, channel, amount);
-    }
 
     /** {@code at} raised by {@code height} blocks, rounded up (a block column), on the block lane. */
     static PhysicalFluidTopology.Position above(PhysicalFluidTopology.Position at, double height) {

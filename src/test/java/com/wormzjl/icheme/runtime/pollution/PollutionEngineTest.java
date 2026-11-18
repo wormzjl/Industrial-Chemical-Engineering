@@ -185,7 +185,7 @@ class PollutionEngineTest {
                 "the installed field shows the burn at once, so the cube cannot ignite twice");
         // The pass was begun from the field before the burn; its result is the same whenever it runs (pure).
         var result = pass.run();
-        var expected = PollutionField.burn(result.field(), result.ledger(), A, burnt, Blasts.SOOT_SHARE);
+        var expected = PollutionField.burn(result.air().field(), result.air().ledger(), A, burnt, Blasts.SOOT_SHARE);
         engine.complete(result);
         assertArrayEquals(expected.field().keys(), engine.field().keys());
         assertArrayEquals(expected.field().amounts(), engine.field().amounts());
@@ -193,7 +193,7 @@ class PollutionEngineTest {
         assertEquals(burnt, engine.ledger().get(Channel.COMBUSTIBLE, PollutionLedger.Total.BURNT), 1e-9, "burnt once");
         assertEquals(burnt * Blasts.SOOT_SHARE, engine.ledger().get(Channel.PARTICULATE, PollutionLedger.Total.RELEASED), 1e-9,
                 "its soot");
-        assertTrue(engine.field().amount(A, Channel.COMBUSTIBLE) < result.field().amount(A, Channel.COMBUSTIBLE), "the pass did not undo the burn");
+        assertTrue(engine.field().amount(A, Channel.COMBUSTIBLE) < result.air().field().amount(A, Channel.COMBUSTIBLE), "the pass did not undo the burn");
         assertClosed(engine);
         // The next pass carries nothing of it again.
         engine.complete(engine.begin(OPEN, 20, SETTINGS).orElseThrow().run());
@@ -235,23 +235,43 @@ class PollutionEngineTest {
         assertClosed(engine);
     }
 
-    /** A waste outfall's rest (batch 2026-11-18-water-intake-outfall): straight to GROUND, never the field, kept across a pass in flight; the ledger closes. */
+    private static double[] amounts(Channel channel, double amount) {
+        var a = new double[Channel.values().length];
+        a[channel.ordinal()] = amount;
+        return a;
+    }
+
+    /**
+     * What the spill law leaves on the ground (batches 2026-11-18-water-intake-outfall and -ground-pollution): the air
+     * ledger's GROUND at once, never the air field, kept across a pass in flight; the next pass lands it in the ground
+     * field, whose ledger closes per channel and per compound.
+     */
     @Test
     void whatGoesToTheGroundIsBookedAndNeverEntersTheField() {
         var engine = new PollutionEngine();
-        engine.ground(Channel.TOXIC, 40);
-        assertEquals(40.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.RELEASED));
-        assertEquals(40.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.GROUND));
+        long column = com.wormzjl.icheme.science.pollution.MapColumns.column(0, 0);
+        engine.deposit(column, amounts(Channel.TOXIC, 40_000), List.of(new com.wormzjl.icheme.science.pollution.GroundField.Compound("crude_pc08", Channel.TOXIC, 0.044)));
+        assertEquals(40_000.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.RELEASED));
+        assertEquals(40_000.0, engine.ledger().get(Channel.TOXIC, PollutionLedger.Total.GROUND));
         assertEquals(0, engine.field().size(), "nothing in the air");
         engine.release(A, Channel.TOXIC, 100);
         var pass = engine.begin(OPEN, 20, SETTINGS).orElseThrow();
-        engine.ground(Channel.PARTICULATE, 7);
-        engine.ground(Channel.TOXIC, Double.NaN);
+        engine.deposit(column, amounts(Channel.PARTICULATE, 7_000), List.of());
+        engine.deposit(column, amounts(Channel.TOXIC, Double.NaN), List.of());
         engine.complete(pass.run());
         var ledger = engine.ledger();
-        assertEquals(140.0, ledger.get(Channel.TOXIC, PollutionLedger.Total.RELEASED), 1e-9);
-        assertEquals(7.0, ledger.get(Channel.PARTICULATE, PollutionLedger.Total.GROUND), 0, "booked during the pass, kept on its result");
-        assertEquals(7.0, ledger.get(Channel.PARTICULATE, PollutionLedger.Total.RELEASED), 0);
+        assertEquals(40_100.0, ledger.get(Channel.TOXIC, PollutionLedger.Total.RELEASED), 1e-9);
+        assertEquals(7_000.0, ledger.get(Channel.PARTICULATE, PollutionLedger.Total.GROUND), 0, "booked during the pass, kept on its result");
+        assertEquals(7_000.0, ledger.get(Channel.PARTICULATE, PollutionLedger.Total.RELEASED), 0);
         for (var channel : Channel.values()) assertEquals(0, ledger.closure(channel, engine.field()), 1e-9, "the ledger closes: " + channel);
+        // The pass landed the first deposit; the one made during it waits for the next.
+        assertEquals(0.044 * Math.pow(2, -20 / 14400.0), engine.ground().moles(column, "crude_pc08"), 1e-12, "landed, then a pass of decay");
+        assertEquals(1, engine.pendingDeposits().size(), "the particulate made during the pass waits");
+        engine.complete(engine.begin(OPEN, 20, SETTINGS).orElseThrow().run());
+        assertTrue(engine.ground().amount(column, Channel.PARTICULATE) > 0, "and lands at the next");
+        var ground = engine.groundLedger();
+        for (var channel : Channel.values()) assertEquals(0, ground.closure(channel, engine.ground()), 1e-9, "the ground ledger closes: " + channel);
+        assertEquals(0, ground.closure("crude_pc08", engine.ground()), 1e-15);
+        assertEquals(40_000.0, ground.get(Channel.TOXIC, com.wormzjl.icheme.science.pollution.GroundLedger.Total.DEPOSITED), 0, "deposited is what the air ledger booked ground");
     }
 }

@@ -7,6 +7,12 @@ import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.CubeKey;
 import com.wormzjl.icheme.science.pollution.Environment;
+import com.wormzjl.icheme.science.pollution.GroundEnvironment;
+import com.wormzjl.icheme.science.pollution.GroundField;
+import com.wormzjl.icheme.science.pollution.GroundLedger;
+import com.wormzjl.icheme.science.pollution.GroundSettings;
+import com.wormzjl.icheme.science.pollution.GroundSnapshot;
+import com.wormzjl.icheme.science.pollution.MapColumns;
 import com.wormzjl.icheme.science.pollution.MapEnvironment;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import com.wormzjl.icheme.science.pollution.PollutionLedger;
@@ -28,6 +34,7 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
@@ -59,11 +66,16 @@ public final class PollutionService {
     private record Cached(Environment.Cell cell, int tick) {
     }
 
+    /** A column's last surface read (G2). */
+    private record CachedWater(boolean water, int tick) {
+    }
+
     /** One dimension: its engine, its cells, its next deadline. */
     private static final class Dimension {
         final ResourceKey<Level> key;
         final PollutionEngine engine = new PollutionEngine();
         final Map<Long, Cached> cells = new HashMap<>();
+        final Map<Long, CachedWater> water = new HashMap<>();
         int next;
 
         Dimension(ResourceKey<Level> key) {
@@ -73,6 +85,7 @@ public final class PollutionService {
 
     private final MinecraftServer server;
     private final PollutionSettings settings;
+    private final GroundSettings groundSettings = GroundSettings.DEFAULT;
     private final double passSeconds;
     private final PollutionStore store;
     private final Map<ResourceKey<Level>, Dimension> dimensions = new LinkedHashMap<>();
@@ -218,24 +231,25 @@ public final class PollutionService {
     }
 
     /**
-     * Books {@code amount} air-mole equivalents of {@code channel} straight to the ground at {@code position} (batch
-     * 2026-11-18-water-intake-outfall, owner: "Ground only"): the dimension's ledger {@code RELEASED} and {@code GROUND},
-     * never the field. A position outside the world's height is dropped, as a release is.
+     * Puts what the spill law left at {@code position} on the ground of its chunk column (batch
+     * 2026-11-18-ground-pollution): four channel amounts and the compounds ({@link PollutionEngine#deposit}). The air
+     * ledger books the amounts {@code RELEASED} and {@code GROUND} at once; the next pass lands the deposit. A position
+     * outside the world's height is dropped, as a release is.
      */
-    public void ground(ResourceKey<Level> dimension, BlockPos position, Channel channel, double amount) {
+    public void deposit(ResourceKey<Level> dimension, BlockPos position, double[] amounts, List<GroundField.Compound> compounds) {
         try {
-            if (disabled || dimension == null || channel == null || position == null) {
+            if (disabled || dimension == null || position == null || amounts == null || compounds == null) {
                 return;
             }
             if (!inside(dimension, cube(position))) {
                 return;
             }
-            dimension(dimension).engine.ground(channel, amount);
+            dimension(dimension).engine.deposit(MapColumns.column(position.getX() >> 4, position.getZ() >> 4), amounts, compounds);
             if (store != null) {
                 store.setDirty();
             }
         } catch (RuntimeException failure) {
-            IChemE.LOGGER.error("pollution status=GROUND_FAILED dimension={} detail={}", dimension, String.valueOf(failure));
+            IChemE.LOGGER.error("pollution status=DEPOSIT_FAILED dimension={} detail={}", dimension, String.valueOf(failure));
         }
     }
 
@@ -277,6 +291,30 @@ public final class PollutionService {
     public PollutionField field(ResourceKey<Level> dimension) {
         var d = disabled ? null : dimensions.get(dimension);
         return d == null ? PollutionField.EMPTY : d.engine.field();
+    }
+
+    /** The installed ground of a dimension; EMPTY when it has none. */
+    public GroundField ground(ResourceKey<Level> dimension) {
+        var d = dimensions.get(dimension);
+        return d == null ? GroundField.EMPTY : d.engine.ground();
+    }
+
+    public GroundLedger groundLedger(ResourceKey<Level> dimension) {
+        var d = dimensions.get(dimension);
+        return d == null ? GroundLedger.EMPTY : d.engine.groundLedger();
+    }
+
+    /** The ground's published bytes of a dimension (G2): what the map, the meter and the world effects read. EMPTY when disabled. */
+    public GroundSnapshot groundSnapshot(ResourceKey<Level> dimension) {
+        if (disabled) {
+            return GroundSnapshot.EMPTY;
+        }
+        var d = dimensions.get(dimension);
+        return d == null ? GroundSnapshot.EMPTY : d.engine.groundSnapshot();
+    }
+
+    public GroundSettings groundSettings() {
+        return groundSettings;
     }
 
     public PollutionLedger ledger(ResourceKey<Level> dimension) {
@@ -400,7 +438,7 @@ public final class PollutionService {
                 ledger = capped.ledger();
                 pending = kept;
             }
-            d.engine.restore(field, ledger, pending);
+            d.engine.restore(field, ledger, pending, saved.ground(), saved.groundLedger(), saved.groundPending());
         }
         dimensions.put(key, d);
         return d;
@@ -416,7 +454,8 @@ public final class PollutionService {
     private Map<String, PollutionStore.Saved> saved() {
         var out = new TreeMap<String, PollutionStore.Saved>();
         for (var d : dimensions.values()) {
-            out.put(d.key.location().toString(), new PollutionStore.Saved(d.engine.field(), d.engine.ledger(), d.engine.pendingForSave()));
+            out.put(d.key.location().toString(), new PollutionStore.Saved(d.engine.field(), d.engine.ledger(), d.engine.pendingForSave(),
+                    d.engine.ground(), d.engine.groundLedger(), d.engine.pendingDepositsForSave()));
         }
         return out;
     }
@@ -482,14 +521,16 @@ public final class PollutionService {
             return;
         }
         Environment environment;
+        GroundEnvironment groundEnvironment;
         try {
             environment = environment(level, d, now);
+            groundEnvironment = groundEnvironment(level, d, now);
         } catch (RuntimeException failure) {
             engine.failed("snapshot: " + failure);
             failed(d, "snapshot", engine.lastFailure());
             return;
         }
-        var pass = engine.begin(environment, passSeconds, settings);
+        var pass = engine.begin(environment, groundEnvironment, passSeconds, settings, groundSettings);
         if (pass.isEmpty()) {
             return;
         }
@@ -594,6 +635,63 @@ public final class PollutionService {
             }
         }
         return new MapEnvironment(cells, Environment.Cell.UNLOADED, level.isRaining(), minimumY, maximumY);
+    }
+
+    /**
+     * The ground's view of the world for the next pass (G2): which of the wanted columns are loaded now, and which have a
+     * surface that is mostly water (at least 9 of 16 sampled surface blocks hold water), read at most {@link #CELL_BUDGET}
+     * columns per pass and kept {@link #CELL_TICKS}; a column over the budget uses its older read, or counts as land.
+     */
+    private GroundEnvironment groundEnvironment(ServerLevel level, Dimension d, int now) {
+        var wanted = d.engine.groundWanted();
+        var loaded = new java.util.HashSet<Long>();
+        var water = new java.util.HashSet<Long>();
+        int budget = CELL_BUDGET;
+        for (long column : wanted) {
+            var chunk = loaded(level, MapColumns.x(column), MapColumns.z(column));
+            if (chunk == null) {
+                continue;
+            }
+            loaded.add(column);
+            var cached = d.water.get(column);
+            boolean wet;
+            if (cached != null && now - cached.tick() < CELL_TICKS) {
+                wet = cached.water();
+            } else if (budget > 0) {
+                budget--;
+                wet = surfaceWater(chunk);
+                d.water.put(column, new CachedWater(wet, now));
+            } else {
+                wet = cached != null && cached.water();
+            }
+            if (wet) {
+                water.add(column);
+            }
+        }
+        d.water.keySet().retainAll(wanted);
+        return GroundEnvironment.of(loaded, water, level.isRaining());
+    }
+
+    /** Whether at least 9 of 16 surface blocks (a 4 × 4 grid) of the chunk hold water; any failure answers land. */
+    static boolean surfaceWater(LevelChunk chunk) {
+        try {
+            int wet = 0;
+            var position = new BlockPos.MutableBlockPos();
+            int baseX = chunk.getPos().getMinBlockX(), baseZ = chunk.getPos().getMinBlockZ();
+            for (int i = 0; i < 4; i++) {
+                for (int j = 0; j < 4; j++) {
+                    int x = 2 + 4 * i, z = 2 + 4 * j;
+                    int top = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
+                    position.set(baseX + x, top, baseZ + z);
+                    if (chunk.getFluidState(position).is(net.minecraft.tags.FluidTags.WATER)) {
+                        wet++;
+                    }
+                }
+            }
+            return wet >= 9;
+        } catch (RuntimeException failure) {
+            return false;
+        }
     }
 
     private static Environment.Cell cell(ServerLevel level, Dimension d, long cube, int now, Map<Long, LevelChunk> chunks,
