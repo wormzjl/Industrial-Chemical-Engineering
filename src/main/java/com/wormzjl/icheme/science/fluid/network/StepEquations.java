@@ -1078,10 +1078,9 @@ final class StepEquations implements SparseNewton.Equations {
             // A trial a typed thermodynamic hold refused names the node it was refused at; see ThermoHold.
             try{state=layout[i]==null?graph.reservoirs().get(i).state():layout[i].decode(x,offsets[i],cachedPrepared[i]);}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(graph.reservoirs().get(i).id());}
-            // A node this pass does not lay out keeps any bundle its slot was handed, unrefilled; one a past step retired is
-            // not handed on (S2): its transport reads no bundle, as when the accepted pass dropped them.
-            var bundle=cachedPrepared[i];
-            var transport=transport(i,state,layout[i]==null&&bundle!=null&&bundle.retired()?null:bundle);
+            // Only a laid-out node prepared this slot for its current temperature. A fixed node can
+            // inherit a live bundle from another active-set pass at a different temperature.
+            var transport=transport(i,state,layout[i]==null?null:cachedPrepared[i]);
             cachedStates[i]=state;cachedTransport[i]=transport;
             if(layout[i]!=null)System.arraycopy(x,offsets[i],cachedVariables[i],0,layout[i].size());
         }
