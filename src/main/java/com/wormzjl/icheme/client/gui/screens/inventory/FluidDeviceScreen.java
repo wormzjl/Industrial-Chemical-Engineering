@@ -899,12 +899,22 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(clause.equals("FULL")||clause.equals("READY"))return tr("ready");
         // A water intake whose strainer touches no water body (batch 2026-11-18-water-intake-outfall): closed until it does.
         if(clause.startsWith(com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.NO_WATER_BODY))return tr("status.no_water_body");
+        // Its column's ground water (batch 2026-11-18-ground-pollution, G5): compounds and mole fractions, display only.
+        if(clause.startsWith(com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.GROUND_WATER))return groundWaterText(clause.substring(com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.GROUND_WATER.length()));
         // A unit a running column holds (C7): the column runs it.
         var column=COLUMN.matcher(clause);if(column.matches())return tr("status.column",column.group(1),column.group(2),column.group(3));
         var low=LOW_LIMIT.matcher(clause);if(low.matches())return tr("status.low_limit",quantity(temperatureUnit.display(Double.parseDouble(low.group(1))),temperatureUnit.symbol()));
         // A difference: the same number in kelvin and in degrees Celsius.
         var short_=DUTY_SHORT.matcher(clause);if(short_.matches())return tr("status.duty_short",quantity(Double.parseDouble(short_.group(1)),temperatureUnit.symbol()));
         return clause;
+    }
+    private static final java.util.regex.Pattern GROUND_MORE=java.util.regex.Pattern.compile(" \\(and ([0-9]+) more\\)$");
+    private String groundWaterText(String body){
+        var more=GROUND_MORE.matcher(body);String extra="";if(more.find()){extra=" "+tr("status.ground_water_more",more.group(1));body=body.substring(0,more.start());}
+        var parts=new ArrayList<String>();
+        for(var item:body.split(";")){int eq=item.lastIndexOf('=');if(eq<=0)continue;String name=item.substring(0,eq);
+            parts.add(tr("status.ground_water_item",materialName(menu.clientData().materialNames().getOrDefault(name,MaterialName.chemical(name))),item.substring(eq+1)));}
+        return tr("status.ground_water",String.join(", ",parts))+extra;
     }
     /** The island's own state in a few words for the Control tab's status: steady since when, solving, or nothing. */
     private String islandWords(String status){

@@ -69,6 +69,20 @@ public final class HazardStandard {
     /** As {@link #toxic}, for the combustible channel on the lower flammability limits (Le Chatelier). */
     public double combustible(double[] moles) { return index(moles, lowerFlammabilityLimit); }
 
+    /**
+     * One compound's term of {@code channel} (toxic, corrosive or combustible) for {@code moles} of it: {@code |n| / ref};
+     * 0 without a reference or for particulate. The terms of every compound sum to the channel's index.
+     */
+    public double term(Channel channel, int compound, double moles) {
+        double[] reference = switch (channel) {
+            case TOXIC -> toxicReference;
+            case CORROSIVE -> corrosiveReference;
+            case COMBUSTIBLE -> lowerFlammabilityLimit;
+            case PARTICULATE -> null;
+        };
+        return reference == null || !(reference[compound] > 0) ? 0 : Math.abs(moles) / reference[compound];
+    }
+
     /** A boundary transfer is signed: moles count by magnitude; a reference of 0 contributes nothing. */
     private double index(double[] moles, double[] reference) {
         if (moles.length != reference.length) throw new IllegalArgumentException("hazard standard: " + moles.length + " moles for " + reference.length + " compounds");

@@ -46,6 +46,9 @@ public final class ModBlocks {
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.AlarmBeaconBlock> ALARM_BEACON=BLOCKS.registerBlock("alarm_beacon",
             com.wormzjl.icheme.world.level.block.AlarmBeaconBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.COLOR_RED).strength(1.5F).sound(SoundType.METAL).noOcclusion()
                     .lightLevel(s->s.getValue(com.wormzjl.icheme.world.level.block.AlarmBeaconBlock.STATE).lit()?12:0));
+    // Polluted soil (batch 2026-11-18-ground-pollution, G4b): dirt-like, shovel, random ticks for its recovery.
+    public static final DeferredBlock<com.wormzjl.icheme.world.level.block.PollutedSoilBlock> POLLUTED_SOIL=BLOCKS.registerBlock("polluted_soil",
+            com.wormzjl.icheme.world.level.block.PollutedSoilBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.TERRACOTTA_GRAY).strength(0.5F).sound(SoundType.GRAVEL).randomTicks());
     // A fixed pollution monitor (batch 2026-11-15-pollution-system, WP10): a post-mounted analyser box with a lamp and a data socket.
     public static final DeferredBlock<com.wormzjl.icheme.world.level.block.PollutionMonitorBlock> POLLUTION_MONITOR=BLOCKS.registerBlock("pollution_monitor",
             com.wormzjl.icheme.world.level.block.PollutionMonitorBlock::new,BlockBehaviour.Properties.of().mapColor(MapColor.METAL).strength(2).sound(SoundType.METAL).noOcclusion()

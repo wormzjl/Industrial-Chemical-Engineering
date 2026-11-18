@@ -37,6 +37,7 @@ class OutfallReleasesTest {
     private record Booked(PhysicalFluidTopology.Position at, Channel channel, double amount) {}
 
     private final List<Booked> booked = new ArrayList<>(), grounded = new ArrayList<>();
+    private final List<com.wormzjl.icheme.science.pollution.GroundField.Compound> deposited = new ArrayList<>();
 
     private static PhysicalFluidTopology.Position at(int x, int y) {
         return new PhysicalFluidTopology.Position("minecraft:overworld", x, y, 0);
@@ -70,7 +71,10 @@ class OutfallReleasesTest {
         return new Releases(ledger(), axis, standard(), new double[n][5], Releases.so2Reference(h[1], new double[n][5]), id -> Releases.Flame.OUT, id -> axis, () -> SimulationTime.ONLINE,
                 new Releases.Sink() {
                     @Override public void release(PhysicalFluidTopology.Position position, Channel channel, double amount) { booked.add(new Booked(position, channel, amount)); }
-                    @Override public void ground(PhysicalFluidTopology.Position position, Channel channel, double amount) { grounded.add(new Booked(position, channel, amount)); }
+                    @Override public void deposit(PhysicalFluidTopology.Position position, double[] amounts, List<com.wormzjl.icheme.science.pollution.GroundField.Compound> compounds) {
+                        for (var channel : Channel.values()) if (amounts[channel.ordinal()] > 0) grounded.add(new Booked(position, channel, amounts[channel.ordinal()]));
+                        deposited.addAll(compounds);
+                    }
                 });
     }
 
@@ -147,6 +151,10 @@ class OutfallReleasesTest {
         assertEquals(moles * (1 - share) / 1100e-6, ground(Channel.TOXIC), 1e-9 * moles / 1100e-6, "the ground: the rest");
         assertEquals(2538, ground(Channel.TOXIC) / SECONDS, 3);
         assertTrue(sum(Channel.TOXIC) / SECONDS < 1e-3, "about nothing to the air: " + sum(Channel.TOXIC) / SECONDS);
+        // The ground keeps the cut itself (batch 2026-11-18-ground-pollution), in moles.
+        assertEquals(1, deposited.size());
+        assertEquals("crude_pc08", deposited.getFirst().name());
+        assertEquals(moles * (1 - share), deposited.getFirst().moles(), 1e-9 * moles);
         double flammable = s.combustible(s.volatileMoles(negated(stream)));
         assertEquals(flammable, sum(Channel.COMBUSTIBLE), 1e-12, "liquid that did not evaporate makes no flammable cloud: its volatile share only");
         assertTrue(flammable / SECONDS < 1e-3, "a negligible cloud: " + flammable / SECONDS);

@@ -36,6 +36,7 @@ public final class IChemEClient {
     @SubscribeEvent
     public static void registerKeys(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {
         event.register(com.wormzjl.icheme.client.gui.tutorial.GuideClient.KEY);
+        event.register(com.wormzjl.icheme.client.pollution.PollutionMapClient.LAYER_KEY);
     }
 
     /** The field guide's one-line tracker, at the top left. */

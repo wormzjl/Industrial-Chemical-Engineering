@@ -4,6 +4,8 @@ import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.CubeKey;
 import com.wormzjl.icheme.science.pollution.Exposure;
+import com.wormzjl.icheme.science.pollution.GroundEffects;
+import com.wormzjl.icheme.science.pollution.MapColumns;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import net.minecraft.core.Holder;
 import net.minecraft.core.particles.DustParticleOptions;
@@ -96,6 +98,8 @@ public final class PollutionEffects {
             entityFailureLogged = false;
             for (ServerLevel level : server.getAllLevels()) {
                 dimension(level, service);
+                water(level, service);
+                GroundSoil.spoil(level, service, CUBE_BUDGET);
             }
             failures = 0;
         } catch (RuntimeException failure) {
@@ -172,6 +176,47 @@ public final class PollutionEffects {
             }
         }
         starts.put(key, next);
+    }
+
+    /**
+     * Water over polluted ground (batch 2026-11-18-ground-pollution, G4; config {@code pollution.groundWater}): every living
+     * thing in water in a chunk column whose ground index reaches {@link Exposure#LOW} is treated as the air treats a toxic
+     * cube at that index ({@link GroundEffects#water}). Reads the published ground snapshot; at most
+     * {@link #CUBE_BUDGET} columns a pass, loaded chunks only.
+     */
+    private void water(ServerLevel level, PollutionService service) {
+        if (!effects || !IChemE.pollutionGroundWater()) {
+            return;
+        }
+        var snapshot = service.groundSnapshot(level.dimension());
+        if (snapshot.size() == 0) {
+            return;
+        }
+        DamageSource[] sources = sources(level);
+        int served = 0;
+        for (int i = 0; i < snapshot.size() && served < CUBE_BUDGET; i++) {
+            var exposure = GroundEffects.water(snapshot.value(i));
+            if (exposure == null) {
+                continue;
+            }
+            long column = snapshot.column(i);
+            int x = MapColumns.x(column), z = MapColumns.z(column);
+            if (level.getChunkSource().getChunkNow(x, z) == null) {
+                continue;
+            }
+            served++;
+            var box = new AABB(x * 16.0, level.getMinBuildHeight(), z * 16.0, x * 16.0 + 16, level.getMaxBuildHeight(), z * 16.0 + 16);
+            for (var entity : level.getEntitiesOfClass(LivingEntity.class, box, e -> AFFECTED.test(e) && e.isInWater())) {
+                try {
+                    treat(entity, exposure, sources, pass);
+                } catch (RuntimeException failure) {
+                    if (!entityFailureLogged) {
+                        entityFailureLogged = true;
+                        IChemE.LOGGER.warn("pollution status=EFFECT_FAILED dimension={} entity={} detail={}", level.dimension().location(), entity.getType(), String.valueOf(failure));
+                    }
+                }
+            }
+        }
     }
 
     /** The damage sources by channel ordinal (null for a channel with no damage, or a type the data does not hold). */

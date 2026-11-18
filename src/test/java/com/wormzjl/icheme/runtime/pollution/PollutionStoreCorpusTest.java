@@ -15,7 +15,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The pollution store's corpus (AGENTS.md, "Saves and data formats"; batch 2026-11-15-pollution-system, WP3): every image
  * under {@code compat/pollution/} reads without throwing to the counts recorded beside it ({@code Expected}: set aside,
- * notes, cubes and pending releases per dimension). A clean image saves back to exactly its tag; every image saves back to
+ * notes, cubes and pending releases per dimension, and from schema 2 the ground columns, compound entries and pending
+ * deposits). A clean image of this build's schema saves back to exactly its tag; every image saves back to
  * a store that reads the same with no note. The image of this build's schema must exist.
  */
 class PollutionStoreCorpusTest {
@@ -45,9 +46,14 @@ class PollutionStoreCorpusTest {
                         var dimension = loaded.dimensions().get(id);
                         assertEquals(counts.getInt("cubes"), dimension.field().size(), where + " " + id);
                         assertEquals(counts.getInt("pending"), dimension.pending().size(), where + " " + id);
+                        // Schema 2 (batch 2026-11-18-ground-pollution): absent counts are 0 (a schema-1 image has no ground).
+                        assertEquals(counts.getInt("columns"), dimension.ground().size(), where + " " + id + " ground columns");
+                        assertEquals(counts.getInt("compounds"), dimension.ground().entries().size(), where + " " + id + " ground compounds");
+                        assertEquals(counts.getInt("ground_pending"), dimension.groundPending().size(), where + " " + id + " pending deposits");
                     }
                     var written = PollutionStore.write(loaded.dimensions());
-                    if (!loaded.setAside() && loaded.notes().isEmpty()) assertEquals(saved, written, file + " saved again");
+                    // An image of this build's schema saves back to exactly its tag; an older one saves as this schema.
+                    if (!loaded.setAside() && loaded.notes().isEmpty() && saved.getInt("schema") == PollutionStore.SCHEMA) assertEquals(saved, written, file + " saved again");
                     var again = PollutionStore.read(written);
                     assertTrue(again.notes().isEmpty() && !again.setAside(), file + " read again: " + again.notes());
                     assertEquals(written, PollutionStore.write(again.dimensions()), file + " saved twice");

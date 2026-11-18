@@ -1,2 +1,2 @@
 {Saved:{schema:1,dimensions:{"minecraft:overworld":{keys:[L;4L,4398046511108L,8L],amounts:[L;4607182418800017408L,0L,0L,4602678819172646912L,4611686018427387904L,0L,0L,0L,4607182418800017408L,9221120237041090560L,0L,0L],ledger:[L;0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L],pending_keys:[L;4L],pending_channels:["TOXIC"],pending_amounts:[L;4613937818241073152L]},"minecraft:the_nether":{keys:[L;1048575L],amounts:[L;0L,0L],ledger:[L;0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L,0L]}}},Expected:{set_aside:0b,notes:2,dimensions:{"minecraft:overworld":{cubes:2,pending:1}}}}
-{Saved:{schema:2,dimensions:{}},Expected:{set_aside:1b,notes:1,dimensions:{}}}
+{Saved:{schema:3,dimensions:{}},Expected:{set_aside:1b,notes:1,dimensions:{}}}

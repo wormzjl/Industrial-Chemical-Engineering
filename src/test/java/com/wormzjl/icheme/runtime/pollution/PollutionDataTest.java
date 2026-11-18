@@ -108,9 +108,17 @@ class PollutionDataTest {
         // The file parses as one JSON object (read), and the key is written once (a duplicate would hide one of two lines).
         var english = read(ASSETS.resolve("lang/en_us.json"));
         var text = Files.readString(ASSETS.resolve("lang/en_us.json"), StandardCharsets.UTF_8);
-        assertEquals(1, text.split("\"pollution\\.icheme\\.map\\.header\"", -1).length - 1, "one header key");
-        assertTrue(english.has("pollution.icheme.map.header"), "pollution.icheme.map.header");
-        assertTrue(english.get("pollution.icheme.map.header").getAsString().contains("%2$s"), "the header names the chunk's x and z");
+        assertEquals(1, text.split("\"pollution\\.icheme\\.map\\.title\"", -1).length - 1, "one title key");
+        assertTrue(english.get("pollution.icheme.map.title").getAsString().contains("%3$s"), "the title names the chunk's x and z and the layer shown");
+        // Every key the tooltip names, in every layer (batch 2026-11-18-ground-pollution, G3): both layers, always.
+        for (var layer : com.wormzjl.icheme.client.pollution.MapLayer.values()) {
+            var lines = layer.tooltip(com.wormzjl.icheme.science.pollution.MapColumns.column(3, -4), 0, 0);
+            assertEquals(1 + 5 + 1, lines.size(), "a title, the air's header and four lines, one ground line");
+            for (var line : lines) {
+                assertTrue(english.has(line.key()), line.key());
+                for (var arg : line.args()) if (arg instanceof com.wormzjl.icheme.client.pollution.MapLayer.Key key) assertTrue(english.has(key.key()), key.key());
+            }
+        }
         assertTrue(english.has("pollution.icheme.meter.line"), "the tooltip's lines are the meter's");
         // The keys PollutionMeters.nameKey and wordKey build (the meter's test reads them the same way).
         for (var channel : com.wormzjl.icheme.science.pollution.Channel.values()) {

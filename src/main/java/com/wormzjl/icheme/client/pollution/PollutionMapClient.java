@@ -39,6 +39,36 @@ public final class PollutionMapClient {
     private PollutionMapClient() {
     }
 
+    /** The pollution map layer key (G3, option A): unbound by default; cycles Air, Ground, Both on the map. */
+    public static final net.minecraft.client.KeyMapping LAYER_KEY = new net.minecraft.client.KeyMapping("key.icheme.pollution_layer",
+            com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM, com.mojang.blaze3d.platform.InputConstants.UNKNOWN.getValue(), "key.categories.icheme");
+
+    /** The key with no screen open (the map shows the new layer when it next opens). */
+    @SubscribeEvent
+    public static void key(net.neoforged.neoforge.client.event.InputEvent.Key event) {
+        boolean pressed = false;
+        while (LAYER_KEY.consumeClick()) pressed = true;
+        if (pressed) cycle();
+    }
+
+    /** The key on an open screen: only while the map is open (the map draws the new layer at once). */
+    @SubscribeEvent
+    public static void screenKey(net.neoforged.neoforge.client.event.ScreenEvent.KeyPressed.Pre event) {
+        if (PollutionMapStore.watching() && !LAYER_KEY.isUnbound() && LAYER_KEY.matches(event.getKeyCode(), event.getScanCode())) {
+            cycle();
+            event.setCanceled(true);
+        }
+    }
+
+    /** The next layer, saved, and its name on the action bar. */
+    static void cycle() {
+        var next = PollutionMapStore.layer().next();
+        PollutionMapStore.layer(next);
+        var player = Minecraft.getInstance().player;
+        if (player != null) player.displayClientMessage(net.minecraft.network.chat.Component.translatable("pollution.icheme.map.layer_shown",
+                net.minecraft.network.chat.Component.translatable(next.key())), true);
+    }
+
     @SubscribeEvent
     public static void tick(ClientTickEvent.Post event) {
         if (!searched) {
