@@ -35,7 +35,18 @@ As a result, both searches visit the same states in the same order as before and
 
 No result moves: the laid plant is the same.
 
-## Not changed
+## Sizing kept (owner, 2026-11-18: "Yes, cache sizing")
 
-- The 13 s sizing runs every time a world is created. It depends only on the material catalog, so it could run once per catalog revision, off the server thread, before the first world is created. This is a separate change, for the owner to decide.
+The 13 s sizing (`CrudeUnitPlant.sized`) depends only on the material catalog, so `SizingCache` keeps it for the game's run:
+
+- **Key:** the catalog's sources, `MaterialCatalog.resources()`, compared by equality. These are the exact text the catalog is parsed from: equal sources give an equal catalog and the same sizes. A world whose data packs change a material record sizes again. Nothing is saved, so no format moves.
+- **Warm-up:** while the Create World screen has the world type "IChemE column test", `client/ColumnTestWorldSizing` starts the sizing on a low-priority daemon thread, on the catalog the client holds (the bundled one, as no server runs). The process simulator already runs flowsheet runs and Size all on its own thread the same way (`SimulatorRunner`).
+- **The build** (`CrudeUnitPlant.review`) takes the kept sizes (log `column_test_world sizing=kept`), waits for the ones being made (`waited`), or makes them on the server thread (`made`, as before). A failed sizing is made again by the build, which reports the failure; the warm-up does not retry it.
+- `SizedPlant`'s lists and maps are read-only copies, since one plant's sizes now serve every build.
+
+What it saves: the time the player spends on the Create World screen and in the world's generation counts against the 13 s. A second column test world in the same game run needs no sizing. A dedicated server has no Create World screen and sizes at its first build, as before.
+
+Check: the GameTest passed (sizing `made` on the server thread, then the build in 4.1 s). The warm-up from the Create World screen needs a client and is not yet seen; an in-game check is offered to the owner.
+
+## Not changed
 - The start after the build (52 s of play to the first solve) is the plant warming up on the engine's schedule, and the player can already play. Not a build cost.
