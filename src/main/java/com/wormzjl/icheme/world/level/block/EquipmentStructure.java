@@ -121,7 +121,11 @@ public final class EquipmentStructure {
         return true;
     }
 
-    /** {@link #place(ServerLevel, BlockPos, EquipmentShape, Paint, int)}, every cell named {@code name} (N1: an imported design's tag). */
+    /**
+     * {@link #place(ServerLevel, BlockPos, EquipmentShape, Paint, int)}, every cell named {@code name} (N1: an imported
+     * design's tag). A whole structure built with no name takes its default plant tag ({@link #defaultName}): the next
+     * free number of its kind's prefix in its dimension.
+     */
     public static int place(ServerLevel level, BlockPos origin, EquipmentShape shape, Paint paint, String name, int rows) {
         var layout = ShapeRasterizer.layout(shape);
         for (var list : java.util.List.of(layout.shell(), layout.interior()))
@@ -132,6 +136,7 @@ public final class EquipmentStructure {
                 if (!level.getBlockState(position).canBeReplaced())
                     throw new IllegalStateException("Cell " + position.toShortString() + " is occupied by " + level.getBlockState(position).getBlock().getName().getString());
             }
+        if (name.isEmpty() && rows >= shape.sizeY()) name = defaultName(level, origin, shape);
         int placed = 0, flags = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
         for (var cell : layout.shell()) {
             if (cell.y() >= rows) continue;
@@ -241,6 +246,17 @@ public final class EquipmentStructure {
      * 3.3): its shape and paint, or none when {@code shape} is null. The registry places the structure again from it. The
      * record's shape text is made only when the record changes.
      */
+    /**
+     * The plant tag a new structure of {@code shape}'s kind at {@code origin} takes ({@link
+     * com.wormzjl.icheme.science.equipment.PlantTag}): beside the names the registry's structures of its dimension hold.
+     * No name without a fluid world.
+     */
+    static String defaultName(ServerLevel level, BlockPos origin, EquipmentShape shape) {
+        var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
+        if (world == null) return com.wormzjl.icheme.science.equipment.DeviceName.NONE;
+        return com.wormzjl.icheme.science.equipment.PlantTag.tag(shape.kind(), world.structureNames(Positions.of(level, origin).dimension()));
+    }
+
     static void record(ServerLevel level, BlockPos origin, @Nullable EquipmentShape shape, @Nullable Paint paint, String name) {
         var world = FluidWorldAuthority.find(level.getServer()).orElse(null);
         if (world == null) return;
