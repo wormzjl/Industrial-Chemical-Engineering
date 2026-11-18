@@ -1,6 +1,6 @@
 # Pollution propagation: review
 
-Batch `2026-11-18-pollution-propagation`, branch `claude/water-intake-outfall-0e90c8`. Commits: P1 `4841ec5cb`, bench `72993755a` and `a92f7d91f`, P2 `1e64ee2fd`. Plan and numbers: [POLLUTION_PROPAGATION_PLAN.md](POLLUTION_PROPAGATION_PLAN.md).
+Batch `2026-11-18-pollution-propagation`, branch `claude/water-intake-outfall-0e90c8`. Commits: P1 `4841ec5cb` (GameTest seeds `4ebf4ee66`), bench `72993755a`, `a92f7d91f`, `d9b274413`, P2 speed `1e64ee2fd`, P2 memory and the two B items `4ee803129`, `41cf4a697`. Plan and numbers: [POLLUTION_PROPAGATION_PLAN.md](POLLUTION_PROPAGATION_PLAN.md).
 
 ## Summary
 
@@ -59,10 +59,65 @@ At 8 192 cubes a step takes 1.4 ms on the worker, every 5 s of play.
 ## Owner items
 
 - **Which channels drift**: A all four (built); B the gases only, particulate not (it settles; a one-line test of the channel in the drift loop).
-- **The server thread's sets** (2.3 ms every 5 s at the cap): A leave (built); B build `wanted` from the field's sorted keys as primitive arrays and once per pass (an estimated 5 to 10 times less; no change to any result).
-- **The ground step** (2 ms a pass at 4 096 columns, on the worker): A leave (built); B flat arrays for the spread and the compound moves (bit-identical with the same summation order).
+- The server thread's sets and the ground step: both B items built on the main thread's call (below).
+- **The save's compound entries** (41 bytes each, a tag of column, name and moles): A leave (built); B columnar arrays (a name table; column, name index and moles arrays: about 20 bytes an entry, 1.0 MB less at 16 384 columns with three compounds, before compression). A format change: schema 3, owner's call.
+
+## P2, memory (owner: "pollution system ram usage matters as well, make sure you optimize them")
+
+Method: `tools/pollution-bench/Retained.java` walks each object graph with reflection and sums the HotSpot 64-bit layout with compressed oops (a 12-byte header and the fields, an array 16 bytes and its elements, each rounded up to 8; an object reached twice counts once). Allocated bytes are the thread's allocation counter around one call. The service's caches need Minecraft, so before the change the tool built the same structure (`HashMap<Long, record(Cell, int)>`, a new `Cell` per read, as `PollutionService` did); after it, the real `CellCache` and `WaterCache`. The save: `PollutionStoreSizeTest` writes the store with `NbtIo`.
+
+### Measured, per entry
+
+| State | Before | After | Change |
+|---|---|---|---|
+| Air field (`PollutionField`) | 40.0 B a cube | 40.0 | none needed: two flat arrays |
+| Cell cache (`PollutionService`, one entry per wanted cube) | 110 B | 16 B | `CellCache`: sorted key, cell and tick arrays; one shared `Cell` per (air count, open) |
+| Water cache (one entry per wanted column) | 111 B | 13 B | `WaterCache`: sorted arrays |
+| Ground field, 3 compounds a column, after a load | 232 B a column | 76 B | one `String` per compound name (a load read a new one per entry: 52 B each) |
+| Ground snapshot | 12 B a column | 12 | none needed |
+| Client map store at its cap | 16 B a column | 16 | none needed (4 096 columns, 66 kB) |
+| Per pass, `core()` and `wanted()` | 247 B a wanted cube | 77 B | `KeySets`: sorted `long[]`, the face neighbours by merging shifted copies, no boxing, no general sort |
+| Per pass, the air environment | 120 B a wanted cube | 29 B | `CellCache.snapshot`: an array environment over the wanted keys |
+| Per pass, `groundWanted()` | 194 B a wanted column | 79 B | `KeySets.columnFaces` |
+| Per pass, the ground environment | 280 B a wanted column | 42 B | `WaterCache.snapshot`, `GroundEnvironment.sorted` |
+| Save, `icheme_pollution.dat` before compression | 40 B a cube, 16 B a column, 41 B a compound entry | the same | no format change (owner item above) |
+
+### Worst case at the caps
+
+8 192 cubes with every cube alone (57 344 wanted cubes), 16 384 ground columns with three compounds each (81 920 wanted columns), one watcher's map answer (4 096 columns):
+
+| | Before | After |
+|---|---|---|
+| Retained: air field 0.33 MB, cell cache, ground field, ground snapshot 0.20 MB, water cache, client map 0.07 MB | 0.33 + 6.31 + 3.80 + 0.20 + 9.09 + 0.07 = 19.8 MB | 0.33 + 0.92 + 1.25 + 0.20 + 1.06 + 0.07 = 3.8 MB |
+| Allocated each pass on the server thread (sets and environments) | 14.2 + 6.9 + 15.9 + 22.9 = 60 MB | 4.4 + 1.7 + 6.5 + 3.4 = 16 MB |
+
+### Speed of the B items (60 s warm-up and 60 s measured, alone; before = the classes of `a1cfd5268` compiled apart)
+
+| Case | Before steps/s | After steps/s | Before bytes/step | After bytes/step |
+|---|---|---|---|---|
+| ground-1000 | 2 130 | 10 062 | 0.69 M | 0.50 M |
+| ground-4096 | 471 | 1 387 | 2.73 M | 2.02 M |
+| ground-16384 | 55 | 279 | 11.81 M | 8.66 M |
+| wanted-8192 (server thread: `core()` and `wanted()`) | 439 (2.28 ms) | 5 165 (0.19 ms) | 2.66 M | 0.83 M |
+
+The ground cases use the Set-based `GroundEnvironment.of` in both runs; with the runtime's sorted environment the 16 384 case allocates 7.09 MB a step.
+
+### Kept, and why bit-identical
+
+- `KeySets`: the same keys in the same order as the `TreeSet`s (`KeySetsTest` against a `TreeSet` reference); the cell budget is spent in the same order (the core, then the rest, ascending).
+- `CellCache` and `WaterCache`: the service's rules unchanged (`CellCacheTest`: budget order, fresh reads, an unloaded chunk keeps its read, unwanted reads forgotten); a pass reads the same cells, so the step gets the same environment.
+- `GroundField.step` on sorted arrays: every sum and booking in the order of the `TreeMap` step (columns ascending, compounds by name, deposits sorted, transfers in visiting order, zero entries kept within the step as the map kept them). `GroundFieldDigestTest` holds the digest `abdc36913b706f53` taken from the `TreeMap` step (120 passes: spread, rain, water, unloaded columns, new columns, truncation and the cap).
+- One `String` per name in `GroundField.of`: equal strings, no result moves. The ground ledger's `Book` finds a row by hash (the same row arrays).
+
+### Rejected or left
+
+- The ground step's copies per pass (the working arrays, each stage's rebuild, the output): 7 to 9 MB a pass at 16 384 columns, on the worker, garbage at once. Fewer copies would merge stages; not done.
+- Interning the compound names globally: one `String` per name per field is enough (0.3 kB for six names).
+- The map answer per watcher (64 kB at its cap) and the client store (66 kB): small.
 
 ## Tests
 
 - New: `PollutionDriftTest` (8): one-step shares, centre of mass and the horizontal moments, a closed cube above and the top, the 1/7 cap, the settings' range, the hinted search, the two digests.
-- Runs (classes from `affected.mjs select`, 4 workers): after P1, 161 classes, 577 tests, two failures (the moved references above), then `PollutionFieldTest` green (16); after P2, 24 classes, 115 tests green, then `PollutionDriftTest` green (8). No dev client was running; no run was held back.
+- New with the memory work: `KeySetsTest` (3), `CellCacheTest` (5), `GroundFieldDigestTest` (1), `PollutionStoreSizeTest` (1).
+- Runs (classes from `affected.mjs select`, 4 workers): after P1, 161 classes, 577 tests, two failures (the moved references above), then `PollutionFieldTest` green (16); after P2, 24 classes, 115 tests green, then `PollutionDriftTest` green (8); after the memory work, 27 classes, 134 tests green, then 28 classes, 126 tests green. Fluid GameTests `pollution-memory-1`: three failures from P1 (below), `pollution-memory-2`: all 125 passed. No dev client was running; no run was held back.
+- GameTests moved by P1 (they had not run after it): a pass now keeps 0.16 of an isolated cube instead of 0.28, so three seeds that stood just above a threshold after one pass fell below it. New seeds keep the old margins: the monitor 5 → 9 (1.337 → 1.375 after the pass), the effects test 3 → 5 a cube (1.60 → 1.53), the blast block 1.3 → 1.5 (the cube below 1.092 → 1.089, the faces 1.09 → 1.26).
