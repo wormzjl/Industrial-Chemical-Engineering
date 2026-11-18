@@ -29,8 +29,11 @@ import java.util.UUID;
 @GameTestHolder("icheme_fluid_test")
 @PrefixGameTestTemplate(false)
 public final class PollutionMonitorGameTests {
-    /** The toxic index the test releases into the monitor's cube: at least 1.4 after one pass's exchange (6 x 0.12). */
-    private static final double RELEASE = 5.0;
+    /**
+     * The toxic index the test releases into the monitor's cube: 1.375 after one pass (it keeps 1 - 6 x 0.12 - 0.12 of the
+     * upward drift, then decays).
+     */
+    private static final double RELEASE = 9.0;
 
     private PollutionMonitorGameTests() {}
 

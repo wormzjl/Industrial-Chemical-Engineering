@@ -46,8 +46,9 @@ public final class PollutionEffectsGameTests {
         var cubes = new LinkedHashSet<Long>();
         cubes.add(cube);
         cubes.add(PollutionService.cube(zombieAt));
+        // 5 a cube (10 when both stand in one): HIGH after one pass, which keeps 0.16 of it (faces and the upward drift).
         for (long c : cubes) {
-            service.add(dimension, c, Channel.TOXIC, 3.0);
+            service.add(dimension, c, Channel.TOXIC, 5.0);
         }
         Cow[] cow = new Cow[1];
         Zombie[] zombie = new Zombie[1];
@@ -61,7 +62,7 @@ public final class PollutionEffectsGameTests {
                     // pass job that installs a few ticks late left four (run `union`, batch 2026-11-16-fouling-corrosion).
                     // The same release again, for the next pass, keeps the cube at HIGH or above through a second window.
                     for (long c : cubes) {
-                        service.add(dimension, c, Channel.TOXIC, 3.0);
+                        service.add(dimension, c, Channel.TOXIC, 5.0);
                     }
                     cow[0] = helper.spawn(EntityType.COW, new BlockPos(2, 2, 2));
                     cow[0].setNoAi(true);

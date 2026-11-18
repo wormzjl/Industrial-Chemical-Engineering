@@ -176,10 +176,11 @@ public final class PollutionBlastGameTests {
                 .thenExecute(() -> {
                     burnt0[0] = s.burnt();
                     for (long c : s.cubes()) {
-                        s.service().add(s.dimension(), c, Channel.COMBUSTIBLE, 1.3);
+                        s.service().add(s.dimension(), c, Channel.COMBUSTIBLE, 1.5);
                     }
                 })
-                // The torch's cube burns first; the faces of the 3 x 3 x 3 block (one empty face each) stay near 1.09 after the pass.
+                // The torch's cube burns first; the faces of the 3 x 3 x 3 block (one empty face each) stay near 1.26 after the
+                // pass, the one below near 1.09 (it drifts up into the centre and takes nothing from below).
                 .thenWaitUntil(() -> {
                     helper.assertTrue(s.burnt() > burnt0[0] && s.index(s.cube()) < 0.1, "Waiting for the torch's cube to burn");
                     first[0] = helper.getTick();
