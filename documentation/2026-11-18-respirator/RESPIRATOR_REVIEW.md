@@ -84,15 +84,19 @@ Filter life, one channel at a constant index (one effects pass = 1 s of play):
 
 ## Look
 
-- Placeholder: option B's look, flat on the outer head (`textures/models/armor/respirator_layer_1.png`, 64 × 32), drawn by vanilla's armour layer from the helmet slot and by `CuriosRespiratorClient` (the outer armour model's head, following the wearer's head) from a Curios slot. Item icons: option B's.
-- Options for the owner: `tmp/respirator/sheets/respirator_options.png` (A half mask with twin cartridges, B full face with one front canister, C full face with twin cartridges; iso and side on a grey head form, the respirator and filter icons at 8×). Drawn by `tools/respirator-sheets/sheets.mjs`. No people.
-- The picked option becomes a 3D model in a follow-up (a custom armour model through `IClientItemExtensions.getHumanoidArmorModel` and the same model in the Curios renderer).
+- Owner's pick (2026-11-18): "C: twin cartridges" (full face, twin cartridges), from `tmp/respirator/sheets/respirator_options.png` (A, B, C by `tools/respirator-sheets/sheets.mjs`).
+- Built as a 3D worn model: `client/RespiratorModel` (a `HumanoidModel` whose only parts hang from the head, so they follow it) with the parts of `client/RespiratorGeometry` and the texture `textures/models/armor/respirator_layer_1.png` (64 × 64). Both are written by `tools/respirator-sheets/model.mjs --write` from one geometry: the seal (7 × 7 px, narrower than the head), the visor standing 0.4 px proud, the nose cup and speech diaphragm, a harness band round the sides and back and one over the crown, and two cartridges turned 34° outward and tipped 9° down, each two crossed boxes (a 12-sided outline; the cross box 0.1 px behind so no faces coincide) and a connector. 14 cubes, all whole-pixel sizes.
+- Helmet slot: `RespiratorClient` registers the layer (`RegisterLayerDefinitions`), bakes the model again at each resource reload (`AddLayers`) and returns it from `IClientItemExtensions.getHumanoidArmorModel`; vanilla's armour layer copies the wearer's pose and visibility onto it and draws it with the armour material's texture (the same file). Curios slot: `CuriosRespiratorClient` draws the same model's head, posed with `ICurioRenderer.followHeadRotations`, with the same texture. No Curios type outside `compat/curios`.
+- Item icons: pixel art drawn in `model.mjs` from the built model's front view, in the texture's colours (thin seal round a large visor, grey nose cup and diaphragm, harness band at the sides, two square cartridges with the steel hub bar and the white band towards the cup; the filter is one such cartridge with its band and depth). A 16 px render of the model was tried first and rejected by the owner ("icon does not look like the model", then "it's even worse"). The sheet now has a FRONT view beside the icons for comparison.
+- Sheet of the built model (the game's geometry and texture, drawn with ModelPart's pose order and box UV): `tmp/respirator/built/respirator_built.png` (front-left iso, side, back on a grey head form; the texture at 6×; both icons at 8× and 1×). No people.
 
 ## Formats
 
 Item data only: no engine format, no `FORMATS.md` row (the table lists no item components), no wire protocol change (the component syncs through the ordinary inventory protocol).
 
 ## Tests
+
+- Follow-up (option C model): `RespiratorDataTest.wornModelAndTextureAgree` (the texture is the size `RespiratorGeometry` declares; 14 cubes, whole-pixel sizes, every box UV block inside the texture and its front face drawn; the parts hang from the head); `modelsIconsAndWornTexture` keeps the icons at 16 × 16. Run 3, the picks of `affected.mjs select --since f9c4b0996` through `record.init.gradle -PlaneTests`, `--max-workers=4`: `test` 58 classes, 356 tests, 0 failed; `equipmentGates` 2 classes, 11 tests, 0 failed (`holdGates`, `columnGates` none).
 
 - New: `RespiratorTest` (9: constants, the four thresholds, no protection without a working filter, the four lives exact in passes, no use below 0.1, the emptying pass still protected and the next not, the no-gear identity, the protected levels, the share), `RespiratorDataTest` (6: lines, models and icons, worn texture, vanilla-only recipes, Curios files, Curios types only in `compat/curios`), `RespiratorFilterCodecTest` (2: round trip, out of range refused).
 - Run 1: the picks of `affected.mjs select --since 809a88cd2` (`LanguageFilesTest` and `UnitTextTest` left out), through `record.init.gradle -PlaneTests`, `--max-workers=4`. `test`: 192 classes, 1045 tests, 2 failed, both in `RespiratorTest` and both errors in the test itself (`Math.nextDown(15.0) / 50` rounds back to 0.3; index 50 without protection is EXTREME, not HIGH). `holdGates`: 9 classes, 50 tests, 0 failed. `equipmentGates`: 6 classes, 87 tests, 0 failed. The law was not changed.
@@ -101,7 +105,7 @@ Item data only: no engine format, no `FORMATS.md` row (the table lists no item c
 
 ## Not verified
 
-- Nothing has been seen in a client: the worn look from either slot, the item bar, the tooltip, the meter segment, fitting by use.
+- Nothing has been seen in a client: the 3D worn model from either slot (its fit on the head, the cartridges' turn, the strap ends against a player skin's hat layer, its look while crouching), the item icons in an inventory, the item bar, the tooltip, the meter segment, fitting by use. The built-model sheet is a software render of the same geometry and texture, not a game screenshot.
 - The Curios slot, its renderer and the mod starting without Curios are argued from the class-loading structure; no run loads Curios.
 - No GameTest treats a player with a respirator (`PollutionEffectsGameTests` cover the path without gear, unchanged).
 
@@ -110,4 +114,4 @@ Item data only: no engine format, no `FORMATS.md` row (the table lists no item c
 - R1: no pollution chapter in the Field Guide; the respirator has item pages only. A chapter (the four kinds, the meter, the respirator) needs steps and advancements of its own.
 - R2 (found, not changed): an entity whose box touches two cubes is treated by both in one pass (each cube's entity search finds every box that crosses it), so it takes effects and damage twice. The filter load is booked once (by the cube of its block position); the double damage is the existing behaviour.
 - R3: when a player stands in a clean cube with the head in a polluted one, the polluted cube protects but books no load. Small and on the player's side.
-- R4: the look (A, B or C).
+- R4: the look: C chosen and built (see Look).
