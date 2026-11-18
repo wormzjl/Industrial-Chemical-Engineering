@@ -54,7 +54,9 @@ public final class IslandCoordinator {
                 throw new IllegalArgumentException("Invalid coordinator settings");
             Objects.requireNonNull(certificates);Objects.requireNonNull(time);
         }
-        public static Settings defaults(){return new Settings(2_000_000_000L,1_500_000_000L,64,true,100,CertificatePolicy.defaults());}
+        /** A job's wall budget where nothing configures one (owner, 2026-11-18: 3 s; config {@code fluid.wallBudgetMilliseconds}), and the adaptive cadence's load measure, 75 % of it. */
+        public static final long DEFAULT_HARD_BUDGET_NANOS=3_000_000_000L,DEFAULT_SOFT_BUDGET_NANOS=DEFAULT_HARD_BUDGET_NANOS*3/4;
+        public static Settings defaults(){return new Settings(DEFAULT_HARD_BUDGET_NANOS,DEFAULT_SOFT_BUDGET_NANOS,64,true,100,CertificatePolicy.defaults());}
         public Settings withCertificates(CertificatePolicy policy){return new Settings(hardBudgetNanos,softBudgetNanos,maximumDispatchesPerTick,adaptive,initialCadenceTicks,policy,time);}
         public Settings withTime(SimulationTime value){return new Settings(hardBudgetNanos,softBudgetNanos,maximumDispatchesPerTick,adaptive,initialCadenceTicks,certificates,value);}
     }

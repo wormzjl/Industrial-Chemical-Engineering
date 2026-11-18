@@ -26,7 +26,7 @@ class TimeFactorElectricTest {
             public long nextRequestId() {return 1;}
             public boolean submit(IslandCoordinator.Attempt attempt, ProcessSolveJobs.FluidIslandCommand command) {return false;}
             public void cancel(long request) {}
-        }, changed -> {}, () -> 0L, new IslandCoordinator.Settings(2_000_000_000L, 1_500_000_000L, 64, false, 100, CertificatePolicy.defaults()).withTime(SimulationTime.of(factor)), () -> 0L);
+        }, changed -> {}, () -> 0L, new IslandCoordinator.Settings(IslandCoordinator.Settings.DEFAULT_HARD_BUDGET_NANOS, IslandCoordinator.Settings.DEFAULT_SOFT_BUDGET_NANOS, 64, false, 100, CertificatePolicy.defaults()).withTime(SimulationTime.of(factor)), () -> 0L);
         var ledger = new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(EventPathWorld.CATALOG));
         long id = ledger.reserve(1);
         var cell = new PhysicalFluidTopology.Position(EventPathWorld.DIM, 0, 64, 0);

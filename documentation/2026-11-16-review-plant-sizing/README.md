@@ -383,6 +383,12 @@ circulations inside the 70 to 120 % rated window, so Auto keeps the nearest.
   boxes follow it through `HorizontalShapes.byFacing`. The shaft end keeps its place. Judged on the software views of
   the tool, not in a client. The 43 classes of `affected.mjs select` ran: 287 tests, no failure. The data gland's place
   is the terminal box lid's centre (north model 8, 16, 8.5, outward up); the socket itself is the pump thread's part C.
+- 2026-11-18, after 0.35.1 (main thread; owner, on the final lane's three wall-deadline holds: "make it configurable and 3s
+  default"): the budget was already the config value `fluid.wallBudgetMilliseconds`; its default goes from 2000 to 3000
+  through one constant, `IslandCoordinator.Settings.DEFAULT_HARD_BUDGET_NANOS` (soft 75 %), read by the config, by
+  `Settings.defaults()` and by the test rigs with real workers (`EventPathWorld`, `FluidDataRangeIslandTest`,
+  `FluidPumpedFillLineTest`, `TimeFactorElectricTest`). The scheduler tests on a fake clock and the budget GameTests keep
+  their own 2 s. A config file already written keeps 2000.
 - Pump speed and the shut valve, 2026-11-18 (owner: "fix it"; main thread: options A and (ii)): a sized pump is built
   at its design speed (`PumpSizing.builtSpeed`, D21: the charge pump at 900 rpm, NPSH3_r 3.24 m instead of 15.8 m) and
   the NPSH rows read that law; a creative motor with no set speed turns at its train's design speed; a flow-regulating
