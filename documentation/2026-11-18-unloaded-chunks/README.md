@@ -10,7 +10,11 @@ The owner's save lost both heaters when its creative supplies unloaded. IChemE n
 - [UNLOADED_CHUNKS_REVIEW.md](UNLOADED_CHUNKS_REVIEW.md) records the implementation, the headless save check, the regression results and the remaining qualification limits.
 - [EQUIPMENT_CHUNK_DEPENDENCIES_REVIEW.md](EQUIPMENT_CHUNK_DEPENDENCIES_REVIEW.md) traces remaining load dependencies in exchanger controls, water intakes, column operation, blast damage and equipment binding.
 
+- [CHUNK_DEPENDENCY_FIXES_REVIEW.md](CHUNK_DEPENDENCY_FIXES_REVIEW.md) records the corrections and regression coverage for all five findings.
+
 ## History
+
+- 2026-11-18: fixed and qualified the five equipment chunk dependencies. Water intakes (`6901213e5`), secondary sockets (`0218b22a7`), DCS column operation (`01a004bbf`), exchanger controls (`c9d02476c`) and blast damage (`b2fca74bf`) passed 1,298 affected tests and 140 standard headless GameTests. Two server launches verified restoration from the new save.
 
 - 2026-11-18: independent high-effort Sol review of `c25abe8a0` and source cross-check. The follow-up review records five findings, recovery limits and regression cases for a future fix.
 - 2026-11-18: plan written after the owner's test save lost its burners' power on a headless server (no player, creative sources not ticking). Measured: no `NO POWER` with the plant's chunks force-loaded.

@@ -31,6 +31,8 @@ The unloaded save review uses a fresh, disposable game directory. Put a copy of 
 
 Use a separate empty game directory and `-PreviewBatch=unloaded-fixtures` for the targeted power, still, alarm and blast GameTests. The fixture batch also accepts a single case such as `unloaded-still`.
 
+The five follow-up fixes have an isolated review group, `-PreviewBatch=chunk-dependencies`. Individual selectors are `chunk-exchanger`, `chunk-binding`, `chunk-dcs`, `chunk-water`, `chunk-blast-loaded` and `chunk-blast-mixed`. Use `-PreviewBatch=exchanger-restart-prepare` in a fresh disposable game directory, then `-PreviewBatch=exchanger-restart-verify` in the same directory, to exercise startup before an exchanger is visited, a saved pool with a stale intake switch and the saved blast cleanup of a sleeping tank.
+
 ## History
 
 - 2026-11-18: written for the owner's stability question after a hold in the test world.

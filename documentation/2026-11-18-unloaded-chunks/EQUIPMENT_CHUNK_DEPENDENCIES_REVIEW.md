@@ -1,5 +1,7 @@
 # Remaining plant dependencies on loaded chunks
 
+All five findings below were subsequently addressed on the batch branch. [Corrections and regression results](CHUNK_DEPENDENCY_FIXES_REVIEW.md)
+
 Reviewed implementation `155b7f744..c25abe8a0` on 2026-11-18. A high-effort Sol review and an independent source trace found the following gaps. These are source findings. The earlier 6,000-tick run established continuous burner supply and a fresh solve on a running column in one save. It exercised the engine set-point entry point directly. It did not operate the column remotely from the DCS or test all of its utility controls.
 
 | Priority | Equipment and trigger | Expected behavior and observed code path | Proposed correction and regression |

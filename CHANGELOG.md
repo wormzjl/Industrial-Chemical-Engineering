@@ -21,6 +21,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Fixed
 
+- Unloaded plant equipment now retains external exchanger valve control, water intake eligibility, and DCS column commands. Secondary equipment nodes can bind independently. Pollution blasts rupture standalone fluid devices on either side of a loaded chunk boundary and record their release at the removal fence (`2026-11-18-unloaded-chunks`).
+
 - IChemE power, column operation, alarms and solid-fired stills continue when a plant's chunks unload. Pollution can still damage registered equipment, subject to the existing external-corrosion and explosion settings (`2026-11-18-unloaded-chunks`).
 - Column on a cold feed, follow-ups (`2026-11-17-column-cold-feed`, on `claude/large-column-surface-shader-f22680`): a column that cannot solve with its pumparounds at full duty solves at 50, 25 or 10 % of it; a pumparound's cooler takes over at most 90 % of the condenser's duty; a fired coil reaches its set point at its outlet's pressure; the burners relight after a world reload.
 - Equipment reflections are a soft grey gloss (`2026-11-18-equipment-reflections`, on `claude/large-column-surface-shader-f22680`): no mirror image of the sky and ground and no colour, the shell keeps 1 - F of its own colour under the sheen, bare steel and jacketing take a fifth head-on, grating a tenth; pipe runs that belong to a structure (a heater's crossover, manifolds) stay plain like laid pipes. Clad columns no longer turn white-blue from below or dark from above, and their rings, heads, the crossovers and the platforms no longer shine.
