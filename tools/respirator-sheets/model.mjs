@@ -255,9 +255,7 @@ const quads = [
   ...PARTS.flatMap((part) => part.cubes.flatMap((cube) => cubeQuads(cube, part))),
 ];
 
-// The item icons, rendered from the same geometry and texture (owner, 2026-11-18: "icon does not look like the model"):
-// the mask alone from the front, a little to the left; the filter is one cartridge, three-quarter view. 16 x 16 with the
-// vanilla dark outline.
+// The item icons, 16 x 16 with the vanilla dark outline.
 function outline(c) {
   const copy = new Canvas(c.w, c.h);
   copy.px.set(c.px);
@@ -272,21 +270,68 @@ function outline(c) {
   }
   return c;
 }
-const maskQuads = PARTS.flatMap((part) => part.cubes.filter((c) => c.material !== 'strap').flatMap((cube) => cubeQuads(cube, part)));
-const respiratorIcon = outline(render(maskQuads, tex, 16, 16, Math.PI + 0.3, 0.15, 1.5, [0.2, 3.9, -5], [0, 0, 0, 0]));
-const cart = PARTS.find((p) => p.name === 'cartridge_left');
-const single = { pivot: [0, 0, 0], rotation: [0, 0, 0] };
-const filterQuads = cart.cubes.flatMap((cube) => cubeQuads(cube, single));
-const filterIcon = outline(render(filterQuads, tex, 16, 16, Math.PI + 0.6, 0.45, 3.4, [0, 0, -0.8], [0, 0, 0, 0]));
+// Drawn as pixel art from the built model's front view, in the texture's colours (owner, 2026-11-18, on a 16 px render of
+// the model: "it's even worse"): seal, visor with its highlight, nose cup and diaphragm, the harness band at the sides,
+// the twin cartridges low at the sides with their white band outward. The filter: one cartridge, face and white band.
+const PIX = {
+  s: M.strap, r: M.rubber, l: M.lens, h: [222, 242, 252], d: shade(M.lens, 0.8), g: M.grey, m: M.metal,
+  t: M.cartridge, w: M.band, T: shade(M.cartridge, 0.75),
+};
+function pixelArt(rows) {
+  const c = new Canvas(16, 16);
+  rows.forEach((row, y) => [...row].forEach((ch, x) => { if (PIX[ch]) c.set(x, y, PIX[ch]); }));
+  return outline(c);
+}
+// The model's front view (the sheet's FRONT): a thin seal round a large visor, the grey nose cup with its diaphragm, the
+// harness band out at the sides, and the two square cartridges with their steel hub bar and the white band towards the cup.
+const respiratorIcon = pixelArt([
+  '................',
+  '.......ss.......',
+  '...rrrrrrrrrr...',
+  '...rlhhlllllr...',
+  '...rllllllllr...',
+  '...rllllllllr...',
+  '...rddddddddr...',
+  'ssrrrrrrrrrrrrss',
+  '.tmtwrggggrwtmt.',
+  'TtmtwrgmmgrwtmtT',
+  'TtmtwrgmmgrwtmtT',
+  'TtmtwrggggrwtmtT',
+  '.tttwrrrrrrwttt.',
+  '................',
+  '................',
+  '................',
+]);
+// One cartridge as the model draws it, seen a little from the side: the square face with its hub bar, the white band
+// and the tan depth behind it, the connector at the back.
+const filterIcon = pixelArt([
+  '................',
+  '................',
+  '....ttttttt.....',
+  '...ttttmtttt....',
+  '...ttttmttttw...',
+  '...ttttmttttwT..',
+  '...ttttmttttwT..',
+  '...ttttmttttwT..',
+  '...ttttmttttwT..',
+  '...ttttmttttwT..',
+  '....tttttttwwT..',
+  '.....wwwwwwwTT..',
+  '......TTTTTTTm..',
+  '............mm..',
+  '................',
+  '................',
+]);
 
 const VIEW_W = 400, VIEW_H = 330, SCALE = 22, BG = [236, 238, 240, 255];
 const centre = [0, 3.6, -0.6];
 const views = [
+  ['FRONT', Math.PI, 0.0001],
   ['ISO, FRONT LEFT', Math.PI + 0.65, 0.42],
   ['SIDE', Math.PI / 2, 0.08],
   ['BACK', 0.0001, 0.2],
 ];
-const sheet = new Canvas(VIEW_W * 3, 60 + VIEW_H + 40 + 6 * TEX_H + 20, [250, 250, 250, 255]);
+const sheet = new Canvas(VIEW_W * 4, 60 + VIEW_H + 40 + 6 * TEX_H + 20, [250, 250, 250, 255]);
 text(sheet, 16, 16, 'RESPIRATOR, OPTION C AS BUILT (THE GAME MODEL AND TEXTURE)', [30, 30, 40], 3);
 views.forEach(([label, yaw, pitch], i) => {
   const img = render(quads, tex, VIEW_W - 10, VIEW_H - 40, yaw, pitch, SCALE, centre, BG);
