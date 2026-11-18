@@ -21,6 +21,16 @@ python -I tools/column-soak/drift.py run/review-world
 rm src/fluidGameTest/java/com/wormzjl/icheme/fluid/gametest/ColumnSoakReviewWorld.java
 ```
 
+## Unloaded plant review
+
+The unloaded save review uses a fresh, disposable game directory. Put a copy of the two-heater save in its `world/` subdirectory and run the command below from the worktree. The review prepares spawn outside the plant, checks both creative sources, the heater nodes and the column shell every tick, changes the column condenser set point by 0.01 K, and checks for an accepted table and actual FE receipts during 6,000 ticks.
+
+```powershell
+.\gradlew.bat runReviewWorldServer -I tools/column-soak/unloaded-save.gradle -PunloadedSaveDir=tmp/unloaded-chunks/review -PreviewBatch=unloaded-save --max-workers=4
+```
+
+Use a separate empty game directory and `-PreviewBatch=unloaded-fixtures` for the targeted power, still, alarm and blast GameTests. The fixture batch also accepts a single case such as `unloaded-still`.
+
 ## History
 
 - 2026-11-18: written for the owner's stability question after a hold in the test world.

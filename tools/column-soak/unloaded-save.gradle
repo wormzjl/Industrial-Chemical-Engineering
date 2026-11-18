@@ -1,0 +1,11 @@
+// Opt-in review source and an isolated game directory containing a copy of the save.
+gradle.beforeProject { p ->
+    p.afterEvaluate {
+        def review = p.findProperty('unloadedSaveDir')
+        if (review == null) throw new GradleException('Supply -PunloadedSaveDir=<isolated game directory>')
+        p.sourceSets.fluidGameTest.java.srcDir(p.file('tools/column-soak'))
+        def run = p.neoForge.runs.getByName('reviewWorldServer')
+        run.gameDirectory.set(p.file(review))
+        run.programArguments.addAll('--spawnPos', '16000,60,16000')
+    }
+}

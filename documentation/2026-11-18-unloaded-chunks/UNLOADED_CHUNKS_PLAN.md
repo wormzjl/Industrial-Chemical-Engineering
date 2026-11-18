@@ -2,6 +2,8 @@
 
 Owner, 2026-11-18: "everything should function in unloaded chunks".
 
+Owner decisions on this plan require existing plants to work after a cold restart before a player visits, a metered motor to stop on lost live supply while retaining its charge, solid-fired stills and pollution-triggered plant damage to continue, and external corrosion to follow its configuration. Beacons must clear and re-arm while unloaded. The implementation reuses the existing saved structure geometry and operating point for C1. The new fluid fact is the solid still's item inventory.
+
 ## 1. What happens today
 
 Measured, the owner's test save (`run/saves/New World`), run on the headless review server, no player:

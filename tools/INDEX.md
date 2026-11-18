@@ -8,7 +8,7 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
-| [column-soak/](column-soak/README.md) | Review GameTest that soaks the column test world or a copied save on the review server and writes islands, devices, feed, column and burner CSVs; drift fit | `2026-11-17-column-cold-feed` | In use since 2026-11-18 |
+| [column-soak/](column-soak/README.md) | Column drift and burner measurements, cold-start save review, unloaded equipment fixtures | `2026-11-17-column-cold-feed`, `2026-11-18-unloaded-chunks` | In use since 2026-11-18 |
 | [respirator-sheets/](respirator-sheets/README.md) | Software-rendered look options of the respirator (three masks on a head form, icons) and its placeholder textures | `2026-11-18-respirator` | In use since 2026-11-18 |
 | [sight-glass-frames/](sight-glass-frames/README.md) | Frame strip of the sight glass bubble law (horizontal and vertical runs, 8 frames each), shading copied from the GLSL | `2026-11-18-equipment-reflections` | In use since 2026-11-18 |
 | [reflection-render/](reflection-render/README.md) | Software renders of the equipment reflection law (drum, column, exchanger, pump; two views, sheen and pass) | `2026-11-18-equipment-reflections` | In use since 2026-11-18 |
