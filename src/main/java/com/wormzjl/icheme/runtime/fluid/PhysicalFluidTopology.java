@@ -992,11 +992,14 @@ public final class PhysicalFluidTopology {
     }
     /**
      * A boundary's link: half its neighbour's geometry, as always, with a generator's own minor loss on top where it has one
-     * (a gas intake's entry loss, batch 2026-11-15-fluid-interfaces, W2). Every other generator has none, and a vessel's or a
-     * sink's link is its neighbour's half as before: bit for bit.
+     * (a gas intake's or a water intake's entry loss, batch 2026-11-15-fluid-interfaces, W2), and a one-block sink's (a
+     * passive void without ports: a waste outfall's exit loss, batch 2026-11-18-water-intake-outfall). Every other generator
+     * and one-block sink has none, and a vessel's or a structure's sink link is its neighbour's half as before: bit for bit.
      */
     private static PipeResistance.Geometry boundaryHalf(Device owner,Device boundary) {
-        var half=scaled(owner.geometry,.5);double own=boundary.kind==TopologyCompiler.Kind.GENERATOR?boundary.geometry.minorLoss():0;
+        var half=scaled(owner.geometry,.5);
+        boolean sink=boundary.kind==TopologyCompiler.Kind.VOID&&boundary.heat==null&&boundary.control instanceof FlowControl.Passive&&boundary.ports.isEmpty()&&boundary.position.lane()==0;
+        double own=boundary.kind==TopologyCompiler.Kind.GENERATOR||sink?boundary.geometry.minorLoss():0;
         return own>0?new PipeResistance.Geometry(half.length(),half.diameter(),half.roughness(),half.minorLoss()+own,half.channels()):half;
     }
     private static PipeResistance.Geometry scaled(PipeResistance.Geometry g,double fraction){return new PipeResistance.Geometry(g.length()*fraction,g.diameter(),g.roughness(),g.minorLoss()*fraction,g.channels());}

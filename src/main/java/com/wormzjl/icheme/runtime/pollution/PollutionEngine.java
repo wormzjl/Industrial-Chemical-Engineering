@@ -70,6 +70,8 @@ public final class PollutionEngine {
     private boolean discardInFlight;
     /** What burnt (WP6a) since the pass in flight began: applied again to its result, which was stepped from the field before them. */
     private final List<Burn> burntInFlight = new ArrayList<>();
+    /** What went to the ground (a waste outfall's rest) since the pass in flight began, per channel: booked again on its result's ledger. */
+    private final double[] groundInFlight = new double[Channel.values().length];
     private int failures;
     private String lastFailure = "";
     private long ignored;
@@ -115,6 +117,7 @@ public final class PollutionEngine {
         inFlight = pass;
         discardInFlight = false;
         burntInFlight.clear();
+        java.util.Arrays.fill(groundInFlight, 0.0);
         return Optional.of(pass);
     }
 
@@ -145,6 +148,20 @@ public final class PollutionEngine {
         return burnt;
     }
 
+    /**
+     * Books {@code amount} of {@code channel} straight to the ground ({@link PollutionLedger#grounded}; batch
+     * 2026-11-18-water-intake-outfall): the installed ledger at once, and again on the result of a pass in flight, which
+     * was stepped from the ledger before it. Nothing enters the field. A non-finite or non-positive amount is ignored.
+     */
+    public void ground(Channel channel, double amount) {
+        if (channel == null || !(amount > 0.0) || !Double.isFinite(amount)) {
+            if (!(amount == 0.0)) ignored++;
+            return;
+        }
+        ledger = ledger.grounded(channel, amount);
+        if (inFlight != null && !discardInFlight) groundInFlight[channel.ordinal()] += amount;
+    }
+
     /** Installs the pass's result. A result with no pass in flight is ignored; one of a pass a {@link #clear} overtook is dropped. */
     public void complete(PollutionField.Result result) {
         Objects.requireNonNull(result, "result");
@@ -157,6 +174,7 @@ public final class PollutionEngine {
         failures = 0;
         if (discard) {
             burntInFlight.clear();
+            java.util.Arrays.fill(groundInFlight, 0.0);
             return;
         }
         var installed = result;
@@ -166,7 +184,10 @@ public final class PollutionEngine {
         }
         burntInFlight.clear();
         field = installed.field();
-        ledger = installed.ledger();
+        var book = installed.ledger();
+        for (Channel channel : Channel.values()) book = book.grounded(channel, groundInFlight[channel.ordinal()]);
+        java.util.Arrays.fill(groundInFlight, 0.0);
+        ledger = book;
     }
 
     /** The pass failed: its releases wait again, the field stays, and the failure counts. Also counts a failure before any pass began. */
@@ -189,8 +210,9 @@ public final class PollutionEngine {
         boolean discard = discardInFlight;
         inFlight = null;
         discardInFlight = false;
-        // The installed field already holds the burns made meanwhile; nothing replaces it.
+        // The installed field already holds the burns made meanwhile, its ledger the ground bookings; nothing replaces them.
         burntInFlight.clear();
+        java.util.Arrays.fill(groundInFlight, 0.0);
         if (discard) {
             return;
         }
@@ -214,6 +236,7 @@ public final class PollutionEngine {
         field = PollutionField.EMPTY;
         pending.clear();
         burntInFlight.clear();
+        java.util.Arrays.fill(groundInFlight, 0.0);
         if (inFlight != null) {
             discardInFlight = true;
         }

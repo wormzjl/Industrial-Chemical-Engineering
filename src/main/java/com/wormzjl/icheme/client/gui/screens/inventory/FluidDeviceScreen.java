@@ -122,8 +122,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private boolean intake(){var level=minecraft==null?null:minecraft.level;return level!=null&&level.getBlockState(menu.position()).getBlock() instanceof com.wormzjl.icheme.world.level.block.FluidDeviceBlock block&&block.ambient();}
     /** A liquid hopper (W4), told by its block: its Forge tank, rule and what it books, and no setting. */
     private boolean hopper(){var level=minecraft==null?null:minecraft.level;return level!=null&&level.getBlockState(menu.position()).getBlock() instanceof com.wormzjl.icheme.world.level.block.FluidDeviceBlock block&&block.hopper();}
-    /** A generator block with nothing the player sets: a gas intake or a liquid hopper. */
-    private boolean fixed(){return intake()||hopper();}
+    /** A water intake or a waste outfall (batch 2026-11-18-water-intake-outfall), told by its block: the world outside, nothing to set. */
+    private boolean boundaryBlock(){var level=minecraft==null?null:minecraft.level;return level!=null&&level.getBlockState(menu.position()).getBlock() instanceof com.wormzjl.icheme.world.level.block.FluidDeviceBlock block&&(block.waterIntake()||block.outfall());}
+    /** A boundary block with nothing the player sets: a gas intake, a liquid hopper, a water intake or a waste outfall. */
+    private boolean fixed(){return intake()||hopper()||boundaryBlock();}
     private boolean pipe(){return menu.clientData()!=null&&menu.clientData().kind()==TopologyCompiler.Kind.PIPE;}
     private boolean transport(){return menu.clientData()!=null&&menu.clientData().view().pipeInfo()!=null;}
     private com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource valveSource=com.wormzjl.icheme.science.fluid.network.FlowControl.ValveSource.NONE;
@@ -895,6 +897,8 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(clause.startsWith("STEADY: no flow"))return tr("no_flow");
         if(clause.startsWith("STEADY:"))return tr("flowing");
         if(clause.equals("FULL")||clause.equals("READY"))return tr("ready");
+        // A water intake whose strainer touches no water body (batch 2026-11-18-water-intake-outfall): closed until it does.
+        if(clause.startsWith(com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.NO_WATER_BODY))return tr("status.no_water_body");
         // A unit a running column holds (C7): the column runs it.
         var column=COLUMN.matcher(clause);if(column.matches())return tr("status.column",column.group(1),column.group(2),column.group(3));
         var low=LOW_LIMIT.matcher(clause);if(low.matches())return tr("status.low_limit",quantity(temperatureUnit.display(Double.parseDouble(low.group(1))),temperatureUnit.symbol()));

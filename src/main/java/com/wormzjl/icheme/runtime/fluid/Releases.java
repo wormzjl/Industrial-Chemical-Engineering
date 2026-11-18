@@ -33,6 +33,10 @@ import java.util.function.Supplier;
  * <li>A one-time {@code FLUSH} of a node's trace components: its gas, at the node. A certificate is not issued on an interval
  * that flushed ({@code IslandCertificate}), so a replay never carries one and a flush is booked once.</li>
  * <li>A cooling tower's {@code ATMOSPHERE}: what its plume carries, at its top.</li>
+ * <li>A waste outfall's void ({@code EXCHANGE}, batch 2026-11-18-water-intake-outfall): the spill law on all it discharged
+ * ({@link #outfall}): its vapour to the air at its own cube; the liquid it leaves on the ground (toxic and corrosive) and the
+ * solids it carries (particulate: a liquid sets them down, unlike a chimney's gas) to the ledger's {@code GROUND} there,
+ * never the field.</li>
  * </ul>
  * Each amount is in air-mole equivalents of its channel. Nothing is saved; no fluid fact, state or reference changes. A
  * fault here is caught and logged ({@link #booked}): it never stops the bookings after it.
@@ -42,6 +46,12 @@ public final class Releases {
     @FunctionalInterface
     public interface Sink {
         void release(PhysicalFluidTopology.Position position, Channel channel, double amount);
+
+        /**
+         * {@code amount} of {@code channel} left on the ground at {@code position}: the pollution ledger's {@code GROUND},
+         * never the air (a waste outfall's rest, batch 2026-11-18-water-intake-outfall). None by default.
+         */
+        default void ground(PhysicalFluidTopology.Position position, Channel channel, double amount) {}
     }
 
     /** A flare tip's flame over the span just booked: whether it holds, and its soot index, 0 to 1 ({@code Flare#soot}). */
@@ -175,7 +185,7 @@ public final class Releases {
                 }
                 case EXCHANGE -> {
                     var d = r.device();
-                    if (!(d.chimney() || d.flare() || d.burner() || d.engineFuel())) continue;
+                    if (!(d.chimney() || d.flare() || d.burner() || d.engineFuel() || FluidWorldAuthority.outfall(r))) continue;
                 }
                 default -> {
                     continue;
@@ -228,6 +238,15 @@ public final class Releases {
                             emit(tip, Channel.CORROSIVE, products[0]);
                             emit(tip, Channel.PARTICULATE, products[1]);
                         } else gas(tip, world);
+                    } else if (FluidWorldAuthority.outfall(r)) {
+                        // A waste outfall (batch 2026-11-18-water-intake-outfall, owner: "Ground only"): what evaporates to
+                        // the air at its own cube; the rest of the liquid and the solids it carries to the ground there.
+                        var cube = above(at, 0);
+                        var split = outfall(standard, world);
+                        gas(cube, split[0]);
+                        grounded(cube, Channel.TOXIC, standard.toxic(split[1]));
+                        grounded(cube, Channel.CORROSIVE, standard.corrosive(split[1]));
+                        grounded(cube, Channel.PARTICULATE, HazardStandard.particulate(solids));
                     } else emit(above(at, 0), Channel.CORROSIVE, sulfur(world, formulas) / so2Reference);
                 }
                 default -> {
@@ -330,6 +349,24 @@ public final class Releases {
             if (f[SULFUR] == 1 && f[OXYGEN] == 2 && f[CARBON] == 0 && f[1] == 0 && f[2] == 0 && corrosiveReferences[c] > 0) return corrosiveReferences[c];
         }
         return SO2_REFERENCE;
+    }
+
+    /**
+     * A waste outfall's discharge {@code moles} (world axis, all phases: a boundary transfer carries no phase) split by the
+     * spill law on the whole stream ({@link HazardStandard#volatileMoles}; batch 2026-11-18-water-intake-outfall, owner:
+     * "Ground only"): {vapour, rest}. The vapour goes to the air as a vent's gas: a compound volatile at 25 C (a gas, share 1)
+     * whole, of a liquid its volatile share; the rest is the liquid left on the ground, which the ledger books {@code GROUND}
+     * (toxic and corrosive) and the air never sees. Clean water books nothing anywhere: water has no reference.
+     */
+    static double[][] outfall(HazardStandard standard, double[] moles) {
+        var vapour = standard.volatileMoles(moles);
+        var rest = new double[moles.length];
+        for (int c = 0; c < moles.length; c++) rest[c] = Math.max(0, Math.abs(moles[c]) - Math.abs(vapour[c]));
+        return new double[][]{vapour, rest};
+    }
+
+    private void grounded(PhysicalFluidTopology.Position at, Channel channel, double amount) {
+        if (amount > 0 && Double.isFinite(amount)) sink.ground(at, channel, amount);
     }
 
     /** {@code at} raised by {@code height} blocks, rounded up (a block column), on the block lane. */
