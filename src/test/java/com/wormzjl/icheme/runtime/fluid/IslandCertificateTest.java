@@ -310,7 +310,16 @@ class IslandCertificateTest {
      */
     @Test void aCertifiedIslandReplaysItsJunctionHoldupsExactly() {
         var rig=rig(new CertificatePolicy(true,1e-6,1e-3,5,2,0));rig.register(1,flushThroughJunction(mix(.6),mix(.4)));
-        long at=rig.certifiedAt(1,40_000);assertTrue(at>0,rig.coordinator.certificationRefusal(1));
+        // Early windows may legitimately be shorter than the multi-interval replay exercised here.
+        // Wait for that qualifying window while the real island continues solving and certifying.
+        while (rig.epoch[0] < 40_000) {
+            var window=rig.stored(1).certificate();
+            if(window.isPresent() && window.get().baseTick()==rig.epoch[0]
+                    && window.get().horizonTick()-window.get().baseTick()>=300)break;
+            rig.run(1);
+        }
+        long at=rig.epoch[0];
+        assertTrue(at < 40_000,rig.coordinator.certificationRefusal(1));
         var certified=rig.stored(1).certificate().orElseThrow();var saved=certified.saved().orElseThrow();
         var before=saved.interval().before();var base=saved.interval().result().graph();
         long baseTick=saved.baseTick(),duration=saved.interval().endTick()-saved.interval().startTick();
@@ -336,6 +345,7 @@ class IslandCertificateTest {
             var expected=b.moles();var m0=a.moles();var m1=b.moles();
             for(int c=0;c<expected.length;c++)expected[c]+=f*(m1[c]-m0[c]);
             var replayed=now.reservoirs().get(n).inventory();
+            assertEquals(b.reserve(),replayed.reserve(),"replay preserves the retained part of the stock");
             assertArrayEquals(expected,replayed.moles(),0,"junction "+node.id()+" moles: base + f * delta, bit for bit");
             assertEquals(b.internalEnergy()+f*(b.internalEnergy()-a.internalEnergy()),replayed.internalEnergy(),0,"junction "+node.id()+" energy field");
         }

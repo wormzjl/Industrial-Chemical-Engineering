@@ -44,14 +44,18 @@ class FluidCheckpointCodecTest {
         var moving = new SolidInventory(List.of(new SolidInventory.Population(material,size,.75)));
         var gas = model.initialNitrogenCharge(1,298.15,101325,()->{});
         var stock = new PassiveNetwork.Reservoir(1,0,gas).inventory();
+        var held = stock.moles();
+        for(int c=0;c<held.length;c++)held[c]*=.75;
+        var reserve = new PassiveNetwork.JunctionReserve(held,.75*stock.internalEnergy());
         var node = new PassiveNetwork.Reservoir(1,0,gas.withSolids(moving),PassiveNetwork.NodeKind.JUNCTION,
-                stock.with(stock.moles(),stock.internalEnergy(),buffered));
+                stock.with(stock.moles(),stock.internalEnergy(),buffered).withReserve(reserve));
         var snapshot = new IslandCoordinator.Snapshot(1,0,new PassiveNetwork(List.of(node),List.of()),
                 new IslandClock.Snapshot(0,0,0,100),Optional.empty(),"READY");
         var before = new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,snapshot)));
         var image = FluidCheckpointCodec.encode(before,key->model);
         var loaded = FluidCheckpointCodec.decode(image,key->model);
         var reopened = loaded.islands().getFirst().snapshot().graph().reservoirs().getFirst();
+        assertEquals(reserve,reopened.inventory().reserve());
         assertEquals(buffered,reopened.inventory().solids());
         assertEquals(moving,reopened.state().solids());
         assertSameImage(image,FluidCheckpointCodec.encode(loaded,key->model),"flowing and stationary populations round-trip");

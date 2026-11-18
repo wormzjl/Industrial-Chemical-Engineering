@@ -126,9 +126,9 @@ import java.util.function.Function;
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=55;
+    public static final int VERSION=56;
     // Format 53 stored a junction's flowing solids using its inventory's populations.
-    static boolean readableState(int version){return version==VERSION||version==53;}
+    static boolean readableState(int version){return version==VERSION||version==55||version==53;}
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -521,7 +521,12 @@ public final class FluidCheckpointCodec {
         for(var n:graph.reservoirs()) {
             var inventory=n.inventory();var s=n.state();
             w.sparse(inventory.moles());w.f64(inventory.internalEnergy());solids(w,inventory.solids());w.bool(inventory.rigid());
-            if(n.junction())solids(w,s.solids());
+            if(n.junction()) {
+                solids(w,s.solids());
+                var reserve=inventory.reserve();
+                w.bool(reserve!=null);
+                if(reserve!=null){w.sparse(reserve.moles());w.f64(reserve.enthalpy());}
+            }
             w.f64(s.temperature());w.f64(s.pressure());w.sparse(s.vaporAmountsView());w.sparse(s.liquidAmountsView());w.sparse(s.aqueousAmountsView());
         }
         for(var p:graph.pipes()) {
@@ -711,9 +716,12 @@ public final class FluidCheckpointCodec {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(t.ids.length);
         for(int n=0;n<t.ids.length;n++) {
             var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);boolean rigid=r.bool();
-            var streamSolids = version==VERSION && t.kinds[n]==PassiveNetwork.NodeKind.JUNCTION ? solids(r,model) : solids;
+            boolean junction=t.kinds[n]==PassiveNetwork.NodeKind.JUNCTION;
+            var streamSolids = version>=55 && junction ? solids(r,model) : solids;
+            var reserve = version==VERSION && junction && r.bool()
+                    ? new PassiveNetwork.JunctionReserve(r.sparse(MAXIMUM_ARRAY),r.f64()) : null;
             double temperature=r.f64(),pressure=r.f64();var vapor=r.sparse(MAXIMUM_ARRAY);var liquid=r.sparse(MAXIMUM_ARRAY);var aqueous=r.sparse(MAXIMUM_ARRAY);
-            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n],rigid).withBlanket(t.blankets[n]);
+            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n],rigid).withBlanket(t.blankets[n]).withReserve(reserve);
             boolean solidOnly = !streamSolids.empty() && Arrays.stream(vapor).sum()==0
                     && Arrays.stream(liquid).sum()==0 && Arrays.stream(aqueous).sum()==0;
             var state=solidOnly?model.solidState(temperature,pressure,streamSolids):model.state(temperature,pressure,vapor,liquid,aqueous).withSolids(streamSolids);

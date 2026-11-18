@@ -58,6 +58,7 @@ public final class IslandCertificate {
         final boolean flushed;
         /** Largest relative thermal increment while a junction's booked stock differs from its flowing state. */
         final double mixingHeatDrift;
+        final boolean reserveChanged;
         /** {@code molecularWeights} (kg/mol, conserved-component order) weigh the finite inventories for {@link #referenceMass}. */
         Summary(Interval interval,double[] molecularWeights){this(interval,molecularWeights,SimulationTime.ONLINE);}
         /** {@code time} is the island's time factor ({@link FluidThermodynamics#time}). */
@@ -68,12 +69,13 @@ public final class IslandCertificate {
             if(before.reservoirs().size()!=after.reservoirs().size()||before.pipes().size()!=after.pipes().size())throw new IllegalArgumentException("Interval changed the island's structure");
             int nodes=after.reservoirs().size();moles=new double[nodes][];energy=new double[nodes];phases=new int[nodes];
             var nodeMass=new double[nodes];double smallest=Double.POSITIVE_INFINITY;
-            boolean zero=true,solids=true,phase=true;double state=0,thermal=0;
+            boolean zero=true,solids=true,phase=true,changedReserve=false;double state=0,thermal=0;
             for(int n=0;n<nodes;n++) {
                 var a=before.reservoirs().get(n);var b=after.reservoirs().get(n);
                 if(a.id()!=b.id()||a.kind()!=b.kind())throw new IllegalArgumentException("Interval changed the island's structure");
                 nodeMass[n]=Double.POSITIVE_INFINITY;
                 if(b.kind()!=PassiveNetwork.NodeKind.RESERVOIR&&!b.junction())continue;
+                changedReserve |= !Objects.equals(a.inventory().reserve(),b.inventory().reserve());
                 phases[n]=phases(b.state());if(phases(a.state())!=phases[n])phase=false;
                 // An empty vessel's state is a numerical guess, not a physical temperature or pressure.
                 if(!a.empty()&&!b.empty())state=Math.max(state,Math.max(Math.abs(b.state().temperature()-a.state().temperature())/b.state().temperature(),
@@ -87,10 +89,13 @@ public final class IslandCertificate {
                 if (b.junction() && energy[n] != 0) {
                     // A moving heat front's energy increment depends on how much stock still differs from the stream.
                     // Extrapolating it as a fixed rate can discharge the numerical stock beyond that stream.
-                    double totalMass=mass+b.inventory().solids().massKg();
-                    double streamEnergy=totalMass*b.state().enthalpy()/b.state().mass();
-                    double rounding=32*Math.ulp(Math.max(1,Math.max(Math.abs(streamEnergy),Math.abs(b.inventory().internalEnergy()))));
-                    if (Math.abs(energy[n]) > rounding && Math.abs(streamEnergy-b.inventory().internalEnergy()) > rounding)
+                    double movingMass=b.inventory().solids().massKg();
+                    var moving=b.inventory().movingMoles();
+                    for(int c=0;c<moving.length;c++)movingMass+=moving[c]*molecularWeights[c];
+                    double streamEnergy=movingMass*b.state().enthalpy()/b.state().mass();
+                    double stockEnergy=b.inventory().movingEnergy();
+                    double rounding=32*Math.ulp(Math.max(1,Math.max(Math.abs(streamEnergy),Math.abs(stockEnergy))));
+                    if (Math.abs(energy[n]) > rounding && Math.abs(streamEnergy-stockEnergy) > rounding)
                         thermal = Math.max(thermal, Math.abs(energy[n])/energyScale(b));
                 }
                 if(!a.inventory().solids().equals(b.inventory().solids()))solids=false;
@@ -123,6 +128,7 @@ public final class IslandCertificate {
             closuresUnchanged=closures;solidsUnchanged=solids;phasesUnchanged=phase;solidsInTransport=transport;hasFilter=filter;stateChange=state;
             // Rest is the identity of the map: nothing may move, not even back and forth inside the interval.
             mixingHeatDrift=thermal;
+            reserveChanged=changedReserve;
             exactZero=zero&&!gross;grossWithoutNet=zero&&gross;
         }
         /** Which of vapour, oil and aqueous liquid a node holds. */
@@ -152,7 +158,7 @@ public final class IslandCertificate {
         double drift() {
             double relative=stateChange;
             for(int n=0;n<moles.length;n++) {
-                if(moles[n]==null)continue;var node=after.reservoirs().get(n);var inventory=node.inventory().moles();
+                if(moles[n]==null)continue;var node=after.reservoirs().get(n);var inventory=node.inventory().movingMoles();
                 if(energy[n]!=0){double scale=energyScale(node);if(scale<=0)return Double.POSITIVE_INFINITY;relative=Math.max(relative,Math.abs(energy[n])/scale);}
                 for(int c=0;c<inventory.length;c++) {
                     double delta=moles[n][c];if(delta==0)continue;
@@ -169,8 +175,8 @@ public final class IslandCertificate {
      * relative test on it alone would demand an absurdly small change.
      */
     static double energyScale(PassiveNetwork.Reservoir node) {
-        double n=0;for(double v:node.inventory().moles())n+=v;
-        return Math.max(Math.abs(node.inventory().internalEnergy()),n*8.314462618*node.state().temperature());
+        double n=0;for(double v:node.inventory().movingMoles())n+=v;
+        return Math.max(Math.abs(node.inventory().movingEnergy()),n*8.314462618*node.state().temperature());
     }
 
     /** A solver rejection that records a solid transport transition inside the interval, as opposed to ordinary
@@ -227,7 +233,7 @@ public final class IslandCertificate {
         var y=b.after;double component=0,energy=0;String componentAt=null,energyAt=null;
         for(int n=0;n<y.reservoirs().size();n++) {
             if(b.moles[n]==null)continue;var t=y.reservoirs().get(n);
-            var inventory=t.inventory().moles();
+            var inventory=t.inventory().movingMoles();
             for(int c=0;c<inventory.length;c++) {
                 double change=Math.abs(b.moles[n][c]-a.moles[n][c]);if(change==0)continue;
                 double ratio=inventory[c]>0?change/inventory[c]:Double.POSITIVE_INFINITY;
@@ -291,6 +297,7 @@ public final class IslandCertificate {
     static Result issue(Summary last,CertificatePolicy policy) {
         if(!last.transitionFree||!last.closuresUnchanged||!last.solidsUnchanged||!last.phasesUnchanged)return Result.refused("the interval changed a closure, a cake, a phase or node solids");
         if(last.flushed)return Result.refused("the interval flushed a trace component");
+        if(last.reserveChanged)return Result.refused("the junction established its retained fluid");
         if(last.grossWithoutNet)return Result.refused("gross flow with a zero average is not rest");
         if(last.exactZero) {
             // The recheck period is play time, a schedule quantity: ticks, whatever the time factor.
@@ -302,7 +309,7 @@ public final class IslandCertificate {
         double relative=last.drift();long zeroLimit=Long.MAX_VALUE;
         if(relative==Double.POSITIVE_INFINITY)return Result.refused("material or energy appears in an empty node");
         for(int n=0;n<last.moles.length;n++) {
-            if(last.moles[n]==null)continue;var inventory=last.after.reservoirs().get(n).inventory().moles();
+            if(last.moles[n]==null)continue;var inventory=last.after.reservoirs().get(n).inventory().movingMoles();
             for(int c=0;c<inventory.length;c++){double delta=last.moles[n][c];if(delta<0)zeroLimit=Math.min(zeroLimit,(long)Math.ceil(inventory[c]/-delta)-1);}
         }
         long intervals=policy.maximumIntervals();
@@ -335,7 +342,7 @@ public final class IslandCertificate {
      * declared revision. A token of letters, digits, {@code _}, {@code .} and {@code -}, at most 32 characters (the
      * checkpoint's field, {@link FluidCheckpointCodec#replayField}).
      */
-    public static final String REPLAY_REVISION="replay-2";
+    public static final String REPLAY_REVISION="replay-3";
 
     /**
      * The validity signature of a certificate: the model's full property revision ({@link FluidThermodynamics#revision},
