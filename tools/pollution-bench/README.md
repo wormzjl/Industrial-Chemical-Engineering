@@ -25,3 +25,4 @@ java -cp build/classes/java/main tools/pollution-bench/Digest.java
 ## History
 
 - 2026-11-18: made for P1 and P2 of the propagation batch: the rise-0 digest `6450680631e3021f` taken from the field before the drift (the compiled classes of `65fee5618`), the default digest `5ae9aaa2c9acc5c5` after it.
+- 2026-11-18: the air cases' digest (`d777d6a3223eeb28`, `963b630fa76779af`, `d6578d868ef2a9a6` for 512, 4 096 and 8 192, the same before and after the optimisation) and the `wanted-8192` case; the before and after table is in the batch's review.
