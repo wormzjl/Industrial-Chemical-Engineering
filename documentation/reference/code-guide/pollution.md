@@ -70,10 +70,11 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | Flare | `Releases` | Burning: SO2 and soot (yield 0.01). Flame out: the gas |
 | Flush, cooling tower air | `Releases` | As booked |
 | Burner and engine fuel | `Releases` | The SO2 of the fuel's sulfur |
+| Waste outfall | `Releases` (`outfall`), at its own cube | The spill law on all it discharges (a gas at 25 °C whole); the liquid it leaves on the ground too, toxic and corrosive only, times `OUTFALL_YIELD` (1); solids as particulate. A stated game simplification |
 | A pipe, valve or one-block tank a blast destroys | `BurstPipes` → `releaseContents` | A vessel node's inventory; a line block's holdup, estimated from its last interval. One dense fluid splits by its liquid-like weight `w` instead of its slot (`DenseReadings.release`, `moved`: a line's side by the node it left), and the volatile share of its liquid-like part counts as the gas heard (`DenseReadings.heard`): dense carbon dioxide reads gas, a dense heavy cut liquid |
 | A breached vessel | It stands open, so the first row applies | |
 
-Not sources: the blanketing vent, a still pot, a relief run, a device a player breaks.
+Not sources: the blanketing vent, a still pot, a relief run, a device a player breaks, a plain fluid void (only a void whose spec is `ambient`, the waste outfall, books), clean water at an outfall (water has no reference).
 
 ## Ignition, blasts and breaches
 
@@ -113,7 +114,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 | Blast numbers, strength at a cell | `ExplosionLawTest`, `BlastsTest` |
 | Engine passes, a burn during a pass | `PollutionEngineTest` |
 | The store, damaged images | `PollutionStoreTest`, `PollutionStoreCorpusTest` |
-| Releases from the network | `ReleasesTest` |
+| Releases from the network | `ReleasesTest`, `OutfallReleasesTest` |
 | Breach and repair, schema 26 | `VesselBreachTest`, `FluidFactsCompatTest`, `MachineHealthTest` |
 | Levels, readings, monitor signals, data files | `ExposureTest`, `ReadingTest`, `MonitorSignalsTest`, `PollutionDataTest` |
 | The monitor on a bus | `ControlSystemTest` |

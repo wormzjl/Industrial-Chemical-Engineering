@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+### Added
+
+- Water intake and waste outfall (`2026-11-18-water-intake-outfall`, on `claude/water-intake-outfall-0e90c8`): a Water Intake block gives the network pure water at 25 °C and 1 atm, with a strainer loss, while one of its faces touches a body of at least 100 connected water blocks (a pump on its line moves the water; NO WATER BODY otherwise); a Waste Outfall block lets a line out to the open air at 1 atm and books what it carries to the pollution field at its cube: the spill law on the whole stream and, as a stated game simplification, the liquid left on the ground in the toxic and corrosive channels; clean water books nothing. Its falling liquid plays the falling-water sound. Placeholder models. No format changes.
+
 ## [0.35.1] - 2026-11-18
 
 ### Changed
