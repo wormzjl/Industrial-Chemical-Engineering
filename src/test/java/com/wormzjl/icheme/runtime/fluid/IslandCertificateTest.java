@@ -324,7 +324,9 @@ class IslandCertificateTest {
         assertTrue(junctions>0,"the line compiles junctions");
         assertTrue(largest>0,"the certified interval moves a junction's composition, so dropping it would show");
         var initial=stock(base);int from=rig.replayed.size();
-        long target=baseTick+duration*5/2;assertTrue(target<certified.horizonTick());
+        // The thermal budget can shorten this certificate. Exercise a fractional interval after a full replay.
+        long target = Math.min(baseTick+duration*5/2, certified.horizonTick()-duration/2);
+        assertTrue(target > baseTick+duration && target < certified.horizonTick());
         rig.run((int)(target-rig.epoch[0]));
         var now=rig.read(1).graph();assertEquals(target,rig.read(1).clock().committedTick(),"materialised to the target");
         double f=(target-baseTick)/(double)duration;
@@ -443,6 +445,37 @@ class IslandCertificateTest {
                 List.of(new PipeTransfer(9,stream(forward),stream(reverse))));
         return new IslandCertificate.Summary(new IslandCertificate.Interval(start,start+100,before,result),model.molecularWeights());
     }
+    @Test void aJunctionThatIsStillExchangingBufferedHeatCannotReplayThatIncrement() {
+        var reservoir=new PassiveNetwork.Reservoir(1,0,gas,PassiveNetwork.NodeKind.JUNCTION);
+        var sink=new PassiveNetwork.Reservoir(2,0,gas,PassiveNetwork.NodeKind.VOID);
+        var pipe=new PassiveNetwork.Pipe(9,0,1,BLOCK);
+        var before=PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(List.of(reservoir,sink),List.of(pipe)),model);
+        var original=before.reservoirs().getFirst();
+        var inventory=original.inventory();
+        var changed=inventory.with(inventory.moles(),inventory.internalEnergy()+100,inventory.solids());
+        var after=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,gas,original.kind(),changed),sink),List.of(pipe));
+        var issued=IslandCertificate.issue(interval(0,before,after,1,5,0,Map.of()),CertificatePolicy.defaults());
+        assertNull(issued.certificate());
+        assertEquals("junction heat is still mixing",issued.refusal());
+    }
+
+    @Test void theReplayWindowBoundsTheEntireRemainingThermalIncrement() {
+        var junction = new PassiveNetwork.Reservoir(1, 0, gas, PassiveNetwork.NodeKind.JUNCTION);
+        var sink = new PassiveNetwork.Reservoir(2, 0, gas, PassiveNetwork.NodeKind.VOID);
+        var pipe = new PassiveNetwork.Pipe(9, 0, 1, BLOCK);
+        var before = PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(List.of(junction, sink), List.of(pipe)), model);
+        var original = before.reservoirs().getFirst();
+        var inventory = original.inventory();
+        var policy = CertificatePolicy.defaults();
+        double increment = IslandCertificate.energyScale(original)*policy.stationaryTolerance()/3.5;
+        var changed = inventory.with(inventory.moles(), inventory.internalEnergy()+increment, inventory.solids());
+        var after = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, gas, original.kind(), changed), sink), List.of(pipe));
+        var summary = interval(0, before, after, 1, 5, 0, Map.of());
+        var certificate = IslandCertificate.issue(summary, policy).certificate();
+        assertNotNull(certificate);
+        assertEquals(3*summary.durationTicks, certificate.horizonTick()-certificate.baseTick());
+    }
+
     /** Two consecutive intervals of a tank draining component amounts {@code delta1} then {@code delta2} from {@code moles}. */
     private IslandCertificate.Summary[] draining(double[] moles,double[] delta1,double[] delta2,double flow1,double flow2) {
         var a=tank(moles,-1e5,0);var m1=moles.clone();for(int c=0;c<m1.length;c++)m1[c]+=delta1[c];var b=tank(m1,-1e5,0);

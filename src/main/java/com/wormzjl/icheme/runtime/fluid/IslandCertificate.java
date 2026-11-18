@@ -56,6 +56,8 @@ public final class IslandCertificate {
         /** The interval booked a transfer at a node the island owns (a vessel or a junction): a trace flush
          * ({@code PassiveIntervalSolver.flushTraces}), a one-time removal that linear replay must not repeat. */
         final boolean flushed;
+        /** Largest relative thermal increment while a junction's booked stock differs from its flowing state. */
+        final double mixingHeatDrift;
         /** {@code molecularWeights} (kg/mol, conserved-component order) weigh the finite inventories for {@link #referenceMass}. */
         Summary(Interval interval,double[] molecularWeights){this(interval,molecularWeights,SimulationTime.ONLINE);}
         /** {@code time} is the island's time factor ({@link FluidThermodynamics#time}). */
@@ -66,7 +68,7 @@ public final class IslandCertificate {
             if(before.reservoirs().size()!=after.reservoirs().size()||before.pipes().size()!=after.pipes().size())throw new IllegalArgumentException("Interval changed the island's structure");
             int nodes=after.reservoirs().size();moles=new double[nodes][];energy=new double[nodes];phases=new int[nodes];
             var nodeMass=new double[nodes];double smallest=Double.POSITIVE_INFINITY;
-            boolean zero=true,solids=true,phase=true;double state=0;
+            boolean zero=true,solids=true,phase=true;double state=0,thermal=0;
             for(int n=0;n<nodes;n++) {
                 var a=before.reservoirs().get(n);var b=after.reservoirs().get(n);
                 if(a.id()!=b.id()||a.kind()!=b.kind())throw new IllegalArgumentException("Interval changed the island's structure");
@@ -82,6 +84,15 @@ public final class IslandCertificate {
                 for(int c=0;c<m1.length;c++){moles[n][c]=m1[c]-m0[c];if(moles[n][c]!=0)zero=false;mass+=m1[c]*molecularWeights[c];}
                 if(!b.junction()){nodeMass[n]=mass;smallest=Math.min(smallest,mass);}
                 energy[n]=b.inventory().internalEnergy()-a.inventory().internalEnergy();if(energy[n]!=0)zero=false;
+                if (b.junction() && energy[n] != 0) {
+                    // A moving heat front's energy increment depends on how much stock still differs from the stream.
+                    // Extrapolating it as a fixed rate can discharge the numerical stock beyond that stream.
+                    double totalMass=mass+b.inventory().solids().massKg();
+                    double streamEnergy=totalMass*b.state().enthalpy()/b.state().mass();
+                    double rounding=32*Math.ulp(Math.max(1,Math.max(Math.abs(streamEnergy),Math.abs(b.inventory().internalEnergy()))));
+                    if (Math.abs(energy[n]) > rounding && Math.abs(streamEnergy-b.inventory().internalEnergy()) > rounding)
+                        thermal = Math.max(thermal, Math.abs(energy[n])/energyScale(b));
+                }
                 if(!a.inventory().solids().equals(b.inventory().solids()))solids=false;
             }
             referenceMass=new double[after.pipes().size()];
@@ -111,6 +122,7 @@ public final class IslandCertificate {
             transitionFree=transitionFree(result.rejectionReasons());
             closuresUnchanged=closures;solidsUnchanged=solids;phasesUnchanged=phase;solidsInTransport=transport;hasFilter=filter;stateChange=state;
             // Rest is the identity of the map: nothing may move, not even back and forth inside the interval.
+            mixingHeatDrift=thermal;
             exactZero=zero&&!gross;grossWithoutNet=zero&&gross;
         }
         /** Which of vapour, oil and aqueous liquid a node holds. */
@@ -294,6 +306,12 @@ public final class IslandCertificate {
             for(int c=0;c<inventory.length;c++){double delta=last.moles[n][c];if(delta<0)zeroLimit=Math.min(zeroLimit,(long)Math.ceil(inventory[c]/-delta)-1);}
         }
         long intervals=policy.maximumIntervals();
+        // A front can settle on the very next solve. Bound even the entire extrapolated heat increment by
+        // the policy's stationary tolerance, including the case where no further heat enters the stock.
+        if (last.mixingHeatDrift > 0) {
+            intervals = Math.min(intervals, (long)Math.floor(policy.stationaryTolerance()/last.mixingHeatDrift));
+            if (intervals < 1) return Result.refused("junction heat is still mixing");
+        }
         if(relative>0)intervals=Math.min(intervals,(long)Math.floor(policy.inventoryBudget()/relative));
         intervals=Math.min(intervals,zeroLimit);
         if(intervals<1)return Result.refused("drift of "+relative+" per interval exceeds the inventory budget");
@@ -317,7 +335,7 @@ public final class IslandCertificate {
      * declared revision. A token of letters, digits, {@code _}, {@code .} and {@code -}, at most 32 characters (the
      * checkpoint's field, {@link FluidCheckpointCodec#replayField}).
      */
-    public static final String REPLAY_REVISION="replay-1";
+    public static final String REPLAY_REVISION="replay-2";
 
     /**
      * The validity signature of a certificate: the model's full property revision ({@link FluidThermodynamics#revision},
