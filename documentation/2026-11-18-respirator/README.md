@@ -18,7 +18,7 @@ Purpose: a respirator worn on the head (or a Curios head slot) that lets a playe
 
 - 2026-11-18: option C (owner: "C: twin cartridges"), after the merge into `claude/column-testing-sizing-26b5b9` at `5e7987575` (`3f5c189a2`, documents in the next commit). A 3D worn model for both slots: `RespiratorModel`, the generated `RespiratorGeometry` and its 64 × 64 texture from `tools/respirator-sheets/model.mjs`; `RespiratorClient` (layer, rebake, `getHumanoidArmorModel`), `CuriosRespiratorClient` on the same model. The item icons are rendered from the model (owner: "icon does not look like the model"). Built-model sheet `tmp/respirator/built/respirator_built.png`. Run: `test` 58 classes, 356 tests, `equipmentGates` 2 classes, 11 tests, 0 failed.
 
-- 2026-11-18: the item icons redrawn as pixel art from the model's front view (owner, on the rendered icons: "it's even worse"); the sheet gains a FRONT view. `RespiratorDataTest` 6 tests, 0 failed.
+- 2026-11-18: the item icons redrawn as pixel art from the model's front view (owner, on the rendered icons: "it's even worse"); the sheet gains a FRONT view. `RespiratorDataTest` 6 tests, 0 failed. Owner, on the sheet: "Yes, keep them".
 
 ## Code areas
 
