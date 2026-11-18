@@ -10,7 +10,7 @@ import java.util.*;
  *
  * <pre>java -cp build/classes/java/main tools/pollution-bench/Bench.java &lt;case&gt; [warmup s] [measure s]</pre>
  *
- * case: air-512, air-4096, air-8192, ground-4096, or counts (one step of every air case, with the environment calls
+ * case: air-512, air-4096, air-8192, ground-<columns> (ground-1000, ground-4096, ground-16384), wanted-8192, digest, or counts (one step of every air case, with the environment calls
  * counted, no timing). Prints steps/s and allocated bytes per step.
  */
 public class Bench {
@@ -135,20 +135,23 @@ public class Bench {
             var engine = new com.wormzjl.icheme.runtime.pollution.PollutionEngine();
             engine.restore(k.field(), PollutionLedger.EMPTY, List.of());
             size = k.field().size();
+            // As PollutionService builds them each pass: the core, then the core and its faces.
             step = () -> {
-                var core = engine.core();
-                var wanted = engine.wanted();
-                if (core.size() > wanted.size()) {
+                Object core = engine.core();
+                Object wanted = core instanceof long[] c ? KeySets.cubeFaces(c) : engine.wanted();
+                if (wanted == null) {
                     throw new IllegalStateException();
                 }
             };
-        } else if (name.equals("ground-4096")) {
-            long[] columns = new long[4096];
-            double[] amounts = new double[4096];
+        } else if (name.startsWith("ground-")) {
+            int count = Integer.parseInt(name.substring(7));
+            int side = (int) Math.ceil(Math.sqrt(count));
+            long[] columns = new long[count];
+            double[] amounts = new double[count];
             List<GroundField.Entry> entries = new ArrayList<>();
             int n = 0;
-            for (int x = -32; x < 32; x++) {
-                for (int z = -32; z < 32; z++) {
+            for (int x = -side / 2; x < side - side / 2 && n < count; x++) {
+                for (int z = -side / 2; z < side - side / 2 && n < count; z++) {
                     columns[n++] = MapColumns.column(x, z);
                 }
             }
@@ -160,8 +163,8 @@ public class Bench {
                 }
             }
             GroundField field = GroundField.of(columns, amounts, entries);
-            GroundEnvironment environment = GroundEnvironment.of(null, Set.of(columns[100], columns[2000]), false);
-            List<GroundField.Deposit> deposits = List.of(GroundField.Deposit.of(columns[2048], 5e5));
+            GroundEnvironment environment = GroundEnvironment.of(null, Set.of(columns[count / 40], columns[count / 2 - 48]), false);
+            List<GroundField.Deposit> deposits = List.of(GroundField.Deposit.of(columns[count / 2], 5e5));
             size = field.size();
             step = () -> GroundField.step(field, GroundLedger.EMPTY, deposits, environment, 20.0, GroundSettings.DEFAULT);
         } else {
