@@ -124,12 +124,15 @@ public final class GroundField {
         }
         var work = new Work();
         for (int i = 0; i < columns.length; i++) work.column(columns[i]).a += amounts[i];
+        // One String per compound name: a load reads a new one for every entry.
+        var canonical = new java.util.HashMap<String, String>();
         for (var e : entries) {
             Objects.requireNonNull(e, "entry");
             new Compound(e.name(), e.moles());
             var col = work.columns.get(e.column());
             if (col == null) throw new IllegalArgumentException("compound " + e.name() + " in an unlisted column");
-            if (col.inventory().put(e.name(), e.moles()) != null) throw new IllegalArgumentException("compound " + e.name() + " twice in a column");
+            String name = canonical.computeIfAbsent(e.name(), k -> k);
+            if (col.inventory().put(name, e.moles()) != null) throw new IllegalArgumentException("compound " + e.name() + " twice in a column");
         }
         return work.field();
     }
@@ -249,12 +252,12 @@ public final class GroundField {
         Objects.requireNonNull(settings, "settings");
         if (!(seconds > 0.0) || !Double.isFinite(seconds)) throw new IllegalArgumentException("seconds must be finite and positive: " + seconds);
         var book = ledger.book();
-        var work = Work.of(field);
-        land(work, deposits, book);
-        spread(work, environment, seconds, settings, book);
-        decay(work, environment, seconds, settings, book);
-        truncate(work, environment, settings, book);
-        cap(work, environment, settings, book);
+        var work = Flat.of(field);
+        work.land(deposits, book);
+        work.spread(environment, seconds, settings, book);
+        work.decay(environment, seconds, settings, book);
+        work.truncate(environment, settings, book);
+        work.cap(environment, settings, book);
         var next = work.field();
         next.requireFinite();
         return new Result(next, book.ledger());
@@ -316,130 +319,6 @@ public final class GroundField {
         }
         return c;
     };
-
-    private static void land(Work work, List<Deposit> deposits, GroundLedger.Book book) {
-        var sorted = deposits.toArray(new Deposit[0]);
-        Arrays.sort(sorted, DEPOSIT_ORDER);
-        for (var d : sorted) {
-            boolean any = d.amount() > 0.0;
-            for (var c : d.compounds()) any |= c.moles() > 0.0;
-            if (!any) continue;
-            var col = work.column(d.column());
-            col.a += d.amount();
-            book.amount(Total.DEPOSITED, d.amount());
-            for (var c : d.compounds()) {
-                if (!(c.moles() > 0.0)) continue;
-                col.inventory().merge(c.name(), c.moles(), Double::sum);
-                book.compound(c.name(), Total.DEPOSITED, c.moles());
-            }
-        }
-    }
-
-    /** One transfer of a step's spread: {@code amount}, the donor's share {@code share}. */
-    private record Transfer(long from, long to, double amount, double share) {}
-
-    /** The compound moles that move with a transfer. */
-    private record CompoundMove(long from, long to, String name, double moles) {}
-
-    private static void spread(Work work, GroundEnvironment environment, double seconds, GroundSettings settings, GroundLedger.Book book) {
-        double base = Math.min(GroundSettings.MAXIMUM_FACE_SHARE, settings.spreadShare() * seconds / settings.nominalSeconds());
-        if (!(base > 0.0)) return;
-        double wet = environment.raining() ? settings.wetSpread() : 1.0;
-        var transfers = new ArrayList<Transfer>();
-        var newInflow = new TreeMap<Long, Double>();
-        for (var entry : work.columns.entrySet()) {
-            long key = entry.getKey();
-            if (!environment.loaded(key)) continue;
-            var a = entry.getValue();
-            int x = MapColumns.x(key), z = MapColumns.z(key);
-            for (int f = 0; f < 4; f++) {
-                long other = MapColumns.column(x + DX[f], z + DZ[f]);
-                var b = work.columns.get(other);
-                if (b != null && other < key) continue;
-                if (!environment.loaded(other)) continue;
-                double k = base * wet;
-                if (environment.water(key) || environment.water(other)) k *= settings.waterSpread();
-                k = Math.min(GroundSettings.MAXIMUM_FACE_SHARE, k);
-                double ab = b == null ? 0.0 : b.a;
-                double flow = k * (a.a - ab);
-                if (flow > 0.0) {
-                    transfers.add(new Transfer(key, other, flow, flow / a.a));
-                    if (b == null) newInflow.merge(other, flow, Double::sum);
-                } else if (flow < 0.0) {
-                    transfers.add(new Transfer(other, key, -flow, -flow / ab));
-                }
-            }
-        }
-        if (transfers.isEmpty()) return;
-        // A column not in the field takes a flow only when its inflows reach the cutoff index.
-        var moves = new ArrayList<Transfer>();
-        var compoundMoves = new ArrayList<CompoundMove>();
-        for (var t : transfers) {
-            var inflow = newInflow.get(t.to());
-            if (inflow != null && inflow / settings.reference() < settings.cutoff()) continue;
-            moves.add(t);
-            var inventory = work.columns.get(t.from()).inventory;
-            if (inventory == null) continue;
-            for (var e : inventory.entrySet()) {
-                double moles = e.getValue() * t.share();
-                if (moles > 0.0) compoundMoves.add(new CompoundMove(t.from(), t.to(), e.getKey(), moles));
-            }
-        }
-        // Applied after every flow is known, so the step is simultaneous.
-        for (var m : moves) {
-            work.columns.get(m.from()).a -= m.amount();
-            work.column(m.to()).a += m.amount();
-        }
-        for (var m : compoundMoves) {
-            work.columns.get(m.from()).inventory().merge(m.name(), -m.moles(), Double::sum);
-            work.column(m.to()).inventory().merge(m.name(), m.moles(), Double::sum);
-        }
-        for (var col : work.columns.values()) col.clampNegatives(book);
-    }
-
-    private static void decay(Work work, GroundEnvironment environment, double seconds, GroundSettings settings, GroundLedger.Book book) {
-        double halfLife = settings.halfLifeSeconds() / (environment.raining() ? settings.washout() : 1.0);
-        double keep = DeterministicMath.exp(-LN2 * seconds / halfLife);
-        for (var entry : work.columns.entrySet()) {
-            if (!environment.loaded(entry.getKey())) continue;
-            var col = entry.getValue();
-            double gone = col.a - col.a * keep;
-            col.a -= gone;
-            book.amount(Total.DECAYED, gone);
-            if (col.inventory == null) continue;
-            for (var e : col.inventory.entrySet()) {
-                double lost = e.getValue() - e.getValue() * keep;
-                e.setValue(e.getValue() - lost);
-                book.compound(e.getKey(), Total.DECAYED, lost);
-            }
-        }
-    }
-
-    private static void truncate(Work work, GroundEnvironment environment, GroundSettings settings, GroundLedger.Book book) {
-        var gone = new ArrayList<Long>();
-        for (var entry : work.columns.entrySet()) {
-            if (!environment.loaded(entry.getKey())) continue;
-            var col = entry.getValue();
-            if (col.a / settings.reference() >= settings.cutoff()) continue;
-            book.amount(Total.DECAYED, col.a);
-            if (col.inventory != null) for (var e : col.inventory.entrySet()) book.compound(e.getKey(), Total.DECAYED, e.getValue());
-            gone.add(entry.getKey());
-        }
-        for (long key : gone) work.columns.remove(key);
-    }
-
-    private static void cap(Work work, GroundEnvironment environment, GroundSettings settings, GroundLedger.Book book) {
-        int over = work.columns.size() - settings.maximumColumns();
-        if (over <= 0) return;
-        var loaded = new ArrayList<Long>();
-        for (long key : work.columns.keySet()) if (environment.loaded(key)) loaded.add(key);
-        loaded.sort(Comparator.comparingDouble((Long key) -> work.columns.get(key).a).thenComparingLong(key -> key));
-        for (int i = 0; i < over && i < loaded.size(); i++) {
-            var col = work.columns.remove(loaded.get(i));
-            book.amount(Total.CAPPED, col.a);
-            if (col.inventory != null) for (var e : col.inventory.entrySet()) book.compound(e.getKey(), Total.CAPPED, e.getValue());
-        }
-    }
 
     private void requireFinite() {
         for (double a : amounts) if (!Double.isFinite(a)) throw new IllegalStateException("ground amount " + a);
@@ -516,6 +395,499 @@ public final class GroundField {
                 i++;
             }
             return new GroundField(keys, amounts, entryColumns, entryNames, entryMoles);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // The step's working copy: sorted parallel arrays. Every sum and every booking is made in the order of the
+    // TreeMap-based step it replaced (columns ascending, a column's compounds by name, deposits in DEPOSIT_ORDER,
+    // transfers in visiting order), so the results are the same to the bit.
+
+    private static final class Flat {
+        int n;
+        long[] columns;
+        double[] a;
+        /** Column i's entries are {@code [start[i], start[i + 1])}, by name; within a step an entry may hold 0. */
+        int[] start;
+        String[] names;
+        double[] moles;
+
+        static Flat of(GroundField f) {
+            var w = new Flat();
+            w.n = f.columns.length;
+            w.columns = f.columns.clone();
+            w.a = f.amounts.clone();
+            w.start = new int[w.n + 1];
+            for (int i = 0, e = 0; i < w.n; i++) {
+                w.start[i] = e;
+                while (e < f.entryColumns.length && f.entryColumns[e] == w.columns[i]) e++;
+                w.start[i + 1] = e;
+            }
+            w.names = f.entryNames.clone();
+            w.moles = f.entryMoles.clone();
+            return w;
+        }
+
+        GroundField field() {
+            int m = 0;
+            for (double v : moles) if (v > 0.0) m++;
+            long[] entryColumns = new long[m];
+            String[] entryNames = new String[m];
+            double[] entryMoles = new double[m];
+            int j = 0;
+            for (int i = 0; i < n; i++) {
+                for (int e = start[i]; e < start[i + 1]; e++) {
+                    if (!(moles[e] > 0.0)) continue;
+                    entryColumns[j] = columns[i];
+                    entryNames[j] = names[e];
+                    entryMoles[j] = moles[e];
+                    j++;
+                }
+            }
+            return new GroundField(columns.length == n ? columns : Arrays.copyOf(columns, n), a.length == n ? a : Arrays.copyOf(a, n),
+                    entryColumns, entryNames, entryMoles);
+        }
+
+        // ----- land
+
+        void land(List<Deposit> deposits, GroundLedger.Book book) {
+            var sorted = deposits.toArray(new Deposit[0]);
+            Arrays.sort(sorted, DEPOSIT_ORDER);
+            int counting = 0;
+            for (var d : sorted) {
+                boolean any = d.amount() > 0.0;
+                for (var c : d.compounds()) any |= c.moles() > 0.0;
+                if (!any) continue;
+                sorted[counting++] = d;
+                book.amount(Total.DEPOSITED, d.amount());
+                for (var c : d.compounds()) {
+                    if (c.moles() > 0.0) book.compound(c.name(), Total.DEPOSITED, c.moles());
+                }
+            }
+            if (counting == 0) return;
+            // Merge the old columns with the deposits' columns.
+            int groups = 0;
+            for (int d = 0; d < counting; d++) if (d == 0 || sorted[d].column() != sorted[d - 1].column()) groups++;
+            int size = n + groups;
+            long[] nc = new long[size];
+            double[] na = new double[size];
+            int[] ns = new int[size + 1];
+            int room = names.length;
+            for (int d = 0; d < counting; d++) room += sorted[d].compounds().size();
+            String[] nn = new String[room];
+            double[] nm = new double[room];
+            int e2 = 0;
+            int i = 0, d = 0, o = 0;
+            while (i < n || d < counting) {
+                long next = i < n && (d >= counting || columns[i] <= sorted[d].column()) ? columns[i] : sorted[d].column();
+                boolean old = i < n && columns[i] == next;
+                ns[o] = e2;
+                nc[o] = next;
+                if (d < counting && sorted[d].column() == next) {
+                    double amount = old ? a[i] : 0.0;
+                    TreeMap<String, Double> inventory = new TreeMap<>();
+                    if (old) for (int e = start[i]; e < start[i + 1]; e++) inventory.put(names[e], moles[e]);
+                    for (; d < counting && sorted[d].column() == next; d++) {
+                        amount += sorted[d].amount();
+                        for (var c : sorted[d].compounds()) {
+                            if (c.moles() > 0.0) inventory.merge(c.name(), c.moles(), Double::sum);
+                        }
+                    }
+                    na[o] = amount;
+                    for (var e : inventory.entrySet()) {
+                        nn[e2] = e.getKey();
+                        nm[e2] = e.getValue();
+                        e2++;
+                    }
+                } else {
+                    na[o] = a[i];
+                    for (int e = start[i]; e < start[i + 1]; e++) {
+                        nn[e2] = names[e];
+                        nm[e2] = moles[e];
+                        e2++;
+                    }
+                }
+                if (old) i++;
+                o++;
+            }
+            ns[o] = e2;
+            n = o;
+            columns = nc;
+            a = na;
+            start = Arrays.copyOf(ns, o + 1);
+            names = Arrays.copyOf(nn, e2);
+            moles = Arrays.copyOf(nm, e2);
+        }
+
+        // ----- spread
+
+        void spread(GroundEnvironment environment, double seconds, GroundSettings settings, GroundLedger.Book book) {
+            double base = Math.min(GroundSettings.MAXIMUM_FACE_SHARE, settings.spreadShare() * seconds / settings.nominalSeconds());
+            if (!(base > 0.0)) return;
+            double wet = environment.raining() ? settings.wetSpread() : 1.0;
+            // Transfers in visiting order; a destination not in the field is -(slot + 1).
+            int tn = 0;
+            int room = Math.max(16, 2 * n);
+            int[] tFrom = new int[room], tTo = new int[room];
+            double[] tAmount = new double[room], tShare = new double[room];
+            var slots = new LongIntMap(Math.max(16, n / 4));
+            long[] newKeys = new long[8];
+            double[] newInflow = new double[8];
+            int newCount = 0;
+            for (int i = 0; i < n; i++) {
+                long key = columns[i];
+                if (!environment.loaded(key)) continue;
+                int x = MapColumns.x(key), z = MapColumns.z(key);
+                for (int f = 0; f < 4; f++) {
+                    long other = MapColumns.column(x + DX[f], z + DZ[f]);
+                    int j = Arrays.binarySearch(columns, 0, n, other);
+                    if (j >= 0 && other < key) continue;
+                    if (!environment.loaded(other)) continue;
+                    double k = base * wet;
+                    if (environment.water(key) || environment.water(other)) k *= settings.waterSpread();
+                    k = Math.min(GroundSettings.MAXIMUM_FACE_SHARE, k);
+                    double ab = j < 0 ? 0.0 : a[j];
+                    double flow = k * (a[i] - ab);
+                    int from, to;
+                    double amount, share;
+                    if (flow > 0.0) {
+                        from = i;
+                        amount = flow;
+                        share = flow / a[i];
+                        if (j >= 0) {
+                            to = j;
+                        } else {
+                            int slot = slots.get(other);
+                            if (slot < 0) {
+                                if (newCount == newKeys.length) {
+                                    newKeys = Arrays.copyOf(newKeys, newCount * 2);
+                                    newInflow = Arrays.copyOf(newInflow, newCount * 2);
+                                }
+                                slot = newCount++;
+                                slots.put(other, slot);
+                                newKeys[slot] = other;
+                                newInflow[slot] = flow;
+                            } else {
+                                newInflow[slot] += flow;
+                            }
+                            to = -(slot + 1);
+                        }
+                    } else if (flow < 0.0) {
+                        from = j;
+                        to = i;
+                        amount = -flow;
+                        share = -flow / ab;
+                    } else {
+                        continue;
+                    }
+                    if (tn == tFrom.length) {
+                        tFrom = Arrays.copyOf(tFrom, tn * 2);
+                        tTo = Arrays.copyOf(tTo, tn * 2);
+                        tAmount = Arrays.copyOf(tAmount, tn * 2);
+                        tShare = Arrays.copyOf(tShare, tn * 2);
+                    }
+                    tFrom[tn] = from;
+                    tTo[tn] = to;
+                    tAmount[tn] = amount;
+                    tShare[tn] = share;
+                    tn++;
+                }
+            }
+            if (tn == 0) return;
+            // A column not in the field takes a flow only when its inflows reach the cutoff index.
+            boolean[] acceptedSlot = new boolean[newCount];
+            for (int s = 0; s < newCount; s++) acceptedSlot[s] = !(newInflow[s] / settings.reference() < settings.cutoff());
+            double[] newA = new double[newCount];
+            // Compound moves, from the donors' inventories before anything moves.
+            int cn = 0;
+            int moveRoom = Math.max(16, 2 * moles.length);
+            int[] cFrom = new int[moveRoom], cTo = new int[moveRoom], cEntry = new int[moveRoom];
+            double[] cMoles = new double[moveRoom];
+            for (int t = 0; t < tn; t++) {
+                if (tTo[t] < 0 && !acceptedSlot[-tTo[t] - 1]) continue;
+                int from = tFrom[t];
+                for (int e = start[from]; e < start[from + 1]; e++) {
+                    double m = moles[e] * tShare[t];
+                    if (!(m > 0.0)) continue;
+                    if (cn == cFrom.length) {
+                        cFrom = Arrays.copyOf(cFrom, cn * 2);
+                        cTo = Arrays.copyOf(cTo, cn * 2);
+                        cEntry = Arrays.copyOf(cEntry, cn * 2);
+                        cMoles = Arrays.copyOf(cMoles, cn * 2);
+                    }
+                    cFrom[cn] = from;
+                    cTo[cn] = tTo[t];
+                    cEntry[cn] = e;
+                    cMoles[cn] = m;
+                    cn++;
+                }
+            }
+            // Applied after every flow is known, so the step is simultaneous.
+            for (int t = 0; t < tn; t++) {
+                int to = tTo[t];
+                if (to < 0 && !acceptedSlot[-to - 1]) continue;
+                a[tFrom[t]] -= tAmount[t];
+                if (to >= 0) a[to] += tAmount[t];
+                else newA[-to - 1] += tAmount[t];
+            }
+            // Compounds: a recipient without the compound gets an extra entry, keyed by (column, name).
+            int xn = 0;
+            int[] xColumn = new int[8]; // column index, or n + slot for a new column
+            String[] xName = new String[8];
+            double[] xMoles = new double[8];
+            // Extras by (column reference, name): the step's few names get small ids.
+            var nameIds = new java.util.HashMap<String, Integer>();
+            var extra = new LongIntMap(16);
+            for (int c = 0; c < cn; c++) {
+                int e = cEntry[c];
+                moles[e] += -cMoles[c];
+                String name = names[e];
+                int to = cTo[c];
+                int found = -1;
+                if (to >= 0) {
+                    for (int r = start[to]; r < start[to + 1]; r++) {
+                        if (names[r].equals(name)) {
+                            found = r;
+                            break;
+                        }
+                    }
+                }
+                if (found >= 0) {
+                    moles[found] += cMoles[c];
+                    continue;
+                }
+                int ref = to >= 0 ? to : n + (-to - 1);
+                Integer id = nameIds.get(name);
+                if (id == null) {
+                    id = nameIds.size();
+                    nameIds.put(name, id);
+                }
+                long extraKey = (long) ref << 20 | id;
+                int x = extra.get(extraKey);
+                if (x < 0) {
+                    if (xn == xColumn.length) {
+                        xColumn = Arrays.copyOf(xColumn, xn * 2);
+                        xName = Arrays.copyOf(xName, xn * 2);
+                        xMoles = Arrays.copyOf(xMoles, xn * 2);
+                    }
+                    x = xn++;
+                    extra.put(extraKey, x);
+                    xColumn[x] = ref;
+                    xName[x] = name;
+                    xMoles[x] = 0.0;
+                }
+                xMoles[x] += cMoles[c];
+            }
+            rebuild(newKeys, newA, acceptedSlot, newCount, xColumn, xName, xMoles, xn);
+            clampNegatives(book);
+        }
+
+        /** The columns with the accepted new ones in key order, each column's entries with its extras by name. */
+        private void rebuild(long[] newKeys, double[] newA, boolean[] acceptedSlot, int newCount, int[] xColumn, String[] xName,
+                double[] xMoles, int xn) {
+            int accepted = 0;
+            for (int s = 0; s < newCount; s++) if (acceptedSlot[s]) accepted++;
+            if (accepted == 0 && xn == 0) return;
+            // The accepted new slots in key order.
+            long[] order = new long[accepted];
+            int[] slotOf = new int[accepted];
+            {
+                int q = 0;
+                for (int s = 0; s < newCount; s++) if (acceptedSlot[s]) order[q++] = newKeys[s];
+                Arrays.sort(order);
+                var position = new LongIntMap(Math.max(16, accepted));
+                for (int s = 0; s < newCount; s++) if (acceptedSlot[s]) position.put(newKeys[s], s);
+                for (int r = 0; r < accepted; r++) slotOf[r] = position.get(order[r]);
+            }
+            // Extras grouped by column reference, each group by name.
+            // Counting sort of the extras by column reference; within one, by name.
+            int refs = n + newCount;
+            int[] first = new int[refs + 1];
+            for (int x = 0; x < xn; x++) first[xColumn[x] + 1]++;
+            for (int r0 = 0; r0 < refs; r0++) first[r0 + 1] += first[r0];
+            int[] byRef = new int[xn];
+            int[] fill = Arrays.copyOf(first, refs);
+            for (int x = 0; x < xn; x++) byRef[fill[xColumn[x]]++] = x;
+            for (int r0 = 0; r0 < refs; r0++) {
+                for (int p = first[r0] + 1; p < first[r0 + 1]; p++) {
+                    int v = byRef[p];
+                    int q = p - 1;
+                    while (q >= first[r0] && xName[byRef[q]].compareTo(xName[v]) > 0) {
+                        byRef[q + 1] = byRef[q];
+                        q--;
+                    }
+                    byRef[q + 1] = v;
+                }
+            }
+            int size = n + accepted;
+            long[] nc = new long[size];
+            double[] na = new double[size];
+            int[] ns = new int[size + 1];
+            int entries = moles.length + xn;
+            String[] nn = new String[entries];
+            double[] nm = new double[entries];
+            int i = 0, r = 0, o = 0, e2 = 0;
+            while (i < n || r < accepted) {
+                boolean old = r >= accepted || i < n && columns[i] < order[r];
+                ns[o] = e2;
+                int ref;
+                if (old) {
+                    nc[o] = columns[i];
+                    na[o] = a[i];
+                    ref = i;
+                } else {
+                    nc[o] = order[r];
+                    na[o] = newA[slotOf[r]];
+                    ref = n + slotOf[r];
+                }
+                int e = old ? start[i] : 0, end = old ? start[i + 1] : 0;
+                int x = first[ref], xe = first[ref + 1];
+                while (e < end || x < xe) {
+                    if (x >= xe || e < end && names[e].compareTo(xName[byRef[x]]) < 0) {
+                        nn[e2] = names[e];
+                        nm[e2] = moles[e];
+                        e++;
+                    } else {
+                        int xi = byRef[x++];
+                        nn[e2] = xName[xi];
+                        nm[e2] = xMoles[xi];
+                    }
+                    e2++;
+                }
+                if (old) i++;
+                else r++;
+                o++;
+            }
+            ns[o] = e2;
+            n = o;
+            columns = nc;
+            a = na;
+            start = ns;
+            names = nn;
+            moles = nm;
+        }
+
+        /**
+         * A move may leave a rounding residue below 0: it is set to 0 and the residue booked {@code decayed} (negative),
+         * as the air field books its own, so the ledger still closes exactly.
+         */
+        private void clampNegatives(GroundLedger.Book book) {
+            for (int i = 0; i < n; i++) {
+                if (a[i] < 0.0) {
+                    book.amount(Total.DECAYED, a[i]);
+                    a[i] = 0.0;
+                }
+                for (int e = start[i]; e < start[i + 1]; e++) {
+                    if (moles[e] < 0.0) {
+                        book.compound(names[e], Total.DECAYED, moles[e]);
+                        moles[e] = 0.0;
+                    }
+                }
+            }
+        }
+
+        // ----- decay, truncate, cap
+
+        void decay(GroundEnvironment environment, double seconds, GroundSettings settings, GroundLedger.Book book) {
+            double halfLife = settings.halfLifeSeconds() / (environment.raining() ? settings.washout() : 1.0);
+            double keep = DeterministicMath.exp(-LN2 * seconds / halfLife);
+            for (int i = 0; i < n; i++) {
+                if (!environment.loaded(columns[i])) continue;
+                double gone = a[i] - a[i] * keep;
+                a[i] -= gone;
+                book.amount(Total.DECAYED, gone);
+                for (int e = start[i]; e < start[i + 1]; e++) {
+                    double lost = moles[e] - moles[e] * keep;
+                    moles[e] -= lost;
+                    book.compound(names[e], Total.DECAYED, lost);
+                }
+            }
+        }
+
+        void truncate(GroundEnvironment environment, GroundSettings settings, GroundLedger.Book book) {
+            boolean[] gone = null;
+            for (int i = 0; i < n; i++) {
+                if (!environment.loaded(columns[i])) continue;
+                if (a[i] / settings.reference() >= settings.cutoff()) continue;
+                book.amount(Total.DECAYED, a[i]);
+                for (int e = start[i]; e < start[i + 1]; e++) book.compound(names[e], Total.DECAYED, moles[e]);
+                if (gone == null) gone = new boolean[n];
+                gone[i] = true;
+            }
+            if (gone != null) remove(gone);
+        }
+
+        void cap(GroundEnvironment environment, GroundSettings settings, GroundLedger.Book book) {
+            int over = n - settings.maximumColumns();
+            if (over <= 0) return;
+            int loaded = 0;
+            for (int i = 0; i < n; i++) if (environment.loaded(columns[i])) loaded++;
+            int[] order = new int[loaded];
+            for (int i = 0, q = 0; i < n; i++) if (environment.loaded(columns[i])) order[q++] = i;
+            // The lowest amount first, then the smaller key (Double.compare, then Long.compare): a total order.
+            sortByAmount(order);
+            boolean[] gone = new boolean[n];
+            for (int q = 0; q < over && q < order.length; q++) {
+                int i = order[q];
+                book.amount(Total.CAPPED, a[i]);
+                for (int e = start[i]; e < start[i + 1]; e++) book.compound(names[e], Total.CAPPED, moles[e]);
+                gone[i] = true;
+            }
+            remove(gone);
+        }
+
+        private void sortByAmount(int[] order) {
+            int[] buffer = new int[order.length];
+            for (int width = 1; width < order.length; width <<= 1) {
+                for (int from = 0; from < order.length; from += 2 * width) {
+                    int middle = Math.min(from + width, order.length), to = Math.min(from + 2 * width, order.length);
+                    int p = from, q = middle;
+                    for (int k = from; k < to; k++) {
+                        boolean left = q >= to || p < middle && before(order[p], order[q]);
+                        buffer[k] = left ? order[p++] : order[q++];
+                    }
+                }
+                System.arraycopy(buffer, 0, order, 0, order.length);
+            }
+        }
+
+        private boolean before(int p, int q) {
+            int c = Double.compare(a[p], a[q]);
+            return c < 0 || c == 0 && columns[p] <= columns[q];
+        }
+
+        private void remove(boolean[] gone) {
+            int keptColumns = 0, keptEntries = 0;
+            for (int i = 0; i < n; i++) {
+                if (!gone[i]) {
+                    keptColumns++;
+                    keptEntries += start[i + 1] - start[i];
+                }
+            }
+            long[] nc = new long[keptColumns];
+            double[] na = new double[keptColumns];
+            int[] ns = new int[keptColumns + 1];
+            String[] nn = new String[keptEntries];
+            double[] nm = new double[keptEntries];
+            int o = 0, e2 = 0;
+            for (int i = 0; i < n; i++) {
+                if (gone[i]) continue;
+                nc[o] = columns[i];
+                na[o] = a[i];
+                ns[o] = e2;
+                int count = start[i + 1] - start[i];
+                System.arraycopy(names, start[i], nn, e2, count);
+                System.arraycopy(moles, start[i], nm, e2, count);
+                e2 += count;
+                o++;
+            }
+            ns[o] = e2;
+            n = o;
+            columns = nc;
+            a = na;
+            start = ns;
+            names = nn;
+            moles = nm;
         }
     }
 }

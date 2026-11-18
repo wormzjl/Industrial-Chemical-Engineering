@@ -1,0 +1,216 @@
+import com.wormzjl.icheme.science.pollution.*;
+import com.wormzjl.icheme.science.pollution.Environment.Cell;
+import java.lang.management.ManagementFactory;
+import java.util.*;
+
+/**
+ * Times PollutionField.step on fixed fields of about 500, 4000 and 8192 cubes, and GroundField.step on 4096 columns.
+ * Each step starts from the same field, so the work per step is constant. Usage (from the worktree root, after
+ * compileJava):
+ *
+ * <pre>java -cp build/classes/java/main tools/pollution-bench/Bench.java &lt;case&gt; [warmup s] [measure s]</pre>
+ *
+ * case: air-512, air-4096, air-8192, ground-<columns> (ground-1000, ground-4096, ground-16384), wanted-8192, digest, or counts (one step of every air case, with the environment calls
+ * counted, no timing). Prints steps/s and allocated bytes per step.
+ */
+public class Bench {
+    /** A mixed environment like the digest's, over the whole block, with an open fallback; counts its cell calls. */
+    static final class Counting implements Environment {
+        final Map<Long, Cell> cells;
+        long calls;
+
+        Counting(Map<Long, Cell> cells) {
+            this.cells = cells;
+        }
+
+        public Cell cell(long key) {
+            calls++;
+            Cell c = cells.get(key);
+            return c != null ? c : OPEN;
+        }
+
+        public boolean raining() {
+            return false;
+        }
+
+        public int minimumY() {
+            return -4;
+        }
+
+        public int maximumY() {
+            return 19;
+        }
+    }
+
+    static final Cell OPEN = new Cell(1, true, true);
+
+    record Case(PollutionField field, Counting environment, List<Release> releases) {}
+
+    /** A block of nx × ny × nz cubes, every cube above the cutoff, so the front around it is live. */
+    static Case air(int nx, int ny, int nz) {
+        Random random = new Random(11);
+        Map<Long, Cell> cells = new HashMap<>();
+        int channels = Channel.values().length;
+        long[] keys = new long[nx * ny * nz];
+        int n = 0;
+        for (int x = 0; x < nx; x++) {
+            for (int y = 0; y < ny; y++) {
+                for (int z = 0; z < nz; z++) {
+                    long key = CubeKey.of(x - nx / 2, y - 2, z - nz / 2);
+                    keys[n++] = key;
+                    double u = random.nextDouble();
+                    cells.put(key, u < 0.8 ? OPEN : u < 0.92 ? new Cell(1, false, true) : u < 0.97 ? new Cell(0.4, false, true) : new Cell(0, false, true));
+                }
+            }
+        }
+        Arrays.sort(keys);
+        double[] amounts = new double[keys.length * channels];
+        for (int i = 0; i < keys.length; i++) {
+            double r = Math.abs(CubeKey.x(keys[i])) + Math.abs(CubeKey.y(keys[i]) - 2) + Math.abs(CubeKey.z(keys[i]));
+            double index = 5.0 / (1.0 + 0.1 * r * r) + 0.01;
+            for (int c = 0; c < channels; c++) {
+                amounts[i * channels + c] = (c == 1 && (i & 3) != 0) ? 0.0 : index * PollutionField.CUBE_AIR_MOLES * (0.5 + 0.2 * c);
+            }
+        }
+        List<Release> releases = List.of(new Release(CubeKey.of(0, 2, 0), Channel.TOXIC, 2e5),
+                new Release(CubeKey.of(1, 2, 0), Channel.PARTICULATE, 5e4));
+        return new Case(PollutionField.of(keys, amounts), new Counting(cells), releases);
+    }
+
+    static Case airCase(String name) {
+        return switch (name) {
+            case "air-512" -> air(8, 8, 8);
+            case "air-4096" -> air(16, 16, 16);
+            case "air-8192" -> air(32, 16, 16);
+            default -> throw new IllegalArgumentException(name);
+        };
+    }
+
+    static long allocated() {
+        return ((com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean()).getCurrentThreadAllocatedBytes();
+    }
+
+    public static void main(String[] args) {
+        String name = args[0];
+        double warmup = args.length > 1 ? Double.parseDouble(args[1]) : 60;
+        double measure = args.length > 2 ? Double.parseDouble(args[2]) : 60;
+        PollutionSettings settings = PollutionSettings.DEFAULT;
+        if (name.equals("counts")) {
+            for (String c : List.of("air-512", "air-4096", "air-8192")) {
+                Case k = airCase(c);
+                k.environment().calls = 0;
+                PollutionField.Result r = PollutionField.step(k.field(), PollutionLedger.EMPTY, k.releases(), k.environment(), 20.0, settings);
+                System.out.printf("%s: cubes %d -> %d, cell calls per step %d%n", c, k.field().size(), r.field().size(), k.environment().calls);
+            }
+            return;
+        }
+        if (name.equals("digest")) {
+            // The bits of five chained steps of each air case: an optimisation must leave them alone.
+            for (String c : List.of("air-512", "air-4096", "air-8192")) {
+                Case k = airCase(c);
+                PollutionField field = k.field();
+                PollutionLedger ledger = PollutionLedger.EMPTY;
+                long h = 0xcbf29ce484222325L;
+                for (int p = 0; p < 5; p++) {
+                    PollutionField.Result r = PollutionField.step(field, ledger, k.releases(), k.environment(), 20.0, settings);
+                    field = r.field();
+                    ledger = r.ledger();
+                    for (long key : field.keys()) h = mix(h, key);
+                    for (double a : field.amounts()) h = mix(h, Double.doubleToRawLongBits(a));
+                    for (double v : ledger.values()) h = mix(h, Double.doubleToRawLongBits(v));
+                }
+                System.out.printf("%s: digest %s%n", c, Long.toHexString(h));
+            }
+            return;
+        }
+        Runnable step;
+        int size;
+        if (name.startsWith("air-")) {
+            Case k = airCase(name);
+            size = k.field().size();
+            step = () -> PollutionField.step(k.field(), PollutionLedger.EMPTY, k.releases(), k.environment(), 20.0, settings);
+        } else if (name.equals("wanted-8192")) {
+            // The server thread's share of a pass: the engine's core and wanted sets, which the environment walks.
+            Case k = airCase("air-8192");
+            var engine = new com.wormzjl.icheme.runtime.pollution.PollutionEngine();
+            engine.restore(k.field(), PollutionLedger.EMPTY, List.of());
+            size = k.field().size();
+            // As PollutionService builds them each pass: the core, then the core and its faces.
+            step = () -> {
+                Object core = engine.core();
+                Object wanted = core instanceof long[] c ? KeySets.cubeFaces(c) : engine.wanted();
+                if (wanted == null) {
+                    throw new IllegalStateException();
+                }
+            };
+        } else if (name.startsWith("ground-")) {
+            int count = Integer.parseInt(name.substring(7));
+            int side = (int) Math.ceil(Math.sqrt(count));
+            long[] columns = new long[count];
+            double[] amounts = new double[count];
+            List<GroundField.Entry> entries = new ArrayList<>();
+            int n = 0;
+            for (int x = -side / 2; x < side - side / 2 && n < count; x++) {
+                for (int z = -side / 2; z < side - side / 2 && n < count; z++) {
+                    columns[n++] = MapColumns.column(x, z);
+                }
+            }
+            Arrays.sort(columns);
+            for (int i = 0; i < columns.length; i++) {
+                amounts[i] = GroundField.GROUND_REFERENCE * (0.05 + (i % 97) / 50.0);
+                if (i % 3 == 0) {
+                    entries.add(new GroundField.Entry(columns[i], "Hydrogen sulfide", 1e4 + i));
+                }
+            }
+            GroundField field = GroundField.of(columns, amounts, entries);
+            GroundEnvironment environment0 = GroundEnvironment.of(null, Set.of(columns[count / 40], columns[count / 2 - 48]), false);
+            // -Dsorted=true: the environment the runtime builds since the cache change (sorted arrays, no boxing).
+            GroundEnvironment environment = environment0;
+            if (Boolean.getBoolean("sorted")) {
+                long[] water = {columns[count / 40], columns[count / 2 - 48]};
+                Arrays.sort(water);
+                try {
+                    environment = (GroundEnvironment) GroundEnvironment.class.getMethod("sorted", long[].class, long[].class, boolean.class)
+                            .invoke(null, null, water, false);
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException("no sorted ground environment in these classes", e);
+                }
+            }
+            List<GroundField.Deposit> deposits = List.of(GroundField.Deposit.of(columns[count / 2], 5e5));
+            size = field.size();
+            GroundEnvironment chosen = environment;
+            step = () -> GroundField.step(field, GroundLedger.EMPTY, deposits, chosen, 20.0, GroundSettings.DEFAULT);
+        } else {
+            throw new IllegalArgumentException(name);
+        }
+        run(step, warmup);
+        long bytes0 = allocated();
+        long t0 = System.nanoTime();
+        long steps = 0;
+        long end = t0 + (long) (measure * 1e9);
+        while (System.nanoTime() < end) {
+            step.run();
+            steps++;
+        }
+        double seconds = (System.nanoTime() - t0) / 1e9;
+        long bytes = allocated() - bytes0;
+        System.out.printf("%s: size %d, %d steps in %.1f s, %.1f steps/s, %.0f bytes/step%n", name, size, steps, seconds,
+                steps / seconds, (double) bytes / steps);
+    }
+
+    /** The digest's hash (FNV-1a over the bytes), as in Digest.java and PollutionDriftTest. */
+    static long mix(long h, long v) {
+        for (int b = 0; b < 8; b++) {
+            h ^= (v >>> (8 * b)) & 0xff;
+            h *= 0x100000001b3L;
+        }
+        return h;
+    }
+
+    static void run(Runnable step, double seconds) {
+        long end = System.nanoTime() + (long) (seconds * 1e9);
+        while (System.nanoTime() < end) {
+            step.run();
+        }
+    }
+}

@@ -15,7 +15,7 @@ Up: [code guide](README.md)
 
 ## In one paragraph
 
-The air of every dimension is divided into 16 m cubes (a chunk section). Each cube holds four amounts: toxic, combustible, corrosive, particulate. An amount is a sum of released moles, each divided by its compound's reference (IDLH for toxic and corrosive, the lower flammability limit for combustible; particulate is mass over 1.75 g/m³). The **index** of a cube is its amount over the air it holds, so index 1 means "at the reference". The fluid network's releases are queued; every 100 ticks a worker job steps the field (exchange with the six face neighbours, settling, decay, truncation) and the server thread installs the result. Effects, ignition, the meter and the monitor only read the installed field. Pollution never refuses a world and never stops the server: every entry point is guarded, and a part that fails three passes in a row turns itself off for the session.
+The air of every dimension is divided into 16 m cubes (a chunk section). Each cube holds four amounts: toxic, combustible, corrosive, particulate. An amount is a sum of released moles, each divided by its compound's reference (IDLH for toxic and corrosive, the lower flammability limit for combustible; particulate is mass over 1.75 g/m³). The **index** of a cube is its amount over the air it holds, so index 1 means "at the reference". The fluid network's releases are queued; every 100 ticks a worker job steps the field (exchange with the six face neighbours, an upward drift, settling, decay, truncation) and the server thread installs the result. Effects, ignition, the meter and the monitor only read the installed field. Pollution never refuses a world and never stops the server: every entry point is guarded, and a part that fails three passes in a row turns itself off for the session.
 
 ## Class map
 
@@ -67,8 +67,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 ## Main flow
 
 1. **Release.** `Releases` reads an island's booked boundary transfers, maps its compound list onto the world's by name and calls `PollutionService.release(dimension, position, channel, amount)`. The release waits in the engine's pending list. A release outside the dimension's height is dropped.
-2. **Pass.** Every 100 ticks `begin` hands the installed field, the pending releases and the cells of the active cubes to a worker (`PollutionField.step`). Process time per pass is 5 s × `fluid.timeScale`.
-3. **Step.** Releases are added; each face exchanges `k × min(φa, φb) × (index difference)` with k = min(1/7, 0.12 × dt/20) and φ the air share; particulate settles 0.05 downward and to `GROUND` at a floor; each amount decays by its half-life (rain ×4 for corrosive and particulate); an amount below the cutoff with no neighbour above it is dropped and booked `DISSIPATED`; above 8192 cubes the smallest are dropped.
+2. **Pass.** Every 100 ticks `begin` hands the installed field, the pending releases and the cells of the active cubes to a worker (`PollutionField.step`). The service builds the cells on the server thread: `PollutionEngine.core()` and `KeySets.cubeFaces` give the wanted cubes as a sorted `long[]`; `CellCache.snapshot` reads at most 256 sections (the core first), keeps reads 60 s in sorted arrays with shared `Cell`s, and answers the step from an array environment. The ground's columns go the same way (`groundWanted`, `WaterCache`, `GroundEnvironment.sorted`). Process time per pass is 5 s × `fluid.timeScale`.
+3. **Step.** Releases are added; each face exchanges `k × min(φa, φb) × (index difference)` with k = min(1/7, 0.12 × dt/20) and φ the air share; each open, loaded cube also drifts `r × min(φa, φb) / φa` of its amounts to the cube above, whatever the index there, with r = min(1/7, `riseShare` × dt/20), `riseShare` 0.12 (config `pollution.riseShare`; above the top it is `DISSIPATED`, into a closed or unloaded cube nothing, into a new cube in the same front slot as the face share); particulate settles 0.05 downward and to `GROUND` at a floor; each amount decays by its half-life (rain ×4 for corrosive and particulate); an amount below the cutoff with no neighbour above it is dropped and booked `DISSIPATED`; above 8192 cubes the smallest are dropped.
 4. **Install.** `complete` replaces the field and the ledger. Burns made while the pass was in flight are applied again to its result.
 5. **Read.** `PollutionEffects`, `Ignition`, `PollutionMeters`, the monitor's block entity and `ControlHosts.readMonitor` read `index` of the installed field. None of them steps it.
 
@@ -155,7 +155,7 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 
 ## Traps
 
-- One cube filled alone loses about 72 % to its six faces in one pass. A test that needs an index after a pass fills the cube and its neighbours.
+- One cube filled alone loses about 84 % in one pass: 0.12 to each face and 0.12 more upward. A test that needs an index after a pass fills the cube and its neighbours.
 - `PollutionService.tick` returns early when pollution is off; the meters and the monitor's ticker run outside it so they can show "off".
 - A burn must go through `PollutionEngine.burn`, never straight to the field: a pass in flight would overwrite it.
 - Equipment cells have a resistance of 3.6e6, so `onBlockExploded` never fires for them in a vanilla blast. The breach comes from the `Detonate` listener.
@@ -166,4 +166,4 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - No class outside `compat/curios/` may name a Curios type (`RespiratorDataTest`). Curios is compile-only; no test loads it, and only a dev client with Curios proves the Curios slot and its look.
 - `LargeMapScreen` and `refreshIconsIfOpen` are FTB internals, not its API. A new FTB version that moves them turns the overlay off, not the game.
 
-**Snapshot:** the one-amount rework, 2026-11-18.
+**Snapshot:** the upward drift and the faster step, 2026-11-18.

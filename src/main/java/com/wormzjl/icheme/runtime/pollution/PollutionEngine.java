@@ -1,14 +1,13 @@
 package com.wormzjl.icheme.runtime.pollution;
 
 import com.wormzjl.icheme.science.pollution.Channel;
-import com.wormzjl.icheme.science.pollution.CubeKey;
 import com.wormzjl.icheme.science.pollution.Environment;
 import com.wormzjl.icheme.science.pollution.GroundEnvironment;
 import com.wormzjl.icheme.science.pollution.GroundField;
 import com.wormzjl.icheme.science.pollution.GroundLedger;
 import com.wormzjl.icheme.science.pollution.GroundSettings;
 import com.wormzjl.icheme.science.pollution.GroundSnapshot;
-import com.wormzjl.icheme.science.pollution.MapColumns;
+import com.wormzjl.icheme.science.pollution.KeySets;
 import com.wormzjl.icheme.science.pollution.PollutionField;
 import com.wormzjl.icheme.science.pollution.PollutionLedger;
 import com.wormzjl.icheme.science.pollution.PollutionSettings;
@@ -20,9 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.TreeMap;
-import java.util.TreeSet;
 
 /**
  * The pollution of one dimension between passes (batch 2026-11-15-pollution-system, WP3; plan section 5): the installed
@@ -415,19 +412,13 @@ public final class PollutionEngine {
     }
 
     /** The columns the next pass's ground environment must describe: the ground's and the pending deposits', and their four neighbours, ascending. */
-    public Set<Long> groundWanted() {
-        var core = new TreeSet<Long>();
-        for (int i = 0; i < ground.size(); i++) core.add(ground.column(i));
-        core.addAll(pendingDeposits.keySet());
-        var out = new TreeSet<Long>(core);
-        for (long column : core) {
-            int x = MapColumns.x(column), z = MapColumns.z(column);
-            out.add(MapColumns.column(x - 1, z));
-            out.add(MapColumns.column(x + 1, z));
-            out.add(MapColumns.column(x, z - 1));
-            out.add(MapColumns.column(x, z + 1));
-        }
-        return out;
+    public long[] groundWanted() {
+        long[] columns = new long[ground.size()];
+        for (int i = 0; i < columns.length; i++) columns[i] = ground.column(i);
+        long[] waiting = new long[pendingDeposits.size()];
+        int n = 0;
+        for (long column : pendingDeposits.keySet()) waiting[n++] = column;
+        return KeySets.columnFaces(KeySets.union(columns, waiting));
     }
 
     public PollutionLedger ledger() {
@@ -488,30 +479,25 @@ public final class PollutionEngine {
         return dropped;
     }
 
-    /** The cubes that hold something or wait for a release, ascending. */
-    public Set<Long> core() {
-        var out = new TreeSet<Long>();
-        for (int i = 0; i < field.size(); i++) {
-            out.add(field.key(i));
+    /** The cubes that hold something or wait for a release: a sorted set ({@link KeySets}). */
+    public long[] core() {
+        long[] cubes = new long[field.size()];
+        for (int i = 0; i < cubes.length; i++) {
+            cubes[i] = field.key(i);
         }
+        // The pending keys are in cube order, a cube once per channel.
+        long[] waiting = new long[pending.size()];
+        int n = 0;
         for (var key : pending.keySet()) {
-            out.add(key.cube());
+            if (n == 0 || waiting[n - 1] != key.cube()) {
+                waiting[n++] = key.cube();
+            }
         }
-        return out;
+        return KeySets.union(cubes, java.util.Arrays.copyOf(waiting, n));
     }
 
     /** The cubes the next pass's environment must describe: {@link #core} and the six face neighbours of each, ascending. */
-    public Set<Long> wanted() {
-        var core = core();
-        var out = new TreeSet<Long>(core);
-        for (long cube : core) {
-            out.add(CubeKey.offset(cube, -1, 0, 0));
-            out.add(CubeKey.offset(cube, 1, 0, 0));
-            out.add(CubeKey.offset(cube, 0, -1, 0));
-            out.add(CubeKey.offset(cube, 0, 1, 0));
-            out.add(CubeKey.offset(cube, 0, 0, -1));
-            out.add(CubeKey.offset(cube, 0, 0, 1));
-        }
-        return out;
+    public long[] wanted() {
+        return KeySets.cubeFaces(core());
     }
 }
