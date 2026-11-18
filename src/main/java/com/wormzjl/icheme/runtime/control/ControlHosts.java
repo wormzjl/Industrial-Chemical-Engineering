@@ -24,8 +24,6 @@ final class ControlHosts {
     private final ControlFacts facts;
     private final Map<Long, DataPort> equipmentPorts = new HashMap<>();
     private final Map<Long, BuiltInInputs.Binding> bindings = new HashMap<>();
-    private final Map<Long, java.lang.ref.WeakReference<EquipmentShellBlockEntity>> columnCells =
-            new HashMap<>();
     private final Map<Long, List<ControlInput>> memberInputs = new HashMap<>();
     private final Map<Long, Set<Long>> columnMembers = new HashMap<>();
     private final Map<Long, Map<Long, BuiltInInputs.Binding>> memberBindings = new HashMap<>();
@@ -241,7 +239,6 @@ final class ControlHosts {
                                 origin.getY(),
                                 origin.getZ()),
                         List.of()));
-        columnCells.put(id, new java.lang.ref.WeakReference<>(cell));
         bind(new InstrumentHosts.Host(id, cell, List.of(), false));
     }
 
@@ -430,7 +427,6 @@ final class ControlHosts {
 
     void removeHost(long host) {
         bindings.remove(host);
-        columnCells.remove(host);
         memberInputs.remove(host);
         columnMembers.remove(host);
         memberBindings.remove(host);
@@ -515,7 +511,7 @@ final class ControlHosts {
     /** The column hosts whose data socket {@code controller}'s bus reaches, in host order (W6.2: the DCS's column page). */
     List<Long> columns(UUID controller) {
         var out = new ArrayList<Long>();
-        for (long host : columnCells.keySet()) if (column(host) != null && wired(controller, host)) out.add(host);
+        for (long host : bindings.keySet()) if (columnMaster(host) != null && wired(controller, host)) out.add(host);
         out.sort(null);
         return out;
     }
@@ -532,13 +528,6 @@ final class ControlHosts {
         for (long host : bindings.keySet()) if (converter(host) && wired(controller, host)) out.add(host);
         out.sort(null);
         return out;
-    }
-
-    /** A loaded cell of column host {@code host}, or null: the column's origin and level for its Operation commands. */
-    EquipmentShellBlockEntity column(long host) {
-        var ref = columnCells.get(host);
-        var cell = ref == null ? null : ref.get();
-        return cell == null || cell.isRemoved() || cell.getLevel() == null || cell.shape() == null ? null : cell;
     }
 
     /** The master position of column host {@code host}, or null where {@code host} is no column's (W6.3: a column loop's output). */

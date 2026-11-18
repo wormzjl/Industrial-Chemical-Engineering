@@ -23,9 +23,9 @@ code of every block it relied on in `AssemblyStore`. A fluid edit, a structure p
 or removed, or a chunk load that changes a coded block reverts the report to not validated. The column's screen is an
 engine presentation session (`AssemblyPresentation`): opening it shows the stored view at once, a check or a command
 answers on the engine's bucket (AGENTS.md, "Engine schedule and player-facing updates"). An exchanger's report reaches
-its sides' controls as `FluidWorldAuthority.Lines` (`ExchangerLines`). A column whose report is complete can be started:
-`ColumnStarts` turns its boundary valves, nozzles and members into a `FluidWorldAuthority.ColumnStart`. The laying tool
-watches the reports of the columns near the player (`AssemblyWatch`).
+its sides' controls as `FluidWorldAuthority.Lines` (`ExchangerLines`). A column with a complete report can start from
+its Assembly screen or a DCS linked to its data socket. `ColumnStarts` uses the saved report, built shapes and registry
+to name its boundary valves, nozzles and members. The laying tool watches the reports of nearby columns (`AssemblyWatch`).
 
 ## Class map
 
@@ -67,7 +67,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
    screens show it at the next bucket (table below).
 5. **Start, Stop, Apply.** `icheme:assembly_operation` → `AssemblyPresentation.act`, queued as Validate is →
    `AssemblyService.start` (→ `ColumnStarts.build` → `FluidWorldAuthority.startColumn`), `stop`, `setpoints`; every open
-   screen of the column gets the answer.
+   screen of the column gets the answer. The DCS routes its queued commands through the same service at the column's
+   saved master position. [Wired control and FE power](wired-control-power.md#a-column-on-the-dcs).
 
 ## Contracts
 
@@ -105,15 +106,16 @@ engine line. The ledger side has its own ([column-run.md](column-run.md)).
   not from `at`. An inlet's column side is against the valve's facing, an outlet's along it, and the port's cell is one
   step from the valve on that side. Conditions come from `PortConditions.estimate`.
 - **Nozzles** are `ShapeRasterizer.ports` of the column's shape; `startColumn` walks from their pipe blocks to the
-  boundary valves.
+  boundary valves in the fluid registry.
 - **Condenser.** The water sides come from every unit (`SlotReport.units`) of the slot `ColumnBlueprint.waterCooled`
   names (the condenser's shells for an exchanger, the trim's for air then water, none for an air cooler;
-  `EquipmentStructure.heatSides`). Where the condenser slot is not water-cooled, the start carries the bare tube of every
-  air cooler bank it holds (`HeatSides.of(...).area()`).
-- **Members.** The heat sides of every unit in slot `REBOILER` and in each `pumparoundCooler(i)`, the air condenser's
-  fan sides (an AIR_COOLER member's sides whose heat unit has fans) and the movers of `REFLUX_PUMP` and each
-  `pumparoundPump(i)` (a casing's through `EquipmentStructure.movers`, or an in-line pump's registration at the slot's
-  place), as `ColumnUnit.Members`.
+  `EquipmentStructure.heatSides`). Air and air-then-water condensers contribute the bare-tube area of every air cooler
+  bank in the condenser slot (`HeatSides.of(...).area()`).
+- **Members.** The saved assembly identifies each unit in `REBOILER` and `pumparoundCooler(i)`, each air condenser bank,
+  and each pump at `REFLUX_PUMP` and `pumparoundPump(i)`. `SavedEquipment.at` resolves constructed members' shapes by
+  origin. `EquipmentStructure.registrationsAtNodes` resolves their heat sides and movers in layout order, and an in-line
+  pump uses the device registered at the slot's position. The Start request carries the reboiler and pumparound sides
+  for utility assignment, and the fan sides and movers as `ColumnUnit.Members`.
 - **A start reverts nothing.** A held device keeps its structural code, and a port has ports, so `LevelGround.piece` is
   null and it has no code.
 - **Stops.** `revert` and `removed` call `stopColumn` first. A dismantle also calls `dismantled`
@@ -121,9 +123,9 @@ engine line. The ledger side has its own ([column-run.md](column-run.md)).
   alone, so its unit stays, stopped.
 - **Set points.** `setpoints(level, origin, values)` takes feed, condenser, reflux, reboiler, steam…, draws…,
   pumparounds…, holds the feed to the design rate and refuses a wrong count. A column that has not run yet takes them on
-  its design's set points (a stopped unit with no stations), unless it has no operating point or is a vacuum column.
-- **`operation`** gives the tab's snapshot, a read: the unit's view; otherwise stopped on the design's set points
-  (editable unless a vacuum column), or NOT_READY for a vacuum column or a refused Start; null without an operating point.
+  its saved design's set points (a stopped unit with no stations), unless it has no operating point or is a vacuum column.
+- **`operation`** reads the unit's published state or uses the saved design for a stopped column with no unit. A vacuum
+  column or a locally refused Start shows NOT_READY. Without a unit or an operating point it returns null.
 
 **The laying tool's watch** (`AssemblyWatch`, `AssemblyToolClient`).
 
@@ -143,10 +145,9 @@ engine line. The ledger side has its own ([column-run.md](column-run.md)).
   nozzles directly and other equipment through its watched report. Diagrams are cached by design and cleared with the
   watch or its next view.
 
-**Other readers.** `ControlHosts.refreshColumnMembers` (each `ControlService` cadence, before it validates edits) reads
-the accepted cached report and the loaded members' registration identities for the column's C1 instrumentation; it does
-not walk, load chunks or run the column solver ([wired-control-power.md](wired-control-power.md)). `AssemblyNetwork`'s
-scheduled send to an open screen also fires `TutorialTriggers.assemblyShown` ([tutorial.md](tutorial.md)).
+**Other readers.** Before each control cadence applies edits, `ControlHosts.refreshColumnMembers` resolves the column's
+C1 instrumentation from the stored report, saved member shapes and registry identities. [Wired control and FE power](wired-control-power.md).
+`AssemblyNetwork`'s scheduled send to an open screen also fires `TutorialTriggers.assemblyShown`. [Tutorial](tutorial.md).
 
 ## Laws and constants
 

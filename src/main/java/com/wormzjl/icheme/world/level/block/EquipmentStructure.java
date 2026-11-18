@@ -184,20 +184,20 @@ public final class EquipmentStructure {
         return found;
     }
 
-    /** The heat sides registered at {@code vessel}'s nodes, by registry identity: a heat unit's sides (a column's condenser, C6b). */
-    public static List<Long> heatSides(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+    /** The heat sides registered at the nodes of the shape built at {@code origin}, in node order. */
+    public static List<Long> heatSides(FluidWorldAuthority world, PhysicalFluidTopology.Position origin, EquipmentShape shape) {
         var sides = new ArrayList<Long>();
-        for (long id : heldAtNodes(world, level, vessel)) {
+        for (long id : registrationsAtNodes(world, origin, shape)) {
             var r = world.registrations().get(id);
             if (r != null && r.device().heat() != null) sides.add(id);
         }
         return sides;
     }
 
-    /** The fluid movers registered at {@code vessel}'s nodes: a pump casing's (W5 of batch 2026-11-10-column-failure-modes). */
-    public static List<Long> movers(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+    /** The movers registered at the nodes of the shape built at {@code origin}, in node order. */
+    public static List<Long> movers(FluidWorldAuthority world, PhysicalFluidTopology.Position origin, EquipmentShape shape) {
         var out = new ArrayList<Long>();
-        for (long id : heldAtNodes(world, level, vessel)) {
+        for (long id : registrationsAtNodes(world, origin, shape)) {
             var r = world.registrations().get(id);
             if (r != null && r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover) out.add(id);
         }

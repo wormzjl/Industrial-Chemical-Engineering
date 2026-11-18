@@ -340,14 +340,17 @@ final class ControlPublication {
     private void columns(CompoundTag root, ControlPanelMenu menu, UUID owner) {
         var list = new ListTag();
         for (long host : hosts.columns(owner)) {
-            var cell = hosts.column(host);
+            var master = hosts.columnMaster(host);
+            var origin = new BlockPos(master.x(), master.y(), master.z());
             var tag = new CompoundTag();
             tag.putLong("id", host);
             tag.putString("label", String.format(Locale.ROOT, "COL-%04d", host));
-            tag.putLong("position", cell.origin().asLong());
+            tag.putLong("position", origin.asLong());
             list.add(tag);
-            if (host != menu.column() || !(cell.getLevel() instanceof net.minecraft.server.level.ServerLevel level)) continue;
-            var view = com.wormzjl.icheme.runtime.assembly.AssemblyService.operation(level, cell.origin(), null,
+            if (host != menu.column()) continue;
+            var level = world.serverLevel(master.dimension());
+            if (level == null) continue;
+            var view = com.wormzjl.icheme.runtime.assembly.AssemblyService.operation(level, origin, null,
                     valve -> com.wormzjl.icheme.network.FluidNetwork.opening(world, valve));
             if (view != null) {
                 root.putLong("column", host);

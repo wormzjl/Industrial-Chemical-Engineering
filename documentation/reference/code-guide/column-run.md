@@ -50,10 +50,11 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 
 ## Main flow
 
-1. **Start.** The tab sends `AssemblyNetwork.Action.START`, a queued command (`AssemblyPresentation.act`).
-   `AssemblyService.start` calls `ColumnStarts.build`, which reads the assembly report and the operating point and names
-   each port: its boundary valve, its cell and its estimated conditions. `FluidWorldAuthority.startColumn` does the
-   rest as one queued ledger event.
+1. **Start.** The Assembly tab queues `AssemblyNetwork.Action.START` through `AssemblyPresentation.act`. A linked DCS
+   queues Start through `ControlService`. Both reach `AssemblyService.start` at the built column's origin.
+   `ColumnStarts.build` reads the saved assembly report and operating point. It resolves ports, boundary valves,
+   utilities and powered members from the saved shapes and fluid registrations. `FluidWorldAuthority.startColumn`
+   builds one queued ledger event, even when the plant's chunks are unloaded.
 2. **Hold.** The event walks from the column's nozzles to the boundary valves, marks each device on the way
    `withSuspendedBy(unit)`, adds one port device per station and saves a `ColumnUnit`. Stations keep their accounts
    across a restart; a restart keeps the player's set points if they are `compatible` with the design.
@@ -234,15 +235,16 @@ and pressures and temperatures stay the table's; `DIFFERENTIAL` (`COLUMN:differe
 `differential_pressure`) reads the live drop. `FluidWorldAuthority.columnInstrument` is read-only.
 
 **The tab.** `AssemblyNetwork.Host.view` adds `AssemblyService.operation(level, origin, refusal, opening)` unless the
-column has no design; the view is `ColumnOperation.view` (a read of the last cycle), else the design's set points;
+column has no design; the view is `ColumnOperation.view` (a read of the last cycle), else the saved design's set points;
 `NOT_READY` "a vacuum column cannot run yet" for a column with an ejector. Each station shows its rate, temperature,
 pressure, fill and the valve's opening (`FluidNetwork.opening`, a stored read that advances no island); duties booked
 against the table at the set feed (an air condenser adds a FANS duty); `Solve` the trigger, warm or cold, the age; the
 run's `conditions`, `accepted` and `Trays`. Start, Stop and Apply are `OperationPayload` commands on the presentation
 bucket; `AssemblyService.setpoints` clamps the feed to the design rate and refuses a wrong count;
 `FluidWorldAuthority.editColumn` queues a set point and calls `ColumnOperation.edited`. A column that never ran gets a
-stopped unit with no stations when its set points are applied. A DCS sends the same three actions over the data link
-(`ColumnCommands`, [process-control.md](process-control.md)).
+stopped unit with no stations when its set points are applied. A linked DCS addresses the same operations by saved host
+and master position. The console can acknowledge Stop while the port-removal event is queued. It publishes the stopped
+view after the event commits. [Wired control and FE power](wired-control-power.md#a-column-on-the-dcs).
 
 ## Laws and constants
 
@@ -286,6 +288,7 @@ stopped unit with no stations when its set points are applied. A DCS sends the s
 | Probes, the live drop | `ColumnUnit.Probes`, `drop` | `ColumnProbeTest` (`theLiveDropIsTheSolvedOneAtTheTablesFeedAndItsDryPartGoesWithTheSquare`) |
 | Facts, shapes, the wire, the page | `ColumnFacts`, `ColumnUnit`, `OperationView`, `OperationColumn` | `FluidFactsCompatTest`, `EquipmentShapeCompatTest` (`equipmentGates`), `AssemblyNetworkCodecTest`, `AssemblyPresentationTest`, `OperationColumnTest` |
 | DCS and loops | `ColumnCommands`, `ControlLaw.column`, `ControlPlans.columnFeed`, `feedRate` | `ControlSystemTest`, `BuiltInInputsTest` |
+| DCS Operation and commands with unloaded equipment | `ControlHosts`, `ControlService`, `ColumnStarts` | GameTest `ColumnOperationGameTests.aRestoredDcsRunsAnUnloadedColumnAndItsMembers` |
 | In the game | the whole run | GameTests `ColumnOperationGameTests` (`aColumnRunsInItsPlantStopsAndLeaves`, `aDcsListsStartsAppliesStopsAndSeesABlockedProduct`, `aMenuReadAdvancesNoIsland`) |
 
 Hand reviews, not gates: `ColumnOperationReviewWorld.aCrudeColumnRuns` and
