@@ -281,7 +281,7 @@ final class ControlHosts {
     /**
      * Binds creative motor {@code unit} standing at {@code pos} with its shaft out of {@code facing} as a data host (part C of
      * PUMP_SPEED_SHUT_VALVE_REVIEW.md): its socket ({@link DataPorts#creativeMotor}) is a control fact keyed by the unit, kept
-     * where a cable is wired to it ({@link DataPorts#remount}). No block entity: the unit and its settings are the engine's.
+     * where a cable is wired to it ({@link DataPorts#remount}). Its block entity keeps only a copy of the socket fact; the unit and its settings are the engine's.
      */
     void bindCreativeMotor(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pos, net.minecraft.core.Direction facing, ShaftUnit unit) {
         var port = equipmentPorts.get(unit.id());
