@@ -15,6 +15,10 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.35.2] - 2026-11-18
+
+On `claude/column-testing-sizing-26b5b9` (version chosen by the owner). Formats: pollution store `icheme_pollution` schema 2 (the ground field); no other format number moves; protocol stays `icheme-7` (display-only payload changes take no number).
+
 ### Added
 
 - Default equipment names (`2026-11-18-default-equipment-names`, on `claude/default-equipment-names-0caa95`): a structure built with no name takes a plant tag, its kind's letters and the lowest free number from 101 in its dimension (three pumps in a row: P-101, P-102, P-103; columns C, drums V, exchangers E, tanks TK, heaters H, reactors R, compressors K, drivers M), shown on its nameplate, screens and the build message; it is an ordinary name the player can change or clear. Typed names, valves, sensors and pipe devices, and equipment built before are unchanged. No format changes.
