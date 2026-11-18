@@ -16,6 +16,7 @@ Purpose: a water intake that draws from a real water body, and a waste outfall t
 
 - 2026-11-18: build (`476a06b86`, `66a5a2e34`). The water intake (`Placement.waterIntake`, `WaterBody`, `FluidDeviceBlock.waterIntake`), the waste outfall (`Placement.outfall`, `Releases.outfall`, `boundaryHalf` takes a portless passive void's own loss), the falling-water noise, placeholder models (`WaterIntakeGeometry`, `OutfallGeometry`), registration, English lines, the `still/water` guide sentence. No format change. The outfall's remaining liquid (`OUTFALL_YIELD` 1) tripped the brief's stop rule on a heavy cut: sent to the main thread as owner item O1.
 - 2026-11-18: "Ground only" (owner): `Releases.outfall` splits the stream into vapour (air) and rest (toxic, corrosive and solids to `PollutionLedger` GROUND through `Sink.ground`, `PollutionService.ground`, `PollutionEngine.ground`); `OUTFALL_YIELD` removed. The intake GameTest waits for a pass on the closed revision before it measures.
+- 2026-11-18: stateFor option A (main thread): `FluidWorldAuthority.waterIntake` is the one stored-facts test that picks the water intake block, the status clause and the edit target; `Placement.waterCharge` removed; `FluidFactsCompatTest` shows a saved gas intake keeps every byte.
 
 ## Code areas
 

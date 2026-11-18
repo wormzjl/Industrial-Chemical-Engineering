@@ -537,10 +537,21 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Registration placeOutfall(PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing){return placement.placeOutfall(position,facing);}
     /** The status clause of a water intake whose block finds no water body: its boundary is closed until it does. */
     public static final String NO_WATER_BODY="NO WATER BODY";
-    /** Whether registration {@code r} is a water intake: a generator that is the world outside holding a water body's charge. */
-    public static boolean waterIntake(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.GENERATOR&&r.spec().ambient()&&Placement.waterCharge(r.spec());}
-    /** Whether registration {@code r} is a gas intake: a generator that is the atmosphere. */
-    public static boolean gasIntake(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.GENERATOR&&r.spec().ambient()&&!Placement.waterCharge(r.spec());}
+    /**
+     * Whether registration {@code r} stands as the water intake block, not the gas intake block. The one place that tells
+     * the two apart (batch 2026-11-18-water-intake-outfall, option A): it reads stored facts only, an ambient generator
+     * whose stored contents are water (its water mole fraction above 0.5; the air's is under 4 %, a water intake's 1), and
+     * selects a block. It is never physics: both intakes give their spec's own contents at 298.15 K and 101 325 Pa. The
+     * block {@code FluidDeviceBlock.stateFor} stands, the NO WATER BODY status clause ({@code ViewBuilder}), the water body
+     * edit's target ({@link #waterBody}) and the edit refusal's words all call it.
+     */
+    public static boolean waterIntake(WorldTopologyLedger.Registration r){
+        if(r==null||r.device().kind()!=TopologyCompiler.Kind.GENERATOR||!r.spec().ambient())return false;
+        // The network's conserved order ends with water (MaterialAxis).
+        var n=r.spec().composition();return n.length>0&&n[n.length-1]>.5;
+    }
+    /** Whether registration {@code r} is a gas intake: an ambient generator that is not a water intake ({@link #waterIntake}). */
+    public static boolean gasIntake(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.GENERATOR&&r.spec().ambient()&&!waterIntake(r);}
     /** Whether registration {@code r} is a waste outfall: a sink that is the world outside. */
     public static boolean outfall(WorldTopologyLedger.Registration r){return r!=null&&r.device().kind()==TopologyCompiler.Kind.VOID&&r.spec().ambient();}
     /**

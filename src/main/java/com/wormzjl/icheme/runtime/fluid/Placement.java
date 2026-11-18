@@ -135,7 +135,7 @@ final class Placement {
      * pressure (the water body's surface; a large body is unchanged by what a pump draws from it); 1 m at the joined
      * pipe's bore {@code bore}, its strainer an entry loss of {@link #INTAKE_LOSS} velocity heads, as the gas intake's.
      * Switched on ({@code generatorEnabled}) while its block touches a water body ({@code WaterBody}); off, it is a closed
-     * boundary. It is told from a gas intake by its charge, pure water ({@link #waterCharge}).
+     * boundary. Which block it stands as: {@code FluidWorldAuthority.waterIntake}.
      */
     static WorldTopologyLedger.Registration waterIntake(long id,PhysicalFluidTopology.Position position,PhysicalFluidTopology.Direction facing,double bore,MaterialCatalog catalog,boolean supplying) {
         var device=PhysicalFluidTopology.Device.builder(id,position,TopologyCompiler.Kind.GENERATOR,facing,new PipeResistance.Geometry(1,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,INTAKE_LOSS),new FlowControl.Passive()).generatorEnabled(supplying).build();
@@ -143,15 +143,6 @@ final class Placement {
         var spec=new FluidDeviceSpec(1,com.wormzjl.icheme.science.fluid.network.CoolingTower.AIR_TEMPERATURE,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE,
                 FluidDeviceSpec.water(catalog).composition(),SlurryFeed.NONE,height,false,com.wormzjl.icheme.science.fluid.network.VesselGeometry.prism(1,height),null,0,0,null,false,true);
         return new WorldTopologyLedger.Registration(device,spec,0);
-    }
-    /**
-     * Whether an ambient generator's charge is a water body's, not the air's: its water holds more than half of it (the
-     * air's water is under 4 mol % at any humidity the game uses; a water intake's is 1).
-     */
-    static boolean waterCharge(FluidDeviceSpec spec) {
-        var n=spec.composition();int water=n.length-1;
-        // The network's conserved order ends with water (MaterialAxis); a list without water at its end holds no water body.
-        return water>=0&&n[water]>.5;
     }
     /**
      * Registers a waste outfall at {@code position} (batch 2026-11-18-water-intake-outfall): a one-block sink open to the
