@@ -62,6 +62,7 @@ public final class IChemEClient {
         com.wormzjl.icheme.network.FluidNetwork.forgetDelivered();
         TankRenderer.clear();
         EquipmentBodyRenderer.release();
+        EquipmentReflectionRenderer.release();
         SightGlassRenderer.clear();
         MoverSounds.clear();
         DriverSounds.clear();

@@ -213,8 +213,8 @@ public final class FxBatch {
         room(EMITTERS.size());
         int count = 0, shown = 0;
         try {
-            // Heat haze: the SHADER path only, and only with heat_haze on (owner X6 A).
-            boolean haze = path == FxPath.SHADER && ClientConfig.heatHaze();
+            // Heat haze: the SHADER path only, and only with heat_haze on (owner X6 A); FxPath.of reads its switch.
+            boolean haze = FxPath.of(FxKind.HAZE) == FxPath.SHADER;
             for (var emitter : EMITTERS) {
                 if (FxGuard.effect(emitter.type()).disabled() || emitter.kind() == FxKind.HAZE && !haze) continue;
                 double x = emitter.x(), y = emitter.y(), z = emitter.z(), r = Math.max(.1, emitter.radius());
@@ -231,7 +231,7 @@ public final class FxBatch {
             FxBudget.allot(pixels, wanted, count, density, FxBudget.FRAME_QUADS, allotted, order, scratch);
             double cx = camera.x, cy = camera.y, cz = camera.z;
             for (int i = 0; i < count; i++) {
-                int quads = path == FxPath.SHADER ? FxBudget.quantize(allotted[i], wanted[i]) : allotted[i];
+                int quads = FxPath.of(candidates[i].kind()) == FxPath.SHADER ? FxBudget.quantize(allotted[i], wanted[i]) : allotted[i];
                 if (quads <= 0) continue;
                 visible[shown] = candidates[i];
                 quadsOf[shown] = quads;
@@ -254,9 +254,13 @@ public final class FxBatch {
                 n = 0;
                 for (int k = 0; k < shown; k++) if (visible[sorted[k]].kind() != FxKind.HAZE) members[n++] = sorted[k];
                 for (int from = 0, to; from < n; from = to) {
-                    int key = runKey(visible[members[from]].kind(), true);
+                    var kind = visible[members[from]].kind();
+                    int key = runKey(kind, true);
                     for (to = from + 1; to < n && runKey(visible[members[to]].kind(), true) == key; to++) ;
-                    drawShader(event, visible[members[from]].kind(), members, from, to, now, epoch, cx, cy, cz, daylight, sunX, sunY);
+                    // A program switched off or not loaded: its run on the compatible path, kind by kind (smoke and plumes share fx_plume).
+                    if (FxPath.of(kind) == FxPath.SHADER) drawShader(event, kind, members, from, to, now, epoch, cx, cy, cz, daylight, sunX, sunY);
+                    else for (var each : FxKind.VALUES)
+                        if (each != FxKind.HAZE && runKey(each, true) == key) drawCompatible(event, each, members, from, to, now, cx, cy, cz, daylight);
                 }
             } else {
                 for (int from = 0, to; from < shown; from = to) {

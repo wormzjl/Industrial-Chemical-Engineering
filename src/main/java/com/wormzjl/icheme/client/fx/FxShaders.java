@@ -27,17 +27,21 @@ import java.util.function.Consumer;
  * <li>{@code icheme:fx_haze}: heat shimmer over a screen copy in {@code Sampler0}, which {@link FxBatch} takes before the haze draws (W8).</li>
  * <li>{@code icheme:rendertype_wiring}: the instrument wiring, the entity cutout shader plus {@code NormalMap} and
  * {@code SpecularMap} (W2 writes its lighting).</li>
+ * <li>{@code icheme:equipment_reflection}: the sky, ground and sun mirrored on equipment, added over the chunk mesh
+ * ({@code EquipmentReflectionRenderer}; batch 2026-11-18-equipment-reflections).</li>
  * </ul>
  * The three effect shaders take {@link FxPackedSink}'s packed {@code NEW_ENTITY} layout; the wiring takes plain
- * {@code NEW_ENTITY}. Reloaded with the resources: each reload clears all four and registers them again. A shader that
- * fails to compile or link is logged and leaves {@link #failed()} true, so every effect takes the COMPATIBLE path.
+ * {@code NEW_ENTITY}; the reflection takes {@code BLOCK} with its own packing. Reloaded with the resources: each reload
+ * clears all five and registers them again. A shader that fails to compile or link is logged once and puts only its own
+ * effect on its compatible path ({@link #path}); each has its own switch ({@link FxShaderProgram}).
  */
 @EventBusSubscriber(modid = IChemE.MOD_ID, value = Dist.CLIENT)
 public final class FxShaders {
     private static final Logger LOGGER = LoggerFactory.getLogger("icheme/fx");
-    public static final ResourceLocation FLAME = id("fx_flame"), PLUME = id("fx_plume"), HAZE = id("fx_haze"), WIRING = id("rendertype_wiring");
+    public static final ResourceLocation FLAME = id("fx_flame"), PLUME = id("fx_plume"), HAZE = id("fx_haze"), WIRING = id("rendertype_wiring"),
+            REFLECTION = id("equipment_reflection");
 
-    private static volatile @Nullable ShaderInstance flame, plume, haze, wiring;
+    private static volatile @Nullable ShaderInstance flame, plume, haze, wiring, reflection;
 
     private FxShaders() {
     }
@@ -48,11 +52,12 @@ public final class FxShaders {
 
     @SubscribeEvent
     public static void register(RegisterShadersEvent event) {
-        flame = plume = haze = wiring = null;
+        flame = plume = haze = wiring = reflection = null;
         register(event, FLAME, FxPackedSink.FORMAT, s -> flame = s);
         register(event, PLUME, FxPackedSink.FORMAT, s -> plume = s);
         register(event, HAZE, FxPackedSink.FORMAT, s -> haze = s);
         register(event, WIRING, DefaultVertexFormat.NEW_ENTITY, s -> wiring = s);
+        register(event, REFLECTION, DefaultVertexFormat.BLOCK, s -> reflection = s);
     }
 
     private static void register(RegisterShadersEvent event, ResourceLocation name, VertexFormat format, Consumer<ShaderInstance> loaded) {
@@ -63,9 +68,30 @@ public final class FxShaders {
         }
     }
 
-    /** True until every shader has loaded, and after any of them failed: the effects then take the COMPATIBLE path. */
+    /** True until every shader has loaded, and after any of them failed (the F3 line; each effect asks {@link #path}). */
     public static boolean failed() {
-        return flame == null || plume == null || haze == null || wiring == null;
+        return flame == null || plume == null || haze == null || wiring == null || reflection == null;
+    }
+
+    /** The program's shader once it compiled and linked, else null. */
+    public static @Nullable ShaderInstance shader(FxShaderProgram program) {
+        return switch (program) {
+            case FLAME -> flame;
+            case PLUME -> plume;
+            case HAZE -> haze;
+            case WIRING -> wiring;
+            case REFLECTION -> reflection;
+        };
+    }
+
+    /**
+     * The path {@code program}'s effect takes now ({@link FxShaderProgram#path}): from the effects mode, the Iris answer,
+     * whether its shader loaded and its switch. Any thread: the chunk meshers read it for the reflection's shell look.
+     */
+    public static FxPath path(FxShaderProgram program) {
+        var iris = FxCompat.iris();
+        return program.path(com.wormzjl.icheme.client.ClientConfig.effectsMode(), iris != null && iris.known(), iris != null && iris.packInUse(),
+                shader(program) != null, com.wormzjl.icheme.client.ClientConfig.shader(program));
     }
 
     public static @Nullable ShaderInstance flame() {
@@ -82,6 +108,10 @@ public final class FxShaders {
 
     public static @Nullable ShaderInstance wiring() {
         return wiring;
+    }
+
+    public static @Nullable ShaderInstance reflection() {
+        return reflection;
     }
 
     private static final String[] SAMPLERS = new String[12];

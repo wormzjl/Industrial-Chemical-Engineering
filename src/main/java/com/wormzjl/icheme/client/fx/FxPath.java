@@ -16,6 +16,20 @@ public enum FxPath {
     OFF;
 
     private static volatile FxPath current = COMPATIBLE;
+    /** This frame's path per effect kind (render thread): {@link #current} where it is not SHADER, else its program's ({@link FxShaders#path}). */
+    private static final FxPath[] KINDS = new FxPath[FxKind.values().length];
+
+    static {
+        java.util.Arrays.fill(KINDS, COMPATIBLE);
+    }
+
+    /**
+     * This frame's path for {@code kind}: the frame's path, or COMPATIBLE where its shader program's switch is off or it
+     * failed to load (flames and smoke can differ; a haze off is not drawn).
+     */
+    public static FxPath of(FxKind kind) {
+        return KINDS[kind.ordinal()];
+    }
 
     /** This frame's path; COMPATIBLE before the first frame. */
     public static FxPath current() {
@@ -36,10 +50,16 @@ public enum FxPath {
     /** The choice itself failed: the path that draws correctly with or without a pack. */
     static void fallback() {
         current = COMPATIBLE;
+        java.util.Arrays.fill(KINDS, COMPATIBLE);
     }
 
-    /** Chooses this frame's path from the client config, Iris and the shader state. */
+    /**
+     * Chooses this frame's path from the client config and Iris, and each kind's from its shader program
+     * ({@link FxShaderProgram}): a program that failed to load or is switched off puts only its own kind on COMPATIBLE.
+     */
     static void refresh() {
-        current = choose(ClientConfig.effectsMode(), FxCompat.iris(), FxShaders.failed());
+        var all = choose(ClientConfig.effectsMode(), FxCompat.iris(), false);
+        for (var kind : FxKind.VALUES) KINDS[kind.ordinal()] = all == SHADER ? FxShaders.path(FxShaderProgram.of(kind)) : all;
+        current = all;
     }
 }

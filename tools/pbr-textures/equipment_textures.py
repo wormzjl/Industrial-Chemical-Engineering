@@ -24,6 +24,11 @@ The sprites:
   paintedCladding), its laps as they are, twice the texels, with a stainless band strap every metre (owner,
   2026-11-15: "Keep straps"). The baked sprites keep today's pixels outside the straps and today's mean colour.
 
+Plain sprites (batch 2026-11-18-equipment-reflections): every other painted body and bare steel sprite the reflection
+pass draws gets <name>_flat.png (a copy: it has no relief), a flat <name>_flat_n.png and a uniform <name>_flat_s.png with
+the smoothness and F0 of its class in ReflectionClass (PLAIN below; ReflectionClassTest checks them), so a shader pack
+mirrors it too. They are read from the mod's own textures (src/main/resources/assets/icheme/textures/block).
+
 _n: R, G = tangent-space normal X (+u) and Y (+v, DirectX "Y-" as LabPBR asks), B = AO, A = height (1 .. 255).
 _s: R = smoothness, G = F0 (dielectrics, linear) or a LabPBR metal id (230 iron, 232 aluminium), B = porosity (0),
 A = emission (0).
@@ -290,6 +295,54 @@ SPRITES = {
 }
 
 
+# ---- Plain sprites: no relief, LabPBR maps from their reflection class (ReflectionClass: smoothness = 1 - sqrt(blur),
+# F0 = 0.05 linear for paint, the iron id 230 for steel).
+
+PAINT = (115, 13)   # ReflectionClass.PAINT: blur 0.30, F0 0.05
+STEEL = (104, 230)  # ReflectionClass.STEEL: blur 0.35, a metal (iron)
+PLAIN = {
+    "painted_shell": PAINT, "painted_head": PAINT, "painted_support": PAINT, "painted_machine": PAINT, "equipment_motor": PAINT,
+    "ac_header": PAINT, "pump_casting": PAINT, "pump_volute": PAINT, "pump_fins": PAINT, "pump_joint": PAINT,
+    "motor_frame": PAINT, "motor_plain": PAINT, "painted_heater": PAINT, "equipment_handrail": PAINT,
+    "equipment_pipe": STEEL, "equipment_flange": STEEL, "equipment_bolt": STEEL, "shaft_steel": STEEL,
+    "still_stainless": STEEL, "still_carbon_steel": STEEL, "equipment_grating": STEEL,
+}
+SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "src", "main", "resources", "assets", "icheme", "textures", "block")
+
+
+def read_png(path):
+    """An 8-bit RGB or RGBA, non-interlaced PNG as rows of RGB tuples."""
+    with open(path, "rb") as f:
+        data = f.read()
+    i, idat = 8, b""
+    while i < len(data):
+        length, kind = struct.unpack(">I", data[i:i + 4])[0], data[i + 4:i + 8]
+        body = data[i + 8:i + 8 + length]
+        i += 12 + length
+        if kind == b"IHDR":
+            w, h, depth, colour, _, _, interlace = struct.unpack(">IIBBBBB", body)
+            if depth != 8 or colour not in (2, 6) or interlace: sys.exit("%s: only 8-bit RGB or RGBA, not interlaced" % path)
+        elif kind == b"IDAT":
+            idat += body
+    raw, bpp = zlib.decompress(idat), (3 if colour == 2 else 4)
+    stride, rows, prev, p = w * bpp, [], bytearray(w * bpp), 0
+    for _ in range(h):
+        kind, line = raw[p], bytearray(raw[p + 1:p + 1 + stride])
+        p += 1 + stride
+        for x in range(stride):
+            a = line[x - bpp] if x >= bpp else 0
+            b, c = prev[x], (prev[x - bpp] if x >= bpp else 0)
+            if kind == 1: line[x] = (line[x] + a) & 255
+            elif kind == 2: line[x] = (line[x] + b) & 255
+            elif kind == 3: line[x] = (line[x] + (a + b) // 2) & 255
+            elif kind == 4:
+                pa, pb, pc = abs(b - c), abs(a - c), abs(a + b - 2 * c)
+                line[x] = (line[x] + (a if pa <= pb and pa <= pc else b if pb <= pc else c)) & 255
+        rows.append([tuple(line[x * bpp:x * bpp + 3]) for x in range(w)])
+        prev = line
+    return rows
+
+
 def main():
     if len(sys.argv) != 2: sys.exit("usage: equipment_textures.py <output folder>")
     out = sys.argv[1]
@@ -301,6 +354,12 @@ def main():
         png(os.path.join(out, name + "_flat_n.png"), normal_map(height, shading), True)
         png(os.path.join(out, name + "_flat_s.png"), specular_map(parts), True)
     print("wrote %s (+ _flat, _flat_n, _flat_s) to %s" % (", ".join(SPRITES), out))
+    for name, (smooth, f0) in PLAIN.items():
+        pixels = read_png(os.path.join(SOURCE, name + ".png"))
+        png(os.path.join(out, name + "_flat.png"), [[p + (255,) for p in row] for row in pixels], False)
+        png(os.path.join(out, name + "_flat_n.png"), [[(128, 128, 255, 255) for _ in row] for row in pixels], True)
+        png(os.path.join(out, name + "_flat_s.png"), [[(smooth, f0, 0, 0) for _ in row] for row in pixels], True)
+    print("wrote the plain %s (_flat, _flat_n, _flat_s) to %s" % (", ".join(PLAIN), out))
 
 
 if __name__ == "__main__":

@@ -12,11 +12,30 @@ public enum ShellVariant {
     /** Today's look: the relief baked into the albedo, the directional shade and the sheen baked into the vertex colour. */
     BAKED,
     /** A shader pack in use: the flat albedo, an unshaded vertex colour; the pack lights it from the sprite's {@code _n} and {@code _s}. */
-    FLAT;
+    FLAT,
+    /**
+     * The reflection pass draws (batch 2026-11-18-equipment-reflections): BAKED without the sheen, whose fixed highlight
+     * the pass's view-dependent one replaces; the directional shade stays.
+     */
+    REFLECTED;
 
     /** FLAT while a shader pack is in use and {@code pbr_textures} is on; BAKED otherwise. */
     public static ShellVariant of(boolean pbrTextures, boolean packInUse) {
-        return pbrTextures && packInUse ? FLAT : BAKED;
+        return of(pbrTextures, packInUse, false);
+    }
+
+    /**
+     * As {@link #of(boolean, boolean)}, REFLECTED in BAKED's place while the reflection pass draws ({@code reflections}:
+     * its program on the SHADER path, which a shader pack never is, and a strength above 0).
+     */
+    public static ShellVariant of(boolean pbrTextures, boolean packInUse, boolean reflections) {
+        if (pbrTextures && packInUse) return FLAT;
+        return reflections && !packInUse ? REFLECTED : BAKED;
+    }
+
+    /** Whether quads of this variant bake the sheen over their shade. */
+    public boolean sheen() {
+        return this == BAKED;
     }
 
     /** A cell's quads in the model's cache: the variant they were baked on and the cell's key. */

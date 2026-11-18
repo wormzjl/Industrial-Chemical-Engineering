@@ -71,6 +71,8 @@ public final class EquipmentBodyRenderer {
     private static final Matrix4f POSE=new Matrix4f();
     private static TextureAtlasSprite atlasMarker;
     private static RenderDetail builtDetail;
+    /** Whether the bodies kept bake the sheen ({@code ShellVariant.sheen}): off while the reflection pass draws. */
+    private static boolean builtSheen;
     /** What the last region map was built from: the frame's hash of every member and its count; -1 after {@link #release} (C14). */
     private static long seenHash;
     private static int seenCount=-1;
@@ -80,8 +82,8 @@ public final class EquipmentBodyRenderer {
         if(event.getStage()!=RenderLevelStageEvent.Stage.AFTER_SOLID_BLOCKS)return;
         var mc=Minecraft.getInstance();if(mc.level==null)return;
         var marker=EquipmentShellModel.sprite(Mesh.Material.CONCRETE);if(marker==null)return;
-        var detail=EquipmentShellModel.detail();
-        if(marker!=atlasMarker||detail!=builtDetail){release();atlasMarker=marker;builtDetail=detail;}
+        var detail=EquipmentShellModel.detail();boolean sheen=EquipmentShellModel.variant().sheen();
+        if(marker!=atlasMarker||detail!=builtDetail||sheen!=builtSheen){release();atlasMarker=marker;builtDetail=detail;builtSheen=sheen;}
         long tick=mc.level.getGameTime();
 
         // Each structure's light on its timer, and a hash of what the region map is built from: the level, every member's
@@ -197,7 +199,7 @@ public final class EquipmentBodyRenderer {
         int[] tints={Paint.tint(paint.body()),Paint.tint(paint.structure())};
         return PolygonBake.triangles(polygons,tints,EquipmentShellModel.ATLAS,(polygon,index)->{
             var p=polygon.positions();
-            return (int)Math.min(255,EquipmentShellModel.shade(polygon,index)*ShapeRasterizer.towerStain(shape,new double[]{p[3*index],p[3*index+1],p[3*index+2]}));
+            return (int)Math.min(255,EquipmentShellModel.shade(polygon,index,builtSheen)*ShapeRasterizer.towerStain(shape,new double[]{p[3*index],p[3*index+1],p[3*index+2]}));
         });
     }
 

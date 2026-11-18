@@ -368,7 +368,8 @@ public final class InstrumentRenderer {
             buffers.endBatch(atlasType);
             for(int i=0;i<SHOWN.size();i++)for(var name:SHOWN.get(i).wiring.names())if(!NAMES.contains(name))NAMES.add(name);
             NAMES.sort(null);
-            boolean lit=com.wormzjl.icheme.client.fx.FxPath.current()==com.wormzjl.icheme.client.fx.FxPath.SHADER&&ClientConfig.pbrTextures()&&com.wormzjl.icheme.client.fx.FxShaders.wiring()!=null&&!LIT.disabled();
+            // rendertype_wiring on the SHADER path with its own switch (wiring_shader) and pbr_textures on; else flat (FxShaderProgram).
+            boolean lit=com.wormzjl.icheme.client.fx.FxPath.current()==com.wormzjl.icheme.client.fx.FxPath.SHADER&&com.wormzjl.icheme.client.fx.FxShaders.path(com.wormzjl.icheme.client.fx.FxShaderProgram.WIRING)==com.wormzjl.icheme.client.fx.FxPath.SHADER&&ClientConfig.pbrTextures()&&!LIT.disabled();
             boolean drawn=false;
             if(lit){litEvent=event;litCamera=camera;try{drawn=LIT.run(DRAW_LIT);}finally{litEvent=null;litCamera=null;}}
             if(!drawn)drawFlat(pose,buffers,camera);

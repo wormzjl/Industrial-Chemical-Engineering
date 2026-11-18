@@ -1,0 +1,24 @@
+{
+    "vertex": "icheme:equipment_reflection",
+    "fragment": "icheme:equipment_reflection",
+    "samplers": [ ],
+    "uniforms": [
+        { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "FogStart", "type": "float", "count": 1, "values": [ 0.0 ] },
+        { "name": "FogEnd", "type": "float", "count": 1, "values": [ 1.0 ] },
+        { "name": "FogColor", "type": "float", "count": 4, "values": [ 0.0, 0.0, 0.0, 0.0 ] },
+        { "name": "FogShape", "type": "int", "count": 1, "values": [ 0 ] },
+        { "name": "Origin", "type": "float", "count": 3, "values": [ 0.0, 0.0, 0.0 ] },
+        { "name": "Pull", "type": "float", "count": 4, "values": [ 0.0, 0.0, 0.0, 11.43 ] },
+        { "name": "Zenith", "type": "float", "count": 3, "values": [ 0.45, 0.62, 0.88 ] },
+        { "name": "Horizon", "type": "float", "count": 3, "values": [ 0.93, 0.95, 0.97 ] },
+        { "name": "NearGround", "type": "float", "count": 3, "values": [ 0.42, 0.40, 0.36 ] },
+        { "name": "Ground", "type": "float", "count": 3, "values": [ 0.25, 0.23, 0.20 ] },
+        { "name": "Powers", "type": "float", "count": 2, "values": [ 0.45, 0.5 ] },
+        { "name": "Light", "type": "float", "count": 4, "values": [ 0.0, 1.0, 0.0, 0.0 ] },
+        { "name": "HighlightSky", "type": "float", "count": 2, "values": [ 0.6667, 0.9333 ] },
+        { "name": "Strength", "type": "float", "count": 1, "values": [ 1.0 ] },
+        { "name": "Fade", "type": "float", "count": 2, "values": [ 72.0, 96.0 ] }
+    ]
+}

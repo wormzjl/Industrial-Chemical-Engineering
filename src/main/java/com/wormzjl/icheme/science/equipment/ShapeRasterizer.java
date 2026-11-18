@@ -197,6 +197,18 @@ public final class ShapeRasterizer {
         return List.copyOf(out);
     }
 
+    /**
+     * The drawn body's fixed facets whole, of the materials {@code kept} takes (no glass, no moving parts, no nozzles),
+     * for the reflection pass (batch 2026-11-18-equipment-reflections): each lies on the plane of the chunk mesh's own
+     * pieces of it (or, at low detail, of {@link #renderBody}'s tiles), uncut, so the pass adds to the surface it covers.
+     */
+    public static List<Polygon> reflectionBody(EquipmentShape shape, RenderDetail detail, java.util.function.Predicate<Material> kept) {
+        var g = geometry(shape, detail);
+        var out = new ArrayList<Polygon>();
+        for (var facet : g.mesh.facets()) if (facet.part() < 0 && facet.material() != Material.GLASS && kept.test(facet.material())) out.add(Mesh.whole(facet));
+        return List.copyOf(out);
+    }
+
     /** Canonical physical service layout, shared by both render profiles and both wired media. */
     public static EquipmentServices.Plan services(EquipmentShape shape) {return geometry(shape).services;}
     public static EquipmentInstruments.Plan instruments(EquipmentShape shape) {return geometry(shape).instruments;}
