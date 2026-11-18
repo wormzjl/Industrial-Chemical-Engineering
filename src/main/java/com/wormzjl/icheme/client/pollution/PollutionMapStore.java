@@ -27,14 +27,6 @@ public final class PollutionMapStore {
     /** The ground's four bytes of each column (batch 2026-11-18-ground-pollution, G3), in the order of {@link #columns}. */
     private static int[] groundValues = NO_VALUES;
 
-    /** Which layer a square shows (G3): both (the worse of air and ground per channel), the air's, or the ground's. */
-    public enum Layer {
-        BOTH,
-        AIR,
-        GROUND
-    }
-
-    private static Layer layer = Layer.BOTH;
     private static Runnable changed = () -> {
     };
 
@@ -126,20 +118,22 @@ public final class PollutionMapStore {
 
     /** The four bytes a square shows in the current {@link #layer}. */
     public static int shown(String dimensionId, long column) {
-        return switch (layer) {
-            case AIR -> value(dimensionId, column);
-            case GROUND -> ground(dimensionId, column);
-            case BOTH -> com.wormzjl.icheme.science.pollution.MapColumns.worse(value(dimensionId, column), ground(dimensionId, column));
-        };
+        return layer().shown(value(dimensionId, column), ground(dimensionId, column));
     }
 
-    public static Layer layer() {
-        return layer;
+    /** The layer the squares show (G3, option A): the client's, kept in {@code icheme-client.toml}. */
+    public static MapLayer layer() {
+        return com.wormzjl.icheme.client.ClientConfig.pollutionMapLayer();
     }
 
-    /** Shows {@code next} on the squares from the next draw. */
-    public static void layer(Layer next) {
-        layer = next == null ? Layer.BOTH : next;
+    /** Whether the map is open and asking. */
+    public static boolean watching() {
+        return watching;
+    }
+
+    /** Shows {@code next} on the squares from the next draw, and saves it. */
+    public static void layer(MapLayer next) {
+        com.wormzjl.icheme.client.ClientConfig.pollutionMapLayer(next == null ? MapLayer.BOTH : next);
     }
 
     /** Run when an answer brings another set of columns (the map gathers its squares again); one listener. */

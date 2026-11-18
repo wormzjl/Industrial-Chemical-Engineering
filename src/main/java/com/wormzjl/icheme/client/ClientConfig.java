@@ -41,6 +41,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.EnumValue<Basis> BASIS;
     public static final ModConfigSpec.BooleanValue STREAM_CONDITIONS;
     public static final ModConfigSpec.BooleanValue GUIDE_HUD;
+    public static final ModConfigSpec.EnumValue<com.wormzjl.icheme.client.pollution.MapLayer> POLLUTION_MAP_LAYER;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_PAINTS;
     public static final ModConfigSpec.BooleanValue LOW_POLYGON_MODE;
     public static final ModConfigSpec.DoubleValue LOD_SCALE;
@@ -58,6 +59,8 @@ public final class ClientConfig {
                 .define("stream_conditions", false);
         GUIDE_HUD = builder.comment("Whether the Field Guide's current step stands on one line at the top left while no screen is open.")
                 .define("guide_hud", true);
+        POLLUTION_MAP_LAYER = builder.comment("The pollution layer the FTB Chunks map shows: BOTH (the worse of air and ground), AIR or GROUND. The pollution map layer key (unbound by default) switches it too.")
+                .defineEnum("pollution_map_layer", com.wormzjl.icheme.client.pollution.MapLayer.BOTH);
         builder.pop();
         builder.comment("The units every process screen shows; the unit keys at a screen's foot switch them too. Display only: the server keeps SI.").push("units");
         TEMPERATURE = builder.comment("CELSIUS or KELVIN.").defineEnum("temperature", TemperatureUnit.CELSIUS);
@@ -133,6 +136,16 @@ public final class ClientConfig {
      */
     public static com.wormzjl.icheme.client.gui.common.OperationColumn.Units operationUnits() {
         return new com.wormzjl.icheme.client.gui.common.OperationColumn.Units(temperature(), pressure(), flowTime());
+    }
+
+    /** The pollution map's layer (batch 2026-11-18-ground-pollution, G3), BOTH before the config has loaded. */
+    public static com.wormzjl.icheme.client.pollution.MapLayer pollutionMapLayer() {
+        return get(POLLUTION_MAP_LAYER, com.wormzjl.icheme.client.pollution.MapLayer.BOTH);
+    }
+
+    /** Sets the pollution map's layer and saves it to the file. */
+    public static void pollutionMapLayer(com.wormzjl.icheme.client.pollution.MapLayer layer) {
+        set(POLLUTION_MAP_LAYER, layer);
     }
 
     public static Basis basis() {

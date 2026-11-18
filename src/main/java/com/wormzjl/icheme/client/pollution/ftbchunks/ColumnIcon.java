@@ -1,11 +1,10 @@
 package com.wormzjl.icheme.client.pollution.ftbchunks;
 
+import com.wormzjl.icheme.client.pollution.MapLayer;
 import com.wormzjl.icheme.client.pollution.PollutionMapClient;
 import com.wormzjl.icheme.client.pollution.PollutionMapStore;
 import com.wormzjl.icheme.runtime.pollution.PollutionMeters;
-import com.wormzjl.icheme.science.pollution.Channel;
 import com.wormzjl.icheme.science.pollution.MapColumns;
-import com.wormzjl.icheme.science.pollution.Reading;
 import dev.ftb.mods.ftbchunks.api.client.icon.MapIcon;
 import dev.ftb.mods.ftbchunks.api.client.icon.MapType;
 import dev.ftb.mods.ftblibrary.ui.BaseScreen;
@@ -29,8 +28,6 @@ final class ColumnIcon implements MapIcon {
     static final int PRIORITY = -1000;
     /** One chunk: the panel draws an icon {@code regionTileSize / 128 x scale} pixels wide, a region being 32 chunks. */
     static final double SCALE = 4.0;
-
-    private static final Channel[] CHANNELS = Channel.values();
 
     private final String dimension;
     private final long column;
@@ -73,29 +70,21 @@ final class ColumnIcon implements MapIcon {
             if (MapColumns.argb(PollutionMapStore.shown(dimension, column)) == 0) {
                 return;
             }
-            // Both layers whenever they hold something (batch 2026-11-18-ground-pollution, G3): the air's worst cube, the ground.
-            lines(list, "pollution.icheme.map.header", PollutionMapStore.value(dimension, column));
-            lines(list, "pollution.icheme.map.ground", PollutionMapStore.ground(dimension, column));
+            // The chunk and the layer shown, then always both layers (batch 2026-11-18-ground-pollution, G3, option A).
+            var layer = PollutionMapStore.layer();
+            for (var line : layer.tooltip(column, PollutionMapStore.value(dimension, column), PollutionMapStore.ground(dimension, column))) list.add(component(line));
         } catch (LinkageError | RuntimeException failure) {
             PollutionMapClient.off(failure);
         }
     }
 
-    /** A layer's header and four lines; nothing when the layer has nothing drawable at this column. */
-    private void lines(TooltipList list, String header, int packed) {
-        if (MapColumns.argb(packed) == 0) {
-            return;
-        }
-        list.add(Component.translatable(header, Integer.toString(MapColumns.x(column)), Integer.toString(MapColumns.z(column)))
-                .withStyle(ChatFormatting.AQUA));
-        for (var channel : CHANNELS) {
-            int value = MapColumns.value(packed, channel);
-            double index = MapColumns.dequantise(value);
-            var word = Reading.word(channel, index);
-            String number = Reading.number(index) + (value >= MapColumns.SATURATED ? "+" : "");
-            list.add(Component.translatable("pollution.icheme.meter.line", Component.translatable(PollutionMeters.nameKey(channel)),
-                    number, Component.translatable(PollutionMeters.wordKey(word))).withStyle(PollutionMeters.colour(word)));
-        }
+    /** One line of {@link MapLayer#tooltip} as text: the title plain, a layer's header aqua, a channel in its word's colour. */
+    private static Component component(MapLayer.Line line) {
+        var args = new Object[line.args().size()];
+        for (int i = 0; i < args.length; i++) args[i] = line.args().get(i) instanceof MapLayer.Key key ? Component.translatable(key.key()) : line.args().get(i);
+        var text = Component.translatable(line.key(), args);
+        if (line.word() != null) return text.withStyle(PollutionMeters.colour(line.word()));
+        return line.args().isEmpty() ? text.withStyle(ChatFormatting.AQUA) : text;
     }
 
     @Override
