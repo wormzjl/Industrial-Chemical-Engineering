@@ -113,3 +113,9 @@ a look in the game, from the worktree root: `git apply tools/tutorial-renders/fi
 - 2026-11-13, P6 correction (3063488da): every page film is one stop; films and page sheets rendered again in
   `tmp/tutorial-renders/p6/`.
 - 2026-11-13, merge preparation: entry points, the detached command's stored copies.
+- 2026-11-18, batch `2026-11-18-tutorial-photos`: a prototype drew two ways to show a chapter's photo over the shipped
+  page, A (a banner over the steps) and B (a thumbnail row with View, and a viewer); the owner picked B. The prototype
+  is replaced by `PhotoRender.java`, run as `GuideRender <out> photos` (compile with `tools/heat-gui-renders` on the
+  source path, `src/main/resources` on the class path): every chapter's list at 464 by 254 light and dark and at 312 by
+  232, every photo in the viewer, three at 312 by 232. `HeatDiagramRender.Java2dCanvas` draws a `textures/tutorial/`
+  sprite in its own colours.

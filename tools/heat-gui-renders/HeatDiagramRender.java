@@ -325,7 +325,8 @@ public final class HeatDiagramRender {
                 var atlas = atlas(s.texture());
                 int a = argb >>> 24;
                 // An item's texture (the tutorial's equipment pages, P5) is a picture, not a mask: drawn white, it keeps its colours.
-                boolean picture = s.texture().contains(":textures/item/") && argb == 0xFFFFFFFF;
+                // The guide's photographs (batch 2026-11-18-tutorial-photos) too.
+                boolean picture = (s.texture().contains(":textures/item/") || s.texture().contains(":textures/tutorial/")) && argb == 0xFFFFFFFF;
                 for (int y = 0; y < s.h(); y++)
                     for (int x = 0; x < s.w(); x++) {
                         if (picture) {

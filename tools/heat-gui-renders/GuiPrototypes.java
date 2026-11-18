@@ -861,7 +861,9 @@ public final class GuiPrototypes {
     }
 
     static CalculatorColumn.PumpDuty sampleDuty(String name, double flow, double head, double density) {
-        var duty = com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.duty(new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Load(flow, head, 0, null, density));
+        var duty = com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.duty(new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Load(flow, head, 0, null, density),
+                // A 100 mm discharge for the sample (0.35.1 sizes the pump first); added so the render tools compile again.
+                new com.wormzjl.icheme.science.flowsheet.sizing.PumpSizing.Size(0.1));
         return new CalculatorColumn.PumpDuty(name, duty.flow(), duty.head(), duty.shaft(), duty.npsh(), duty.motor());
     }
 
