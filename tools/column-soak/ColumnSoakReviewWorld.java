@@ -151,7 +151,8 @@ public final class ColumnSoakReviewWorld {
         ColumnTestWorld.begin(start);
         int[] ticks = {0};
         long[] wall = {0};
-        PrintWriter[] out = new PrintWriter[5];
+        PrintWriter[] out = new PrintWriter[6];
+        var lag = new JunctionLagTrace();
         helper.startSequence()
                 .thenWaitUntil(() -> helper.assertTrue(ended[0], "Waiting for the column test world's start: " + start.state()))
                 .thenExecute(() -> {
@@ -163,14 +164,17 @@ public final class ColumnSoakReviewWorld {
                         out[2] = new PrintWriter(Files.newBufferedWriter(dir.resolve("soak-feed.csv")));
                         out[3] = new PrintWriter(Files.newBufferedWriter(dir.resolve("soak-column.csv")));
                         out[4] = new PrintWriter(Files.newBufferedWriter(dir.resolve("soak-burners.csv")));
+                        if (batch.equals(FEED_BATCH)) out[5] = new PrintWriter(Files.newBufferedWriter(dir.resolve("junction-lag.csv")));
                     } catch (IOException e) {
                         throw new IllegalStateException(e);
                     }
+                    if (out[5] != null) out[5].println("start_tick,end_tick,endpoint_full_firing,accepted,rejected,coil_kg,feed_kg,coil_j_per_kg,feed_j_per_kg,coil_at_feed_pressure_K,feed_K");
                     out[0].println("tick,island,status,online,committed,retry_at,cadence,accepted,rejected,advanced_s,rejections");
                     out[1].println("tick,device,kind,pos,island,status,p_pa,t_k,mass_kg,flow_kg_s,level_m,heat_out_k,heat_w");
                     out[2].println("tick,island,committed,pipe,id,control,mode,avg_kg_s,end_kg_s,head_pa,valve_drop_pa,drive");
                     out[3].println("tick,online,phase,alpha,resolving,engine,conditions");
                     out[4].println("tick,what,heater,id,a,b,c,d,e,f,g");
+                    if (out[5] != null) rig.plant.world.observe((changed, metrics) -> lag.sample(rig, changed, out[5]));
                     IChemE.LOGGER.info("column_soak started ticks={} every={}", soakTicks, EVERY);
                     wall[0] = System.nanoTime();
                 })
@@ -199,6 +203,10 @@ public final class ColumnSoakReviewWorld {
                     out[2].close();
                     out[3].close();
                     out[4].close();
+                    if (out[5] != null) {
+                        rig.plant.world.observe(null);
+                        out[5].close();
+                    }
                     IChemE.LOGGER.info("column_soak done ticks={}", ticks[0]);
                     rig.plant.release();
                 })
