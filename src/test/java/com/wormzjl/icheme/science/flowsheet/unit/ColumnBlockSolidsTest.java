@@ -53,14 +53,14 @@ final class ColumnBlockSolidsTest {
         assertEquals(stream.mass(), fluid.mass() + held.held().massKg(), 1e-12 * stream.mass(), "mass is kept");
     }
 
-    /** A product of water at 260 K holds ice: the run refuses with column.frozen, naming water and the product's port; at 300 K it runs. */
+    /** A product of water at 260 K holds ice: the run refuses with column.frozen, naming water, the product's port, its temperature and the crystal; at 300 K it runs. */
     @Test void aProductThatHoldsACrystalRefusesTheRun() {
         String water = THERMO.axis().get(THERMO.water());
         var fraction = List.of(new V3ColumnStreamProperties.ComponentFraction(water, 1, 1));
         var cold = new V3ColumnStreamProperties("free_water", "Free water", "liquid", 10, .18, 260, 101325, 0, fraction);
         var failure = assertThrows(FlowsheetFailure.class, () -> ColumnBlockSolve.frozen(THERMO, List.of(cold), id -> ColumnUnit.WATER));
         assertEquals("column.frozen", failure.key());
-        assertEquals(List.of(water, ColumnUnit.WATER), failure.arguments());
+        assertEquals(List.of(water, ColumnUnit.WATER, "260.0", "icheme:crystal_ice_ih"), failure.arguments());
         var warm = new V3ColumnStreamProperties("free_water", "Free water", "liquid", 10, .18, 300, 101325, 0, fraction);
         ColumnBlockSolve.frozen(THERMO, List.of(warm), id -> ColumnUnit.WATER);
     }

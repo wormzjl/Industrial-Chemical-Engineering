@@ -6,10 +6,12 @@ import java.util.Objects;
 /**
  * A consumer without crystal equations was given a package that admits crystal phases (P6, batch
  * 2026-09-24-coolprop-low-temperature): a package whose {@code crystals} list is not empty, such as the network package
- * {@code icheme:refinery} with its CO2-I crystal (or the test-only pilot {@code icheme:pilot_cryogenic}). The V3 column is a vapour-liquid algorithm, and a projected
- * neural inference view is a PR78 axis without crystal records; each refuses such a package with this type rather than
- * running it fluid-only, where a crystal could form that it would never see (plan P6: "do not feed crystals to a VLE-only
- * column algorithm without corresponding equations; give a meaningful unsupported-phase result").
+ * {@code icheme:refinery} with its CO2-I crystal (or the test-only pilot {@code icheme:pilot_cryogenic}). A projected neural
+ * inference view is a PR78 axis without crystal records, so it refuses such a package with this type rather than running it
+ * fluid-only, where a crystal could form that it would never see (plan P6: "do not feed crystals to a VLE-only column
+ * algorithm without corresponding equations; give a meaningful unsupported-phase result"). The V3 column builds such a
+ * package: the crystal equilibrium of its solved products decides whether a compound solidifies in it
+ * ({@code ColumnSolve.frozen}).
  *
  * <p>It is an {@link IllegalArgumentException} (an unusable package, like any other refused package id); its own type
  * lets a caller tell "this package's phase set is for another consumer" from malformed data or a missing ideal-gas fit

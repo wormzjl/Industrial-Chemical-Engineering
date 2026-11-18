@@ -14,22 +14,24 @@ import org.junit.jupiter.api.Test;
 /**
  * P6 (batch 2026-09-24-coolprop-low-temperature, plan P6 "make columns and other consumers explicit about supported
  * phases"): every consumer of a package's thermodynamics either answers the crystal competition (the equilibrium engine
- * and the fluid network, P4/P5) or refuses a package that admits crystals typed ({@link CrystalPhasesUnavailable}), never
- * running it fluid-only where a crystal could form, and never zero-padding or projecting its species away.
+ * and the fluid network, P4/P5; the column through the crystal equilibrium of its solved products, ColumnSolve.frozen) or
+ * refuses a package that admits crystals typed ({@link CrystalPhasesUnavailable}), never running it fluid-only where a
+ * crystal could form unseen, and never zero-padding or projecting its species away.
  *
  * <ul>
- * <li>The V3 column (a vapour-liquid algorithm) refuses the pilot {@code icheme:pilot_cryogenic} with the crystal type,
- * on the bundled catalog and on the dev override that selects the pilot as the network package; column packages build.</li>
+ * <li>The V3 column (a vapour-liquid algorithm) builds the pilot {@code icheme:pilot_cryogenic}, which admits CO2-I, on the
+ * bundled catalog and on the dev override that selects the pilot as the network package: whether a crystal forms is the
+ * equilibrium of its solved products (batch 2026-11-18-co2-column-input), not a property of the package.</li>
  * <li>The neural binding is classical for a crystal package (no model is bound), and a projected inference view of it is
  * refused typed rather than dropping its crystals.</li>
  * <li>The world's package {@code icheme:refinery} admits the CO2-I crystal on its fit ideal gas (decision E27 of batch
- * 2026-11-04-open-thermo-data; the loader refused crystals without a spine before): the column refuses a view that
- * holds CO2 and builds a view without it, whose package admits no crystal.</li>
+ * 2026-11-04-open-thermo-data): the column builds a view that holds CO2, CO2 on its basis, and a view without it, whose
+ * package admits no crystal.</li>
  * <li>Presets: a network configuration that selects the pilot cannot carry a crude-assay fluid preset (the assay holds compounds the pilot lacks);
  * the pilot has no assay, so no column preset can name it.</li>
  * </ul>
  *
- * The column packages admit no crystal, so none of these guards changes them (their pins are unmoved:
+ * The column packages admit no crystal, so none of this changes them (their pins are unmoved:
  * {@code bundledPackageRevisionsAndSharedPhysicsAreUnchanged}, {@code LegacyNetworkPathPinTest}). Ported from the branch's
  * {@code 7bf22842} in milestone M4 of the unified thermo port (main's registry is {@link V3NeuralRegistry}).
  */
@@ -41,14 +43,12 @@ class CrystalPackageConsumersTest {
 
     @AfterEach void reset() { MaterialRuntime.reset(); }
 
-    @Test void theColumnRefusesAPackageWithCrystalsTyped() {
+    @Test void theColumnBuildsAPackageWithCrystals() {
         for (MaterialCatalog catalog : List.of(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), PilotCryogenicTestCatalog.catalog())) {
-            var refused = assertThrows(CrystalPhasesUnavailable.class,
-                    () -> MaterialRuntime.with(catalog, PILOT, () -> V3PengRobinsonThermo.fromRegisteredPackage(PILOT)));
-            assertEquals(PILOT, refused.packageId());
-            assertEquals("the V3 column", refused.consumer());
-            assertEquals(List.of(CO2_I), refused.crystals());
-            assertTrue(refused.getMessage().contains("crystal"), refused.getMessage());
+            var column = MaterialRuntime.with(catalog, PILOT, () -> V3PengRobinsonThermo.fromRegisteredPackage(PILOT));
+            assertEquals(PILOT, column.packageId());
+            assertTrue(column.componentBasis().componentIds().contains("CarbonDioxide"), "CO2 is a column component");
+            assertEquals(List.of(CO2_I), catalog.requirePackage(PILOT).crystals(), "the package still admits CO2-I");
         }
         // A column package builds as before.
         var column = MaterialRuntime.with(com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot(), "icheme:tjl20_methane",
@@ -79,12 +79,12 @@ class CrystalPackageConsumersTest {
         assertEquals("a neural inference projection", projection.consumer());
     }
 
-    @Test void theColumnRefusesOnlyARefineryViewThatHoldsCarbonDioxide() {
+    @Test void theColumnBuildsARefineryViewWithAndWithoutCarbonDioxide() {
         var catalog = com.wormzjl.icheme.science.material.PilotCryogenicTestCatalog.withPilot();
         var co2 = catalog.restrict(REFINERY, List.of("Methane", "Ethane", "CarbonDioxide"));
-        var refused = assertThrows(CrystalPhasesUnavailable.class,
-                () -> MaterialRuntime.with(co2, REFINERY, () -> V3PengRobinsonThermo.fromRegisteredPackage(REFINERY)));
-        assertEquals(List.of(CO2_I), refused.crystals());
+        assertEquals(List.of(CO2_I), co2.requirePackage(REFINERY).crystals(), "the view keeps its compounds' crystal");
+        var column = MaterialRuntime.with(co2, REFINERY, () -> V3PengRobinsonThermo.fromRegisteredPackage(REFINERY));
+        assertTrue(column.componentBasis().componentIds().contains("CarbonDioxide"), "CO2 is a column component");
         var dry = catalog.restrict(REFINERY, List.of("Methane", "Ethane", "HydrogenSulfide"));
         assertTrue(dry.requirePackage(REFINERY).crystals().isEmpty());
         assertEquals(REFINERY, MaterialRuntime.with(dry, REFINERY, () -> V3PengRobinsonThermo.fromRegisteredPackage(REFINERY)).packageId());

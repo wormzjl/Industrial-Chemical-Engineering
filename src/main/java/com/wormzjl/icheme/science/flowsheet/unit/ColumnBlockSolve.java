@@ -432,23 +432,36 @@ final class ColumnBlockSolve implements Calculation.Law {
     }
 
     /**
-     * Refuses a solve whose product holds a crystal at its solved state, on the sheet's thermo (owner D6): a compound
-     * solidifies in the column ({@link ColumnSolve#frozen}).
+     * Refuses a solve whose product or coldest tray holds a crystal at its solved state, on the sheet's thermo (owner D6): a
+     * compound solidifies in the column ({@link ColumnSolve#frozen}, {@link ColumnSolve#coldestTray}).
      */
     private void frozen(V3ColumnResult result) {
-        frozen(u.thermo(), result.streams(), this::port);
+        double tested = frozen(u.thermo(), result.streams(), this::port);
+        var cold = result.inspection().map(i -> ColumnSolve.coldestTray(u.thermo().model(), i, tested, u.thermo().checkpoint())).orElse(null);
+        if (cold != null) throw failure(cold.compound(), cold.node(), cold.temperature(), cold.solid().crystal());
     }
 
-    /** {@link #frozen(V3ColumnResult)} on {@code streams}, each named by the port {@code port} gives its V3 id. */
-    static void frozen(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, List<com.wormzjl.icheme.science.column.v3.V3ColumnStreamProperties> streams,
-                       java.util.function.UnaryOperator<String> port) {
+    /**
+     * {@link #frozen(V3ColumnResult)} on {@code streams}, each named by the port {@code port} gives its V3 id: the coldest
+     * stream tested, K ({@code +infinity} for none).
+     */
+    static double frozen(com.wormzjl.icheme.science.flowsheet.FlowThermo thermo, List<com.wormzjl.icheme.science.column.v3.V3ColumnStreamProperties> streams,
+                         java.util.function.UnaryOperator<String> port) {
+        double tested = Double.POSITIVE_INFINITY;
         for (var stream : streams) {
             double[] amounts = amounts(thermo, stream);
             if (java.util.Arrays.stream(amounts).sum() <= 0) continue;
             var flashed = thermo.atTemperature(stream.temperatureKelvin(), stream.pressurePascal(), amounts, SolidInventory.EMPTY);
-            String compound = ColumnSolve.frozen(thermo.model(), flashed.temperature(), flashed.pressure(), amounts, flashed.enthalpy(), thermo.checkpoint());
-            if (compound != null) throw new FlowsheetFailure("column.frozen", compound, port.apply(stream.streamId()));
+            tested = Math.min(tested, flashed.temperature());
+            var solid = ColumnSolve.frozen(thermo.model(), flashed.temperature(), flashed.pressure(), amounts, flashed.enthalpy(), thermo.checkpoint());
+            if (solid != null) throw failure(solid.compound(), port.apply(stream.streamId()), flashed.temperature(), solid.crystal());
         }
+        return tested;
+    }
+
+    /** {@code column.frozen}: the compound, where it solidifies (a port or "tray n"), the temperature there, K, and the crystal. */
+    private static FlowsheetFailure failure(String compound, String node, double temperature, String crystal) {
+        return new FlowsheetFailure("column.frozen", compound, node, String.format(Locale.ROOT, "%.1f", temperature), crystal);
     }
 
     /** The sheet's port a V3 product leaves by. */

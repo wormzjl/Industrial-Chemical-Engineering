@@ -121,19 +121,33 @@ public final class ColumnSolve {
     }
 
     /**
-     * A solve whose product holds a crystal at its solved state (section 13 of the 2026-11-16 fouling and corrosion plan, owner
-     * D6): {@code compound} solidifies in the column at {@code product}, the port's name in lower case. The column cannot
-     * carry a solid on its trays (a capability limit), so the solve gives no table.
+     * A solve whose product or coldest tray holds a crystal at its solved state (section 13 of the 2026-11-16 fouling and
+     * corrosion plan, owner D6; the tray of batch 2026-11-18-co2-column-input): {@code solid} forms at {@code node} (a
+     * product port's name in lower case, or "tray n") at {@code temperature}, K. The column cannot carry a solid on its trays
+     * (a capability limit), so the solve gives no table.
      */
-    public record Frozen(String product, String compound) implements Outcome {
+    public record Frozen(String node, Solid solid, double temperature) implements Outcome {
         public Frozen {
-            Objects.requireNonNull(product, "product");
-            Objects.requireNonNull(compound, "compound");
+            Objects.requireNonNull(node, "node");
+            Objects.requireNonNull(solid, "solid");
+        }
+
+        /** The compound that solidifies. */
+        public String compound() {
+            return solid.compound();
         }
 
         /** The finding in words, for the running column's status line. */
         public String text() {
-            return compound + " solidifies in this column at its " + product;
+            return String.format(java.util.Locale.ROOT, "%s solidifies in this column at its %s at %.1f K (crystal %s)", solid.compound(), node, temperature, solid.crystal());
+        }
+    }
+
+    /** A compound that solidifies, by its id on the model's list, and the record id of the crystal it forms. */
+    public record Solid(String compound, String crystal) {
+        public Solid {
+            Objects.requireNonNull(compound, "compound");
+            Objects.requireNonNull(crystal, "crystal");
         }
     }
 
@@ -145,7 +159,7 @@ public final class ColumnSolve {
      * crystal phase in it is the finding. The temperature only selects whether the test runs; the stop comes from the
      * equilibrium. An equilibrium the engine cannot answer is no finding: the product's fluid flash stands.
      */
-    public static String frozen(FluidThermodynamics model, double t, double p, double[] moles, double enthalpy, Runnable checkpoint) {
+    public static Solid frozen(FluidThermodynamics model, double t, double p, double[] moles, double enthalpy, Runnable checkpoint) {
         if (!model.crystalsCompete(t, moles)) return null;
         FluidThermodynamics.CrystalAnswer answer;
         try {
@@ -155,8 +169,41 @@ public final class ColumnSolve {
         }
         double[] crystals = answer.crystalMoles();
         var all = model.crystalSolids().all();
-        for (int k = 0; k < crystals.length; k++) if (crystals[k] > 0) return model.components().get(all.get(k).component());
+        for (int k = 0; k < crystals.length; k++)
+            if (crystals[k] > 0) return new Solid(model.components().get(all.get(k).component()), all.get(k).material().id());
         return null;
+    }
+
+    /**
+     * The coldest tray's finding (batch 2026-11-18-co2-column-input): the products are tested where they leave
+     * ({@link #frozen}); a tray colder than every product tested (a cold side feed, a pumparound return) is tested too, on
+     * its liquid at its solved temperature and pressure. One tray at most: the coldest of {@code inspection}'s nodes, where it
+     * is colder than {@code products}, the coldest product tested (K). Null where it is not, holds no liquid or no crystal.
+     */
+    public static Frozen coldestTray(FluidThermodynamics model, com.wormzjl.icheme.science.column.v3.V3ColumnInspection inspection, double products,
+                                     Runnable checkpoint) {
+        var nodes = inspection.nodes();
+        int coldest = 0;
+        for (int n = 1; n < nodes.size(); n++) if (nodes.get(n).temperatureKelvin() < nodes.get(coldest).temperatureKelvin()) coldest = n;
+        var tray = nodes.get(coldest);
+        double t = tray.temperatureKelvin();
+        if (!(t < products) || !(tray.liquidMolPerSecond() > 0)) return null;
+        var axis = model.components();
+        var basis = inspection.input().componentBasis();
+        double[] liquid = new double[axis.size()];
+        for (int c = 0; c < basis.componentCount(); c++) {
+            int i = axis.indexOf(basis.componentId(c));
+            if (i >= 0) liquid[i] += tray.liquidMolPerSecond() * tray.liquidFractions().get(c);
+        }
+        if (!model.crystalsCompete(t, liquid)) return null;
+        double h;
+        try {
+            h = model.flashTP(t, tray.pressurePascal(), liquid.clone(), checkpoint).enthalpy();
+        } catch (IllegalArgumentException | IllegalStateException noAnswer) {
+            return null;
+        }
+        var solid = frozen(model, t, tray.pressurePascal(), liquid, h, checkpoint);
+        return solid == null ? null : new Frozen("tray " + coldest, solid, t);
     }
 
     /**
@@ -412,7 +459,7 @@ public final class ColumnSolve {
         }
         double[][] split = solved.split(pooled);
         double[][] enthalpy = new double[split.length][];
-        double out = 0;
+        double out = 0, tested = Double.POSITIVE_INFINITY;
         for (int k = 0; k < split.length; k++) {
             var product = solved.products().get(k);
             double n = Arrays.stream(split[k]).sum();
@@ -427,13 +474,17 @@ public final class ColumnSolve {
             }
             double whole = model.flashTP(product.temperature(), product.pressure(), own.clone(), checkpoint).enthalpy();
             // A product that holds a crystal at its solved state: a compound solidifies in the column (owner D6), no table.
-            String solid = n > 0 ? frozen(model, product.temperature(), product.pressure(), own, whole, checkpoint) : null;
-            if (solid != null) return new Frozen(product.port().name().toLowerCase(java.util.Locale.ROOT), solid);
+            if (n > 0) tested = Math.min(tested, product.temperature());
+            var solid = n > 0 ? frozen(model, product.temperature(), product.pressure(), own, whole, checkpoint) : null;
+            if (solid != null) return new Frozen(product.port().name().toLowerCase(java.util.Locale.ROOT), solid, product.temperature());
             enthalpy[k] = new double[world.size()];
             Arrays.fill(enthalpy[k], whole / held);
             for (int i = 0; i < m; i++) enthalpy[k][at[i]] = whole / mass * model.molecularWeight(i);
             for (int i = 0; i < world.size(); i++) out += enthalpy[k][i] * split[k][i];
         }
+        var solvedInspection = success.result().inspection().orElse(null);
+        var cold = solvedInspection == null ? null : coldestTray(model, solvedInspection, tested, checkpoint);
+        if (cold != null) return cold;
         double[] pa = solved.pumparoundPerFeed();
         double paTotal = 0;
         for (double q : pa) paTotal += q * rate;

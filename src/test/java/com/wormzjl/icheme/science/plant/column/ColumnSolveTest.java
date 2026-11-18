@@ -669,7 +669,7 @@ class ColumnSolveTest {
         Runnable none = () -> {
         };
         double cold = model.flashTP(260, 101325, water.clone(), none).enthalpy();
-        assertEquals(model.components().get(m - 1), ColumnSolve.frozen(model, 260, 101325, water, cold, none));
+        assertEquals(new ColumnSolve.Solid(model.components().get(m - 1), "icheme:crystal_ice_ih"), ColumnSolve.frozen(model, 260, 101325, water, cold, none));
         double warm = model.flashTP(300, 101325, water.clone(), none).enthalpy();
         assertNull(ColumnSolve.frozen(model, 300, 101325, water, warm, none));
     }
