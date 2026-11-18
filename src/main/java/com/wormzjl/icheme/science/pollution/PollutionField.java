@@ -47,11 +47,20 @@ public final class PollutionField {
         this.amounts = amounts;
     }
 
-    /** The outcome of a step or a burn. */
-    public record Result(PollutionField field, PollutionLedger ledger) {
+    /**
+     * The outcome of a step or a burn. {@code deposits}: what settled to the ground in the step, by chunk column (batch
+     * 2026-11-18-ground-pollution), one particulate deposit per column in ascending column order; the same amounts the
+     * ledger books {@code ground}.
+     */
+    public record Result(PollutionField field, PollutionLedger ledger, List<GroundField.Deposit> deposits) {
         public Result {
             Objects.requireNonNull(field, "field");
             Objects.requireNonNull(ledger, "ledger");
+            deposits = List.copyOf(deposits);
+        }
+
+        public Result(PollutionField field, PollutionLedger ledger) {
+            this(field, ledger, List.of());
         }
     }
 
@@ -247,11 +256,16 @@ public final class PollutionField {
         Arrays.sort(sorted, RELEASE_ORDER);
         land(work, sorted, environment, book);
         exchange(work, environment, seconds, settings, book);
-        settle(work, environment, seconds, settings, book);
+        var grounded = new java.util.TreeMap<Long, Double>();
+        settle(work, environment, seconds, settings, book, grounded);
         decay(work, environment, seconds, settings, book);
         truncate(work, settings, book);
         cap(work, settings, book);
-        return finish(work.keys, work.amounts, book);
+        var result = finish(work.keys, work.amounts, book);
+        if (grounded.isEmpty()) return result;
+        var deposits = new java.util.ArrayList<GroundField.Deposit>(grounded.size());
+        for (var e : grounded.entrySet()) deposits.add(GroundField.Deposit.of(e.getKey(), Channel.PARTICULATE, e.getValue()));
+        return new Result(result.field(), result.ledger(), deposits);
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -389,7 +403,7 @@ public final class PollutionField {
     }
 
     private static void settle(Work work, Environment environment, double seconds, PollutionSettings settings,
-            double[] book) {
+            double[] book, java.util.TreeMap<Long, Double> grounded) {
         int n = work.keys.length;
         double closed = settings.closedAirShare();
         double share = Math.min(0.1, settings.settlingShare() * seconds / settings.nominalSeconds());
@@ -418,6 +432,7 @@ public final class PollutionField {
             if (CubeKey.y(key) - 1 < minimumY) {
                 a[i * CHANNELS + p] -= f;
                 book[ground] += f;
+                grounded.merge(MapColumns.columnOf(key), f, Double::sum);
                 continue;
             }
             long below = CubeKey.offset(key, 0, -1, 0);
@@ -429,6 +444,7 @@ public final class PollutionField {
                 a[i * CHANNELS + p] -= f;
                 if (work.phi[j] < closed) {
                     book[ground] += f;
+                    grounded.merge(MapColumns.columnOf(key), f, Double::sum);
                 } else {
                     a[j * CHANNELS + p] += f;
                 }
@@ -441,6 +457,7 @@ public final class PollutionField {
             if (cell.airShare() < closed) {
                 a[i * CHANNELS + p] -= f;
                 book[ground] += f;
+                grounded.merge(MapColumns.columnOf(key), f, Double::sum);
                 continue;
             }
             if (f / (cell.airShare() * CUBE_AIR_MOLES) < settings.cutoff()) {
