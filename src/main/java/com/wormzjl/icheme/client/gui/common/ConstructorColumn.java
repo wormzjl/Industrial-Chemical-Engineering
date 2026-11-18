@@ -11,6 +11,7 @@ import com.wormzjl.icheme.science.equipment.SentDesign;
 import com.wormzjl.icheme.science.equipment.UnitDesign;
 import com.wormzjl.icheme.science.equipment.VesselPlacement;
 import com.wormzjl.icheme.science.flowsheet.sizing.SheetSizing;
+import com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -80,11 +81,7 @@ public final class ConstructorColumn {
 
     /** The choice page's groups of kinds. */
     public enum Category {
-        VESSELS, HEAT, MACHINES, REACTORS, SOLID_FUEL,
-        // The vacuum sub-category (batch 2026-11-10-vacuum-pump, owner V4 A): the steam ejector and the vacuum pump casings.
-        VACUUM,
-        // The power category (batch 2026-11-10-prime-movers, owner P3 A): the steam turbine and the generator moved in, the engines and gas turbines.
-        POWER;
+        VESSELS, SEPARATION, HEAT, REACTORS, SOLID_FUEL, UTILITIES, ROTATING;
 
         public String key() {
             return name().toLowerCase(Locale.ROOT);
@@ -93,25 +90,40 @@ public final class ConstructorColumn {
 
     /** What the constructor builds, by group; a horizontal drum lies along or across the constructor's facing, every other is its placement form. */
     public enum Equipment {
-        VERTICAL_DRUM(Category.VESSELS), HORIZONTAL_DRUM(Category.VESSELS), COLUMN(Category.VESSELS), FLOATING_ROOF_TANK(Category.VESSELS), SPHERE(Category.VESSELS),
-        ADSORBER(Category.VESSELS), CYCLONE(Category.VESSELS),
-        EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT), VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT), INDUCED_DRAFT_COOLING_TOWER(Category.HEAT), NATURAL_DRAFT_COOLING_TOWER(Category.HEAT), FLARE_STACK(Category.HEAT), BATCH_STILL(Category.HEAT), STEEL_STACK(Category.HEAT), BRICK_CHIMNEY(Category.HEAT),
-        PUMP(Category.MACHINES), COMPRESSOR(Category.MACHINES), CENTRIFUGAL_COMPRESSOR(Category.MACHINES), EJECTOR(Category.VACUUM),
-        STEAM_TURBINE(Category.POWER), MOTOR(Category.MACHINES), GENERATOR(Category.POWER), GEARBOX(Category.MACHINES),
-        STIRRED_REACTOR(Category.REACTORS), TRICKLE_BED_REACTOR(Category.REACTORS), EBULLATED_BED_REACTOR(Category.REACTORS), FCC_CONVERTER(Category.REACTORS),
-        DELAYED_COKER(Category.REACTORS),
-        FLUIDIZED_BED_BOILER(Category.SOLID_FUEL), FLUIDIZED_BED_GASIFIER(Category.SOLID_FUEL), GRATE_BOILER(Category.SOLID_FUEL), FIXED_BED_GASIFIER(Category.SOLID_FUEL),
-        LIQUID_RING_PUMP(Category.VACUUM), DRY_SCREW_PUMP(Category.VACUUM),
-        COMBUSTION_ENGINE(Category.POWER), GAS_TURBINE(Category.POWER),
-        // The fluid converters (batch 2026-11-12-fluid-conversion).
-        FLUID_CONVERTER(Category.VESSELS), GAS_CONVERTER(Category.VESSELS),
-        // The plunger pump (batch 2026-11-15-supercritical-fluids, S8): a pump on a shaft, beside the centrifugal pump.
-        PLUNGER_PUMP(Category.MACHINES);
+        VERTICAL_DRUM(Category.VESSELS, VesselPlacement.Form.VERTICAL), HORIZONTAL_DRUM(Category.VESSELS, VesselPlacement.Form.LENGTHWISE),
+        FLOATING_ROOF_TANK(Category.VESSELS), SPHERE(Category.VESSELS),
+
+        COLUMN(Category.SEPARATION), BATCH_STILL(Category.SEPARATION), ADSORBER(Category.SEPARATION), CYCLONE(Category.SEPARATION),
+
+        EXCHANGER(Category.HEAT), KETTLE(Category.HEAT), AIR_COOLER(Category.HEAT),
+        VERTICAL_HEATER(Category.HEAT), CABIN_HEATER(Category.HEAT),
+        INDUCED_DRAFT_COOLING_TOWER(Category.HEAT), NATURAL_DRAFT_COOLING_TOWER(Category.HEAT),
+
+        PUMP(Category.ROTATING), PLUNGER_PUMP(Category.ROTATING), LIQUID_RING_PUMP(Category.ROTATING), DRY_SCREW_PUMP(Category.ROTATING),
+        CENTRIFUGAL_COMPRESSOR(Category.ROTATING), COMPRESSOR(Category.ROTATING),
+        STEAM_TURBINE(Category.ROTATING), GAS_TURBINE(Category.ROTATING), COMBUSTION_ENGINE(Category.ROTATING),
+        MOTOR(Category.ROTATING), GENERATOR(Category.ROTATING), GEARBOX(Category.ROTATING),
+
+        STIRRED_REACTOR(Category.REACTORS), TRICKLE_BED_REACTOR(Category.REACTORS), EBULLATED_BED_REACTOR(Category.REACTORS),
+        FCC_CONVERTER(Category.REACTORS), DELAYED_COKER(Category.REACTORS),
+
+        FLUIDIZED_BED_BOILER(Category.SOLID_FUEL), GRATE_BOILER(Category.SOLID_FUEL),
+        FLUIDIZED_BED_GASIFIER(Category.SOLID_FUEL), FIXED_BED_GASIFIER(Category.SOLID_FUEL),
+
+        EJECTOR(Category.UTILITIES), FLARE_STACK(Category.UTILITIES), STEEL_STACK(Category.UTILITIES), BRICK_CHIMNEY(Category.UTILITIES),
+        FLUID_CONVERTER(Category.UTILITIES), GAS_CONVERTER(Category.UTILITIES);
 
         public final Category category;
+        public final VesselPlacement.Form form;
 
         Equipment(Category category) {
             this.category = category;
+            this.form = VesselPlacement.Form.valueOf(name());
+        }
+
+        Equipment(Category category, VesselPlacement.Form form) {
+            this.category = category;
+            this.form = form;
         }
 
         public static Equipment of(VesselPlacement.Form form) {
@@ -129,7 +141,16 @@ public final class ConstructorColumn {
     }
 
     /** A page: its rows; its footer's push buttons, Build the last (the primary one); whether it shows the message display. */
-    public record Page(List<Column.Row> rows, List<Column.Button> footer, boolean display) {
+    public record Page(List<Column.Row> rows, List<Column.Button> footer, boolean display, int panelWidth) {
+        public Page(List<Column.Row> rows, List<Column.Button> footer, boolean display) {
+            this(rows, footer, display, PANEL);
+        }
+
+        public Rect area(int height) {
+            var area = ConstructorColumn.area(height, display);
+            return new Rect(area.x(), area.y(), panelWidth - 2 * LEFT, area.h());
+        }
+
         public Page {
             rows = List.copyOf(rows);
             footer = List.copyOf(footer);
@@ -169,7 +190,7 @@ public final class ConstructorColumn {
         if (state != null) removal.add(new Column.Paragraph(state, target.words() != null && !target.words().isEmpty() ? Palette.WARN : Palette.TEXT));
         if (target.message() != null) removal.add(new Column.Paragraph(target.message(), target.warn() ? Palette.WARN : Palette.ACCENT));
         rows.add(new Column.Group(t.get(KEY + "group.deconstruct"), t.get(KEY + "deconstruct.hint"), removal));
-        return new Page(rows, page.footer(), page.display());
+        return new Page(rows, page.footer(), page.display(), page.panelWidth());
     }
 
     /** A selector's position: latched where it stands, else a key that moves it there. */
@@ -230,33 +251,39 @@ public final class ConstructorColumn {
 
     // ---- The choice page ----
 
-    /**
-     * What to build: the groups as a latched selector, three a row, then the shown group's kinds, one a row, the draft's
-     * latched. The draft's kind still acts: pressed, it returns to its design, as Back right of the title does (owner
-     * report 2026-10-28: the green kind could not be pressed). A kind's hover gives its full name and what it is. After the
-     * last group, Import (batch 2026-11-02-process-simulator, S5): a process simulator's design within {@code reach} blocks, which sets the
-     * kind with its sizes. Keys: {@code category:<category>}, {@code kind:<equipment>}, {@code import}.
-     */
+    /** Import opens the simulator's saved designs. Category keys filter the equipment list. Each kind opens its design. */
     public static Page choose(Category shown, Equipment current, int reach, HeatControlColumn.Texts t) {
-        var rows = new ArrayList<Column.Row>();
+        var groups = new ArrayList<Column.Row>();
+        groups.add(new Column.Group(t.get(KEY + "group.saved_designs"), null,
+                List.of(new Column.Buttons(List.of(importKey(reach, t))))));
+
+        var filters = new ArrayList<Column.Row>();
         var categories = Category.values();
         for (int i = 0; i < categories.length; i += 3) {
             var row = new ArrayList<Column.Button>();
             for (int j = i; j < Math.min(i + 3, categories.length); j++) {
-                String key = KEY + "category." + categories[j].key();
-                row.add(position("category:" + categories[j].key(), t.get(key), categories[j] == shown, t.get(key + ".hint")));
+                var category = categories[j];
+                String key = KEY + "category." + category.key();
+                row.add(position("category:" + category.key(), t.get(key), category == shown, t.get(key + ".hint")));
             }
-            // Import takes the last row's free place: a row of its own would scroll the largest groups.
-            if (i + 3 >= categories.length) row.add(importKey(reach, t));
-            rows.add(new Column.Buttons(row));
+            filters.add(new Column.Buttons(row));
         }
-        rows.add(new Column.Gap(4));
-        for (var e : Equipment.values()) {
-            if (e.category != shown) continue;
-            String key = KEY + "equipment." + e.key();
-            rows.add(new Column.Buttons(List.of(new Column.Button("kind:" + e.key(), t.get(key + ".short"), true, t.get(key) + "\n" + t.get(key + ".hint"), e == current))));
+        groups.add(new Column.Group(t.get(KEY + "group.equipment"), t.get(KEY + "group.equipment.hint"), filters));
+
+        var kinds = new ArrayList<Column.Row>();
+        for (var equipment : Equipment.values()) {
+            if (equipment.category != shown) continue;
+            String key = KEY + "equipment." + equipment.key();
+            String label = t.get(key), hint = t.get(key + ".hint");
+            if (EquipmentInfo.SHAPE_ONLY.contains(equipment.form.kind())) {
+                label = t.get(KEY + "wip", label);
+                hint = t.get(KEY + "wip.hint") + "\n" + hint;
+            }
+            kinds.add(new Column.Buttons(List.of(new Column.Button("kind:" + equipment.key(), label, true, hint, equipment == current))));
         }
-        return new Page(List.of(new Column.Group(t.get(KEY + "group.equipment"), t.get(KEY + "group.equipment.hint"), rows)), List.of(), false);
+        groups.add(new Column.Group(t.get(KEY + "category." + shown.key()), null, kinds));
+        // The chooser has room for full equipment names. The design door leaves more of the world preview visible.
+        return new Page(groups, List.of(), false, 272);
     }
 
     // ---- The column templates ----
@@ -439,6 +466,7 @@ public final class ConstructorColumn {
             }
         }
         var rows = new ArrayList<Column.Row>();
+        if (EquipmentInfo.SHAPE_ONLY.contains(form.kind())) rows.add(new Column.Paragraph(t.get(KEY + "wip.hint"), Palette.WARN));
         if(form.kind()==EquipmentShape.Kind.EXCHANGER) {
             var types=new ArrayList<Column.Button>();
             for(var type:com.wormzjl.icheme.science.equipment.ExchangerType.CATALOG)types.add(position("exchanger:"+type.name(),t.get("exchanger.type."+type.key()),type==in.exchangerType(),t.get("exchanger.type_hint")));

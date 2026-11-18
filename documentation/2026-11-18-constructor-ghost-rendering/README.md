@@ -1,10 +1,15 @@
-# Constructor ghost rendering
+# Constructor preview and equipment selection
 
 Client lane, PERF. In progress since 2026-11-18 on `codex/constructor-ghost-rendering`.
 
 ## History
 
 - 2026-11-18 — Cached the sorted translucent draw buffer in `EquipmentGhost` and culled previews outside the view. The collision scan reuses a position for clear cells and the controller lookup reuses the layout’s controller cell.
+- 2026-11-18 — Reorganized the equipment chooser. Separation contains the column and batch still, Rotating equipment contains pumps, compressors and shaft machinery, and Utilities includes the steam ejector. Saved designs has its own simulator import action. The chooser shows full equipment names and marks the 11 kinds in `EquipmentInfo.SHAPE_ONLY` with `[WIP]`. A tagged design explains that its structure can be built while its process operation is in development.
+
+## Equipment chooser
+
+The chooser is 272 GUI pixels wide to fit the equipment labels. The design pages retain their 200-pixel panel. The English labels, category and kind selection, placement of the import action and panel width are covered by the constructor and tour layout gates. The light and dark software sheets include the Separation page at 464 × 254 and Rotating equipment at 320 × 240.
 
 ## Rendering
 

@@ -297,7 +297,7 @@ public final class GuiPrototypes {
         var flare = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.FLARE_STACK, .3, 1, 0, 0, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         out.add(new Prototype("equipment-constructor-flare", 464, 254, (d, s) -> constructorDoor(d, flare, "Flare stack", "change", DIALOG.get(CONSTRUCTOR + "flare_rating", "212.4", "32"), Palette.ACCENT, Map.of()), true));
         out.add(new Prototype("equipment-constructor-choose-heat", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.HEAT,
-                ConstructorColumn.Equipment.FLARE_STACK, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true));
+                ConstructorColumn.Equipment.INDUCED_DRAFT_COOLING_TOWER, 16, DIALOG), "Constructor", "back", null, 0, Map.of()), true));
         return out;
     }
 
@@ -1211,6 +1211,10 @@ public final class GuiPrototypes {
                     columnDrawing(d, d.well(new Rect(d.w - 16 - 140, 16, 152, d.h - 32)));
                 }, true),
                 new Prototype("equipment-constructor-templates", 464, 254, (d, s) -> constructorDoor(d, templatePage, "Distillation column", "back", null, 0, Map.of()), true),
+                new Prototype("equipment-constructor-choose-separation", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.SEPARATION,
+                        ConstructorColumn.Equipment.COLUMN, 16, DIALOG), "Constructor", "back", null, 0, Map.of()), true),
+                new Prototype("equipment-constructor-choose-rotating", 320, 240, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.ROTATING,
+                        ConstructorColumn.Equipment.PUMP, 16, DIALOG), "Constructor", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor-choose", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.VESSELS,
                         ConstructorColumn.Equipment.VERTICAL_DRUM, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor", 464, 254, (d, s) -> constructorDoor(d, drum, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
@@ -1250,13 +1254,13 @@ public final class GuiPrototypes {
      * {@code values}. Returns the column as placed, unscrolled (where the column scrolls, the palette is not drawn).
      */
     static Column constructorDoor(Door d, ConstructorColumn.Page page, String title, String key, String status, int tone, Map<String, String> values) {
-        int panel = ConstructorColumn.PANEL;
+        int panel = page.panelWidth();
         d.c.fill(panel, 0, d.w, d.h, 0xFF4A6B3A);
-        d.c.text("(the world and the ghost)", panel + 30, d.h / 2, 0xFFE0E0E0);
+        if (panel == ConstructorColumn.PANEL) d.c.text("(the world and the ghost)", panel + 30, d.h / 2, 0xFFE0E0E0);
         d.skin.page(d.c, new Rect(0, 0, panel, d.h));
         d.skin.title(d.c, 10, 10, title);
         if (key != null) d.skin.button(d.c, ConstructorColumn.TITLE_KEY, DIALOG.get(CONSTRUCTOR + key), Skin.Press.REST, false);
-        var area = ConstructorColumn.area(d.h, page.display());
+        var area = page.area(d.h);
         int tall = Column.place(page.rows(), area.x(), area.y(), area.w(), d.m, Column.Metrics.COMPACT).bounds().h();
         int width = tall > area.h() ? area.w() - ScrollView.BAR - 4 : area.w();
         var column = Column.place(page.rows(), area.x(), area.y(), width, d.m, Column.Metrics.COMPACT);
