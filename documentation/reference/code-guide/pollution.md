@@ -29,7 +29,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | `CubeKey` | A cube as a long, packed as `SectionPos.asLong`; `offset`, `inside(key, minY, maxY)`. |
 | `PollutionField` | Immutable sorted keys and amounts. `step` (one pass), `burn`, `capped` (drops cubes outside the height, booked dissipated), `index`. `CUBE_AIR_MOLES` ≈ 167 400. |
 | `PollutionSettings` | Exchange 0.12 per face and 20 s, half-lives 300 s open and 3600 s enclosed, rain factor 4, settling 0.05, cutoff 1e-3, at most 8192 cubes. |
-| `Environment`, `Cell`, `MapEnvironment` | A cube's air share, whether it is above the surface and whether its terrain is known. |
+| `Environment`, `Cell` (the map-backed `MapEnvironment` fixture lives in test sources) | A cube's air share, whether it is above the surface and whether its terrain is known. |
 | `PollutionLedger` | Per channel: `RELEASED`, `DECAYED`, `DISSIPATED`, `BURNT`, `GROUND`; `closure` = released − stored − the rest. |
 | `ExplosionLaw` | `flammable` (index ≥ 1), `burntIndex` (at most 2), `energy`, `tntKilograms`, `power`, `strengthAt(power, distance)`, `reach`. |
 | `Exposure` | Levels at 0.1, 0.3, 1 and 3; the effects and damage of each kind. |
