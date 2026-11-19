@@ -596,8 +596,7 @@ public final class PassiveStepSolver {
         var seen=new HashSet<PassKey>();
         // Constant for this solve: every pass keys on the same graph identity and component support.
         var pipeIdentities=identitiesOf(graph);int pipesHash=pipeIdentities.hashCode();
-        long[] nodeIds=nodeIds(graph);byte[] kinds=new byte[nodeIds.length];
-        for(int i=0;i<kinds.length;i++)kinds[i]=(byte)graph.reservoirs().get(i).kind().ordinal();
+        long[] nodeIds=nodeIds(graph);
         boolean[] componentMask=componentMask(graph);
         // Components this solve has reactivated, per node. Reactivation is monotone within one solve
         // - a later pass's seed may not undo it - which is what keeps the support half of the cycle
@@ -626,6 +625,8 @@ public final class PassiveStepSolver {
         for(int pass=0;pass<maximumPasses;pass++) {
             checkpoint.run();SolverDiagnostics.count(SolverDiagnostics.activeSetPasses);
             graph=emptying==null?original:PhaseActiveSet.emptyingGraph(original,emptying);emptyings=emptying==null?null:phaseSet.emptyings(original,emptying,dt);
+            // An emptying vessel can become a junction on this pass. Earlier workspace keys retain their own kinds.
+            byte[] kinds=new byte[nodeIds.length];
             for(int i=0;i<kinds.length;i++)kinds[i]=(byte)graph.reservoirs().get(i).kind().ordinal();
             // Decision D34: the phases a pass is laid out for are the flash's, decided here once per pass and never inside a
             // residual or a Jacobian probe; a seed taken from a converged point of an earlier pass may still hold a phase its
