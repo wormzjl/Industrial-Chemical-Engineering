@@ -161,9 +161,15 @@ final class StartSeeds {
                          List<FlowControl.Mode> modes,boolean[] boundaryClosed,double dt,Runnable checkpoint,double[] deliveredFlows) {
         int nodes=graph.reservoirs().size();
         List<FluidThermodynamics.State> result=null;
+        // Flows and phase draws stay fixed for this propagation. After a sweep, only a changed seed
+        // or one of its downstream neighbours can produce a different mixture on the next visit.
+        boolean[] revisit=new boolean[nodes];
+        Arrays.fill(revisit,true);
         for(int round=0;round<=nodes;round++) {
             boolean changed=false;
             for(int j=0;j<nodes;j++) {
+                if(!revisit[j])continue;
+                revisit[j]=false;
                 var node=graph.reservoirs().get(j);boolean empty=holdsNoFluidVessel(node);if(!(node.junction()&&!node.fixed()&&!vesselsOnly||empty))continue;
                 var current=result==null?seeds:result;var seed=current.get(j);
                 if(empty&&!dry(node,seed))continue;
@@ -191,7 +197,8 @@ final class StartSeeds {
                     var own=emptyBagSplit(node,weighted/mass,n,heat,checkpoint);
                     if(result==null)result=new ArrayList<>(seeds);
                     var arrived=own==null?delivered:own;var held=node.inventory().solids();
-                    result.set(j,held.empty()?arrived:arrived.withSolids(held));changed=true;continue;
+                    result.set(j,held.empty()?arrived:arrived.withSolids(held));
+                    revisitDownstream(graph,flows,j,revisit);changed=true;continue;
                 }
                 // Where nothing arrives the mixture is the stock alone, which the seed must hold as well.
                 if(!(heldMass>0))continue;
@@ -231,12 +238,23 @@ final class StartSeeds {
                 var mixture=model.folded(own,true);
                 if(!stocked && !front && Math.abs(mixture.temperature()-seed.temperature()) <= .5 && laidOutFor(phaseCode(mixture),phaseCode(seed)))continue;
                 if(result==null)result=new ArrayList<>(seeds);
-                result.set(j,mixture.withSolidState(seed.solids(),seed.solidMoments()));changed=true;
+                result.set(j,mixture.withSolidState(seed.solids(),seed.solidMoments()));
+                revisitDownstream(graph,flows,j,revisit);changed=true;
             }
             if(!changed)break;
         }
         return result==null?new Seeded(seeds,null):flashSeeds(graph,modes,boundaryClosed,seeds,result,checkpoint);
     }
+
+    private static void revisitDownstream(PassiveNetwork graph,double[] flows,int changed,boolean[] revisit) {
+        revisit[changed]=true;
+        for(int edge=0;edge<flows.length;edge++) {
+            var pipe=graph.pipes().get(edge);
+            if(flows[edge]>0&&pipe.first()==changed)revisit[pipe.second()]=true;
+            else if(flows[edge]<0&&pipe.second()==changed)revisit[pipe.first()]=true;
+        }
+    }
+
     /**
      * Whether junction {@code j} of a cold solve is seeded by its stock: its {@code seed} is the balance's restatement
      * ({@link BalanceStart#balanceStart}), not its own state, and the step's start flows bring it no more than it holds

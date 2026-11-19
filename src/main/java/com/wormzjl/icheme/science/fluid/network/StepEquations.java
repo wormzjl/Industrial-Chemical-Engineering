@@ -67,6 +67,8 @@ final class StepEquations implements SparseNewton.Equations {
     PhaseLayout.Wall[] sweepWall,builtWall;
     private final FurnacePairs furnacePairs;
     final int edgeOffset,size;final double[][] oldAmounts;int[][] sparsity;final List<FlowControl.Mode> modes;final int[] controlOffsets;final boolean[] boundaryClosed;final List<FluidThermodynamics.State> seeds;
+    /** The junction's owned mass at step start is constant over every trial of the pass. */
+    private final double[] junctionStockMass;
     final double[][] cachedVariables;final FluidThermodynamics.State[] cachedStates;final Transport[] cachedTransport;
     /** Which nodes an end draws phases of ({@link PassiveNetwork.PhasePort} VAPOR or LIQUID) through a connection this
      * pass leaves open: only those nodes build their phase streams at each decode, and only their non-amount columns
@@ -290,10 +292,13 @@ final class StepEquations implements SparseNewton.Equations {
             // The bag volume the step starts from, whose wall work each vessel's energy row books (decision D54).
             if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)bagStart[i]=node.empty()?node.inventory().emptyBag():PhaseLayout.bagVolume(node.state(),node.inventory().wallCapacity());
         }
+        junctionStockMass=new double[count];
         for(int i=0;i<count;i++) {
-            var state=graph.reservoirs().get(i).state();offsets[i]=cursor;oldAmounts[i]=graph.reservoirs().get(i).inventory().moles();
-            if(!graph.reservoirs().get(i).fixed()&&!dry[i]) {
-                layout[i]=new PhaseLayout(model,seeds.get(i),reachable[i],kept(i),supports[i],solidSupport).atAmbient(graph.reservoirs().get(i).inventory().ambient());cursor+=layout[i].size();
+            var node=graph.reservoirs().get(i);var inventory=node.inventory();
+            offsets[i]=cursor;oldAmounts[i]=inventory.moles();
+            if(!node.fixed()&&!dry[i]) {
+                if(node.junction())junctionStockMass[i]=solver.molarMass(oldAmounts[i])+inventory.solids().massKg();
+                layout[i]=new PhaseLayout(model,seeds.get(i),reachable[i],kept(i),supports[i],solidSupport).atAmbient(inventory.ambient());cursor+=layout[i].size();
                 if(SolverDiagnostics.ENABLED) {
                     int omitted=layout[i].singlePhaseComponentCount();
                     if(omitted>0){SolverDiagnostics.traceOmittedUnknowns.add(omitted);SolverDiagnostics.truncatedNodePasses.increment();}
@@ -1412,12 +1417,100 @@ final class StepEquations implements SparseNewton.Equations {
      * are never read.
      */
     private void nodeAccumulate(int node,double[] x,FluidThermodynamics.State[] st,Transport[] tr) {
+        var reservoir=graph.reservoirs().get(node);
+        boolean junction=reservoir.junction();
         double[] target=targets[node],in=incoming[node];
-        System.arraycopy(startMoments(node),0,solidTargets[node],0,3);Arrays.fill(solidIncoming[node],0);
-        System.arraycopy(oldAmounts[node],0,target,0,target.length);Arrays.fill(in,0);
-        double stored=graph.reservoirs().get(node).inventory().internalEnergy(),mass=0,heat=0,net=0;
+        double stored=0,mass=0,heat=0,net=0;
+        if(junction) {
+            Arrays.fill(in,0);
+            Arrays.fill(solidIncoming[node],0);
+        } else stored=vesselStartBalance(node,st[node]);
+        // A kettle's pool (W7): the bundle's heat into the vessel over the step, on its start state.
+        double pooled=poolHeat(reservoir);
+        if(junction)heat+=pooled;else stored+=dt*pooled;
+        if(reservoir.inventory().tower()!=null) {
+            double[] flows;if(edgesRead)flows=edgeFlow;else{flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);}
+            // The stream each spray edge delivers, as this point's transport draws it (COOLING_TOWER_PLAN.md 3.1).
+            double[][] drawn=null;
+            for(int edge:nodeEdges[node]){var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
+                if(pipe.portAt(node)!=PassiveNetwork.PhasePort.SPRAY||!((first?-flows[edge]:flows[edge])>0))continue;
+                int donor=first?pipe.second():pipe.first();var rates=drawRates(edge,flows[edge],st[donor],tr[donor]);
+                if(rates!=null){if(drawn==null)drawn=new double[flows.length][];drawn[edge]=rates;}}
+            var exchange=TowerExchange.at(graph,node,Arrays.asList(st),flows,drawn,model);
+            if(junction) {
+                heat-=exchange.energyWatt();
+                net-=exchange.massLoss();
+            } else {
+                for(int c=0;c<target.length;c++)target[c]-=dt*exchange.loss(c)/model.molecularWeight(c);
+                stored-=dt*exchange.energyWatt();
+            }
+        }
+        for(int edge:nodeEdges[node]) {
+            var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flowAt(edge,x,tr);
+            // Read the transported stream from its actual upwind end, including a phase port's draw.
+            boolean first=node==a;int donor=flow>=0?a:b;var upstream=st[donor];var transport=donorAt(edge,tr,flow);
+            boolean receiver=node==(flow>=0?b:a);
+            double rate=Math.abs(flow);
+            var amounts=transport.moles;
+            boolean filtered=pipe.filter()!=null;
+            if(junction) {
+                double capture=filtered?transport.solids.mass()/transport.mass:0;
+                double delivered=rate*(1-capture);
+                net+=receiver?delivered:-rate;
+                if(receiver) {
+                    mass+=delivered;
+                    for(int c=0;c<amounts.length;c++)in[c]+=rate*amounts[c]/transport.mass;
+                    heat+=rate*transport.specificEnthalpy;
+                    var moments=momentsOf(transport.solids,mixedMoments);
+                    if(!filtered&&melting!=null&&melting.any(node)&&transport.solids.mass()>0) {
+                        // Owner decision D61: the crystal this junction melts arrives as its component and energy offset.
+                        var split=melting.split(node,upstream.solids(),amounts.length);double solidRate=rate*transport.solids.mass()/transport.mass;
+                        for(int c=0;c<amounts.length;c++)if(split.mass()[c]>0)in[c]+=solidRate*split.mass()[c]/model.molecularWeight(c);
+                        heat+=solidRate*split.energy();
+                        if(!split.all()){double[] removed={split.share(),split.volume(),split.capacity()};
+                            for(int c=0;c<3;c++)solidIncoming[node][c]+=Math.max(0,rate*moments[c]/transport.mass-solidRate*removed[c]);}
+                    }
+                    else if(!filtered)for(int c=0;c<3;c++)solidIncoming[node][c]+=rate*moments[c]/transport.mass;
+                    else heat-=rate*(transport.solids.enthalpy(upstream.temperature(),upstream.pressure())/transport.mass);
+                }
+            } else {
+                double moving=dt*flow;
+                for(int c=0;c<amounts.length;c++){double moved=moving*amounts[c]/transport.mass;target[c]+=first?-moved:moved;}
+                var moments=momentsOf(transport.solids,carriedMoments);
+                for(int c=0;c<3;c++)if(!receiver||!filtered)solidTargets[node][c]+=(first?-1:1)*moving*moments[c]/transport.mass;
+                stored+=(first?-1:1)*moving*transport.specificEnthalpy;
+                if(receiver&&filtered) {
+                    double capturedRate=rate*(transport.solids.enthalpy(upstream.temperature(),upstream.pressure())/transport.mass);
+                    stored-=dt*capturedRate;
+                }
+            }
+            if(!first&&(pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine)) {
+                int control=controlOffsets[edge];double head=control<0?0:x[control]*1e5;
+                // Metered on the suction stream's density and on the trial endpoint pressures (decision D8).
+                double power=moverPower(edge,flow,head,suctionAt(edge,tr,flow).density,st[a].pressure(),st[b].pressure());
+                if(junction)heat+=power;else stored+=dt*power;
+            }
+            // Heat picked up crossing the wall enters the receiving balance, like mover work.
+            if(receiver&&pipe.heat()!=null) {
+                double taken=trialCoilHeat(edge,transport.specificEnthalpy,flow,x,tr);
+                if(junction)heat+=taken;else stored+=dt*taken;
+            }
+        }
+        if(junction) {
+            incomingMass[node]=mass;incomingEnergy[node]=heat;
+            // An emptying vessel standing as a junction (D54) passes its stock as well as what arrives.
+            netMass[node]=solver.emptyings!=null&&solver.emptyings[node]!=null?net+solver.emptyings[node].drain():net;
+        } else energy[node]=stored;
+    }
+
+    /** Owned stock and scheduled transfers at the start of a finite vessel's balance. */
+    private double vesselStartBalance(int node,FluidThermodynamics.State state) {
+        double[] target=targets[node];
+        System.arraycopy(oldAmounts[node],0,target,0,target.length);
+        System.arraycopy(startMoments(node),0,solidTargets[node],0,3);
+        double stored=graph.reservoirs().get(node).inventory().internalEnergy();
         for(int t:transfersAt[node]) {
-            var transfer=graph.scheduledTransfers().get(t);var state=st[node];
+            var transfer=graph.scheduledTransfers().get(t);
             if(transfer instanceof ScheduledTransfer.Withdrawal withdrawal) {
                 // A module's withdrawal takes the vessel's bulk, its solids at their share of the mass (D23 (6)), on the
                 // state's own amounts: the node's transport is what a connection's bulk end draws (the gas, under D33).
@@ -1438,76 +1531,7 @@ final class StepEquations implements SparseNewton.Equations {
             var moments=released.moments().values();for(int c=0;c<3;c++)solidTargets[node][c]-=moments[c];
             stored-=released.energyJoule();
         }
-        // A kettle's pool (W7): the bundle's heat into the vessel over the step, on its start state.
-        double pooled=poolHeat(graph.reservoirs().get(node));stored+=dt*pooled;heat+=pooled;
-        if(graph.reservoirs().get(node).inventory().tower()!=null) {
-            double[] flows;if(edgesRead)flows=edgeFlow;else{flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);}
-            // The stream each spray edge delivers, as this point's transport draws it (COOLING_TOWER_PLAN.md 3.1).
-            double[][] drawn=null;
-            for(int edge:nodeEdges[node]){var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
-                if(pipe.portAt(node)!=PassiveNetwork.PhasePort.SPRAY||!((first?-flows[edge]:flows[edge])>0))continue;
-                int donor=first?pipe.second():pipe.first();var rates=drawRates(edge,flows[edge],st[donor],tr[donor]);
-                if(rates!=null){if(drawn==null)drawn=new double[flows.length][];drawn[edge]=rates;}}
-            var exchange=TowerExchange.at(graph,node,Arrays.asList(st),flows,drawn,model);
-            for(int c=0;c<target.length;c++)target[c]-=dt*exchange.loss(c)/model.molecularWeight(c);
-            stored-=dt*exchange.energyWatt();heat-=exchange.energyWatt();net-=exchange.massLoss();
-        }
-        for(int edge:nodeEdges[node]) {
-            var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flowAt(edge,x,tr);
-            // The donor terms read the stream of the end the flow leaves: the donor's bulk at a BULK end (the same
-            // doubles as its whole state), its drawn phase at a phase port.
-            boolean first=node==a;int donor=flow>=0?a:b;var upstream=st[donor];var transport=donorAt(edge,tr,flow);
-            boolean receiver=node==(flow>=0?b:a);
-            double captureFraction=pipe.filter()==null?0:transport.solids.mass()/transport.mass;
-            double deliveredFlow=Math.abs(flow)*(1-captureFraction);
-            net+=receiver?deliveredFlow:-Math.abs(flow);
-            var amounts=transport.moles;double moving=dt*flow;
-            for(int c=0;c<amounts.length;c++){double moved=moving*amounts[c]/transport.mass;target[c]+=first?-moved:moved;}
-            var moments=momentsOf(transport.solids,carriedMoments);
-            for(int c=0;c<3;c++)if(!receiver||pipe.filter()==null)solidTargets[node][c]+=(first?-1:1)*moving*moments[c]/transport.mass;
-            stored+=(first?-1:1)*moving*transport.specificEnthalpy;
-            // What arrives at this node, on the live upwind: read only by a junction's rows, which mix it into the
-            // junction's owned stock like a vessel's inflow.
-            int mixed=donor;
-            if(receiver) {
-                var source=st[mixed];var carried=transport;var sourceAmounts=carried.moles;
-                double sourceCapture=pipe.filter()==null?0:carried.solids.mass()/carried.mass;
-                double sourceEnthalpy=carried.specificEnthalpy;
-                mass+=Math.abs(flow)*(1-sourceCapture);
-                for(int c=0;c<sourceAmounts.length;c++)in[c]+=Math.abs(flow)*sourceAmounts[c]/carried.mass;
-                heat+=Math.abs(flow)*sourceEnthalpy;
-                var sourceMoments=momentsOf(carried.solids,mixedMoments);
-                if(pipe.filter()==null&&melting!=null&&melting.any(node)&&carried.solids.mass()>0) {
-                    // Owner decision D61: the crystal this junction is above the melting point of arrives as its
-                    // component, with its offset (the crystal's enthalpy), and only the solids it keeps mix as solids.
-                    var split=melting.split(node,source.solids(),sourceAmounts.length);double solidRate=Math.abs(flow)*carried.solids.mass()/carried.mass;
-                    for(int c=0;c<sourceAmounts.length;c++)if(split.mass()[c]>0)in[c]+=solidRate*split.mass()[c]/model.molecularWeight(c);
-                    heat+=solidRate*split.energy();
-                    if(!split.all()){double[] removed={split.share(),split.volume(),split.capacity()};
-                        for(int c=0;c<3;c++)solidIncoming[node][c]+=Math.max(0,Math.abs(flow)*sourceMoments[c]/carried.mass-solidRate*removed[c]);}
-                }
-                else if(pipe.filter()==null)for(int c=0;c<3;c++)solidIncoming[node][c]+=Math.abs(flow)*sourceMoments[c]/carried.mass;
-                else heat-=Math.abs(flow)*(carried.solids.enthalpy(source.temperature(),source.pressure())/carried.mass);
-            }
-            if(receiver&&pipe.filter()!=null) {
-                double capturedRate=Math.abs(flow)*(transport.solids.enthalpy(upstream.temperature(),upstream.pressure())/transport.mass);
-                stored-=dt*capturedRate;
-            }
-            if(!first&&(pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine)) {
-                int control=controlOffsets[edge];double head=control<0?0:x[control]*1e5;
-                // Metered on the suction stream's density (its bulk at a BULK end) and, for a compressor, the suction
-                // node's pressure at this trial (decision D8: suction properties only). A turbine's work leaves the
-                // stream (negative), its drop read from the trial inlet to the trial exhaust node's pressure; the
-                // sparsity declares this row on both ends' columns and the flow's (buildSparsity).
-                double power=moverPower(edge,flow,head,suctionAt(edge,tr,flow).density,st[a].pressure(),st[b].pressure());
-                stored+=dt*power;heat+=power;
-            }
-            // A heat-exchanging side delivers its donor's stream with the heat it took up crossing the wall, booked like
-            // a mover's work into the receiver's energy and its inflow (batch 2026-10-27-heat-exchanger-design).
-            if(receiver&&pipe.heat()!=null){double taken=trialCoilHeat(edge,transport.specificEnthalpy,flow,x,tr);stored+=dt*taken;heat+=taken;}
-        }
-        // An emptying vessel standing as a junction (decision D54, emptyingGraph) passes its stock as well as what arrives.
-        energy[node]=stored;incomingMass[node]=mass;incomingEnergy[node]=heat;netMass[node]=solver.emptyings!=null&&solver.emptyings[node]!=null?net+solver.emptyings[node].drain():net;
+        return stored;
     }
     /** {@code moments.values()} written into {@code into} (P-07): the same three doubles in the same order (mass, volume,
      * heat capacity), every element written. */
@@ -1895,8 +1919,7 @@ final class StepEquations implements SparseNewton.Equations {
         }
         // A junction's solid moments are its owned stock's, mixed with what arrives like its fluid; a rate-only solve
         // holds them at the stock's own (see junctionInflow).
-        var inventory=graph.reservoirs().get(node).inventory();
-        double stock = solver.molarMass(oldAmounts[node]) + inventory.solids().massKg();
+        double stock = junctionStockMass[node];
         double share = mixingShare(node, stock), retained = share * stock / dt, total = incomingMass[node] + retained;
         var solids=solidMix;System.arraycopy(solidIncoming[node],0,solids,0,3);var held=heldKept[node]!=null?heldKept[node]:startMoments(node);
         for(int c=0;c<3;c++)solids[c]=solver.rateOnly?held[c]/stock:(solids[c]+held[c]*share/dt)/total;
@@ -1953,7 +1976,7 @@ final class StepEquations implements SparseNewton.Equations {
         for(int node=0;node<layout.length;node++) {
             if(!backedFluidJunction(node)||!(incomingMass[node]>0))continue;
             var state=cachedStates[node];
-            double weight=1+dt*incomingMass[node]/solver.molarMass(oldAmounts[node]);
+            double weight=1+dt*incomingMass[node]/junctionStockMass[node];
             double ulp=Math.ulp(state.enthalpy()/state.mass())/Math.max(1,layout[node].energyScale()/state.mass());
             if(8*weight*Math.max(Math.ulp(1.0),ulp)>=tolerance)return true;
         }
@@ -1968,13 +1991,13 @@ final class StepEquations implements SparseNewton.Equations {
 
     private double junctionInflow(int node) {
         var inventory=graph.reservoirs().get(node).inventory();var held=oldAmounts[node];
-        double heldMass=solver.molarMass(held)+inventory.solids().massKg();
-        double share=mixingShare(node,heldMass),total=incomingMass[node]+share*heldMass/dt;
+        double heldMass=junctionStockMass[node];
         if(solver.rateOnly) {
             junctionWeight=1;
             for(int c=0;c<fractions.length;c++)fractions[c]=held[c]*model.molecularWeight(c)/heldMass;
             return inventory.internalEnergy()/heldMass;
         }
+        double share=mixingShare(node,heldMass),total=incomingMass[node]+share*heldMass/dt;
         junctionWeight=share+incomingMass[node]*dt/heldMass;
         // Owner decision D61: what the junction's own stock melts joins its fluid, with the crystal's offset.
         var melt=heldMelt[node];

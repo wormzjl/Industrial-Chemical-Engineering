@@ -255,7 +255,11 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
             if(moles.length==0||!Double.isFinite(total)||(total==0&&solids.empty()&&internalEnergy!=0))throw new IllegalArgumentException("Invalid empty/overflowed inventory");
         }
         /** The same vessel (volume, level height, opening and pool) holding these contents. */
-        public Inventory with(double[] moles,double internalEnergy,SolidInventory solids){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,carried,reserve);}
+        public Inventory with(double[] moles,double internalEnergy,SolidInventory solids){return with(moles,internalEnergy,solids,reserve);}
+        /** Replace the contents and their reserve as one validated inventory. */
+        Inventory with(double[] moles,double internalEnergy,SolidInventory solids,JunctionReserve reserve) {
+            return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,carried,reserve);
+        }
         /** The same vessel and contents with {@code value} as its pool (W7: a kettle's, planned or compiled). */
         public Inventory withPool(@org.jetbrains.annotations.Nullable Pool value){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,value,tower,rigid,ambient,blanket,carried,reserve);}
         /** The same vessel and contents under {@code value}, the pressure outside its wall (batch 2026-11-10-chimney, C1 B). */
@@ -270,7 +274,7 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
         }
         public double movingEnergy(){return reserve==null?internalEnergy:internalEnergy-reserve.enthalpy();}
         public Inventory withReserve(JunctionReserve value) {
-            return reserve==value?this:new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,carried,value);
+            return reserve==value?this:with(moles,internalEnergy,solids,value);
         }
         /** Whether {@code other} holds the same contents, bit for bit: its moles, energy and solids, whatever the vessel's
          * geometry. A topology event conserves these; a layout refresh may rebuild the vessel around them (batch

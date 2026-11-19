@@ -40,7 +40,7 @@ final class JunctionMixing {
                 reserves=new PassiveNetwork.JunctionReserve[graph.reservoirs().size()];
                 nodes=new ArrayList<>(graph.reservoirs());
                 // The working inventory has already been partitioned. Its entire balance circulates.
-                extracted=new PassiveNetwork.JunctionReserve(new double[whole.moles().length],0);
+                extracted=new PassiveNetwork.JunctionReserve(new double[moving.length],0);
             }
             PassiveNetwork.Inventory active;
             if(PhaseLayout.sum(moving)==0) {
@@ -49,7 +49,7 @@ final class JunctionMixing {
                 active=whole.withReserve(null);
             } else {
                 reserves[i]=reserve;
-                active=whole.withReserve(extracted).with(moving,whole.movingEnergy(),whole.solids());
+                active=whole.with(moving,whole.movingEnergy(),whole.solids(),extracted);
             }
             nodes.set(i,new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state(),node.kind(),active));
         }
@@ -265,7 +265,7 @@ final class JunctionMixing {
             var amounts=reserve.moles();
             var moving=active.moles();
             for(int c=0;c<amounts.length;c++)amounts[c]+=moving[c];
-            combined.set(i,total.withReserve(reserve).with(amounts,reserve.enthalpy()+active.internalEnergy(),active.solids()));
+            combined.set(i,total.with(amounts,reserve.enthalpy()+active.internalEnergy(),active.solids(),reserve));
         }
         return combined;
     }

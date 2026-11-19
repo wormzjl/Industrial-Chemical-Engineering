@@ -23,8 +23,16 @@ public record PipeTransfer(long pipeId, Stream forward, Stream reverse) {
         }
         @Override public double[][] phaseMoles(){return copy(phaseMoles);}
         @Override public double[] phaseVolumes(){return phaseVolumes.clone();}
+        /** Number of components in each booked phase. */
+        public int componentCount(){return phaseMoles[0].length;}
+        /** One element of the immutable phase history in mol. */
+        public double phaseMoles(int phase,int component){return phaseMoles[phase][component];}
         public double[] componentMoles(){double[] n=new double[phaseMoles[0].length];for(var phase:phaseMoles)for(int c=0;c<n.length;c++)n[c]+=phase[c];return n;}
-        private static double[][] copy(double[][] source){return Arrays.stream(source).map(double[]::clone).toArray(double[][]::new);}
+        private static double[][] copy(double[][] source) {
+            var result=new double[source.length][];
+            for(int phase=0;phase<source.length;phase++)result[phase]=source[phase].clone();
+            return result;
+        }
     }
 
     /** One immutable empty stream per basis size instead of one per pipe and step; a Stream's arrays are copied in and
