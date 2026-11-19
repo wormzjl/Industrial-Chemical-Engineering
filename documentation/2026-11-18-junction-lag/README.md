@@ -19,3 +19,9 @@ The solver must deliver hot and cold fronts within 0.5 K on the first slice whil
 - 2026-11-19: extended same-slice delivery to isothermal composition changes. Added direct receiving-port and two-furnace measurements. See [implementation qualification](JUNCTION_LAG_IMPLEMENTATION_REVIEW.md) for verified behavior and open gates.
 
 - 2026-11-19: completed the optional full lane and recorded the failed test, GameTest and campaign cases. Qualification remains open.
+
+- 2026-11-19: corrected the moving parcel, slurry carrier, phase seeds, zero-demand valve carry, and inlet-plan retention. The follow-up restored-world measurements and gate results are in the [qualification review](JUNCTION_LAG_IMPLEMENTATION_REVIEW.md).
+
+- 2026-11-19: fixed the positive-demand furnace branch stall and stale shut-valve certification. Recorded the first 6,000-tick plant run with the paired furnace changes, warm worker replay and checkpoint regressions in the [qualification review](JUNCTION_LAG_IMPLEMENTATION_REVIEW.md).
+
+- 2026-11-19: fixed the late blanket drain at its finite phase outlet and separated the optional Newton equation layouts. All 196 focused tests passed on `e4321d66b`. The final 6,000-tick saved world finished at full column throughput after recovering four charge deadlines. A separate copy of the shutdown checkpoint resumed positive feed after its saved retry. The [qualification review](JUNCTION_LAG_IMPLEMENTATION_REVIEW.md) records the earlier campaign and its remaining holds.
