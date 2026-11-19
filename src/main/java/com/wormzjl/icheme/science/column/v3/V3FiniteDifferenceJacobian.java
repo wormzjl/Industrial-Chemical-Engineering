@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.column.v3;
 
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
+import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -292,7 +293,12 @@ final class V3FiniteDifferenceJacobian {
     }
 
     interface V3ThermoWorkspaceFactory {
-        com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace newWorkspace();
+        V3ThermoWorkspace newWorkspace();
+
+        /** Temperature-dependent work for a stage that will be revisited by a series of probes. */
+        default V3ThermoWorkspace workspaceForNode(int node) {
+            return newWorkspace();
+        }
     }
 
     static final class Jacobian {

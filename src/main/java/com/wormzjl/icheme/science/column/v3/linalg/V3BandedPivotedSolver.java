@@ -43,7 +43,7 @@ public final class V3BandedPivotedSolver {
                     "V3 banded LU scaling exceeds the finite numerical range", 0.0, 0.0, 0, 0.0);
         }
         double initialMaximum = work.maximumAbsoluteValue();
-        double maximumDuringFactorization = initialMaximum;
+        long growthMagnitude = magnitudeBits(initialMaximum);
         double minimumPivot = Double.POSITIVE_INFINITY;
         double maximumPivot = 0.0;
         int pivotSwaps = 0;
@@ -75,7 +75,7 @@ public final class V3BandedPivotedSolver {
             }
             if (!Double.isFinite(pivotMagnitude) || pivotMagnitude <= PIVOT_TOLERANCE) {
                 return new Result.Failure(FailureCode.SINGULAR, "V3 banded LU encountered a zero or tiny pivot",
-                        finiteOrZero(minimumPivot), maximumPivot, pivotSwaps, pivotGrowth(maximumDuringFactorization, initialMaximum));
+                        finiteOrZero(minimumPivot), maximumPivot, pivotSwaps, pivotGrowth(growthMagnitude, initialMaximum));
             }
             int lastFilledColumn = Math.min(size - 1, pivot + fillBandwidth);
             int pivotEnd = rowEnds[pivotRow];
@@ -106,28 +106,29 @@ public final class V3BandedPivotedSolver {
                 workspace.fullWidthEntries += lastFilledColumn - pivot;
                 // Each entry is written once per pivot, so these values survive to its end.
                 // Including the L multiplier preserves the former whole-matrix growth scan.
-                maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(multiplier));
+                growthMagnitude = Math.max(growthMagnitude, magnitudeBits(multiplier));
                 // The update alone, so the loop can run as vector arithmetic (P9 of batch 2026-11-13-codebase-review);
-                // Java evaluates a - m * b with two roundings and never fuses it. The growth maximum then reads the
-                // same written values in a pass of its own: the same number, a NaN or an infinity included.
-                for (int column = pivot + 1; column <= lastUpdatedColumn; column++) {
-                    band[rowBase + column] -= multiplier * band[pivotBase + column];
+                // Java evaluates a - m * b with two roundings and never fuses it. The growth maximum uses
+                // the same written values, with independent integer reductions along the row.
+                int from = rowBase + pivot + 1;
+                int to = rowBase + lastUpdatedColumn + 1;
+                int pivotFrom = pivotBase + pivot + 1;
+                for (int offset = 0; offset < to - from; offset++) {
+                    band[from + offset] -= multiplier * band[pivotFrom + offset];
                 }
-                for (int column = pivot + 1; column <= lastUpdatedColumn; column++) {
-                    maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(band[rowBase + column]));
-                }
+                growthMagnitude = Math.max(growthMagnitude, rowGrowthMagnitude(band, from, to));
                 rightHandSide[row] -= multiplier * rightHandSide[pivot];
             }
             // The envelope rejected a non-finite entry as it stored one. The growth maximum absorbs every value
             // this pivot wrote, so it is non-finite exactly when one of those writes was, and the guard survives.
-            if (!Double.isFinite(maximumDuringFactorization)) {
+            if (growthMagnitude >= magnitudeBits(Double.POSITIVE_INFINITY)) {
                 throw new IllegalStateException("V3 banded LU produced a non-finite entry");
             }
         }
         if (minimumPivot / maximumPivot < ILL_CONDITIONED_PIVOT_RATIO) {
             return new Result.Failure(FailureCode.ILL_CONDITIONED,
                     "V3 banded LU pivot spread exceeds the configured conditioning guard", minimumPivot, maximumPivot,
-                    pivotSwaps, pivotGrowth(maximumDuringFactorization, initialMaximum));
+                    pivotSwaps, pivotGrowth(growthMagnitude, initialMaximum));
         }
 
         double[] scaledSolution = backSubstitute(work, rightHandSide);
@@ -137,10 +138,10 @@ public final class V3BandedPivotedSolver {
         if (!Double.isFinite(backwardError) || backwardError > MAXIMUM_BACKWARD_ERROR) {
             return new Result.Failure(FailureCode.BACKWARD_ERROR_EXCEEDED,
                     "V3 banded LU correction does not satisfy the backward-error guard", minimumPivot, maximumPivot,
-                    pivotSwaps, pivotGrowth(maximumDuringFactorization, initialMaximum));
+                    pivotSwaps, pivotGrowth(growthMagnitude, initialMaximum));
         }
         return new Result.Success(solution, backwardError, minimumPivot, maximumPivot, pivotSwaps,
-                pivotGrowth(maximumDuringFactorization, initialMaximum));
+                pivotGrowth(growthMagnitude, initialMaximum));
     }
 
     /**
@@ -260,8 +261,27 @@ public final class V3BandedPivotedSolver {
         return maximum;
     }
 
-    private static double pivotGrowth(double maximumDuringFactorization, double initialMaximum) {
-        return initialMaximum == 0.0 ? 0.0 : maximumDuringFactorization / initialMaximum;
+    private static long rowGrowthMagnitude(double[] values, int from, int to) {
+        long first = 0, second = 0, third = 0, fourth = 0;
+        int at = from;
+        for (; at <= to - 4; at += 4) {
+            first = Math.max(first, magnitudeBits(values[at]));
+            second = Math.max(second, magnitudeBits(values[at + 1]));
+            third = Math.max(third, magnitudeBits(values[at + 2]));
+            fourth = Math.max(fourth, magnitudeBits(values[at + 3]));
+        }
+        long maximum = Math.max(Math.max(first, second), Math.max(third, fourth));
+        for (; at < to; at++) maximum = Math.max(maximum, magnitudeBits(values[at]));
+        return maximum;
+    }
+
+    /** IEEE-754 magnitude bits compare in numeric order, with both infinity and NaNs above all finite values. */
+    private static long magnitudeBits(double value) {
+        return Double.doubleToRawLongBits(value) & Long.MAX_VALUE;
+    }
+
+    private static double pivotGrowth(long growthMagnitude, double initialMaximum) {
+        return initialMaximum == 0.0 ? 0.0 : Double.longBitsToDouble(growthMagnitude) / initialMaximum;
     }
 
     private static double finiteOrZero(double value) {
