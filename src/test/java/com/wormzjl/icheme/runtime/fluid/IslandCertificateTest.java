@@ -520,6 +520,60 @@ class IslandCertificateTest {
         assertEquals(0.0,rest.drift());assertEquals(Long.MAX_VALUE,rest.horizonTick());
     }
 
+    /** A circulation conserves each node's inventory even if its forward and reverse deliveries change together. */
+    @Test void directionalDeliveryMustRepeatEvenWhenNetFlowRepeats() {
+        var mixture = model.flashTP(298.15, 101325, amounts(800, 200), () -> {});
+        var ring = new PassiveNetwork(List.of(
+                new PassiveNetwork.Reservoir(1, 0, mixture, PassiveNetwork.NodeKind.RESERVOIR),
+                new PassiveNetwork.Reservoir(2, 0, mixture, PassiveNetwork.NodeKind.RESERVOIR),
+                new PassiveNetwork.Reservoir(3, 0, mixture, PassiveNetwork.NodeKind.RESERVOIR)), List.of(
+                new PassiveNetwork.Pipe(9, 0, 1, BLOCK),
+                new PassiveNetwork.Pipe(10, 1, 2, BLOCK),
+                new PassiveNetwork.Pipe(11, 2, 0, BLOCK)));
+        var first = circulating(0, ring, stream(2, 0), stream(1, 0));
+        var moreShuttling = circulating(100, ring, stream(4, 0), stream(3, 0));
+        var changedFluid = circulating(100, ring, stream(1.5, .5), stream(.5, .5));
+        var repeat = circulating(100, ring, stream(2, 0), stream(1, 0));
+        double tolerance = CertificatePolicy.defaults().stationaryTolerance();
+
+        assertArrayEquals(first.result.averageMassFlows(), moreShuttling.result.averageMassFlows());
+        assertArrayEquals(first.result.averageMassFlows(), changedFluid.result.averageMassFlows());
+        var gross = IslandCertificate.stationaryRefusal(first, moreShuttling, tolerance);
+        assertNotNull(gross);
+        assertTrue(gross.contains("gross transfer"), gross);
+        var composition = IslandCertificate.stationaryRefusal(first, changedFluid, tolerance);
+        assertNotNull(composition);
+        assertTrue(composition.contains("gross transfer component"), composition);
+        assertNull(IslandCertificate.stationaryRefusal(first, repeat, tolerance));
+        var certificate = IslandCertificate.issue(repeat, CertificatePolicy.defaults()).certificate();
+        assertNotNull(certificate);
+        var moved = certificate.replay(200, 300).pipeTransfers().getFirst();
+        assertEquals(2, moved.forward().massKg());
+        assertEquals(1, moved.reverse().massKg());
+
+        // A tiny reversal is quiet even while the net circulation on the same pipes is large.
+        var steady = circulating(0, ring, stream(2, 0), stream(0, 0));
+        var noise = circulating(100, ring, stream(2 + 1e-12, 0), stream(1e-12, 0));
+        assertNull(IslandCertificate.stationaryRefusal(steady, noise, tolerance));
+        assertNotNull(IslandCertificate.stationaryRefusal(steady, noise, 0));
+    }
+
+    private PipeTransfer.Stream stream(double nitrogenKg,double methaneKg) {
+        double[][] phaseMoles = new double[3][components];
+        phaseMoles[2] = amounts(nitrogenKg/model.molecularWeight(nitrogen), methaneKg/model.molecularWeight(methane));
+        return new PipeTransfer.Stream(nitrogenKg + methaneKg, phaseMoles, new double[3]);
+    }
+
+    private IslandCertificate.Summary circulating(long start,PassiveNetwork graph,PipeTransfer.Stream forward,PipeTransfer.Stream reverse) {
+        var pipes = graph.pipes();
+        double[] flow = new double[pipes.size()];
+        Arrays.fill(flow, (forward.massKg() - reverse.massKg()) / 5);
+        var history = pipes.stream().map(pipe -> new PipeTransfer(pipe.id(), forward, reverse)).toList();
+        var result = new PassiveIntervalSolver.Result(graph, 5, flow, 1, 0, 0, List.of(), Map.of(),
+                Collections.nCopies(pipes.size(), FlowControl.Mode.PASSIVE), new double[pipes.size()], flow, history);
+        return new IslandCertificate.Summary(new IslandCertificate.Interval(start, start + 100, graph, result), model.molecularWeights());
+    }
+
     /** Plan section 5 item 5: a rate that keeps changing, however slowly, is not stationary. */
     @Test void slowMonotonicEvolutionFailsStationarity() {
         var drifting=draining(amounts(1000,0),amounts(-1,0),amounts(-1-2e-6,0),1,1);

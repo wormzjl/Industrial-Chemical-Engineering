@@ -190,8 +190,8 @@ class FluidCheckpointFormatTest extends CertifyingRig.Islands {
         // Another replay revision: an older save's graph digest (64 hexadecimal digits, read back as such), and an older declared one.
         var digest=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withReplayRevision(entry,"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
         var older=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withReplayRevision(entry,"replay-1"));
-        var preceding=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withReplayRevision(entry,"replay-2"));
-        assertNotEquals("replay-2",IslandCertificate.REPLAY_REVISION);
+        var preceding=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withReplayRevision(entry,"replay-3"));
+        assertNotEquals("replay-3",IslandCertificate.REPLAY_REVISION);
         var cases=List.of(
                 new Case("property revision",FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE,10, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION),defaults,image),
                 new Case("certificate policy",model,new CertificatePolicy(true,1e-8,1e-6,17_280,2,0),image),
