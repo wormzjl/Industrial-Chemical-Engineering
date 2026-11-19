@@ -305,6 +305,10 @@ function since(commit) {
     if (java) {
       if (!SETS.includes(java[1])) { r.notes.push(`${f}: source set ${java[1]} has no tests`); continue; }
       seed(f, 'changed');
+      // This gate walks Java sources on disk, so its loaded classes omit what it checks.
+      if (/^src\/(?:main\/java\/com\/wormzjl\/icheme\/(?:science|runtime)|test\/java\/com\/wormzjl\/icheme\/fluid\/benchmark)\//.test(f)) {
+        seed('src/test/java/com/wormzjl/icheme/science/fluid/DeterministicMathSourceTest.java', `scans ${f}`);
+      }
       if (java[1] === 'fluidGameTest' || (java[1] === 'main' && !f.includes('/client/'))) r.gametest ??= `${f} changed`;
       const before = earlier.get(f), after = later ? later.get(f) : sourceText(f);
       for (const [name, types] of changedConstants(f, before, after)) pending.push([name, f, types]);
