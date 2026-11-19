@@ -22,6 +22,24 @@ class ViscosityTest {
         assertTrue(v.source().contains("IAPWS"));
     }
 
+    @Test void preparedTableMatchesDirectEvaluationAtAndBetweenKnotsAndOutsideTheRange() {
+        var table=new ViscosityCorrelation(ViscosityCorrelation.Model.LOG_TABLE,300,400,100000,100000,300,
+                List.of(0.1,0.05,0.01),List.of(),"1","test table",false,List.of(300.0,350.0,400.0));
+        var nodes=table.temperaturesKelvin();
+        for(var phase:ViscosityCorrelation.Phase.values()) {
+            var prepared=table.evaluator(phase);
+            double previous=nodes.getFirst()-1;
+            for(double t:nodes) {
+                for(double at:new double[]{previous,(previous+t)/2,t}) {
+                    assertEquals(table.dynamicViscosityPascalSeconds(at,phase),prepared.applyAsDouble(at));
+                }
+                previous=t;
+            }
+            double above=previous+1;
+            assertEquals(table.dynamicViscosityPascalSeconds(above,phase),prepared.applyAsDouble(above));
+        }
+    }
+
     @Test void validityLimitsAndMissingDataAreExplicit() {
         var catalog = MaterialCatalog.bundled();
         assertTrue(catalog.viscosity(PACKAGE, "Water", ViscosityCorrelation.Phase.VAPOR).isEmpty());

@@ -7,6 +7,7 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.ViscosityCorrelation;
 import java.util.Arrays;
 import java.util.Map;
+import java.util.function.DoubleUnaryOperator;
 
 /** Reference-pressure transport approximation: logarithmic liquid mixing and Wilke vapor mixing. */
 public final class MixtureViscosity {
@@ -16,6 +17,7 @@ public final class MixtureViscosity {
     private final MaterialCatalog.Package propertyPackage;
     private final ViscosityCorrelation[] liquidCorrelations,vaporCorrelations;
     private final ViscosityCorrelation waterLiquidCorrelation;
+    private final DoubleUnaryOperator[] liquidValues,vaporValues;
     /** The compounds (water not among them) in package order, their package indices, and the correction's participants on the conserved basis. */
     private final java.util.List<String> compounds;
     private final int[] packageIndex,correctionParticipants;
@@ -34,11 +36,14 @@ public final class MixtureViscosity {
         revision=catalog.fluidRevision(packageId)+":log-liquid-pair-groups-wilke-v2:catalog-conditional-solute-v1:supercritical-liquid-slot-dilute-v1:range-continuation-v1:water-in-liquid-log-v1:dense-residual-jst-v1:dense-laws-v1";
         var list=new java.util.ArrayList<>(propertyPackage.components());list.remove("Water");compounds=java.util.List.copyOf(list);
         int count=compounds.size();liquidCorrelations=new ViscosityCorrelation[count];vaporCorrelations=new ViscosityCorrelation[count];packageIndex=new int[count];
+        liquidValues=new DoubleUnaryOperator[count];vaporValues=new DoubleUnaryOperator[count];
         double[] mw=new double[count+1];
         for(int i=0;i<count;i++) {
             String component=compounds.get(i);packageIndex[i]=propertyPackage.components().indexOf(component);
             liquidCorrelations[i]=catalog.viscosity(packageId,component,ViscosityCorrelation.Phase.LIQUID).orElse(null);
             vaporCorrelations[i]=catalog.viscosity(packageId,component,ViscosityCorrelation.Phase.VAPOR).orElse(null);
+            if(liquidCorrelations[i]!=null)liquidValues[i]=liquidCorrelations[i].evaluator(ViscosityCorrelation.Phase.LIQUID);
+            if(vaporCorrelations[i]!=null)vaporValues[i]=vaporCorrelations[i].evaluator(ViscosityCorrelation.Phase.VAPOR);
             mw[i]=propertyPackage.properties().get(packageIndex[i]).molecularWeight();
         }
         var participants=new java.util.ArrayList<Integer>();
@@ -275,14 +280,14 @@ public final class MixtureViscosity {
                 mu=conditional.get(compounds.get(component)).dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.LIQUID);
                 prepared.liquidKind[component]=Prepared.CONDITIONAL_SOLUTE;
             }
-            default->{mu=liquidCorrelations[component].dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.LIQUID);prepared.liquidKind[component]=Prepared.CARRIER;}
+            default->{mu=liquidValues[component].applyAsDouble(temperature);prepared.liquidKind[component]=Prepared.CARRIER;}
         }
         prepared.liquidLog[component]=DeterministicMath.log(mu);
     }
     private double pureVapor(double temperature,int component) {
         if(component==liquidCorrelations.length)return WaterRegion1.diluteVaporViscosity(temperature);
-        var c=vaporCorrelations[component];if(c==null)throw new IllegalArgumentException("PROPERTY_UNAVAILABLE: vapor viscosity");
-        return c.dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.VAPOR);
+        var c=vaporValues[component];if(c==null)throw new IllegalArgumentException("PROPERTY_UNAVAILABLE: vapor viscosity");
+        return c.applyAsDouble(temperature);
     }
 
     /** Conditional solute factors are only used in a mixture with a supported liquid carrier. */

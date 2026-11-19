@@ -56,8 +56,8 @@ public record ViscosityCorrelation(Model model, double minimumTemperatureKelvin,
         }
         // Positive power sums are convex as functions of ln(T); their maximum is at an endpoint.
         // Andrade and the admitted Sutherland form are monotone. Reject overflow before publication.
-        requirePositive(evaluate(model, minimumTemperatureKelvin, referenceTemperatureKelvin, coefficients, exponents, temperaturesKelvin), "viscosity at minimum temperature");
-        requirePositive(evaluate(model, maximumTemperatureKelvin, referenceTemperatureKelvin, coefficients, exponents, temperaturesKelvin), "viscosity at maximum temperature");
+        requirePositive(evaluate(model, minimumTemperatureKelvin, referenceTemperatureKelvin, coefficients, exponents, temperaturesKelvin, null), "viscosity at minimum temperature");
+        requirePositive(evaluate(model, maximumTemperatureKelvin, referenceTemperatureKelvin, coefficients, exponents, temperaturesKelvin, null), "viscosity at maximum temperature");
     }
 
     /**
@@ -78,6 +78,18 @@ public record ViscosityCorrelation(Model model, double minimumTemperatureKelvin,
      * pressure correction, so the declared pressure interval is data only.
      */
     public double dynamicViscosityPascalSeconds(double temperatureKelvin, Phase phase) {
+        return viscosity(temperatureKelvin,phase,null);
+    }
+
+    /** Bind the phase and precompute the immutable knot logarithms once for repeated transport evaluations. */
+    public java.util.function.DoubleUnaryOperator evaluator(Phase phase) {
+        Objects.requireNonNull(phase,"phase");
+        double[] logs=model==Model.LOG_TABLE
+                ?coefficients.stream().mapToDouble(DeterministicMath::log).toArray():null;
+        return temperature->viscosity(temperature,phase,logs);
+    }
+
+    private double viscosity(double temperatureKelvin, Phase phase, double[] logs) {
         Objects.requireNonNull(phase, "phase");
         if (!(temperatureKelvin > 0) || !Double.isFinite(temperatureKelvin))
             throw new IllegalArgumentException("Viscosity temperature must be positive and finite: " + temperatureKelvin);
@@ -85,7 +97,7 @@ public record ViscosityCorrelation(Model model, double minimumTemperatureKelvin,
         if (model == Model.LOG_TABLE && temperatureKelvin < minimumTemperatureKelvin) value = continued(temperatureKelvin, 0, 1, phase);
         else if (model == Model.LOG_TABLE && temperatureKelvin > maximumTemperatureKelvin)
             value = continued(temperatureKelvin, coefficients.size() - 1, coefficients.size() - 2, phase);
-        else value = evaluate(model, temperatureKelvin, referenceTemperatureKelvin, coefficients, exponents, temperaturesKelvin);
+        else value = evaluate(model, temperatureKelvin, referenceTemperatureKelvin, coefficients, exponents, temperaturesKelvin, logs);
         if (!(value <= MAXIMUM_VISCOSITY)) value = MAXIMUM_VISCOSITY;
         requirePositive(value, "dynamic viscosity");
         return value;
@@ -101,7 +113,7 @@ public record ViscosityCorrelation(Model model, double minimumTemperatureKelvin,
         return log >= LOG_MAXIMUM_VISCOSITY ? MAXIMUM_VISCOSITY : DeterministicMath.exp(log);
     }
 
-    private static double evaluate(Model model, double t, double reference, List<Double> c, List<Double> powers, List<Double> nodes) {
+    private static double evaluate(Model model, double t, double reference, List<Double> c, List<Double> powers, List<Double> nodes, double[] logs) {
         return switch (model) {
             case ANDRADE -> DeterministicMath.exp(DeterministicMath.log(c.get(0)) + c.get(1) / t);
             case SUTHERLAND -> c.get(0) * DeterministicMath.pow(t / reference, 1.5) * (reference + c.get(1)) / (t + c.get(1));
@@ -110,8 +122,9 @@ public record ViscosityCorrelation(Model model, double minimumTemperatureKelvin,
                 if (index >= 0) yield c.get(index);
                 int high = -index - 1, low = high - 1;
                 double fraction = (t - nodes.get(low)) / (nodes.get(high) - nodes.get(low));
-                double lowLog = DeterministicMath.log(c.get(low));
-                yield DeterministicMath.exp(lowLog + fraction * (DeterministicMath.log(c.get(high)) - lowLog));
+                double lowLog = logs==null?DeterministicMath.log(c.get(low)):logs[low];
+                double highLog = logs==null?DeterministicMath.log(c.get(high)):logs[high];
+                yield DeterministicMath.exp(lowLog + fraction * (highLog - lowLog));
             }
             case POWER_SUM -> {
                 double total = 0;
