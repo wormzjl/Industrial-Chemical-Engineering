@@ -224,8 +224,7 @@ class HoldFuzzTest {
             for(int i=0;i<g.reservoirs().size();i++){var n=g.reservoirs().get(i);var st=n.state();
                 b.append("    node ").append(i).append(" id=").append(n.id()).append(' ').append(n.kind()).append(" z=").append(n.elevation()).append(" P=").append(st.pressure()).append(" T=").append(st.temperature()).append(" m=").append(st.mass()).append(" liq=").append(FluidThermodynamics.phaseVolume(st,FluidThermodynamics.OIL)).append(" water=").append(FluidThermodynamics.phaseVolume(st,FluidThermodynamics.AQUEOUS)).append(" vap=").append(st.vaporVolume())
                         .append(" stockMol=").append(Arrays.toString(n.inventory().moles()))
-                        .append(" movingMol=").append(Arrays.toString(n.inventory().movingMoles()))
-                        .append(" movingJ=").append(n.inventory().movingEnergy())
+                        .append(" stockJ=").append(n.inventory().internalEnergy())
                         .append(" solidKg=").append(n.inventory().solids().massKg()).append('\n');}
             for(int i=0;i<g.pipes().size();i++){var p=g.pipes().get(i);
                 b.append("    pipe ").append(i).append(' ').append(p.first()).append("->").append(p.second()).append(' ').append(p.control()).append(" areaM2=").append(p.minimumArea()).append(" blocked=").append(p.blockedDirections()).append(" filter=").append(p.filter()!=null).append(" ports=").append(p.firstPort()).append('/').append(p.secondPort()).append('\n');}
