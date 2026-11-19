@@ -625,7 +625,8 @@ public final class PassiveStepSolver {
                     var draws=equations.pinnedStartDraws();
                     if(draws!=null) {
                         var laws=Arrays.copyOfRange(equations.initialPoint,equations.edgeOffset,equations.edgeOffset+graph.pipes().size());
-                        var arriving=seeding.arrivingPhases(graph,seeds,laws,draws,false,modes,boundaryClosed,dt,checkpoint);
+                        var projected=equations.projectedPhaseDonors(draws,checkpoint);
+                        var arriving=seeding.arrivingPhases(graph,projected,laws,draws.phaseRates(),false,modes,boundaryClosed,dt,checkpoint,draws.transported());
                         if(arriving.states()!=seeds) {
                             restarts++;
                             seeds=arriving.states();

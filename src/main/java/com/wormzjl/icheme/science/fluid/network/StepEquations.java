@@ -511,8 +511,9 @@ final class StepEquations implements SparseNewton.Equations {
         double total=0;for(double c:overflowCapacities[node])total+=c;
         return total;
     }
-    /** The phase draws at the pass's start when a junction will receive a phase at its finite supply limit. */
-    double[][] pinnedStartDraws() {
+    record PinnedStartDraw(double[] transported,double[][] phaseRates) {}
+    /** The transported rates and phase draws at a pass's start when a junction receives water, oil or gas at its supply limit. */
+    PinnedStartDraw pinnedStartDraws() {
         for(int edge=0;edge<segments.length;edge++) {
             double law=initialPoint[edgeOffset+edge];
             var segment=segments[edge][law<0?1:0];
@@ -527,10 +528,55 @@ final class StepEquations implements SparseNewton.Equations {
                 int donor=end==0?line.first():line.second();
                 flows[e]=saturates(e)?saturated(y,cap(segments[e][end],e,end,transportAt(donor,seeds.get(donor)),y)):y;
             }
-            return draws(flows,seeds);
+            return new PinnedStartDraw(flows,draws(flows,seeds));
         }
         return null;
     }
+    /**
+     * A finite draw can change the donor's inventory markedly before the end of this step, even when its marginal phase
+     * remains. Seed it from the first pass's material and energy rows at the start point, including all other arrivals.
+     * This is a trial inventory. The next pass retains the original start inventory and phase capacities.
+     */
+    List<FluidThermodynamics.State> projectedPhaseDonors(PinnedStartDraw start,Runnable checkpoint) {
+        if(start.phaseRates()==null||PassiveStepSolver.hasSolids(graph))return seeds;
+        boolean[] selected=new boolean[layout.length];
+        int[] required=new int[layout.length];
+        for(int edge=0;edge<start.transported().length;edge++) {
+            double flow=start.transported()[edge];
+            if(flow==0)continue;
+            var pipe=graph.pipes().get(edge);int end=flow<0?1:0;
+            int donor=end==0?pipe.first():pipe.second(),receiver=end==0?pipe.second():pipe.first();
+            var segment=segments[edge][end];
+            if(segment!=null&&segment.pinned().length>0&&graph.reservoirs().get(receiver).junction())selected[donor]=true;
+            var rates=start.phaseRates()[edge];
+            if(rates!=null)for(int phase=0;phase<3;phase++)if(rates[phase]>0)required[donor]|=1<<phase;
+        }
+        try{residual(initialPoint);}catch(IllegalArgumentException outside){return seeds;}
+        List<FluidThermodynamics.State> projected=null;
+        for(int i=0;i<selected.length;i++) {
+            if(!selected[i]||layout[i]==null||dry[i])continue;
+            var node=graph.reservoirs().get(i);
+            if(node.junction()||node.fixed()||Arrays.stream(targets[i]).anyMatch(n->n<0))continue;
+            try {
+                var inventory=node.inventory().with(targets[i].clone(),energy[i],node.inventory().solids());
+                var seed=seeds.get(i);
+                var guess=model.folded(model.flashTP(seed.temperature(),seed.pressure(),targets[i],checkpoint),false,inventory.rigid());
+                var candidate=InventoryEquilibrium.split(model,guess,inventory,bagStart[i],checkpoint);
+                if(candidate==null||!FluidThermodynamics.holdsFluid(candidate))continue;
+                // The receiver's seed still reads the start estimate's phase rates. Every phase it draws from the
+                // donor's end state must exist on this projected donor.
+                boolean fits=true;
+                for(int phase=0;phase<3;phase++)if((required[i]&(1<<phase))!=0&&!FluidThermodynamics.holdsPhase(candidate,phase))fits=false;
+                if(!fits)continue;
+                if(projected==null)projected=new ArrayList<>(seeds);
+                projected.set(i,candidate);
+            }catch(IllegalArgumentException outside) {
+                // An inadmissible forecast leaves the original donor seed in place.
+            }
+        }
+        return projected==null?seeds:projected;
+    }
+
     /** The segment of every open phase-port end at the connection flows {@code flows} and this pass's seeds; each end's
      * priority order is read off the node's state on the accepted state the step starts from, like its capacities. */
     private PhaseDraw.Segment[][] decideSegments(double[] flows) {

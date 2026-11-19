@@ -154,6 +154,11 @@ final class StartSeeds {
      * with it ({@link Seeded}). */
     Seeded arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,double[] flows,double[][] draws,boolean vesselsOnly,List<FlowControl.Mode> modes,
                                   boolean[] boundaryClosed,double dt,Runnable checkpoint) {
+        return arrivingPhases(graph,seeds,flows,draws,vesselsOnly,modes,boundaryClosed,dt,checkpoint,null);
+    }
+    /** As above, with the transported flows that the pass's own phase rates were evaluated at, when available. */
+    Seeded arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,double[] flows,double[][] draws,boolean vesselsOnly,
+                         List<FlowControl.Mode> modes,boolean[] boundaryClosed,double dt,Runnable checkpoint,double[] deliveredFlows) {
         int nodes=graph.reservoirs().size();
         List<FluidThermodynamics.State> result=null;
         for(int round=0;round<=nodes;round++) {
@@ -170,7 +175,7 @@ final class StartSeeds {
                     if(!(Math.abs(flow)>0)||(flow>=0?pipe.second():pipe.first())!=j||!boundaryAllowed(graph,pipe,flow))continue;
                     int donor=flow>=0?pipe.first():pipe.second();var stream=current.get(donor);var port=pipe.drawPort(flow);
                     var rates=draws==null?null:draws[edge];var drawn=rates==null?null:PortStreams.drawnStream(model,rates,stream,graph.reservoirs().get(donor).state());
-                    double rate=Math.abs(transported(graph,pipe,flow)),delivered=dt*rate,streamMass=drawn!=null?1:PortStreams.endMass(model,stream,port,pipe.volume());double[] moles=drawn!=null?drawn:PortStreams.endMoles(model,stream,port,pipe.volume());
+                    double rate=Math.abs(deliveredFlows==null?transported(graph,pipe,flow):deliveredFlows[edge]),delivered=dt*rate,streamMass=drawn!=null?1:PortStreams.endMass(model,stream,port,pipe.volume());double[] moles=drawn!=null?drawn:PortStreams.endMoles(model,stream,port,pipe.volume());
                     for(int c=0;c<n.length;c++)n[c]+=delivered*moles[c]/streamMass;
                     var through=solver.delivered(graph,pipe,drawn!=null?drawn[n.length]:PortStreams.endSpecificEnthalpy(model,stream,port,pipe.volume()),stream.temperature(),Math.copySign(rate,flow),checkpoint);
                     mass+=delivered;weighted+=delivered*through[1];arrives=true;
