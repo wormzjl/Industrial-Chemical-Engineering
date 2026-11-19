@@ -104,6 +104,77 @@ final class JunctionMixing {
         return nodes==null?this:begin(new PassiveNetwork(nodes,full.pipes(),full.scheduledTransfers()),model);
     }
 
+    record Precision(int node,double delivered,double active,FluidThermodynamics.State settled) {}
+
+    /** Repartition backed fluid only where putting part of the reserve back into circulation keeps the front. */
+    JunctionMixing resolvePrecision(List<Precision> requests,FluidThermodynamics model,Runnable checkpoint) {
+        ArrayList<PassiveNetwork.Reservoir> nodes=null;
+        for(var request:requests) {
+            int i=request.node();
+            var reserve=reserves[i];
+            if(reserve==null)continue;
+            var node=full.reservoirs().get(i);
+            var stock=node.inventory();
+            double active=mass(working.reservoirs().get(i).inventory().moles(),model);
+            double extra=request.active()-active;
+            if(!(extra>0))continue;
+            var parked=reserve.moles();
+            double parkedMass=mass(parked,model);
+            if(!(parkedMass>=extra))continue;
+            double mixed=request.delivered()+active;
+            // The released fraction of this substep's blend bounds the effect on every constituent against
+            // its actual reserve-to-stream composition difference. The substep is the shortest delivery window.
+            if(extra/(mixed+extra)>FRONT_COMPOSITION_FRACTION)continue;
+            var state=request.settled();
+            var moles=PhaseLayout.totalAmounts(state);
+            double released=extra/parkedMass;
+            double scale=mixed/state.mass();
+            for(int c=0;c<moles.length;c++)moles[c]=scale*moles[c]+released*parked[c];
+            double enthalpy=scale*state.enthalpy()+released*reserve.enthalpy();
+            FluidThermodynamics.State shifted;
+            try{shifted=model.equilibriumPH(state.temperature(),state.pressure(),enthalpy,moles,checkpoint);}
+            catch(IllegalArgumentException refused){continue;}
+            if(shifted==null||Math.abs(state.temperature()-shifted.temperature())>FRONT_TEMPERATURE_KELVIN)continue;
+            double stays=1-released;
+            for(int c=0;c<parked.length;c++)parked[c]*=stays;
+            var newReserve=new PassiveNetwork.JunctionReserve(parked,reserve.enthalpy()*stays);
+            if(nodes==null)nodes=new ArrayList<>(full.reservoirs());
+            nodes.set(i,new PassiveNetwork.Reservoir(node.id(),node.elevation(),node.state(),node.kind(),stock.withReserve(newReserve)));
+        }
+        return nodes==null?this:begin(new PassiveNetwork(nodes,full.pipes(),full.scheduledTransfers()),model);
+    }
+
+    /** Check the new step's actual transfer in case a different flow branch weakened the forecast delivery. */
+    boolean precisionKeepsFront(JunctionMixing resolved,List<Precision> requests,PassiveStepSolver.Result trial,
+                                FluidThermodynamics model) {
+        var delivered=new double[reserves.length];
+        addDelivery(resolved.working,trial.pipeTransfers(),delivered);
+        for(var request:requests) {
+            int i=request.node();
+            var old=reserves[i];
+            var next=resolved.reserves[i];
+            if(old==null||old==next)continue;
+            var parked=old.moles();
+            double parkedMass=mass(parked,model);
+            double released=parkedMass-mass(next.moles(),model);
+            double active=mass(resolved.working.reservoirs().get(i).inventory().moles(),model);
+            if(!(delivered[i]>0)||released/(delivered[i]+active)>FRONT_COMPOSITION_FRACTION)return false;
+            var prior=request.settled();
+            var now=trial.states().get(i);
+            if(now.solidMoments().mass()>0||Math.abs(now.temperature()-prior.temperature())>FRONT_TEMPERATURE_KELVIN)return false;
+            var before=PhaseLayout.totalAmounts(prior);
+            var after=PhaseLayout.totalAmounts(now);
+            for(int c=0;c<before.length;c++) {
+                double mw=model.molecularWeight(c);
+                double oldShare=before[c]*mw/prior.mass(),newShare=after[c]*mw/now.mass(),reserveShare=parked[c]*mw/parkedMass;
+                double limit=FRONT_COMPOSITION_FRACTION*Math.abs(reserveShare-oldShare);
+                double roundoff=8*Math.max(Math.ulp(oldShare),Math.ulp(newShare));
+                if(Math.abs(newShare-oldShare)>Math.max(roundoff,limit))return false;
+            }
+        }
+        return true;
+    }
+
     /** Accepted fluid mass plus the trial's inlet rate projected over the remaining window. */
     static double windowDelivery(double previouslyDelivered,double trialDelivery,double trialSeconds,double remainingSeconds) {
         return previouslyDelivered+trialDelivery*(Math.max(trialSeconds,remainingSeconds)/trialSeconds);

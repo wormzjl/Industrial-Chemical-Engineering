@@ -399,6 +399,13 @@ public final class PassiveStepSolver {
         try{return solveRate(new PassiveNetwork(ports,graph.pipes()),checkpoint);}
         catch(SparseNewton.Nonconvergence|IllegalArgumentException failed){return null;}
     }
+    private boolean watchJunctionPrecision;
+    private StepEquations precisionEquations;
+
+    void watchJunctionPrecision(StepEquations equations) {
+        if(watchJunctionPrecision)precisionEquations=equations;
+    }
+
     /**
      * A solve that fails hands the next solve the point it started from (option S2 of START_HOLD_REVIEW.md, batch
      * 2026-11-16-review-plant-sizing): its passes write {@link #carry} as they converge, and a retry at a shorter interval
@@ -411,7 +418,39 @@ public final class PassiveStepSolver {
             var mixing=JunctionMixing.begin(inputGraph,model);
             if(mixing==null)return solvePasses(inputGraph,dt,checkpoint,rateOnly,acceptedEndpointModes);
             var reopened=keepOpen;
-            var result=solvePasses(mixing.working,dt,checkpoint,rateOnly,acceptedEndpointModes);
+            Result result;
+            try {
+                watchJunctionPrecision=!rateOnly;
+                result=solvePasses(mixing.working,dt,checkpoint,rateOnly,acceptedEndpointModes);
+            } catch(SparseNewton.Nonconvergence failure) {
+                if(precisionEquations==null||failure.phaseHold()!=null||failure.lastVariables()==null)throw failure;
+                List<JunctionMixing.Precision> requests;
+                try{requests=precisionEquations.precisionLoss(failure.lastVariables(),NEWTON_TOLERANCE);}
+                catch(IllegalArgumentException undecodable){throw failure;}
+                var resolved=mixing.resolvePrecision(requests,model,checkpoint);
+                if(resolved==mixing)throw failure;
+                var failedOpenings=keepOpen;
+                carry=entry;
+                keepOpen=reopened;
+                watchJunctionPrecision=false;
+                boolean retained=false;
+                try {
+                    result=solvePasses(resolved.working,dt,checkpoint,false,acceptedEndpointModes);
+                    if(!mixing.precisionKeepsFront(resolved,requests,result,model))throw failure;
+                    mixing=resolved;
+                    retained=true;
+                } catch(SparseNewton.Nonconvergence|IllegalArgumentException refused) {
+                    throw failure;
+                } finally {
+                    if(!retained) {
+                        keepOpen=failedOpenings;
+                        lastSolve=null;
+                    }
+                }
+            } finally {
+                watchJunctionPrecision=false;
+                precisionEquations=null;
+            }
             if(!rateOnly && !result.pipeTransfers().isEmpty()) {
                 var refined=mixing.resolveFront(result,deliveryWindow-deliveryElapsed,deliveredInWindow,model);
                 if(refined!=mixing) {

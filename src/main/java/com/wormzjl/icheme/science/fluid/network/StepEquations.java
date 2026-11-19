@@ -407,6 +407,7 @@ final class StepEquations implements SparseNewton.Equations {
             columnEnds[edge]=only>=0?only:columnFromFirst(first,second,difference,dz,initialPoint[edgeOffset+edge]>=0)?0:1;
         }
         segments=startSegments();
+        solver.watchJunctionPrecision(this);
     }
     /**
      * The segments of this pass, decided from the flows its start point carries: the start point's edge unknowns are
@@ -1862,6 +1863,54 @@ final class StepEquations implements SparseNewton.Equations {
     private double mixingShare(int node, double stock) {
         if (solver.rateOnly || solver.emptyings != null && solver.emptyings[node] != null) return 1;
         return JunctionMixing.share(graph.reservoirs().get(node).inventory(),stock, incomingMass[node], dt, model.time());
+    }
+
+    /**
+     * Finds the smallest supported active parcels for an otherwise converged point whose weighted mixing rows reach
+     * their floating-point resolution. The step keeps its equations and acceptance tolerances on a retry.
+     */
+    List<JunctionMixing.Precision> precisionLoss(double[] point,double tolerance) {
+        if(point==null||point.length!=size||!mightResolveJunctionRoundoff(tolerance))return List.of();
+        double[] residual=residual(point);
+        boolean[] rounded=new boolean[residual.length];
+        var requests=new ArrayList<JunctionMixing.Precision>();
+        for(int node=0;node<layout.length;node++) {
+            if(!backedFluidJunction(node))continue;
+            double delivery=dt*incomingMass[node];
+            if(!(delivery>0))continue;
+            double target=junctionInflow(node);
+            if(!Double.isFinite(junctionWeight))continue;
+            double ulp=layout[node].identifyMixingRoundoff(cachedStates[node],fractions,target,junctionWeight,
+                    residual,offsets[node],tolerance,rounded);
+            if(!(ulp>0))continue;
+            // Allow 16 ulps for the residual of the new mixture, including its thermodynamic reconstruction.
+            double turnover=tolerance/(16*ulp)-1;
+            if(!(turnover>0)||!Double.isFinite(turnover))return List.of();
+            requests.add(new JunctionMixing.Precision(node,delivery,delivery/turnover,cachedStates[node]));
+        }
+        for(int row=0;row<residual.length;row++) {
+            double weight=rowWeights==null?1:rowWeights[row];
+            if(!rounded[row]&&!(weight*Math.abs(residual[row])<=tolerance))return List.of();
+        }
+        return requests;
+    }
+
+    /** Most failed solves have ample resolution. Check the last assembled streams before re-evaluating a failed point. */
+    private boolean mightResolveJunctionRoundoff(double tolerance) {
+        for(int node=0;node<layout.length;node++) {
+            if(!backedFluidJunction(node)||!(incomingMass[node]>0))continue;
+            var state=cachedStates[node];
+            double weight=1+dt*incomingMass[node]/solver.molarMass(oldAmounts[node]);
+            double ulp=Math.ulp(state.enthalpy()/state.mass())/Math.max(1,layout[node].energyScale()/state.mass());
+            if(8*weight*Math.max(Math.ulp(1.0),ulp)>=tolerance)return true;
+        }
+        return false;
+    }
+
+    private boolean backedFluidJunction(int node) {
+        var reservoir=graph.reservoirs().get(node);
+        return layout[node]!=null&&cachedStates[node]!=null&&reservoir.junction()&&reservoir.inventory().reserve()!=null
+                &&reservoir.inventory().solids().empty()&&cachedStates[node].solidMoments().mass()==0;
     }
 
     private double junctionInflow(int node) {

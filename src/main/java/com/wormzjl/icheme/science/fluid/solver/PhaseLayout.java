@@ -491,6 +491,39 @@ public final class PhaseLayout {
         if(solidIndex>=0){var target=junctionSolidTarget;System.arraycopy(solidReference,0,target,0,3);for(int i=0;i<3;i++)target[i]/=state.mass();solidRows(state,variables,offset,target,true,result);row+=3;}
         return row;
     }
+    /**
+     * Marks failed mixing rows whose state and target differ by at most four representable values. Returns the
+     * largest unweighted ulp of those rows, in dimensionless residual units. Other equations keep their own tests.
+     */
+    public double identifyMixingRoundoff(FluidThermodynamics.State state,double[] incomingMassFractions,
+                                         double incomingSpecificEnthalpy,double weight,double[] residual,
+                                         int offset,double tolerance,boolean[] rounded) {
+        var amounts=totals(state);
+        double quantum=0;
+        for(int index=0;index<junctionBasis.length-1;index++) {
+            int component=junctionBasis[index];
+            double actual=amounts[component]*model.molecularWeight(component)/state.mass();
+            double ulp=Math.max(Math.ulp(actual),Math.ulp(incomingMassFractions[component]));
+            if(mixingRoundoff(residual[offset+index],weight,ulp,tolerance)) {
+                rounded[offset+index]=true;
+                quantum=Math.max(quantum,ulp);
+            }
+        }
+        int energy=offset+junctionBasis.length;
+        double actual=state.enthalpy()/state.mass();
+        double ulp=Math.max(Math.ulp(actual),Math.ulp(incomingSpecificEnthalpy))/Math.max(1,energyScale/state.mass());
+        if(mixingRoundoff(residual[energy],weight,ulp,tolerance)) {
+            rounded[energy]=true;
+            quantum=Math.max(quantum,ulp);
+        }
+        return quantum;
+    }
+
+    private static boolean mixingRoundoff(double residual,double weight,double ulp,double tolerance) {
+        double error=Math.abs(residual);
+        return error>tolerance&&error/weight<=4*ulp;
+    }
+
     /** {@link FluidThermodynamics.State#totals} written into this layout's scratch (P-07): the same sums in the same order,
      * every element written; read by {@link #junctionRows} within the call. */
     private double[] totals(FluidThermodynamics.State state) {
