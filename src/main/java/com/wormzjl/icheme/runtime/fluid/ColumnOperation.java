@@ -62,7 +62,7 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
     static final long TRANSIENT_WAIT=600;
     /** A new table applies at the second cycle after its trigger (owner Q5). */
     static final long APPLY_TICKS=2*CYCLE_TICKS;
-    /** The windows a save keeps beyond the fence: a port island this far behind still reads its plan. */
+    /** The usual saved window beyond the fence. A lagging inlet also keeps its pending plan. */
     static final long KEEP_TICKS=2400;
 
     /** Where a column's solves go (C5). */
@@ -351,7 +351,17 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
         if(r.table==null){if(u.state()!=null)topology.column(u.withState(null));return;}
         long through=r.nextCycle-FENCE_TICKS-KEEP_TICKS;
         var levels=new ArrayList<ColumnUnit.State.Level>();
-        for(var e:new TreeMap<>(r.levels).entrySet()){asOf(e.getValue(),Level::tick,through);for(var l:e.getValue())levels.add(new ColumnUnit.State.Level(e.getKey(),l.tick(),l.held(),l.rate(),l.molarMass()));}
+        for(var e:new TreeMap<>(r.levels).entrySet()) {
+            long device=e.getKey(),oldest=through;
+            Long owner=registry.owner(device);
+            if(owner!=null) {
+                // The cycle can run past a held inlet, whose retry still reads from its own fenced slice start.
+                var committed=coordinator.committedTick(owner);
+                if(committed.isPresent())oldest=Math.min(oldest,committed.getAsLong()-FENCE_TICKS);
+            }
+            asOf(e.getValue(),Level::tick,oldest);
+            for(var l:e.getValue())levels.add(new ColumnUnit.State.Level(device,l.tick(),l.held(),l.rate(),l.molarMass()));
+        }
         var credits=new ArrayList<ColumnUnit.State.Credit>();
         for(var e:new TreeMap<>(r.credits).entrySet()){asOf(e.getValue(),Credit::tick,through);for(var c:e.getValue())credits.add(new ColumnUnit.State.Credit(e.getKey(),c.tick(),c.product()));}
         topology.column(u.withState(new ColumnUnit.State(r.table,r.enthalpy,r.tableTick,r.applied,r.solvedCondenser,levels,credits,r.probes)));
@@ -1010,7 +1020,11 @@ public final class ColumnOperation implements IslandCoordinator.Ports {
             if(!(molarMass>0)){int water=axis.indexOf(SplitTable.WATER);molarMass=s.port()==Port.FEED?(r.table==null?0:molar(r.table.reference().feedFractions())):water<0?0:weights[water];}
             // Nothing to meter by (steam on an axis without water): the inlet demands nothing, and the status line says why.
             if(rate>0&&!(molarMass>0)){rate=0;unmetered=new Condition.Active(Condition.UNMETERED,0,s.index(),String.format(Locale.ROOT,"the %s inlet takes nothing: no molar mass to meter it by",s.port().name().toLowerCase(Locale.ROOT)));}
-            r.levels.computeIfAbsent(s.device(),d->new ArrayDeque<>()).addLast(new Level(tick,available.get(s.device()).total(),rate,molarMass));
+            var log=r.levels.computeIfAbsent(s.device(),d->new ArrayDeque<>());
+            double held=available.get(s.device()).total();
+            var previous=log.peekLast();
+            if(previous==null||previous.held()!=held||previous.rate()!=rate||previous.molarMass()!=molarMass)
+                log.addLast(new Level(tick,held,rate,molarMass));
         }
         return unmetered;
     }

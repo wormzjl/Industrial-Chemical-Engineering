@@ -523,6 +523,12 @@ public final class IslandCoordinator {
     public int pendingCount(){owned();return pending.size();}
     /** The shared online epoch this coordinator's clocks read. */
     public long now(){owned();return epoch.getAsLong();}
+    /** The start of an island's next uncommitted slice without materialising a certificate. */
+    OptionalLong committedTick(long id) {
+        owned();
+        var island = islands.get(id);
+        return island == null ? OptionalLong.empty() : OptionalLong.of(island.clock.committedTick());
+    }
     /**
      * Whether {@code id} has booked what it delivers through {@code tick} (batch 2026-10-28-column-operation, plan section 9):
      * committed through it, certified that far (materialised here, to that tick and not to the moment this runs, so the
