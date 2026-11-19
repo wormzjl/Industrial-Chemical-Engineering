@@ -13,10 +13,10 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
  * flue gas (the burners out, the radiant coil still). A mean capacity rate misses a pinch inside a boiling plateau by a
  * few K (OWNER_TEST_REVIEW.md section 1).
  *
- * <p>{@code flue} is a slice input: planned at each step from the radiant coil's heat where both coils are in one island
- * ({@link PassiveStepSolver#plan}), else at each slice from the radiant coil's heat as its island committed it
- * ({@link PassiveStepSolver#couple}, the exchanger's relay). Fuel is another scope: the heat enters from outside, booked
- * as the coil's {@code HEAT} boundary.
+ * <p>The flue capacity rate follows the radiant coil's heat. An in-island pair shares the trial's radiant heat
+ * ({@link StepEquations}); the plan supplies the start guess. Across islands {@code flue} is a slice input, taken from
+ * the radiant coil's last causal commit ({@link PassiveStepSolver#couple}). Fuel is another scope: the heat enters
+ * from outside, booked as the coil's {@code HEAT} boundary.
  *
  * @param radiant the radiant coil's connection id, 0 for none (no flue gas)
  */
@@ -46,6 +46,9 @@ public record ConvectionCoil(double conductance,long radiant,double flue) implem
     @Override public double hottest(){return BRIDGEWALL;}
     @Override public HeatCurve.Films films(){return HeatCurve.Films.DEFAULT;}
     @Override public double heat(HeatCurve curve,double inlet,double massFlow) {
+        return heatAtFlue(curve,inlet,massFlow,flue);
+    }
+    double heatAtFlue(HeatCurve curve,double inlet,double massFlow,double flue) {
         double mass=Math.abs(massFlow);
         if(mass==0||flue==0)return 0;
         double span=BRIDGEWALL-curve.temperatureAt(inlet);

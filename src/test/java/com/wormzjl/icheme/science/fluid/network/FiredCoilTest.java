@@ -54,7 +54,11 @@ class FiredCoilTest {
         var planned=half.planned(BOILING,inlet,1);
         assertEquals(5e5/demand,planned.firing(),1e-12,"short of the set point at half the duty");
         assertEquals(5e5,planned.heat(BOILING,inlet,1),1e-6);
-        assertEquals(1,half.planned(BOILING,inlet,.1).firing(),"a small flow still reaches the set point");
+        var initiallySmall=half.planned(BOILING,inlet,.1);
+        assertEquals(1,initiallySmall.firing(),"a small flow still reaches the set point");
+        assertEquals(5e5,initiallySmall.heat(BOILING,inlet,2),1e-6,"a later increase cannot exceed available fuel");
+        assertEquals(2*demand,initiallySmall.requested(BOILING,inlet,-2),1e-6,"uncapped demand follows signed through-flow");
+        assertEquals(0,initiallySmall.heat(BOILING,BOILING.enthalpyAt(460),2),"no negative radiant heating");
         assertEquals(0,coil.withLimit(0).planned(BOILING,inlet,1).firing(),"no fuel or no power: no heat");
         assertEquals(coil.shape(),half.shape(),"the limit is a slice input, not a shape");
         assertThrows(IllegalArgumentException.class,()->coil.withLimit(1.5));

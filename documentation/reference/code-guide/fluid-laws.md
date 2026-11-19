@@ -70,13 +70,13 @@ A connection's law, as the step reads it:
 
 1. At dispatch, the runtime's slice inputs are applied to the graph: `ShaftPlan.apply` (speeds, displacements, governors, fans, fuel, burners, flare tips, exhausts, failed pumps), the column and still port plans (`PortPlan` through `PassiveStepSolver.ports`), the exchanger reads (`ExchangerRelay.Read`).
 2. Once per slice: `InletPhase.decide` on the committed state refuses movers; `PassiveStepSolver.couple` plans each coupled side's wall, bypass, give-back and sit-out, each pool, each convection coil fed from another island, and a complete side's valve target.
-3. At each step's start: `PassiveStepSolver.plan` (a radiant coil's firing, a controlled air cooler's draught, an in-island convection coil's flue gas) and `GasBlanket.plan` (each pad's mass target).
+3. At each step's start, `PassiveStepSolver.plan` supplies a controlled air cooler's draught and starting guesses for radiant firing and local convection flue. `GasBlanket.plan` sets each pad's mass target.
 4. In each residual: the connection row reads `FlowControl` (rise, law residual), `PipeResistance` (loss), `PhaseDraw` (what the end draws), `HeatLaw` (the heat with the stream), `OpenVessel` (a vessel's releases), `TowerExchange` (a tower's exchange).
 5. At the booking: `ConservativeTransport` books the same heat (`EdgeHeat`), the movers' work, the releases, the tower's `ATMOSPHERE` boundary ([fluid-interval.md](fluid-interval.md)).
 
 ## Contracts
 
-- **A heat law has no unknown and no mode.** Its heat is a pure function of its flow and the donor's enthalpy for the step, on the donor end's curve (`PassiveStepSolver.sideCurve`, cached per end while the law's span and films, the port and the donor state hold). A coupled side reads its partner's stream on the partner's model (`ExchangerRelay.Partner.model`, through `PortStreams.spanned`), with no second solver.
+- **A heat law has no unknown and no mode.** Its heat reads the signed flow and donor enthalpy on the donor end's curve (`PassiveStepSolver.sideCurve`, cached per end while the law's span and films, the port and the donor state hold). A coupled side reads its partner's stream on the partner's model (`ExchangerRelay.Partner.model`, through `PortStreams.spanned`), with no second solver. A local furnace pair uses its actual radiant duty on the trial for the convection coil and uses the reconstructed radiant duty in the energy ledger.
 - **Controllers act between solves.** `HeatControl` and the planned valves fix their effort or target before the Newton, dead-beat on the law, held within `PassiveStepSolver.VALVE_DEADBAND`; no controller bypasses mass, component or energy accounting.
 - **Inlet decisions are per slice**, on the committed state with its transport closures read open and endpoint modes only (with hysteresis, `DRY_REFUSE`/`DRY_RESUME`), so a replay decides the same way.
 - **Ports act on outflow only.** Inflow through any port is delivered as through a bulk end; a LIQUID port's level head applies in both directions.
@@ -105,7 +105,7 @@ A connection's law, as the step reads it:
 
 **Heat laws** ([heat-exchangers.md](heat-exchangers.md) for the walls, the relay and the controller). `HeatSide`, `AirCooled`, `FiredCoil`, `ConvectionCoil` and `ExhaustCoil` each give a passage's heat on the donor's `HeatCurve`. `couple` sets, for a ratio side, the ratio times the partner's mass flow; for a column condenser's water side (`Operation.column`), the mass flow that carries the read's `heatRate` from the inlet enthalpy to the outlet at the inlet temperature plus `rise`, capped at the read's `ceiling` (water at or above the ceiling takes nothing); for a heating read (`Read.heating`, a reboiler's utility, `gives()`), `−heatRate / (h(inlet) − h(floor))`, the curve sampled down to the floor, a stream at or under the floor giving nothing. A kettle's pool (`Pool`) enters its vessel's energy row on the step's start state (`poolHeat`), its vapour counted as gas the vessel's ports may draw within the step (`boilUp`). A segment that starts with no flows known and plans a fired coil or a controlled air cooler plans from one rate solve's flows (`plansHeat`).
 
-**Burners** (`Burners`): the radiant duty sets the fuel fired on its lower heating value through one flue-gas capacity C_g = Q_f / (T_flame − T_air), which the convection coil reads too; the fans' shaft per watt fired is `FAN_SHAFT_PER_FIRED`. `FiredCoil.limit` is the share of its duty the burners give (short fuel, no fan power).
+**Burners** (`Burners`): the radiant duty sets the fuel fired on its lower heating value through one flue-gas capacity C_g = Q_f / (T_flame − T_air), which the convection coil reads too; the fans' shaft per watt fired is `FAN_SHAFT_PER_FIRED`. `FiredCoil.limit` fixes the available share of the radiant duty for the slice. Each radiant trial transfers the smaller of the stream's demand and the available duty. `ConvectionCoil` uses the actual radiant heat of a local pair and a causal relay reading across islands.
 
 **Flare** (`Flare`): the vent gas's combustion by component amounts, lower heating values (`MaterialCatalog.Combustion`) and formulas (C, H, N, O, S). The flame holds while the stoichiometric adiabatic flame temperature with air at `AMBIENT` is at least `FLAME_LIMIT`; below it the gas leaves unburnt. A tip's rating is methane at its stable exit velocity (`LOW_VELOCITY` to `HIGH_VELOCITY` with the heating value); the stack stands for `ALLOWED_FLUX` at its base. `limit` is status only: the flame lifts off above its stable velocity (FLAME OUT) and burns on above its rating (OVER CAPACITY).
 
@@ -149,7 +149,7 @@ The devices' controls, valve sources and heat laws are written by the runtime's 
 | Open vessels | `OpenTankTest`, runtime `OpenTankRuntimeTest` |
 | Gas blanketing and relief | `GasBlanketTest`, runtime `BlanketValveWorldTest`, `BlanketDrainWorldTest`, `ReliefValveWorldTest` |
 | Check valves | runtime `PipelineFittingTest` |
-| Heat laws, curves, relay, controller | `HeatCurveTest`, `HeatSideNetworkTest`, `ExchangerRelayTest`, `HeatControlTest`, `FiredCoilTest`, `ConvectionCoilTest`, `ExhaustCoilTest`; a heating read: `ExchangerRelayTest.aColumnsHeatingSideGivesItsDueDownToTheFloor` |
+| Heat laws, curves, relay, controller | `HeatCurveTest`, `HeatSideNetworkTest`, `ExchangerRelayTest`, `HeatControlTest`, `FiredCoilTest`, `ConvectionCoilTest`, `FurnaceThermalCouplingTest`, `ExhaustCoilTest`; a heating read: `ExchangerRelayTest.aColumnsHeatingSideGivesItsDueDownToTheFloor` |
 | Chimney | `ChimneyTest` |
 | Slurry and solids | `SlurryTransportTest`, `SolidChainTransportTest` |
 | Valve noise regime | `ValveCavitationTest` |

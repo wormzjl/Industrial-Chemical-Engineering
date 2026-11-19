@@ -120,6 +120,7 @@ public final class ConservativeTransport {
      * books and its flow: the Newton's own function ({@code PassiveStepSolver.Equations}), so the booking and the equation
      * gate read one number, as a mover's work does. */
     @FunctionalInterface public interface EdgeHeat {double heat(int edge,double specificEnthalpy,double massFlow);}
+    interface PairedEdgeHeat extends EdgeHeat {void prepare(double[] donorSpecificEnthalpies,double[] flows);}
     /** The power (W) mover connection {@code edge} gives what it moves at {@code massFlow} (kg/s) across {@code head} (Pa) on
      * its suction's density and pressure: the Newton's own function ({@code PassiveStepSolver.moverPower}), which reads what
      * the solve read of the suction (a centrifugal compressor's wet efficiency, request 11), so the booking and the energy
@@ -201,6 +202,13 @@ public final class ConservativeTransport {
     }
     /** The state entry {@code k} of a draw is read on: {@code end} for an end-state entry, {@code start} for a pinned one. */
     private static FluidThermodynamics.State at(int k,FluidThermodynamics.State end,FluidThermodynamics.State start){return k<3?end:start;}
+    private static double donorEnthalpy(FluidThermodynamics model,FluidThermodynamics.State upstream,FluidThermodynamics.State startState,
+                                        double[] rates,int[] phases) {
+        if(rates==null)return upstream.enthalpy()/upstream.mass();
+        double enthalpy=0;
+        for(int k:phases)enthalpy+=weight(rates,phases,k)*model.phaseSpecificEnthalpy(at(k,upstream,startState),k%3,null);
+        return enthalpy;
+    }
     /** The mass share of solids in what a connection draws out of its donor: the bulk share {@code solids/mass} of
      * {@code donor} (the double it always was) where it draws the bulk, and otherwise its phases' solid shares weighted by
      * their mass flows (none in the gas; a liquid's share of the solids over its stream's mass). */
@@ -560,6 +568,19 @@ public final class ConservativeTransport {
         // below, solids included.
         double[][] accMoles=frozen?new double[nodes][components]:null;SignedSolids[] accSolids=frozen?new SignedSolids[nodes]:null;
         if(frozen)for(int node=0;node<nodes;node++)accSolids[node]=new SignedSolids();
+        double[] paidByEdge=null;
+        if(heat instanceof PairedEdgeHeat paired) {
+            paidByEdge=new double[flows.length];
+            for(int edge=0;edge<flows.length;edge++) {
+                var pipe=graph.pipes().get(edge);
+                if(pipe.heat()==null||flows[edge]==0)continue;
+                int donor=flows[edge]>=0?pipe.first():pipe.second();
+                var rates=drawn[edge]==null?null:draws[edge];
+                paidByEdge[edge]=donorEnthalpy(model,states.get(donor),graph.reservoirs().get(donor).state(),rates,
+                        rates==null?null:drawnPhases(rates));
+            }
+            paired.prepare(paidByEdge,flows);
+        }
         for(int edge=0;edge<flows.length;edge++) {
             checkpoint.run();var pipe=graph.pipes().get(edge);int donor=flows[edge]>=0?pipe.first():pipe.second(),receiver=flows[edge]>=0?pipe.second():pipe.first();
             var upstream=states.get(donor);double moved=dt*Math.abs(flows[edge]);
@@ -570,10 +591,8 @@ public final class ConservativeTransport {
             // enthalpy, as always.
             var w=drawn[edge]!=null?drawn[edge]:fractions[donor];var rates=drawn[edge]==null?null:draws[edge];var phases=rates==null?null:drawnPhases(rates);
             var startState=graph.reservoirs().get(donor).state();
-            double specificEnthalpy;
-            if(moved==0)specificEnthalpy=0;
-            else if(rates==null)specificEnthalpy=upstream.enthalpy()/upstream.mass();
-            else{specificEnthalpy=0;for(int k:phases)specificEnthalpy+=weight(rates,phases,k)*model.phaseSpecificEnthalpy(at(k,upstream,startState),k%3,null);}
+            double specificEnthalpy=moved==0?0:paidByEdge!=null&&pipe.heat()!=null?paidByEdge[edge]
+                    :donorEnthalpy(model,upstream,startState,rates,phases);
             double movedEnergy=moved*specificEnthalpy;
             energy[donor]-=movedEnergy;
             SolidInventory movedSolids;

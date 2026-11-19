@@ -796,7 +796,7 @@ public final class PassiveStepSolver {
                 var arrived=seeding.arrivingPhases(graph,point,lawFlows,draws,true,modes,boundaryClosed,dt,checkpoint);
                 if(arrived.states()!=point){seeds=arrived.states();passStart=new PassStart(null,false,arrived.flashRestated());carry=new CarriedPoint(pipeIdentities,nodeIds,inputStates,states,rateOnly,flows.clone(),lawFlows,heads.clone(),List.copyOf(modes));continue;}
             }
-            var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::bookedHeat,equations::moverPower);
+            var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations.thermalBooking(),equations::moverPower);
             // Decision D54: what the booking fills past the bag's resolution though the flows delivered nothing at it (the
             // delivered amounts stated warmer) is laid out from that state.
             if(PhaseActiveSet.filled(equations,projection)){seeds=projection.states();continue;}
@@ -916,7 +916,7 @@ public final class PassiveStepSolver {
         }
         if(equations.segmentsMoved(flows))return null;
         var draws=equations.draws(flows,states);
-        var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations::bookedHeat,equations::moverPower);
+        var projection=ConservativeTransport.reconstruct(graph,states,flows,heads,dt,model,checkpoint,transport,rateOnly,draws,equations.supports,emptyings,equations.releases,equations.thermalBooking(),equations::moverPower);
         if(PhaseActiveSet.phaseAppeared(graph,states,projection.states())||PhaseActiveSet.phaseFolded(graph,states,projection.states(),equations.dry)
                 ||phaseSet.phaseCorrection(graph,projection.states(),checkpoint,equations.cachedPrepared,foldedPhases.clone())!=null)return null;
         var reconstructed=variables.clone();
@@ -1449,7 +1449,7 @@ public final class PassiveStepSolver {
     /**
      * {@code graph} with each local heat actuator planned for a step that starts with {@code flows} (kg/s per connection, in
      * {@code graph}'s order; null where none is known) on its donor's curve (batch 2026-10-27-heat-exchanger-design): a fired
-     * coil's firing share ({@link FiredCoil#planned}, W6; it fires fully where its end draws nothing), a controlled air
+     * coil's starting firing share ({@link FiredCoil#planned}, W6), a controlled air
      * cooler's louvers and fans ({@link AirCooled#planned}, W4), and the flue gas of a convection coil whose radiant coil is
      * in this island: the radiant coil's planned heat at the step's start ({@link ConvectionCoil#flueOf}). Each stays fixed
      * inside the step's Newton; the next step plans it again from where this one ended. An exchanger side's bypass needs its

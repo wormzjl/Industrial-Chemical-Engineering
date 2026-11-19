@@ -265,10 +265,9 @@ public final class PassiveIntervalSolver {
                 }
                 // The cold rate seed (owner decision of 2026-10-19, the plan's fallback): a structure no step has been accepted on
                 // starts from one rate solve's converged point, itself started from the balance; see {@link #coldRateSeed}.
-                // Each fired coil's firing share and controlled air cooler's fans for this step, planned from its start (batch
-                // 2026-10-27-heat-exchanger-design, W6 and W4): the previous accepted step's flows, else the endpoint carried
-                // from the last interval, else one rate solve's (batch 2026-11-09-furnace-fuel-power, open item O2): planned at
-                // no flow, a fired coil fires fully and overshoots its duty and the fuel its burners fired for the whole step.
+                // Start guesses for radiant firing and local convection flue, and the air cooler's fans for this step.
+                // Read the previous accepted rates or the endpoint carried from the last interval, else one rate solve.
+                // The fired heater's local heat laws read the actual trial streams under the dispatched fuel limit.
                 double[] startFlows=last!=null?last.massFlows():carriedFlows(accepted);
                 if(startFlows==null&&PassiveStepSolver.plansHeat(accepted)) {
                     if(rateFlows==null){var rate=implicit.portRate(accepted,checkpoint);if(rate!=null)rateFlows=rate.massFlows();}

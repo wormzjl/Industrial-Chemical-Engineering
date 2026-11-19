@@ -65,6 +65,7 @@ final class StepEquations implements SparseNewton.Equations {
      * A423): {@code sweepWall} is read by the rows while a build is bracketed ({@link #linearising}), null otherwise;
      * {@code builtWall} by the chord test ({@link #linearisationHolds}). Null for a junction and for a dry vessel. */
     PhaseLayout.Wall[] sweepWall,builtWall;
+    private final FurnacePairs furnacePairs;
     final int edgeOffset,size;final double[][] oldAmounts;int[][] sparsity;final List<FlowControl.Mode> modes;final int[] controlOffsets;final boolean[] boundaryClosed;final List<FluidThermodynamics.State> seeds;
     final double[][] cachedVariables;final FluidThermodynamics.State[] cachedStates;final Transport[] cachedTransport;
     /** Which nodes an end draws phases of ({@link PassiveNetwork.PhasePort} VAPOR or LIQUID) through a connection this
@@ -259,7 +260,7 @@ final class StepEquations implements SparseNewton.Equations {
         this.modes=List.copyOf(modes);this.pipeIdentities=pipeIdentities;
         this.seeds=List.copyOf(seeds);this.supports=supports;
         this.boundaryClosed=boundaryClosed.clone();
-        this.graph=graph;this.dt=dt;solidSupport=hasSolids(graph);int count=graph.reservoirs().size();layout=new PhaseLayout[count];offsets=new int[count];oldAmounts=new double[count][];
+        this.graph=graph;furnacePairs=FurnacePairs.in(graph);this.dt=dt;solidSupport=hasSolids(graph);int count=graph.reservoirs().size();layout=new PhaseLayout[count];offsets=new int[count];oldAmounts=new double[count][];
         this.checkpoint=checkpoint;passCurves=new HeatCurve[graph.pipes().size()][];passKnown=new boolean[graph.pipes().size()][];heldCurves();
         cachedVariables=new double[count][];cachedStates=new FluidThermodynamics.State[count];cachedTransport=new Transport[count];
         cachedPrepared=new FluidThermodynamics.Prepared[count];probePrepared=new FluidThermodynamics.Prepared[count];
@@ -922,6 +923,61 @@ final class StepEquations implements SparseNewton.Equations {
     /** This node's transport rows at {@code state} with no prepared temperature bundle (for a point other than the
      * pass's decoded one: the reconstruction's, the error probe's). */
     Transport transportAt(int node,FluidThermodynamics.State state){return transport(node,state,null);}
+    /** An in-island furnace pair uses both trial streams. An external convection coil keeps its causal relay input. */
+    private record FurnacePairs(int[] radiantAtConvection,int[] convectionAtRadiant) {
+        static FurnacePairs in(PassiveNetwork graph) {
+            Map<Long,Integer> radiantById=null;
+            var pipes=graph.pipes();
+            for(int edge=0;edge<pipes.size();edge++) {
+                var pipe=pipes.get(edge);
+                if(pipe.heat() instanceof FiredCoil coil&&coil.partner()!=0) {
+                    if(radiantById==null)radiantById=new HashMap<>();
+                    radiantById.put(pipe.id(),edge);
+                }
+            }
+            if(radiantById==null)return null;
+            int[] radiantAtConvection=new int[pipes.size()],convectionAtRadiant=new int[pipes.size()];
+            Arrays.fill(radiantAtConvection,-1);Arrays.fill(convectionAtRadiant,-1);
+            boolean linked=false;
+            for(int edge=0;edge<pipes.size();edge++) {
+                var pipe=pipes.get(edge);
+                if(!(pipe.heat() instanceof ConvectionCoil coil))continue;
+                var radiant=radiantById.get(coil.radiant());
+                if(radiant==null||((FiredCoil)pipes.get(radiant).heat()).partner()!=pipe.id())continue;
+                radiantAtConvection[edge]=radiant;convectionAtRadiant[radiant]=edge;linked=true;
+            }
+            return linked?new FurnacePairs(radiantAtConvection,convectionAtRadiant):null;
+        }
+    }
+    /** The paired convection receiver's energy also reads the radiant rate, its donor state and its phase-port cap. */
+    private void pairedColumns(BitSet[] columns) {
+        for(int radiant=0;radiant<graph.pipes().size();radiant++) {
+            int convection=furnacePairs.convectionAtRadiant()[radiant];
+            if(convection<0)continue;
+            var hot=graph.pipes().get(radiant);var warm=graph.pipes().get(convection);
+            for(int recipient:new int[]{warm.first(),warm.second()})if(layout[recipient]!=null) {
+                int from=offsets[recipient],to=from+nodeSize(recipient);
+                columns[edgeOffset+radiant].set(from,to);
+                for(int donor:new int[]{hot.first(),hot.second()})
+                    for(int column=offsets[donor];column<offsets[donor]+nodeSize(donor);column++)
+                        columns[column].set(from,to);
+                for(int end=0;end<2;end++) {
+                    int weir=weirOffsets[radiant][end];
+                    if(weir>=0)columns[weir].set(from,to);
+                }
+            }
+        }
+    }
+    /** Recompute the paired receiver for a radiant donor or flow column, including where both edges meet at that node. */
+    private void pairedRows(int radiant,int perturbedNode,double[] base,double[] x,FluidThermodynamics.State[] st,Transport[] tr,double[] f) {
+        int convection=furnacePairs.convectionAtRadiant()[radiant];
+        if(convection<0)return;
+        var pipe=graph.pipes().get(convection);
+        for(int recipient:new int[]{pipe.first(),pipe.second()})if(layout[recipient]!=null&&recipient!=perturbedNode) {
+            seed(recipient,f,base);nodeAccumulate(recipient,x,st,tr);nodeTargetRows(recipient,x,st,f);
+        }
+    }
+
     private void buildSparsity() {
         int count=layout.length;
         BitSet[] columns=new BitSet[size];for(int i=0;i<size;i++)columns[i]=new BitSet(size);
@@ -957,6 +1013,7 @@ final class StepEquations implements SparseNewton.Equations {
             if(control>=0){columns[row].set(control);columns[control].set(row);}
             if(filter>=0){columns[row].set(filter);columns[filter].set(row);}
         }
+        if(furnacePairs!=null)pairedColumns(columns);
         // Exact structural zeros: phase allocation, T and P cannot change bulk component flow at fixed total amounts and
         // kg/s, so cancellation-noise derivatives are suppressed, not small physics. Only for a BULK end: what a phase
         // port carries is the phase split itself, so a node any end of which draws a phase keeps every entry.
@@ -1347,7 +1404,7 @@ final class StepEquations implements SparseNewton.Equations {
             }
             // A heat-exchanging side delivers its donor's stream with the heat it took up crossing the wall, booked like
             // a mover's work into the receiver's energy and its inflow (batch 2026-10-27-heat-exchanger-design).
-            if(receiver&&pipe.heat()!=null){double taken=sideHeat(edge,transport.specificEnthalpy,flow);stored+=dt*taken;heat+=taken;}
+            if(receiver&&pipe.heat()!=null){double taken=trialCoilHeat(edge,transport.specificEnthalpy,flow,x,tr);stored+=dt*taken;heat+=taken;}
         }
         // An emptying vessel standing as a junction (decision D54, emptyingGraph) passes its stock as well as what arrives.
         energy[node]=stored;incomingMass[node]=mass;incomingEnergy[node]=heat;netMass[node]=solver.emptyings!=null&&solver.emptyings[node]!=null?net+solver.emptyings[node].drain():net;
@@ -1373,15 +1430,60 @@ final class StepEquations implements SparseNewton.Equations {
      * read this one function (batch 2026-10-27-heat-exchanger-design). It never samples: an end whose curve the pass does
      * not hold yet is noted and reads zero, and its evaluation is discarded ({@link #evaluated}).
      */
+    /** Read the other passage's radiant duty from this same Newton point. This closes the thermal loop through the
+     * actual flow and fluid states, including a condenser or a junction held between the two passages. */
+    private double trialCoilHeat(int edge,double inlet,double flow,double[] x,Transport[] tr) {
+        int radiant=furnacePairs==null?-1:furnacePairs.radiantAtConvection()[edge];
+        if(radiant<0)return sideHeat(edge,inlet,flow);
+        double radiantFlow=flowAt(radiant,x,tr);
+        if(radiantFlow==0)return 0;
+        var radiantDonor=donorAt(radiant,tr,radiantFlow);
+        double flue=ConvectionCoil.flueOf(sideHeat(radiant,radiantDonor.specificEnthalpy,radiantFlow));
+        return sideHeat(edge,inlet,flow,flue);
+    }
+
     double sideHeat(int edge,double specificEnthalpy,double flow) {
+        return sideHeat(edge,specificEnthalpy,flow,Double.NaN);
+    }
+    private double sideHeat(int edge,double specificEnthalpy,double flow,double localFlue) {
         var pipe=graph.pipes().get(edge);
         if(pipe.heat()==null||flow==0)return 0;
         int end=flow>0?0:1;
         if(passRefusals!=null&&passRefusals[edge]!=null&&passRefusals[edge][end]!=null)throw passRefusals[edge][end];
         if(!passKnown[edge][end]){if(missingEdge<0){missingEdge=edge;missingEnd=end;}return 0;}
         var curve=passCurves[edge][end];
-        return curve==null?0:pipe.heat().heat(curve,specificEnthalpy,flow);
+        if(curve==null)return 0;
+        return Double.isNaN(localFlue)?pipe.heat().heat(curve,specificEnthalpy,flow)
+                :((ConvectionCoil)pipe.heat()).heatAtFlue(curve,specificEnthalpy,flow,localFlue);
     }
+    /** Pair the heat on the reconstructed donors and signed flows that the conserved booking actually uses. */
+    ConservativeTransport.EdgeHeat thermalBooking() {
+        if(furnacePairs==null)return this::bookedHeat;
+        return new ConservativeTransport.PairedEdgeHeat() {
+            private final double[] flues=new double[graph.pipes().size()];
+            @Override public void prepare(double[] donor,double[] flows) {
+                for(int convection=0;convection<flows.length;convection++) {
+                    int radiant=furnacePairs.radiantAtConvection()[convection];
+                    if(radiant>=0)flues[convection]=ConvectionCoil.flueOf(bookedHeat(radiant,donor[radiant],flows[radiant]));
+                }
+            }
+            @Override public double heat(int edge,double enthalpy,double flow) {
+                if(furnacePairs.radiantAtConvection()[edge]<0)return bookedHeat(edge,enthalpy,flow);
+                if(flow!=0&&!passKnown[edge][flow>0?0:1])sample(edge,flow>0?0:1);
+                return sideHeat(edge,enthalpy,flow,flues[edge]);
+            }
+        };
+    }
+
+    /** Uncapped radiant duty requested by the donor and signed flow of the decoded accepted point. */
+    double radiantDemand(int edge,double flow) {
+        if(flow==0||!(graph.pipes().get(edge).heat() instanceof FiredCoil coil))return 0;
+        int end=flow>0?0:1;
+        if(!passKnown[edge][end])sample(edge,end);
+        var curve=passCurves[edge][end];
+        return curve==null?0:coil.requested(curve,donorAt(edge,cachedTransport,flow).specificEnthalpy,flow);
+    }
+
     /** {@link #sideHeat} for the reconstruction, outside every evaluation: an end not held yet is sampled first. */
     double bookedHeat(int edge,double specificEnthalpy,double flow) {
         var pipe=graph.pipes().get(edge);
@@ -1611,6 +1713,7 @@ final class StepEquations implements SparseNewton.Equations {
                             nodeAccumulate(other,trial,st,tr);nodeTargetRows(other,trial,st,perturbed);
                         }
                     }
+                    if(furnacePairs!=null)for(int edge:nodeEdges[node])pairedRows(edge,node,f,trial,st,tr,perturbed);
                     write(entryOffsets,entryRows,entries,column,perturbed,f,step);
                     st[node]=baseStates[node];tr[node]=baseTransport[node];pr[node]=basePrepared[node];
                     trial[column]=x[column];
@@ -1634,6 +1737,7 @@ final class StepEquations implements SparseNewton.Equations {
                     if(which<2)for(int node:new int[]{pipe.first(),pipe.second()})if(layout[node]!=null) {
                         seed(node,perturbed,f);nodeAccumulate(node,trial,st,tr);nodeTargetRows(node,trial,st,perturbed);
                     }
+                    if(furnacePairs!=null&&which==0)pairedRows(edge,-1,f,trial,st,tr,perturbed);
                     write(entryOffsets,entryRows,entries,column,perturbed,f,step);
                     trial[column]=x[column];
                 }
