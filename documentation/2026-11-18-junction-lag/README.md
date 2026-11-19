@@ -14,6 +14,8 @@ Updated 2026-11-19. The final 6,000-tick plant run had zero charge holds and pos
 
 - [REMAINING_HOLDS_REVIEW.md](REMAINING_HOLDS_REVIEW.md) records the precision, pump startup, blanket-drain, valve regulation and saved-plant results.
 
+- [JUNCTION_PERFORMANCE_REVIEW.md](JUNCTION_PERFORMANCE_REVIEW.md) compares saved-plant CPU and resident memory with the pre-implementation baseline and measures equal-work junction circuits.
+
 ## Code areas
 
 The follow-up covers junction mix and reconstruction precision, hydraulic balance and pump seeding, adaptive substep growth, the column port's first solve after zero feed, and the warm transition from open to regulating.
@@ -37,3 +39,5 @@ The follow-up covers junction mix and reconstruction precision, hydraulic balanc
 - 2026-11-19: fixed the late blanket drain at its finite phase outlet and separated the optional Newton equation layouts. All 196 focused tests passed on `e4321d66b`. The final 6,000-tick saved world finished at full column throughput after recovering four charge deadlines. A separate copy of the shutdown checkpoint resumed positive feed after its saved retry. The [qualification review](JUNCTION_LAG_IMPLEMENTATION_REVIEW.md) records the earlier campaign and its remaining holds.
 
 - 2026-11-19: corrected the backed-junction precision stall in `cfead1ca6`, kept workspace keys stable during vessel emptying in `c09476c1c`, and corrected the pump start and charge reopening in `1924c2e75`. The [follow-up review](REMAINING_HOLDS_REVIEW.md) records the 80-second drain, the affected lane, watch worlds and saved plant. The subsequent donor derivative, provisional phase and warm valve changes passed 195 focused tests at `5b34bff75`. Normal shutdown cancellation passed 137 focused runtime and checkpoint tests at `0f4c08c41`. An in-flight bottoms solve was discarded cleanly on shutdown and all 14 islands saved without a pending retry.
+
+- 2026-11-19: benchmarked two saved-plant runs per revision and matched liquid and mixed-gas circuits. The [performance review](JUNCTION_PERFORMANCE_REVIEW.md) records the CPU, allocation, resident-memory and plant-state differences.
