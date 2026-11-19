@@ -583,6 +583,22 @@ public final class PassiveStepSolver {
             double tolerance=NEWTON_TOLERANCE;
             try{numerical=SparseNewton.solve(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
             catch(SparseNewton.Nonconvergence failure) {
+                // At a finite vessel outlet the leading phase can run out within the step. Its receiver
+                // can restart on the mixed draw if the first Newton pass fails on its leading-phase guess.
+                if(pass==0 && !rateOnly) {
+                    var draws=equations.pinnedStartDraws();
+                    if(draws!=null) {
+                        var laws=Arrays.copyOfRange(equations.initialPoint,equations.edgeOffset,equations.edgeOffset+graph.pipes().size());
+                        var arriving=seeding.arrivingPhases(graph,seeds,laws,draws,false,modes,boundaryClosed,dt,checkpoint);
+                        if(arriving.states()!=seeds) {
+                            restarts++;
+                            seeds=arriving.states();
+                            passStart=new PassStart(null,false,arriving.flashRestated());
+                            continue;
+                        }
+                    }
+                }
+
                 if(failure.lastVariables()==null)throw failure;
                 double[] trialFlows=Arrays.copyOfRange(failure.lastVariables(),equations.edgeOffset,equations.edgeOffset+graph.pipes().size());
                 // Owner decisions D59 (4) and D14: a pump whose law pulled its suction below the vapour pressure of the liquid

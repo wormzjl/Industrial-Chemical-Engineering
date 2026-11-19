@@ -504,6 +504,26 @@ final class StepEquations implements SparseNewton.Equations {
         double total=0;for(double c:overflowCapacities[node])total+=c;
         return total;
     }
+    /** The phase draws at the pass's start when a junction will receive a phase at its finite supply limit. */
+    double[][] pinnedStartDraws() {
+        for(int edge=0;edge<segments.length;edge++) {
+            double law=initialPoint[edgeOffset+edge];
+            var segment=segments[edge][law<0?1:0];
+            var pipe=graph.pipes().get(edge);
+            int receiver=law<0?pipe.first():pipe.second();
+            if(law==0 || segment==null || segment.pinned().length==0 || !graph.reservoirs().get(receiver).junction())continue;
+            var flows=new double[segments.length];
+            for(int e=0;e<flows.length;e++) {
+                double y=initialPoint[edgeOffset+e];
+                var line=graph.pipes().get(e);
+                int end=y<0?1:0;
+                int donor=end==0?line.first():line.second();
+                flows[e]=saturates(e)?saturated(y,cap(segments[e][end],e,end,transportAt(donor,seeds.get(donor)),y)):y;
+            }
+            return draws(flows,seeds);
+        }
+        return null;
+    }
     /** The segment of every open phase-port end at the connection flows {@code flows} and this pass's seeds; each end's
      * priority order is read off the node's state on the accepted state the step starts from, like its capacities. */
     private PhaseDraw.Segment[][] decideSegments(double[] flows) {
