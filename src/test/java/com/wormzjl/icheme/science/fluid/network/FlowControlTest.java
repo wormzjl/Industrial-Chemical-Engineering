@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.wormzjl.icheme.runtime.fluid.RetainedSolver;
 import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
 import org.junit.jupiter.api.Test;
@@ -123,6 +124,33 @@ class FlowControlTest {
             SolverDiagnostics.ENABLED=enabled;
             SolverDiagnostics.reset();
         }
+    }
+    @Test void aReopenedPortStartsItsSlowCentrifugalPumpAtTheBalancedShutoff() {
+        int water=model.componentCount()-1;
+        var pipe=new PipeResistance.Geometry(10,.05,.000045,0);
+        var pump=new FlowControl.Machine(CentrifugalPump.rated(.03,156),.1,true,.02,0);
+        var valve=new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,10,PortPlan.COLUMN_SENSOR,0);
+        var source=line(150000,220000,water,pump);
+        var outlet=line(220000,250000,water,valve);
+        var nodes=List.of(
+                new PassiveNetwork.Reservoir(0,0,source.reservoirs().getFirst().state(),PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(1,0,source.reservoirs().getLast().state(),PassiveNetwork.NodeKind.JUNCTION),
+                new PassiveNetwork.Reservoir(2,0,outlet.reservoirs().getLast().state(),PassiveNetwork.NodeKind.VOID));
+        var graph=new PassiveNetwork(nodes,List.of(new PassiveNetwork.Pipe(5,0,1,pipe,pump),new PassiveNetwork.Pipe(6,1,2,pipe,valve)));
+        var closed=List.of(FlowControl.Mode.CLOSED,FlowControl.Mode.CLOSED);
+        var accepted=new PassiveIntervalSolver.Result(graph,1,new double[2],1,0,0,
+                List.of(),Map.of(),closed,new double[2],new double[2],List.of());
+        var solver=new PassiveStepSolver(model);
+        solver.replayStart(graph,accepted);
+        var result=solver.solve(graph,1,()->{},closed);
+        // At 10 % speed the pump has under 19 kPa of shutoff rise, against the 70 kPa already on its discharge.
+        assertTrue(solver.balancedStart.converged());
+        assertEquals(0,solver.balancedStart.lawFlows()[0]);
+        assertEquals(FlowControl.Mode.CLOSED,solver.balancedStart.modes().getFirst());
+        assertEquals(FlowControl.Mode.CLOSED,result.modes().getFirst());
+        assertEquals(0,result.massFlows()[0],1e-10);
+        assertEquals(0,result.massFlows()[1],1e-10);
+        assertEquals(0,result.pumpWorkJoule(),1e-10);
     }
     @Test void removingASensorRetainsIndependentSiTargets(){
         var v=new FlowControl.ControlValve(FlowControl.ValveSource.PRESSURE,350000,2,.03,new java.util.UUID(1,1),1);

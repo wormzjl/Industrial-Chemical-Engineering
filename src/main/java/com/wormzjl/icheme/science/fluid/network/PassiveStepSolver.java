@@ -563,16 +563,7 @@ public final class PassiveStepSolver {
         // Owner decision D16 A: a vapour-locked pump ({@link MoverSuction#vapourLocks}) already starts closed ({@link DeviceModes#initialModes}) and
         // the carry leaves it so; the carry reads no suction head of its own. The rise reads this solve's supply densities
         // ({@link SolveConstants}: the input graph and slice, NaN until read).
-        if(carryModes&&!reseedOpeningPort)for(int i=0;i<modes.size();i++) {
-            var pipe=graph.pipes().get(i);
-            if(!(pipe.control() instanceof FlowControl.Mover pump)||pump.targetVolumeFlow()==0||suctions.vapourLocked(i))continue;
-            var carried=carry.modes().get(i);
-            double band=DeviceModes.shutoffBand(Math.max(graph.reservoirs().get(pipe.first()).state().pressure(),graph.reservoirs().get(pipe.second()).state().pressure()),NEWTON_TOLERANCE);
-            if(carried==FlowControl.Mode.PUMP_SUCTION_LIMIT&&suctions.suctionLimitPressure(graph,i,0)<Double.POSITIVE_INFINITY)
-                modes.set(i,carried);
-            else if(carried==FlowControl.Mode.CLOSED&&!(devices.shutoffMargin(graph,i)>band))
-                modes.set(i,carried);
-        }
+        if(carryModes&&!reseedOpeningPort)carryMoverModes(graph,modes,null);
         // A connection closed to all transport before the solve starts is in the active-set state the pass-by-pass closure
         // produces, actuator included: an actuator left on its setpoint across a closed edge is a second equation for a
         // flow the closure has decided, and on a junction whose other edges are closed the factorization is singular.
@@ -592,6 +583,7 @@ public final class PassiveStepSolver {
         boolean[] keep=null;
         if(!keepOpen.isEmpty()&&!rateOnly){var ids=identitiesOf(graph);keep=new boolean[ids.size()];for(int i=0;i<keep.length;i++)keep[i]=keepOpen.contains(ids.get(i));keepOpen=Set.of();}
         closures.closeDeadHeads(graph,boundaryClosed,keep);
+        var openingCarry=reseedOpeningPort?carry:null;
         if(reseedOpeningPort||!rateOnly&&carryModes&&DeviceModes.resumesPriming(graph,modes,carry.modes(),boundaryClosed))carry=carry.withoutFlows();
         balancedStart=null;
         if(needsBalance(graph)) {
@@ -602,11 +594,18 @@ public final class PassiveStepSolver {
             relieveSealedPockets(graph,modes,boundaryClosed);
             BalanceStart.Start start;
             if(balanceFor==inputGraph&&balanceCache!=null&&Arrays.equals(balanceClosedFor,boundaryClosed))start=balanceCache;
-            else{start=balance.balanceStart(graph,modes,boundaryClosed,keep,checkpoint);balanceFor=inputGraph;balanceCache=start;balanceClosedFor=boundaryClosed.clone();}
-            graph=start.graph();balancedStart=start;
-            for(int i=0;i<modes.size();i++)modes.set(i,start.modes().get(i));
-            carry=carry.withoutFlows();
-            for(int i=0;i<boundaryClosed.length;i++)if(start.closed()[i])boundaryClosed[i]=true;
+            else{start=balance.balanceStart(graph,openingCarry==null?modes:new ArrayList<>(modes),boundaryClosed,keep,checkpoint);balanceFor=inputGraph;balanceCache=start;balanceClosedFor=boundaryClosed.clone();}
+            if(openingCarry!=null&&!start.converged()) {
+                // The opening balance is speculative. Its unbalanced discharge can seed phases from deliveries the
+                // upstream circuit cannot supply while its pump is still at shutoff.
+                carry=openingCarry;
+                carryMoverModes(graph,modes,boundaryClosed);
+            } else {
+                graph=start.graph();balancedStart=start;
+                for(int i=0;i<modes.size();i++)modes.set(i,start.modes().get(i));
+                carry=carry.withoutFlows();
+                for(int i=0;i<boundaryClosed.length;i++)if(start.closed()[i])boundaryClosed[i]=true;
+            }
         }
         closures.closeIllegalStarts(graph,modes,boundaryClosed,keep);
         // Owner decision D58: a running mover with a sealed side carries nothing and starts closed.
@@ -1951,6 +1950,20 @@ public final class PassiveStepSolver {
     /** The last balance and the input graph it was computed for: every attempt of one step starts from the same graph. */
     private PassiveNetwork balanceFor;private BalanceStart.Start balanceCache;private boolean[] balanceClosedFor;
     /** Whether this solve starts from a carried point ({@link StartSeeds#startPoint}'s test) or needs the balance. */
+    private void carryMoverModes(PassiveNetwork graph,List<FlowControl.Mode> modes,boolean[] boundaryClosed) {
+        for(int i=0;i<modes.size();i++) {
+            var pipe=graph.pipes().get(i);
+            if(boundaryClosed!=null&&boundaryClosed[i])continue;
+            if(!(pipe.control() instanceof FlowControl.Mover pump)||pump.targetVolumeFlow()==0||suctions.vapourLocked(i))continue;
+            var carried=carry.modes().get(i);
+            double band=DeviceModes.shutoffBand(Math.max(graph.reservoirs().get(pipe.first()).state().pressure(),graph.reservoirs().get(pipe.second()).state().pressure()),NEWTON_TOLERANCE);
+            if(carried==FlowControl.Mode.PUMP_SUCTION_LIMIT&&suctions.suctionLimitPressure(graph,i,0)<Double.POSITIVE_INFINITY)
+                modes.set(i,carried);
+            else if(carried==FlowControl.Mode.CLOSED&&!(devices.shutoffMargin(graph,i)>band))
+                modes.set(i,carried);
+        }
+    }
+
     private boolean needsBalance(PassiveNetwork graph){return !graph.pipes().isEmpty()&&!carriedPoint(graph,identitiesOf(graph));}
     /**
      * Whether this solve starts from a carried point: the previous converged solve's structure is this one's (pipe

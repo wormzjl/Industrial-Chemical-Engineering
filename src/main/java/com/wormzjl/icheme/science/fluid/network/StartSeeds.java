@@ -16,6 +16,7 @@ import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.solver.StepPhaseRules;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import java.util.*;
 
 /**
@@ -86,7 +87,7 @@ final class StartSeeds {
             var stream=PortStreams.endStream(model,graph.reservoirs().get(flow>=0?pipe.first():pipe.second()).state(),pipe.drawPort(flow),pipe.volume());
             if(stream==null)continue;
             // The stream is per kilogram of fluid; the start flows are the law's, delivered at their saturation ({@link #transported}).
-            double mass=Math.min(seed.mass()*.25,dt*Math.abs(transported(graph,pipe,flow)));
+            double mass=Math.min(seed.mass()*.25,dt*Math.abs(transported(graph,pipe,flow,true)));
             for(int label:new int[]{FluidThermodynamics.GAS,FluidThermodynamics.OIL,FluidThermodynamics.AQUEOUS}) {
                 int from=stream.slot(label);if(from<0||FluidThermodynamics.holdsPhase(seed,label))continue;
                 int to=label==FluidThermodynamics.GAS?FluidThermodynamics.State.VAPOR:freeLiquidSlot(slots);
@@ -181,7 +182,7 @@ final class StartSeeds {
                     if(!(Math.abs(flow)>0)||(flow>=0?pipe.second():pipe.first())!=j||!boundaryAllowed(graph,pipe,flow))continue;
                     int donor=flow>=0?pipe.first():pipe.second();var stream=current.get(donor);var port=pipe.drawPort(flow);
                     var rates=draws==null?null:draws[edge];var drawn=rates==null?null:PortStreams.drawnStream(model,rates,stream,graph.reservoirs().get(donor).state());
-                    double rate=Math.abs(deliveredFlows==null?transported(graph,pipe,flow):deliveredFlows[edge]),delivered=dt*rate,streamMass=drawn!=null?1:PortStreams.endMass(model,stream,port,pipe.volume());double[] moles=drawn!=null?drawn:PortStreams.endMoles(model,stream,port,pipe.volume());
+                    double rate=Math.abs(deliveredFlows==null?transported(graph,pipe,flow,true):deliveredFlows[edge]),delivered=dt*rate,streamMass=drawn!=null?1:PortStreams.endMass(model,stream,port,pipe.volume());double[] moles=drawn!=null?drawn:PortStreams.endMoles(model,stream,port,pipe.volume());
                     for(int c=0;c<n.length;c++)n[c]+=delivered*moles[c]/streamMass;
                     var through=solver.delivered(graph,pipe,drawn!=null?drawn[n.length]:PortStreams.endSpecificEnthalpy(model,stream,port,pipe.volume()),stream.temperature(),Math.copySign(rate,flow),checkpoint);
                     mass+=delivered;weighted+=delivered*through[1];arrives=true;
@@ -315,6 +316,9 @@ final class StartSeeds {
                 // start from, however small: the pass loop tolerates one below 1e-10 kg/s at a converged point, and carried
                 // into the next step a Newton that converges without an iteration kept it there for good. It starts at rest.
                 flows[i]=boundaryAllowed(graph,pipe,solver.carry.lawFlows()[i])?solver.carry.lawFlows()[i]:0;heads[i]=solver.carry.heads()[i]/1e5;headSet[i]=true;
+                if(modes.get(i)==FlowControl.Mode.VALVE_OPEN&&solver.carry.modes().get(i)==FlowControl.Mode.CLOSED
+                        &&pipe.control() instanceof FlowControl.ControlValve valve&&PortPlan.COLUMN_SENSOR.equals(valve.sensor()))
+                    heads[i]=0;
                 if(modes.get(i)==FlowControl.Mode.VALVE_REGULATING&&pipe.control() instanceof FlowControl.Valve valve&&valve.pressureControl()) {
                     double predictedDrop=a.state().pressure()-(seeds==null?a.state():seeds.get(pipe.first())).pressure();
                     if(predictedDrop>0)flows[i]*=Math.clamp((a.state().pressure()-valve.targetPressure())/predictedDrop,0,1);
@@ -359,9 +363,11 @@ final class StartSeeds {
     }
     /** The transported flow of connection {@code pipe} for the law's flow {@code lawFlow}: its saturation at the velocity
      * cap of the end it leaves, on that end's stream ({@link PassiveStepSolver#massFlowLimit}). */
-    private double transported(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double lawFlow) {
-        // The balanced pump seed carries the raw law flow. Other movers' estimates already carry the capped flow.
-        if(pipe.control() instanceof FlowControl.Mover&&!(pipe.control() instanceof FlowControl.Pump))return lawFlow;
+    private double transported(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double lawFlow,boolean fromStartPoint) {
+        // The balanced centrifugal start supplies the raw flow. A nominal estimate already carries the capped value.
+        boolean balancedCentrifugal=fromStartPoint&&solver.balancedStart!=null
+                &&pipe.control() instanceof FlowControl.Machine machine&&machine.law() instanceof CentrifugalPump;
+        if(pipe.control() instanceof FlowControl.Mover&&!(pipe.control() instanceof FlowControl.Pump)&&!balancedCentrifugal)return lawFlow;
         var donor=graph.reservoirs().get(lawFlow>=0?pipe.first():pipe.second()).state();
         return saturated(lawFlow,solver.massFlowLimit(pipe,donor,pipe.drawPort(lawFlow)));
     }
@@ -481,7 +487,7 @@ final class StartSeeds {
             if(boundaryClosed[e]||mode==FlowControl.Mode.CLOSED||mode==FlowControl.Mode.INLET_WRONG_PHASE)continue;
             double law=solver.lawFlow(g,pipe,PortStreams.endPressure(model,g,pipe,pipe.first()),PortStreams.endPressure(model,g,pipe,pipe.second()));
             if(!boundaryAllowed(g,pipe,law))continue;
-            double q=transported(g,pipe,law);
+            double q=transported(g,pipe,law,false);
             net+=pipe.second()==j?q:-q;
         }
         return net;

@@ -14,6 +14,7 @@ import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.scaled;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
+import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
 import java.util.*;
@@ -225,12 +226,18 @@ final class BalanceStart {
             // A valve whose flow or opening the balance states starts at what the balance gave it, not at its pipe's unthrottled law.
             boolean stated=pipe.control() instanceof FlowControl.Valve&&(!Double.isNaN(net.prescribed[e])||!Double.isNaN(net.fixedOpenings[e]));
             law[e]=net.suctionLimited[e]?net.prescribed[e]:stated?net.flow(e,pa,pb):solver.lawFlow(current,pipe,pa,pb);
-            if(converged&&net.onLaw[e]&&pipe.control() instanceof FlowControl.Pump) {
-                // Keep the pump's balanced law flow and its rise together. Starting at displacement and zero head
-                // can empty a suction junction even though the discharge loss limits the actual flow well above its floor.
+            boolean centrifugal=pipe.control() instanceof FlowControl.Machine machine&&machine.law() instanceof CentrifugalPump;
+            if(net.onLaw[e]&&(centrifugal||converged&&pipe.control() instanceof FlowControl.Pump)) {
+                // Start on the pump's curve at the balanced head, even when a centrifugal drive is too slow to open its
+                // check valve. Its nominal speed-scaled flow is not the rate that reached the discharge junction.
                 var suction=current.reservoirs().get(pipe.first()).state();
                 double rho=PortStreams.endDensity(model,suction,pipe.firstPort(),pipe.volume());
                 law[e]=net.flow(e,pa,pb)>0?net.lastQ[e][0]:0;
+                if(centrifugal&&converged&&law[e]==0&&solver.devices.shutoffMargin(current,e)<=0) {
+                    // A balanced closed start remains an ordinary active-set mode: the end-of-step head can reopen it.
+                    modes.set(e,FlowControl.Mode.CLOSED);
+                    continue;
+                }
                 double flow=saturated(law[e],solver.massFlowLimit(pipe,suction,pipe.firstPort()));
                 if(pumpHeads==null){pumpHeads=new double[edges];Arrays.fill(pumpHeads,Double.NaN);}
                 pumpHeads[e]=solver.lawRise(current,e,flow/rho,solver.suctions.riseDensity(e,rho),suction.pressure());
