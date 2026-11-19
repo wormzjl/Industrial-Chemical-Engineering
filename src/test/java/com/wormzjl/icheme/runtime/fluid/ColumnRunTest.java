@@ -6,6 +6,7 @@ import com.wormzjl.icheme.science.equipment.ColumnOperatingPoint;
 import com.wormzjl.icheme.science.equipment.ColumnTrays;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.Paint;
+import com.wormzjl.icheme.science.plant.column.ColumnCycle;
 import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
 import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import com.wormzjl.icheme.science.plant.column.Condition;
@@ -928,10 +929,14 @@ class ColumnRunTest {
         assertTrue(given>10,"the bottoms left downstream: "+given+" mol");
         var bottoms=world.coordinator.snapshots().stream().flatMap(s->s.graph().reservoirs().stream()).filter(n->n.id()==r.product()).findFirst().orElseThrow();
         assertEquals(300,bottoms.state().temperature(),1,"the bottoms at the feed's temperature, not the table's 330 K");
-        // The feed turns hot: the column runs on its table.
+        // The feed turns hot. The line and inlet account still contain some cold feed. The fake only has the
+        // original hot table, so it must refuse a state for which that table would still trip.
+        var hotTable=ops.run(unit).table;
+        double hotEnthalpy=hotTable.reference().feedEnthalpy();
+        double closureBand=ColumnCycle.TRIP_DEPARTURE*Math.abs(hotTable.condenserPerFeed());
         var source=world.registry.registrations().get(r.source());
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(r.source(),new WorldTopologyLedger.Registration(source.device(),new FluidDeviceSpec(1,340,300000,EventPathWorld.nitrogen().composition()),source.revision()+1))),world.ledger.nextIdentity(),null);
-        f.fail=j->false;
+        f.fail=j->Math.abs(j.taken().feedEnthalpy()-hotEnthalpy)>closureBand;
         double before=world.ledger.column(unit).totals().condenser();
         f.runTo(9000);
         assertFalse(ops.last(unit).passing(),ops.status(unit));
@@ -1532,8 +1537,8 @@ class ColumnRunTest {
     /**
      * Condenser shells in parallel (S3b): identical shells split the overhead equally, so each takes its share of the duty.
      * A column with two shells at 0.5 mol/s holds in each shell's water what one shell's water holds from the same column at
-     * 0.25 mol/s, the same flow per shell: the same share of its duty, within 1 %; every joule is in a water side or in
-     * transit, and the shares are equal.
+     * 0.25 mol/s, the same flow per shell: the same delivered cooling within 1 %; every joule is in a water side or in
+     * transit, and both shells take equal shares.
      */
     @Test void twoCondenserShellsEachHoldWhatOneShellHoldsAtHalfTheFeed() {
         shells=2;feedRate=.5;
@@ -1542,23 +1547,25 @@ class ColumnRunTest {
         var one=rig(0,null,false,false,true);one.world().runTo(4000);
         var u=two.world().ledger.column(two.unit());
         assertEquals(List.of(two.tube(),two.tube()+2),u.condensers());
-        double removed=-u.totals().condenser(),taken=0;var each=new ArrayList<Double>();
+        double removed=-u.totals().condenser();var each=new ArrayList<Double>();
+        assertTrue(removed>10000,"the column's condenser removed heat: "+removed+" J");
         for(long tube:u.condensers()) {
             double water=two.counting().heat.getOrDefault(PhysicalFluidTopology.sideIdentity(tube),0.);
             double owed=two.world().coordinator.transitAsOf(PhysicalFluidTopology.sideIdentity(tube),PhysicalFluidTopology.sideIdentity(tube+1),two.world().ledger.onlineTick());
-            each.add(water);taken+=water+owed;
+            assertEquals(removed/2,water+owed,1e-6*removed/2,"each shell's half of the duty is in its water or in transit");
+            each.add(water);
         }
-        assertTrue(removed>10000,"the column's condenser removed heat: "+removed+" J");
-        assertEquals(removed,taken,1e-6*removed,"every joule is in a water side or in transit");
         assertEquals(each.get(0),each.get(1),1e-9*each.get(0),"identical shells take equal shares");
-        double single=one.counting().heat.getOrDefault(PhysicalFluidTopology.sideIdentity(one.tube()),0.);
+        long singleSide=PhysicalFluidTopology.sideIdentity(one.tube());
+        double single=one.counting().heat.getOrDefault(singleSide,0.);
         double oneRemoved=-one.world().ledger.column(one.unit()).totals().condenser(),oneTaken=one.world().ledger.column(one.unit()).totals().taken().total(),twoTaken=u.totals().taken().total();
+        double singleOwed=one.world().coordinator.transitAsOf(singleSide,PhysicalFluidTopology.sideIdentity(one.shell()),one.world().ledger.onlineTick());
+        assertEquals(oneRemoved,single+singleOwed,1e-6*oneRemoved,"the single shell's duty is in its water or in transit");
         // A cycle waits until every water side has booked through its fence, so the two-shell column may run a 5 s cycle fewer
         // in the same time: its feed taken is twice the single shell's within one cycle's take.
         assertEquals(oneTaken,twoTaken/2,.25*CYCLE_SECONDS*(1+1e-9),"the feed taken per shell, within one cycle: "+twoTaken+" against "+oneTaken);
-        // What a shell's water holds follows its duty: each shell of two takes the share of its duty one shell takes of the same duty.
-        assertEquals(single/oneRemoved,each.get(0)/(removed/2),.01*single/oneRemoved,"a shell's water takes its share of its duty as one shell does: "+each+" of "+removed
-                +" against "+single+" of "+oneRemoved);
+        // Compare water actually booked over the same window. The extra cycle above can still be in transit at its end.
+        assertEquals(single,each.get(0),.01*single,"one shell and each of two shells deliver the same cooling at the same feed per shell");
         for(var r:List.of(one,two))assertTrue(r.ops().status(r.unit()).startsWith("RUNNING")||r.ops().status(r.unit()).startsWith("LIMITED: outlet"),r.ops().status(r.unit()));
         assertTrue(two.world().held.isEmpty()&&one.world().held.isEmpty(),"no island held");
     }
