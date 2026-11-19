@@ -24,7 +24,15 @@ class IslandSetsPresentedTest {
         long island=w.registry.owner(sink);var from=w.coordinator.model(island);
         assertNotEquals(w.model.compounds(),from.compounds(),"the island carries its own compound list");
         var stored=w.coordinator.observe(island);var last=stored.lastResult().orElseThrow();
-        var shown=IslandSets.presented(stored,from,w.model);
+        var presentation=new IslandSets.Presentation(w.model);
+        var shown=presentation.snapshot(stored,from);
+        var statusChange=new IslandCoordinator.Snapshot(island,stored.revision(),stored.graph(),stored.clock(),stored.lastResult(),"WAITING");
+        var updated=presentation.snapshot(statusChange,from);
+        assertEquals("WAITING",updated.status());
+        assertSame(shown.graph(),updated.graph());
+        assertSame(shown.lastResult().orElseThrow(),updated.lastResult().orElseThrow());
+        presentation.clear();
+        assertNotSame(shown.graph(),presentation.snapshot(stored,from).graph());
         for(int i=0;i<stored.graph().reservoirs().size();i++)
             assertEquals(bits(IslandSets.paddedNode(stored.graph().reservoirs().get(i),from,w.model)),bits(shown.graph().reservoirs().get(i)),"node "+i);
         var result=shown.lastResult().orElseThrow();

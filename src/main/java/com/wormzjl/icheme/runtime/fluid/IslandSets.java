@@ -253,15 +253,37 @@ public final class IslandSets {
      * change. The island itself never sees it.
      */
     static IslandCoordinator.Snapshot presented(IslandCoordinator.Snapshot s,FluidThermodynamics from,FluidThermodynamics world) {
-        if(same(from,world))return s;
-        // One axis map for the whole island (code base review R1), not one per node, boundary and stream.
-        int[] map=map(from,world);int width=world.componentCount();
-        var graph=paddedGraph(s.graph(),map,world);
-        var result=s.lastResult().map(r->{
-            // An awake snapshot normally shares its interval's graph. A replay preview may have a different state.
-            var resultGraph=r.graph()==s.graph()?graph:paddedGraph(r.graph(),map,world);
-            return resultOn(r,resultGraph,map,width);
-        });
-        return new IslandCoordinator.Snapshot(s.id(),s.revision(),graph,s.clock(),result,s.status(),s.fences(),s.certificate(),s.payloadGeneration());
+        return new Presentation(world).snapshot(s,from);
+    }
+
+    /** World-axis projections shared by readers during one server tick. A same-tick commit or replay can change
+     * the graph, result or model independently. Snapshot metadata always comes directly from the current read. */
+    static final class Presentation {
+        private final FluidThermodynamics world;
+        private final IdentityHashMap<FluidThermodynamics, Axis> axes=new IdentityHashMap<>();
+
+        Presentation(FluidThermodynamics world){this.world=world;}
+        void clear(){axes.clear();}
+
+        IslandCoordinator.Snapshot snapshot(IslandCoordinator.Snapshot source,FluidThermodynamics from) {
+            if(same(from,world))return source;
+            var axis=axes.computeIfAbsent(from,model->new Axis(map(model,world)));
+            var graph=axis.graph(source.graph());
+            var result=source.lastResult().map(axis::result);
+            return new IslandCoordinator.Snapshot(source.id(),source.revision(),graph,source.clock(),result,
+                    source.status(),source.fences(),source.certificate(),source.payloadGeneration());
+        }
+
+        private final class Axis {
+            private final int[] map;
+            private final IdentityHashMap<PassiveNetwork,PassiveNetwork> graphs=new IdentityHashMap<>();
+            private final IdentityHashMap<PassiveIntervalSolver.Result,PassiveIntervalSolver.Result> results=new IdentityHashMap<>();
+
+            Axis(int[] map){this.map=map;}
+            PassiveNetwork graph(PassiveNetwork input){return graphs.computeIfAbsent(input,g->paddedGraph(g,map,world));}
+            PassiveIntervalSolver.Result result(PassiveIntervalSolver.Result input) {
+                return results.computeIfAbsent(input,r->resultOn(r,graph(r.graph()),map,world.componentCount()));
+            }
+        }
     }
 }

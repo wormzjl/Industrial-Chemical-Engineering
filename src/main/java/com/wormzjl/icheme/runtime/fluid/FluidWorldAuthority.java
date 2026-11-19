@@ -34,6 +34,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     final MinecraftServer server;
     final MaterialCatalog catalog;
     final FluidThermodynamics model;
+    private final IslandSets.Presentation worldProjections;
     private final FluidPropertyReloadGuard propertyReload;
     private String propertyHold;
     final IChemE.FluidOptions options;
@@ -132,6 +133,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         FluidPropertyReloadGuard.validateSolids(catalog.solids(),data.checkpoint(),savedTopology);observedSolidData=catalog;
         topology=new WorldTopologyLedger(savedTopology);
         topology.builds().structures().forEach((origin,structure)->{chunks.indexStructure(origin,structure,true);nozzles.index(origin,structure,true);});
+        worldProjections=new IslandSets.Presentation(model);
         presentation=new FluidPresentation<>(new PresentationHost(),topology.onlineTick());
         var settings=new IslandCoordinator.Settings(options.wallBudgetNanos(),options.wallBudgetNanos()*3/4,64,options.adaptiveCadence(),options.initialCadenceTicks(),options.certificates()).withTime(options.time());
         // Island clocks read the world's online tick: one epoch increment per tick advances every island.
@@ -1687,7 +1689,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * events, so its replies and views include them.
      */
     private void tick() {
-        owned();if(closed)return;refreshProperties();topology.tick();
+        owned();if(closed)return;refreshProperties();worldProjections.clear();topology.tick();
         chunks.reconcileFullChunks();
         if (topology.onlineTick() >= nextWaterCheck) {
             WaterIntakes.recheck(this);
@@ -2080,7 +2082,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** Island {@code island} as a presentation reads it, on the world list (V2 stage 5): every view, display and wire vector
      * stays on the network package's whole list whatever the island carries. */
     IslandCoordinator.Snapshot presentation(long island){return onWorldList(island,runtime.coordinator().presentation(island));}
-    private IslandCoordinator.Snapshot onWorldList(long island,IslandCoordinator.Snapshot snapshot){return IslandSets.presented(snapshot,runtime.coordinator().model(island),model);}
+    private IslandCoordinator.Snapshot onWorldList(long island,IslandCoordinator.Snapshot snapshot){return worldProjections.snapshot(snapshot,runtime.coordinator().model(island));}
     /** {@code islands} caches island reads, so one bucket reads each island once however many of its devices it presents. */
     /**
      * One presented island's lookups for a bucket's views (code base review R2): its nodes and pipes by identity, each node's
