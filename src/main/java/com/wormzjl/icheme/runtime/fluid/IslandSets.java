@@ -5,6 +5,8 @@ import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.science.fluid.network.PipeTransfer;
 import com.wormzjl.icheme.science.fluid.network.ScheduledTransfer;
+import com.wormzjl.icheme.science.fluid.network.Separation;
+import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel;
 import java.util.*;
@@ -140,21 +142,32 @@ public final class IslandSets {
     private static ConservativeTransport.BoundaryTransfer boundary(ConservativeTransport.BoundaryTransfer b,int[] map,int width) {
         return new ConservativeTransport.BoundaryTransfer(b.nodeId(),map==null?b.moles().clone():amounts(b.moles(),map,width,"amounts"),b.totalEnergyJoule(),b.solids(),b.solidDirection(),b.kind());
     }
-    /** A pipe history stream on {@code to}. */
-    static PipeTransfer.Stream stream(PipeTransfer.Stream s,FluidThermodynamics from,FluidThermodynamics to) {
-        return same(from,to)?stream(s,null,0):stream(s,map(from,to),to.componentCount());
-    }
+    /** A pipe history stream on the destination axis, by component. */
     private static PipeTransfer.Stream stream(PipeTransfer.Stream s,int[] map,int width) {
-        var phases=s.phaseMoles();var moved=new double[phases.length][];
-        for(int p=0;p<phases.length;p++)moved[p]=map==null?phases[p].clone():amounts(phases[p],map,width,"amounts");
+        if(s.componentCount()!=map.length)
+            throw new IllegalArgumentException("An amounts vector of "+s.componentCount()+" entries on an axis of "+map.length);
+        var moved=new double[3][width];
+        for(int phase=0;phase<moved.length;phase++) {
+            for(int component=0;component<map.length;component++) {
+                double amount=s.phaseMoles(phase,component);
+                int target=map[component];
+                if(target>=0)moved[phase][target]=amount;
+                else if(Double.doubleToRawLongBits(amount)!=0)
+                    throw new IllegalStateException("Island compound set: amounts hold "+amount+" of a compound the new list does not carry");
+            }
+        }
         return new PipeTransfer.Stream(s.massKg(),moved,s.phaseVolumes(),s.solids());
     }
     /** A solved interval on {@code to}: its graph, its boundary bookings and its pipe histories by id. */
     public static PassiveIntervalSolver.Result result(PassiveIntervalSolver.Result r,FluidThermodynamics from,FluidThermodynamics to) {
         if(same(from,to))return r;
-        var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(r.boundaries().size());for(var b:r.boundaries())boundaries.add(boundary(b,from,to));
-        var transfers=new ArrayList<PipeTransfer>(r.pipeTransfers().size());for(var t:r.pipeTransfers())transfers.add(new PipeTransfer(t.pipeId(),stream(t.forward(),from,to),stream(t.reverse(),from,to)));
-        return new PassiveIntervalSolver.Result(graph(r.graph(),from,to),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),boundaries,
+        return resultOn(r,graph(r.graph(),from,to),map(from,to),to.componentCount());
+    }
+    /** Carries bookings and histories onto the same axis as the already converted graph. */
+    private static PassiveIntervalSolver.Result resultOn(PassiveIntervalSolver.Result r,PassiveNetwork graph,int[] map,int width) {
+        var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(r.boundaries().size());for(var b:r.boundaries())boundaries.add(boundary(b,map,width));
+        var transfers=new ArrayList<PipeTransfer>(r.pipeTransfers().size());for(var t:r.pipeTransfers())transfers.add(new PipeTransfer(t.pipeId(),stream(t.forward(),map,width),stream(t.reverse(),map,width)));
+        return new PassiveIntervalSolver.Result(graph,r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),boundaries,
                 r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),transfers,r.observations(),r.towers(),r.radiantDemands());
     }
 
@@ -178,10 +191,12 @@ public final class IslandSets {
     /** {@link #paddedNode} on the axis {@code map} of {@code from} onto {@code world}, made once for a whole island (code base review R1). */
     private static PassiveNetwork.Reservoir paddedNode(PassiveNetwork.Reservoir n,int[] map,FluidThermodynamics world) {
         var i=n.inventory();
-        var inventory=new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),map,world.componentCount(),"amounts"),i.internalEnergy(),
-                i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower(),i.rigid()).withBlanket(i.blanket());
-        if(i.reserve()!=null)inventory=inventory.withReserve(new PassiveNetwork.JunctionReserve(
-                amounts(i.reserve().moles(),map,world.componentCount(),"junction reserve"),i.reserve().enthalpy()));
+        int width=world.componentCount();
+        var reserve=i.reserve()==null?null:new PassiveNetwork.JunctionReserve(
+                amounts(i.reserve().moles(),map,width,"junction reserve"),i.reserve().enthalpy());
+        var inventory=new PassiveNetwork.Inventory(i.volume(),amounts(i.moles(),map,width,"amounts"),i.internalEnergy(),
+                i.solids(),i.levelHeight(),i.open(),i.geometry(),onList(i.pool(),world),i.tower(),i.rigid(),
+                PhaseLayout.AMBIENT_PRESSURE,i.blanket()==0?0:i.blanket(),Separation.Carried.NONE,reserve);
         return new PassiveNetwork.Reservoir(n.id(),n.elevation(),cut(n.state(),map,world.compounds().size()),n.kind(),inventory);
     }
     private static PassiveNetwork paddedGraph(PassiveNetwork g,int[] map,FluidThermodynamics world) {
@@ -243,10 +258,9 @@ public final class IslandSets {
         int[] map=map(from,world);int width=world.componentCount();
         var graph=paddedGraph(s.graph(),map,world);
         var result=s.lastResult().map(r->{
-            var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(r.boundaries().size());for(var b:r.boundaries())boundaries.add(boundary(b,map,width));
-            var transfers=new ArrayList<PipeTransfer>(r.pipeTransfers().size());for(var t:r.pipeTransfers())transfers.add(new PipeTransfer(t.pipeId(),stream(t.forward(),map,width),stream(t.reverse(),map,width)));
-            return new PassiveIntervalSolver.Result(paddedGraph(r.graph(),map,world),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),boundaries,
-                    r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),transfers,r.observations(),r.towers(),r.radiantDemands());
+            // An awake snapshot normally shares its interval's graph. A replay preview may have a different state.
+            var resultGraph=r.graph()==s.graph()?graph:paddedGraph(r.graph(),map,world);
+            return resultOn(r,resultGraph,map,width);
         });
         return new IslandCoordinator.Snapshot(s.id(),s.revision(),graph,s.clock(),result,s.status(),s.fences(),s.certificate(),s.payloadGeneration());
     }
