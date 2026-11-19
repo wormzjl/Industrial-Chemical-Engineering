@@ -443,8 +443,8 @@ public final class PassiveStepSolver {
                 if(constants.standing.get(edge)||accepted==FlowControl.Mode.VALVE_CONFLICT&&Double.isNaN(heldOpenings[edge])){modes.set(edge,accepted==FlowControl.Mode.CLOSED?accepted:FlowControl.Mode.VALVE_OPEN);continue;}
                 if(!Double.isNaN(heldOpenings[edge]))continue;
                 var start=accepted;
-                // A regulating flow valve whose target went to zero is closed: its regulation row would state a zero flow through its open line.
-                if(accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()&&valve.targetMassFlow(1)==0)start=FlowControl.Mode.CLOSED;
+                // Zero demand closes the controlling valve before the first pass, including a previously wide-open valve.
+                if(!valve.pressureControl()&&valve.targetMassFlow(1)==0)start=FlowControl.Mode.CLOSED;
                 // Owner decision D11 (A1): one whose target lies above what a set-flow mover in its series moves starts open, the
                 // mover setting the flow, as an open valve's first pass would find; the pass loop regulates again where the open line
                 // passes more. Regulating there asked the mover for its target: 50 kg/s of a 10 kg/s pump stood a thousand relief

@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.fluid.network;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import java.util.*;
@@ -69,6 +70,31 @@ class FlowControlTest {
         var saturated=run(300000,101325,0,new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,100,new java.util.UUID(1,2),1),.1);
         assertEquals(FlowControl.Mode.VALVE_OPEN,saturated.modes().getFirst());
         assertTrue(saturated.massFlows()[0]<100);
+    }
+    @Test void aClosedPortPlanSupersedesTheLastWideOpenValveBeforeTheSolve() {
+        var valve=new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW,0,PortPlan.COLUMN_SENSOR,0);
+        var graph=line(300000,101325,0,valve);
+        boolean enabled=SolverDiagnostics.ENABLED;
+        try {
+            SolverDiagnostics.ENABLED=true;
+            long reference=0;
+            for(var previous:List.of(FlowControl.Mode.CLOSED, FlowControl.Mode.VALVE_OPEN)) {
+                SolverDiagnostics.reset();
+                var endpoint=new PassiveIntervalSolver.Result(graph,.1,new double[1],1,0,0,
+                        List.of(),Map.of(),List.of(previous),new double[1],new double[1],List.of());
+                var solver=new PassiveStepSolver(model);
+                solver.replayStart(graph,endpoint);
+                var step=solver.solve(graph,.1,()->{},endpoint.endpointModes());
+                assertEquals(FlowControl.Mode.CLOSED,step.modes().getFirst());
+                assertEquals(0,step.pipeTransfers().getFirst().forward().massKg());
+                long passes=SolverDiagnostics.sample().value("activeSetPasses");
+                if(previous==FlowControl.Mode.CLOSED)reference=passes;
+                else assertEquals(reference,passes,"the old opening must not trigger a flowing trial");
+            }
+        } finally {
+            SolverDiagnostics.ENABLED=enabled;
+            SolverDiagnostics.reset();
+        }
     }
     @Test void removingASensorRetainsIndependentSiTargets(){
         var v=new FlowControl.ControlValve(FlowControl.ValveSource.PRESSURE,350000,2,.03,new java.util.UUID(1,1),1);
