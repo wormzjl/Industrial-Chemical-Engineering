@@ -15,6 +15,8 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ## [Unreleased]
 
+## [0.35.3] - 2026-11-19
+
 ### Changed
 
 - Constructor previews reuse their sorted translucent buffer and skip equipment outside the view. The chooser groups equipment by function, marks unfinished equipment and offers simulator import under Saved designs (`1e176216e`, `87d414280`, `2026-11-18-constructor-ghost-rendering`).

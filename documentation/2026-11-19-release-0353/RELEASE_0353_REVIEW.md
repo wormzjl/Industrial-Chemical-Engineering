@@ -1,6 +1,6 @@
 # 0.35.3 merge review
 
-Target: local `main` at `98254db2c`. Candidate branch: `claude/large-column-surface-shader-f22680`. Main is an ancestor of the candidate. The owner chose 0.35.3. The changes are listed under Unreleased in the [changelog](../../CHANGELOG.md) for dating at the actual merge.
+Local `main` merged the approved 0.35.3 release on November 19, 2026. Its previous tip was `98254db2c`. Candidate `6d87cc8cd` supplied the qualified code and resources. The [changelog](../../CHANGELOG.md) records the release.
 
 ## Delivered behavior
 
