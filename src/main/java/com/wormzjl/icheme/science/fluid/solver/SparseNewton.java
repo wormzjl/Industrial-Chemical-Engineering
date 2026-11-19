@@ -18,6 +18,10 @@ public final class SparseNewton {
         /** Sorted unique residual rows influenced by each variable. Include structurally possible zero derivatives. */
         int[][] columnRows();
         default double differenceScale(int column,double value){return Math.max(1,Math.abs(value));}
+        /** Signed perturbation for a one-sided difference. Equations can choose a side of a non-smooth row. */
+        default double differenceIncrement(int column,double value,double differenceStep) {
+            return differenceStep*differenceScale(column,value);
+        }
         default double maximumStep(double[] variables,double[] direction){return 1;}
         /**
          * Maps a line-search trial {@code candidate} (the current point {@code variables} plus a
@@ -363,7 +367,7 @@ public final class SparseNewton {
             SolverDiagnostics.count(SolverDiagnostics.jacobianBlockBuilds);
             return factor(x,derivatives,workspace,pattern,blocks);
         }
-        for(int column=0;column<n;column++)steps[column]=differenceStep*equations.differenceScale(column,x[column]);
+        for(int column=0;column<n;column++)steps[column]=equations.differenceIncrement(column,x[column],differenceStep);
         for(int[] group:pattern.groups) {
             checkpoint.run();double[] trial=x.clone();for(int column:group)trial[column]+=steps[column];double[] perturbed=null;
             try{calls++;perturbed=evaluate(equations,trial,n);}catch(IllegalArgumentException outsideDomain){ /* Use a bounded one-sided stencil below. */ }

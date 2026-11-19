@@ -152,6 +152,46 @@ class BlockJacobianEquivalenceTest {
         assertTrue(comparison.solidCoupling()>0,"No neighbour solid row moved with a donor column");
     }
 
+    @Test void aSmallReverseFlowDifferentiatesTheWarmSideStreamAtAColdJunction() {
+        var cold=model.initialNitrogenCharge(1,260,185_000,()->{});
+        var junction=model.initialNitrogenCharge(1,260,150_000,()->{});
+        var warm=model.initialNitrogenCharge(1,340,125_000,()->{});
+        var vent=model.initialNitrogenCharge(1,260,101_325,()->{});
+        var run=new PipeResistance.Geometry(4,.025,.000045,0);
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,cold,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,junction,PassiveNetwork.NodeKind.JUNCTION),
+                new PassiveNetwork.Reservoir(3,0,warm),new PassiveNetwork.Reservoir(4,0,vent,PassiveNetwork.NodeKind.VOID)),
+                List.of(new PassiveNetwork.Pipe(10,0,1,run),new PassiveNetwork.Pipe(11,3,1,run),new PassiveNetwork.Pipe(12,1,2,run)));
+        var solver=new PassiveStepSolver(model);
+        solver.solve(graph,.05,()->{});
+        var equations=solver.acceptedEquations();
+        var point=solver.acceptedPoint();
+        int coldJunction=1,sideLine=2;
+        int column=equations.edgeOffset+sideLine;
+        int enthalpy=equations.offsets[coldJunction]+equations.layout[coldJunction].componentBalanceCount();
+
+        // At this valid Newton trial the side tank feeds the cold junction. Adding a positive stencil of 1e-6 kg/s
+        // would cross zero and spend three quarters of the stencil with no inflow from the tank.
+        point[column]=-2.5e-7;
+        var base=equations.residual(point);
+        var negative=point.clone();negative[column]-=1e-6;
+        double expected=(equations.residual(negative)[enthalpy]-base[enthalpy])/-1e-6;
+        assertTrue(expected>.01,"more warm inflow decreases the cold junction's enthalpy residual");
+
+        int[][] pattern=equations.columnRows();
+        int[] offsets=new int[point.length+1];
+        for(int c=0;c<point.length;c++)offsets[c+1]=offsets[c]+pattern[c].length;
+        int[] rows=new int[offsets[point.length]];
+        for(int c=0;c<point.length;c++)System.arraycopy(pattern[c],0,rows,offsets[c],pattern[c].length);
+        int row=Arrays.binarySearch(pattern[column],enthalpy);
+        assertTrue(row>=0,"side flow affects the junction's enthalpy row");
+        var entries=new double[rows.length];
+        assertEquals(point.length,equations.differentiateEntries(point,base,1e-6,offsets,rows,entries,()->{}));
+        assertEquals(expected,entries[offsets[column]+row],1e-9*Math.abs(expected));
+        assertEquals(1e-6,equations.differenceIncrement(equations.edgeOffset+1,-2.5e-7,1e-6),0,
+                "the one-way vent keeps its existing stencil at the same flow");
+    }
+
     private record Comparison(int columns,int entries,int solidCoupling,int filterColumns,long tangentPhases) {}
 
     private Comparison compare(FluidThermodynamics view,PassiveNetwork graph,double dt,String name) {
@@ -182,7 +222,7 @@ class BlockJacobianEquivalenceTest {
         double[][] reference=new double[2][rows.length];
         double[] steps={1e-6,1e-5};
         for(int k=0;k<2;k++)for(int column=0;column<size;column++) {
-            double step=steps[k]*equations.differenceScale(column,x[column]);
+            double step=equations.differenceIncrement(column,x[column],steps[k]);
             double[] trial=x.clone();trial[column]+=step;
             double[] once=equations.residual(trial);
             trial[column]=x[column]+2*step;

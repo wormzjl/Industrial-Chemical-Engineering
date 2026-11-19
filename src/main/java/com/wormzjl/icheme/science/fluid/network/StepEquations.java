@@ -1083,6 +1083,16 @@ final class StepEquations implements SparseNewton.Equations {
         if(seed>=0)return PhaseLayout.traceDifferenceScale(Math.max(seed,Math.abs(value)));
         return Math.max(differenceFloors[column],Math.abs(value));
     }
+    /** Keep a reversible junction edge on its current donor branch in either Jacobian sweep. */
+    @Override public double differenceIncrement(int column,double value,double differenceStep) {
+        double step=differenceStep*differenceScale(column,value);
+        int edge=column-edgeOffset;
+        if(value>=0||value+step<0||edge<0||edge>=graph.pipes().size())return step;
+        var pipe=graph.pipes().get(edge);
+        boolean junction=graph.reservoirs().get(pipe.first()).junction()||graph.reservoirs().get(pipe.second()).junction();
+        // One-way boundaries already choose their physical donor in the closure stage. Keep the existing stencil there.
+        return junction&&boundaryAllowed(graph,pipe,-1)&&boundaryAllowed(graph,pipe,1)?-step:step;
+    }
     /**
      * Whether a chord step on the Jacobian built at {@code built} still closes at least half of every row's gap at
      * {@code now} ({@link PassiveStepSolver#chordHolds}): the slopes a connection's row states are its loss slope in its flow and its
@@ -1820,7 +1830,7 @@ final class StepEquations implements SparseNewton.Equations {
                     int column=which==0?edgeOffset+edge:which==1?controlOffsets[edge]:filterOffsets[edge];
                     if(column<0)continue;
                     columns++;
-                    double step=differenceStep*differenceScale(column,x[column]);
+                    double step=differenceIncrement(column,x[column],differenceStep);
                     trial[column]+=step;
                     edgeRows(edge,trial,st,tr,perturbed);
                     // No node is decoded again, so only the two endpoints' inflow rows move.
