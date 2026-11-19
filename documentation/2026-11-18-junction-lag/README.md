@@ -4,7 +4,7 @@ The solver must deliver hot and cold fronts within 0.5 K on the first slice whil
 
 ## Status
 
-Updated 2026-11-19. The final 6,000-tick plant run had zero charge holds and positive feed in all 292 new bookings. The watch campaign recorded 34 first holds in 65 worlds. The [hold review](REMAINING_HOLDS_REVIEW.md) records the passing and open cases.
+Updated 2026-11-19. The optimized plant used 24.1% less CPU and allocated 42.3% less per second than the junction build. One 6,000-tick trial completed without holds and the other logged five deadlines. The latest campaign logged 33 first holds in 65 watch worlds. Its one newly held world passed alone. See the [performance recovery review](PERFORMANCE_RECOVERY_REVIEW.md) for the controls and the [hold review](REMAINING_HOLDS_REVIEW.md) for the earlier diagnoses.
 
 ## Documents
 
@@ -15,6 +15,8 @@ Updated 2026-11-19. The final 6,000-tick plant run had zero charge holds and pos
 - [REMAINING_HOLDS_REVIEW.md](REMAINING_HOLDS_REVIEW.md) records the precision, pump startup, blanket-drain, valve regulation and saved-plant results.
 
 - [JUNCTION_PERFORMANCE_REVIEW.md](JUNCTION_PERFORMANCE_REVIEW.md) compares saved-plant CPU and resident memory with the pre-implementation baseline and measures equal-work junction circuits.
+
+- [PERFORMANCE_RECOVERY_REVIEW.md](PERFORMANCE_RECOVERY_REVIEW.md) attributes the saved-plant CPU and allocation growth and reports the matched optimization benchmarks.
 
 ## Code areas
 
@@ -41,3 +43,5 @@ The follow-up covers junction mix and reconstruction precision, hydraulic balanc
 - 2026-11-19: corrected the backed-junction precision stall in `cfead1ca6`, kept workspace keys stable during vessel emptying in `c09476c1c`, and corrected the pump start and charge reopening in `1924c2e75`. The [follow-up review](REMAINING_HOLDS_REVIEW.md) records the 80-second drain, the affected lane, watch worlds and saved plant. The subsequent donor derivative, provisional phase and warm valve changes passed 195 focused tests at `5b34bff75`. Normal shutdown cancellation passed 137 focused runtime and checkpoint tests at `0f4c08c41`. An in-flight bottoms solve was discarded cleanly on shutdown and all 14 islands saved without a pending retry.
 
 - 2026-11-19: benchmarked two saved-plant runs per revision and matched liquid and mixed-gas circuits. The [performance review](JUNCTION_PERFORMANCE_REVIEW.md) records the CPU, allocation, resident-memory and plant-state differences.
+
+- 2026-11-19: profiled the plant and optimized column, thermodynamic, fluid and display work. The [recovery review](PERFORMANCE_RECOVERY_REVIEW.md) records the six saved-plant controls, fixed circuits, fixed-input column and correctness checks.

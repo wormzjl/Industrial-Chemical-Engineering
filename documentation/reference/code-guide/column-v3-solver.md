@@ -131,6 +131,7 @@ One rung, inside `V3AttemptLoop.solveSingleProblem` ([column-v3.md](column-v3.md
   keeping value and slope; an accepted extrapolation adds a notice. `V3PengRobinsonSession.kernelFor` builds the shared
   kernel from the package's derived pairs (`DerivedPairs.derive`), so the column and the network solve one equation of
   state on one list; a lens keeps its own matrix.
+- **Stage-coloured finite differences.** Each perturbation starts from the decoded base of that Jacobian. It evaluates properties only for the affected tray phases. Material and energy balances still use the full perturbed state, including water transported from adjacent trays. The band solve follows the occupied tail of the pivot row through swaps.
 - **The column's water** (`V3WaterProperties`): `saturationPressurePascal` and `wagnerPruss` take 0 < T ≤ Tc (the
   supercooled branch below the triple point) and refuse above Tc; the steam's enthalpy and heat capacity hold the
   Shomate fit's end heat capacity past its data, and an accepted state with steam there gets one advisory, never a hold.
