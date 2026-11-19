@@ -206,8 +206,53 @@ final class ExchangerCoupling {
             if(other!=null&&other!=island&&other.certificate!=null&&moved(side,coordinator.coupled.get(side.partner),other))wake(other,end);
         }
     }
+    /** First known later partner record that changes the solve's admitted heat read. A new certificate may replay
+     * through that tick. The radiant relay keeps its booked rate spans even when its independent island is ahead. */
+    long replayWake(Island island,long start,Map<Long,ExchangerRelay.Read> reads) {
+        long wake=Long.MAX_VALUE;
+        for(long own:island.sides) {
+            var reader=coordinator.coupled.get(own);
+            var read=reads.get(own);
+            if(reader==null||read==null||read==ExchangerRelay.Read.NONE||read.ceiling()>0||reader.kind==SideKind.RADIANT)continue;
+            var producer=other(reader);
+            var source=coordinator.coupled.get(reader.partner);
+            if(producer==null||producer==island||source==null)continue;
+            if(reader.kind==SideKind.CONVECTION) {
+                for(var span:source.booked) {
+                    if(span.end()<=start)continue;
+                    double rate=span.joule()/coordinator.settings.time().seconds(span.end()-span.start());
+                    if(rateMoved(rate,read.heatRate())){wake=Math.min(wake,span.end());break;}
+                }
+                if(source.current!=null&&source.current.tick()>start&&rateMoved(source.current.rate(),read.heatRate()))
+                    wake=Math.min(wake,source.current.tick());
+            } else {
+                long settledThrough=Math.min(producer.clock.committedTick(),island.clock.committedTick());
+                long settledWake=Long.MAX_VALUE;
+                for(var record:new SideRecord[]{source.previous,source.current}) {
+                    if(record==null||record.tick()<=start)continue;
+                    if(record.stream()!=null&&(read.stopped()||streamMoved(record.stream(),read.partner())))
+                        wake=Math.min(wake,record.tick());
+                    if(record.tick()<=settledThrough)settledWake=Math.min(settledWake,record.tick());
+                }
+                if(settledWake<wake&&transitMoved(source.pair(),reader.heatRate,island))wake=settledWake;
+            }
+        }
+        return wake;
+    }
+
+    /** Replay may reach a dated input change while the other partners close through it. */
+    long replayThrough(long id) {
+        var ticks=dated.get(id);
+        return ticks==null||ticks.isEmpty()?Long.MAX_VALUE:ticks.first();
+    }
+
     /** Decision D4's wake of certified island {@code other} as of {@code tick} (R-ST4); its partners' fence re-derives it. */
-    private void wake(Island other,long tick){if(dated.computeIfAbsent(other.id,k->new TreeSet<>()).add(tick))coordinator.reconsider(other);}
+    void wake(Island other,long tick) {
+        if(dated.computeIfAbsent(other.id,k->new TreeSet<>()).add(tick)) {
+            if(other.certificate!=null&&!other.savesCertificate())other.touch();
+            coordinator.reconsider(other);
+        }
+    }
     /** The heat (J) {@code pipe}'s stream took up over {@code result}'s span. */
     static double heat(PassiveIntervalSolver.Result result,long pipe) {
         double joule=0;for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT&&b.nodeId()==pipe)joule+=b.totalEnergyJoule();
@@ -220,22 +265,29 @@ final class ExchangerCoupling {
             if(side.kind!=SideKind.RADIANT||otherSide==null||side.current==null)return false;
             double rate=side.current.rate();
             if(!otherSide.read){otherSide.read=true;otherSide.rateUsed=rate;return false;}
-            return Math.abs(rate-otherSide.rateUsed)>WAKE_FLOW*Math.abs(otherSide.rateUsed)+1;
+            return rateMoved(rate,otherSide.rateUsed);
         }
         if(otherSide==null||side.current==null||side.current.stream()==null)return false;
         var now=side.current.stream();
         if(!otherSide.read){otherSide.read=true;otherSide.readUsed=now;return false;}
-        var used=otherSide.readUsed;if(used==null)return true;
-        double slice=coordinator.settings.time().seconds(Math.min(other.clock.snapshot().cadenceTicks(),other.maximumSliceTicks));
-        return Math.abs(now.donor().temperature()-used.donor().temperature())>WAKE_TEMPERATURE
-                ||Math.abs(now.massFlow()-used.massFlow())>WAKE_FLOW*Math.abs(used.massFlow())
-                // A controller's bypass moves the flow through the cells as a flow change does (W4).
-                ||now.law()!=null&&used.law()!=null&&Math.abs(now.law().bypass()-used.law().bypass())>WAKE_FLOW
-                // A kettle's pool that boils dry or floods changes its film (W7).
-                ||now.pool()!=used.pool()||now.pool()&&Math.abs(now.bath().film()-used.bath().film())>WAKE_FLOW*used.bath().film()
-                // The settled transit: the heat the side ahead booked past the other's commit is a clock offset, not a change.
-                ||Math.abs(settledTransit(side.pair()))>WAKE_TRANSIT*Math.abs(otherSide.heatRate)*slice+1;
+        return streamMoved(now,otherSide.readUsed)||transitMoved(side.pair(),otherSide.heatRate,other);
     }
+    /** Heat booked ahead of either side's clock is a clock offset. Only settled transit may wake its reader. */
+    private boolean transitMoved(long pair,double heatRate,Island reader) {
+        double slice=coordinator.settings.time().seconds(Math.min(reader.clock.snapshot().cadenceTicks(),reader.maximumSliceTicks));
+        return Math.abs(settledTransit(pair))>WAKE_TRANSIT*Math.abs(heatRate)*slice+1;
+    }
+    private static boolean rateMoved(double offered,double used) {
+        return Math.abs(offered-used)>WAKE_FLOW*Math.abs(used)+1;
+    }
+    private static boolean streamMoved(ExchangerRelay.Partner offered,ExchangerRelay.Partner used) {
+        if(used==null)return true;
+        return Math.abs(offered.donor().temperature()-used.donor().temperature())>WAKE_TEMPERATURE
+                ||Math.abs(offered.massFlow()-used.massFlow())>WAKE_FLOW*Math.abs(used.massFlow())
+                ||offered.law()!=null&&used.law()!=null&&Math.abs(offered.law().bypass()-used.law().bypass())>WAKE_FLOW
+                ||offered.pool()!=used.pool()||offered.pool()&&Math.abs(offered.bath().film()-used.bath().film())>WAKE_FLOW*used.bath().film();
+    }
+
     /** The certified islands woken by an exchanger partner's commit (decision D4, dated: {@link #dated}) and by a control, shaft
      * or port change ({@code toWake}) end their certificates here, at the engine's decision points (a round's close, the due
      * deadlines, a pump), never inside a presentation read. */

@@ -163,19 +163,31 @@ public final class FiredHeaters {
                 else demand=inlet.temperature()<coil.setTemperature()-.05&&coil.duty()>0?coil.duty():0;
                 demand=Math.min(coil.duty(),demand);
                 double before=h.demand;h.demand=demand;h.radiantIsland=island;h.demandSeen=true;
-                if(moved(Burners.fired(before),Burners.fired(demand))&&h.fuelIsland!=null)wake.add(h.fuelIsland);
+                if(moved(Burners.fired(before),Burners.fired(demand)))wake.addAll(fuelIslands(h));
             }
         }
         wake.remove(island);
         if(!wake.isEmpty())coordinator.shaftsMoved(wake);
     }
 
+    /**
+     * The islands that fire heater {@code h}'s fuel: the one its last fuel booking came from, else every island that holds
+     * its burners ({@link #islands}). After a load a heater knows no fuel island, and a fuel island saved at rest (certified)
+     * books nothing until something wakes it: without the lookup the radiant coil's demand woke nobody and the burners stayed
+     * out (the owner's test world of 2026-11-18: NO FUEL for five minutes after a reload, the fuel island committed nothing).
+     */
+    private java.util.Collection<Long> fuelIslands(Heater h){return h.fuelIsland!=null?List.of(h.fuelIsland):islandsOf.apply(h.burners);}
+    /** Every island holding device {@code id} (the registry's), for {@link #fuelIslands}; none until {@link #islands} is set. */
+    private java.util.function.LongFunction<java.util.Collection<Long>> islandsOf=id->List.of();
+    /** Sets the lookup of the islands holding a device ({@code PhysicalRegistry.islands}). */
+    void islands(java.util.function.LongFunction<java.util.Collection<Long>> lookup){islandsOf=java.util.Objects.requireNonNull(lookup);}
+
     private static boolean moved(double before,double after){return (before>0)!=(after>0)||Math.abs(after-before)>WAKE*Math.max(before,after)+1;}
 
     /** A powered unit changed: its heater's islands read the new plans (the store's cadence wakes the fuel island only). */
     void powerMoved(long burners) {
         var h=heaters.get(burners);if(h==null)return;
-        var wake=new ArrayList<Long>();if(h.radiantIsland!=null)wake.add(h.radiantIsland);if(h.fuelIsland!=null)wake.add(h.fuelIsland);
+        var wake=new ArrayList<Long>();if(h.radiantIsland!=null)wake.add(h.radiantIsland);wake.addAll(fuelIslands(h));
         if(!wake.isEmpty())coordinator.shaftsMoved(wake);
     }
 

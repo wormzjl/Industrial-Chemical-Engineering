@@ -165,11 +165,14 @@ final class VerticalHeaterDesign extends UnitDesign {
         // The ring header low enough that the fuel's line at a pipe's largest passes under the burners' mufflers (owner
         // decision 2026-10-21: a 1 m pipe has a 1 m root, other components give way).
         double yFuel = Math.floor(Math.min(y0 - 1.2, y0 - ProcessUnit.BURNER_DROP - .05 - PipeSizes.MAX_OUTSIDE / 2) - .5) + .5, pipe = .04 + .004 * dia;
-        u.burners(at, register, y0, yFuel, pipe);
-        for (int i = 0; i < burners; i++) {
-            double[] p = {at[i][0], yFuel, at[i][1]}, q = {at[(i + 1) % burners][0], yFuel, at[(i + 1) % burners][1]};
-            u.mesh.cylinder(new Frame(p, Mesh.unit(Mesh.sub(q, p)), new double[]{0, 1, 0}), pipe, 0, Math.sqrt(Mesh.dot(Mesh.sub(q, p), Mesh.sub(q, p))), 8, Material.PIPE);
-        }
+        u.burners(at, register, y0);
+        for (var p : at) u.burnerRiser(p[0], p[1], yFuel, y0, pipe);
+        // Share one cross-section at each burner. The ring retains the chords that meet its fixed fuel nozzle.
+        double first = Math.PI / burners;
+        boolean wasRun = u.mesh.run(true);
+        u.mesh.torus(Frame.of(new double[]{a, yFuel, a}, 1, 1), circle, pipe, first, first + 2 * Math.PI,
+                burners, 8, Material.PIPE);
+        u.mesh.run(wasRun);
         // The convection section with its header boxes, the stack.
         double y2 = y1 + hc;
         u.convection(a - hx, a + hx, a - hz, a + hz, y1, y2);

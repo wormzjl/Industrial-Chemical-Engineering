@@ -1,5 +1,11 @@
 package com.wormzjl.icheme.runtime.fluid;
 
+import com.wormzjl.icheme.science.column.v3.V3ColumnInput;
+import com.wormzjl.icheme.science.equipment.ColumnComponents;
+import com.wormzjl.icheme.science.equipment.ColumnOperatingPoint;
+import com.wormzjl.icheme.science.equipment.ColumnTrays;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.plant.column.ColumnCycle.Account;
 import com.wormzjl.icheme.science.plant.column.ColumnSolve;
 import com.wormzjl.icheme.science.plant.column.Condition;
@@ -15,6 +21,10 @@ import com.wormzjl.icheme.science.fluid.network.PortPlan;
 import com.wormzjl.icheme.science.fluid.topology.TopologyCompiler.Kind;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.integrity.Metallurgy;
+import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
+import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.ChunkPos;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Direction;
@@ -440,15 +450,39 @@ class ColumnRunTest {
         world.runTo(40);
         long first=world.ledger.reserve(2),second=first+1,feed=world.ledger.nextIdentity(),outlet=feed+1,inlet=feed+2,product=feed+3;
         var g=new PipeResistanceGeometry(world.registry.registrations().get(feedValve).device().geometry());var none=new double[0];
-        var a=new Setpoints(firstRate,firstRate,330,1,0,none,none,none);var b=new Setpoints(secondRate,secondRate,330,1,0,none,none,none);
+        var a=new Setpoints(firstRate,firstRate,330,1,0,none,none,none);
+        var upstream=table(model,a);
+        var upstreamPrices=upstream.enthalpy();
+        var distillate=upstream.table().products().getFirst();
+        var fractions=upstream.table().reference().feedFractions();
+        double delivered=0;
+        for(int i=0;i<m;i++)delivered+=fractions[i]*upstreamPrices[0][i];
+        // The line transports the distillate account's enthalpy through adiabatic valves.
+        // Recover its temperature at each port's pressure, including the downstream inlet.
+        double outletPressure=distillate.pressure(),inletPressure=150_000;
+        var atOutlet=model.equilibriumPH(distillate.temperature(),outletPressure,delivered,fractions.clone(),()->{});
+        var atInlet=model.equilibriumPH(distillate.temperature(),inletPressure,delivered,fractions.clone(),()->{});
+        assertNotNull(atOutlet,"the upstream product at the generator pressure");
+        assertNotNull(atInlet,"the upstream product at the downstream inlet pressure");
+        // The second column removes 1 kJ/mol from that feed. Price the product by its recovered PH state.
+        var secondProduct=model.equilibriumPH(atInlet.temperature(),outletPressure,atInlet.enthalpy()-1000,fractions.clone(),()->{});
+        assertNotNull(secondProduct,"the downstream product at the generator pressure");
+        var b=new Setpoints(secondRate,secondRate,secondProduct.temperature(),1,0,none,none,none);
+        var secondReference=new SplitTable.Reference(fractions,atInlet.enthalpy(),30,none,1,b,atInlet.temperature(),none);
+        var secondTable=new SplitTable(model.components(),
+                List.of(new SplitTable.Product(Port.DISTILLATE,0,distillate.recovery(),secondProduct.temperature(),outletPressure)),
+                0,none,secondProduct.enthalpy()-atInlet.enthalpy(),secondReference,upstream.table().held());
+        var secondPrices=new double[1][m];
+        Arrays.fill(secondPrices[0],secondProduct.enthalpy());
         world.ledger.column(new ColumnUnit(first,new PhysicalFluidTopology.Position(EventPathWorld.DIM,6,70,0),true,a,List.of(new ColumnUnit.Station(Port.FEED,0,feed,feedValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,outlet,outletValve,Account.empty(m))),ColumnUnit.Totals.empty(m),0));
         world.ledger.column(new ColumnUnit(second,new PhysicalFluidTopology.Position(EventPathWorld.DIM,inletAt+3,70,0),true,b,List.of(new ColumnUnit.Station(Port.FEED,0,inlet,inletValve,Account.empty(m)),new ColumnUnit.Station(Port.DISTILLATE,0,product,productValve,Account.empty(m))),ColumnUnit.Totals.empty(m),0));
         world.registry.submit(List.of(new WorldTopologyLedger.Edit(feed,new WorldTopologyLedger.Registration(port(feed,3,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
-                new WorldTopologyLedger.Edit(outlet,new WorldTopologyLedger.Registration(port(outlet,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0)),
-                new WorldTopologyLedger.Edit(inlet,new WorldTopologyLedger.Registration(port(inlet,inletAt,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,330,150000,n2),0)),
-                new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,inletAt+6,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,330,250000,n2),0))),product+1,null);
+                new WorldTopologyLedger.Edit(outlet,new WorldTopologyLedger.Registration(port(outlet,10,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,atOutlet.temperature(),outletPressure,n2),0)),
+                new WorldTopologyLedger.Edit(inlet,new WorldTopologyLedger.Registration(port(inlet,inletAt,Kind.VOID,Direction.WEST,g),new FluidDeviceSpec(1,atInlet.temperature(),inletPressure,n2),0)),
+                new WorldTopologyLedger.Edit(product,new WorldTopologyLedger.Registration(port(product,inletAt+6,Kind.GENERATOR,Direction.EAST,g),new FluidDeviceSpec(1,secondProduct.temperature(),outletPressure,n2),0))),product+1,null);
         ops.refresh();world.columns=ops;
-        var s=table(model,a);ops.table(first,s.table(),s.enthalpy());s=table(model,b);ops.table(second,s.table(),s.enthalpy());
+        ops.table(first,upstream.table(),upstreamPrices);
+        ops.table(second,secondTable,secondPrices);
         return new Chain(world,ops,counting,first,second,feed,outlet,inlet,product);
     }
     /** One column's outlet into another's inlet: two port valves in series, or one valve bounding both. The lower target wins, each column's books stay exact, and neither gives what it does not hold (owner 2026-11-02, "Lower target wins"). */
@@ -938,6 +972,89 @@ class ColumnRunTest {
         // A stopped unit keeps no engine state.
         var u=again.ledger.column(r.unit());assertNull(u.withStations(false,u.stations().stream().map(s->s.withDevice(0)).toList()).state());
     }
+
+    @Test void aColdReloadAsksForAFreshSolveFromTheRegistryOrAnOlderSavedShell() {
+        var condenser = ColumnComponents.Condenser.AIR_COOLER;
+        var trays = ColumnTrays.of(Fake.DESIGN);
+        var components = new ColumnComponents(condenser, ColumnComponents.Pump.STANDARD,
+                Collections.nCopies(trays.pumparounds().size(), ColumnComponents.Pump.STANDARD), false, false);
+        double diameter = 4;
+        var shape = EquipmentShape.column(diameter, trays.withComponents(components).withOperating(ColumnOperatingPoint.of(Fake.DESIGN)),
+                EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(diameter));
+        for (boolean legacy : List.of(false, true)) {
+            var original = rig(0, new Fake(0));
+            var world = original.world();
+            long unit = original.unit();
+            var master = world.ledger.column(unit).master();
+            if (!legacy) world.ledger.structure(master, WorldTopologyLedger.Structure.of(shape, Paint.DEFAULT));
+            var bytes = FluidCheckpointCodec.encodeTopology(world.ledger.snapshot());
+            var saved = FluidCheckpointCodec.decodeTopology(bytes, world.ledger.onlineTick(), k -> world.model);
+            var again = new EventPathWorld(1, saved, world.entries());
+
+            var olderShell = new CompoundTag();
+            EquipmentShellBlockEntity.writeShape(olderShell, shape);
+            olderShell.putString("id", "icheme:equipment_shell");
+            olderShell.putIntArray("Cell", new int[] {1, 0, 0});
+            var shellAt = new BlockPos(master.x() + 1, master.y(), master.z());
+            var solve = new Fake(0);
+            solve.world = again;
+            solve.model = again.model;
+            var equipment = new SavedEquipment();
+            var ops = new ColumnOperation(again.ledger, again.registry, again.coordinator,
+                    again.model.components(), again.model.molecularWeights());
+            ops.solves(new ColumnOperation.Solves() {
+                private EquipmentShape structure(ColumnUnit column) {
+                    return equipment.at(column.master(), again.ledger::structure, at -> {
+                        assertTrue(legacy, "a registry shape needs no shell tag");
+                        return shellAt.equals(at) ? olderShell : null;
+                    });
+                }
+
+                @Override public V3ColumnInput design(ColumnUnit column) {
+                    return SavedEquipment.columnInput(structure(column));
+                }
+
+                @Override public ColumnComponents.Condenser condenser(ColumnUnit column) {
+                    return SavedEquipment.columnCondenser(structure(column));
+                }
+
+                @Override public boolean submit(long id, ColumnSolve.Job job, java.util.function.Consumer<ColumnSolve.Outcome> done) {
+                    return solve.submit(id, job, done);
+                }
+            });
+            again.coordinator.ports(ops);
+            ops.refresh();
+            solve.runTo(again.ledger.onlineTick() + 700);
+            var start = solve.jobs.stream().filter(job -> job.trigger() == DriftBands.Trigger.START).findFirst().orElseThrow();
+            assertEquals(diameter, start.design().columnDiameterMetres());
+            assertEquals(condenser, start.condenser());
+            assertNotNull(ops.run(unit).table, "the solve was applied");
+        }
+    }
+
+    @Test void aLegacyShapeMissIsReadAgainWhenItsChunkLoads() {
+        var equipment = new SavedEquipment();
+        var master = new PhysicalFluidTopology.Position(EventPathWorld.DIM, 15, 70, 0);
+        var owner = new BlockPos(16, 70, 0);
+        var shape = EquipmentShape.column(4, ColumnTrays.simple(12, 6), EquipmentShape.Heading.NORTH,
+                EquipmentShape.minimumSkirt(4));
+        var shell = new CompoundTag();
+        EquipmentShellBlockEntity.writeShape(shell, shape);
+        shell.putString("id", "icheme:equipment_shell");
+        shell.putIntArray("Cell", new int[] {1, 0, 0});
+        var tags = new HashMap<BlockPos, CompoundTag>();
+        assertNull(equipment.at(master, ignored -> null, tags::get));
+        tags.put(owner, shell);
+        assertNull(equipment.at(master, ignored -> null, ignored -> fail("the miss must be cached")));
+
+        equipment.invalidate(master.dimension(), ChunkPos.asLong(1, 0));
+        assertEquals(shape, equipment.at(master, ignored -> null, tags::get));
+        assertEquals(shape, equipment.at(master, ignored -> null, ignored -> fail("the resolved shape must be cached")));
+        equipment.invalidate(master);
+        tags.clear();
+        assertNull(equipment.at(master, ignored -> null, tags::get));
+    }
+
     /** A solver's hydraulics where the worst tray stands at 0.6 of flood per unit of reflux ratio at the design feed (0.5 mol/s): tray 12, vapour limited. */
     private static SplitTable.Flood floodByReflux(ColumnSolve.Job job){return new SplitTable.Flood(.6*job.setpoints().refluxRatio()/.5,12,true,1000,3000);}
     private void reflux(Rig r,double ratio){var u=r.world().ledger.column(r.unit());var s=u.setpoints();

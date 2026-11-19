@@ -398,7 +398,7 @@ public final class EquipmentConstructorScreen extends Screen {
         custom = null;
         var m = GuiCanvas.measure(font);
         var shown = panel();
-        door.layout(ConstructorColumn.area(height, shown.display()), shown.rows(), m);
+        door.layout(shown.area(height), shown.rows(), m);
         door.keep(this::box, (spec, slot) -> addRenderableWidget(SkinButton.of(spec, slot, this::act, EquipmentConstructorScreen::skin)));
         // The palette in the Paint group's gap: each swatch outlined while it is the edited colour.
         if (page == Page.PAINT) {
@@ -793,11 +793,7 @@ public final class EquipmentConstructorScreen extends Screen {
     private void choose(Equipment equipment) {
         var before = form;
         category = null;
-        form = switch (equipment) {
-            case VERTICAL_DRUM -> VesselPlacement.Form.VERTICAL;
-            case HORIZONTAL_DRUM -> Equipment.of(form) == Equipment.HORIZONTAL_DRUM ? form : VesselPlacement.Form.LENGTHWISE;
-            default -> VesselPlacement.Form.valueOf(equipment.name());
-        };
+        if (Equipment.of(before) != equipment) form = equipment.form;
         boolean changedKind = before.kind() != form.kind();
         if (changedKind && !(form.column() && column != null)) {
             var sizes = com.wormzjl.icheme.science.equipment.ConstructorDefaults.sizes(form);
@@ -1106,16 +1102,16 @@ public final class EquipmentConstructorScreen extends Screen {
         var skin = skin();
         var canvas = new GuiCanvas(g, font, 0, 0);
         var m = GuiCanvas.measure(font);
-        skin.page(canvas, new Rect(0, 0, ConstructorColumn.PANEL, height));
+        var shown = panel();
+        skin.page(canvas, new Rect(0, 0, shown.panelWidth(), height));
         var equipment = Equipment.of(form);
         String title = shownTitle(m);
         skin.title(canvas, 10, 10, title);
         // Placed again for this frame's texts and values; the widgets keep their slots.
-        var shown = panel();
         door.place(shown.rows(), m);
         hovered = door.draw(canvas, skin, mouseX, mouseY);
         if (page != Page.CHOOSE && new Rect(6, 6, m.width(title) + 8, 16).contains(mouseX, mouseY))
-            hovered = tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".hint");
+            hovered = tr(ConstructorColumn.KEY + "equipment." + equipment.key()) + "\n" + tr(ConstructorColumn.KEY + "equipment." + equipment.key() + ".hint");
         if (shown.display()) {
             var line = ConstructorColumn.display(height);
             var status = status();

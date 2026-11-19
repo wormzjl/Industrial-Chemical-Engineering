@@ -1,17 +1,15 @@
 package com.wormzjl.icheme.world.level.block.entity;
 
 import com.wormzjl.icheme.registry.ModBlockEntities;
+import com.wormzjl.icheme.runtime.power.PowerPorts;
 
 import net.minecraft.core.*;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.energy.IEnergyStorage;
 
 /**
- * Unlimited extract-only FE capability, also pushing to each loaded adjacent receiver. No saved
- * inventory.
+ * Unlimited extract-only FE capability. The world power network owns scheduled distribution.
  */
 public final class CreativePowerBlockEntity extends BlockEntity
         implements IEnergyStorage, com.wormzjl.icheme.runtime.instrument.Instrument.Holder {
@@ -86,19 +84,6 @@ public final class CreativePowerBlockEntity extends BlockEntity
         super(ModBlockEntities.CREATIVE_POWER.get(), pos, state);
     }
 
-    public static void tick(
-            Level level, BlockPos pos, BlockState state, CreativePowerBlockEntity source) {
-        for (var face : Direction.values()) {
-            var neighbour = pos.relative(face);
-            if (!level.hasChunkAt(neighbour)) continue;
-            var receiver =
-                    level.getCapability(
-                            Capabilities.EnergyStorage.BLOCK, neighbour, face.getOpposite());
-            if (receiver != null && receiver.canReceive())
-                receiver.receiveEnergy(Integer.MAX_VALUE, false);
-        }
-    }
-
     @Override
     public int receiveEnergy(int amount, boolean simulate) {
         return 0;
@@ -106,22 +91,22 @@ public final class CreativePowerBlockEntity extends BlockEntity
 
     @Override
     public int extractEnergy(int amount, boolean simulate) {
-        return Math.max(0, amount);
+        return isRemoved() ? 0 : PowerPorts.CREATIVE.extractEnergy(amount, simulate);
     }
 
     @Override
     public int getEnergyStored() {
-        return Integer.MAX_VALUE;
+        return isRemoved() ? 0 : PowerPorts.CREATIVE.getEnergyStored();
     }
 
     @Override
     public int getMaxEnergyStored() {
-        return Integer.MAX_VALUE;
+        return isRemoved() ? 0 : PowerPorts.CREATIVE.getMaxEnergyStored();
     }
 
     @Override
     public boolean canExtract() {
-        return true;
+        return !isRemoved();
     }
 
     @Override

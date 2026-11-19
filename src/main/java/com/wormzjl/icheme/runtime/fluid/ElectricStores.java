@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.function.LongFunction;
 import java.util.function.LongPredicate;
 import java.util.function.Supplier;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 
 /**
  * The electric stores of a world (batch 2026-11-03-rotating-machinery W5, build plan sections 2 to 4, owner decision
@@ -296,8 +297,36 @@ public final class ElectricStores {
 
     /** Whether unit {@code id}'s port gives FE (a generator) rather than taking it; null for no store. */
     public Boolean generator(long id) {
+        if (kind(id) == null) return null;
         var s = store(id);
         return s == null ? null : s.kind.generator();
+    }
+
+    /** Standard FE adapter shared by the grid and the loaded block capability. */
+    public IEnergyStorage port(long id) {
+        var output = generator(id);
+        return output == null ? null : new Port(this, id, output);
+    }
+
+    private record Port(ElectricStores stores, long id, boolean output) implements IEnergyStorage {
+        @Override public int receiveEnergy(int fe, boolean simulate) {
+            return canReceive() ? stores.receive(id, fe, simulate) : 0;
+        }
+        @Override public int extractEnergy(int fe, boolean simulate) {
+            return canExtract() ? stores.extract(id, fe, simulate) : 0;
+        }
+        @Override public int getEnergyStored() {
+            return stores.kind(id) == null ? 0 : stores.stored(id);
+        }
+        @Override public int getMaxEnergyStored() {
+            return stores.kind(id) == null ? 0 : stores.capacity(id);
+        }
+        @Override public boolean canExtract() {
+            return output && stores.generator(id) == Boolean.TRUE;
+        }
+        @Override public boolean canReceive() {
+            return !output && stores.generator(id) == Boolean.FALSE;
+        }
     }
 
     /** The joules a port may move this tick, of the per-tick rate (twice the rated draw). */

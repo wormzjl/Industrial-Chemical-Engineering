@@ -27,9 +27,9 @@ import java.util.function.Supplier;
  * <li>At the cadence ({@link #cadence}): every record books its rate over the process time since its last booking
  * ({@code rate × Δt / year}) and a flowing heat side its deposit ({@link FoulingLaw#step}); then at most {@link #EVALUATIONS}
  * records whose island booked a span since their last evaluation, round-robin, read their fluid's digest from that result
- * (a vessel its own node, a heat side and a machine the hotter end of its connection) and set their rate: the inside law, the
- * corrosive air at the device ({@link CorrosionLaw#outside}) and a heat side's particle erosion
- * ({@link ErosionLaw#wall}, read only on an island whose last slice moved solids). A wall through
+ * (a vessel its own node, a heat side and a machine the hotter end of its connection) and set their inside and erosion rates.
+ * A separate round-robin reads corrosive air ({@link CorrosionLaw#outside}) on the same cadence, including walls with no
+ * new solve. A wall through
  * ({@link WallState.Stage#THROUGH}) fails once by the failure its kind has today: a vessel stands breached, a machine
  * fails ({@link MachineHealth#breach}), a heat side's passage closes and its holdup is released once. A wall lost to an
  * oxygen fire is one of the plant's flames for the next pollution pass ({@link #fires}).</li>
@@ -45,7 +45,7 @@ import java.util.function.Supplier;
 public final class Integrity {
     /** The cadence, online ticks (the machines' health's). */
     public static final int CADENCE = MachineHealth.CADENCE;
-    /** Records evaluated per cadence at most. */
+    /** Records evaluated per cadence in each of the process and outside-air scans at most. */
     public static final int EVALUATIONS = 256;
     /** Registrations the discovery sweep reads per cadence at most. */
     public static final int SWEEP = 4096;
@@ -127,10 +127,10 @@ public final class Integrity {
         double loss, fouling;
         boolean wrecked;
         Kind kind;
-        /** The corrosion rate (inside and air) and the erosion rate, mm/y, kept apart so that a switch turned off stops its part at once. */
-        double corrosion, erosion, asymptote;
-        /** What governs the corrosion part, or null. */
-        Mechanism corroding;
+        /** The rates, mm/y, kept apart so that a switch turned off stops its part at once. */
+        double inside, outside, erosion, asymptote;
+        /** The governing mechanism inside, or null. */
+        Mechanism corrodingInside;
         /** Its wall through has failed since it was last below through: a failure is applied once, whatever its edit's timing. */
         boolean flowing, failed;
         /** The deposit level the side's compiled passage carries, as last handed to the ledger (WP5; state). */
@@ -147,15 +147,20 @@ public final class Integrity {
 
         /** The wall's rate under {@code s}, mm/y: each part only while its switch is on. */
         double rate(Settings s) {
-            double r = (s.corrosion() ? corrosion : 0) + (s.erosion() ? erosion : 0);
+            double r = corrosion(s) + (s.erosion() ? erosion : 0);
             return Math.min(r, CorrosionLaw.MAX_RATE);
         }
 
         /** The governing mechanism under {@code s}: the larger part's, null at a rate of 0. */
         Mechanism mechanism(Settings s) {
-            double c = s.corrosion() ? corrosion : 0, e = s.erosion() ? erosion : 0;
+            double c = corrosion(s), e = s.erosion() ? erosion : 0;
             if (e > c) return Mechanism.EROSION;
-            return c > 0 ? corroding : null;
+            if (!(c > 0)) return null;
+            return s.external() && outside > inside ? Mechanism.CORROSIVE_AIR : corrodingInside;
+        }
+
+        private double corrosion(Settings s) {
+            return s.corrosion() ? Math.min(inside + (s.external() ? outside : 0), CorrosionLaw.MAX_RATE) : 0;
         }
     }
 
@@ -173,6 +178,7 @@ public final class Integrity {
     private List<Long> sweep = List.of();
     private int sweepAt;
     private long cursor = Long.MIN_VALUE;
+    private long outsideCursor = Long.MIN_VALUE;
     private long evaluations;
 
     public Integrity(WorldTopologyLedger topology, LongFunction<Long> owner, IslandCoordinator coordinator, MachineHealth health, Supplier<Settings> settings, Host host) {
@@ -349,7 +355,12 @@ public final class Integrity {
         long now = coordinator.now();
         var s = settings.get();
         discover(SWEEP, now);
-        for (var w : walls.values()) book(w, now, s);
+        boolean outsideEnabled = s.corrosion() && s.external();
+        for (var w : walls.values()) {
+            book(w, now, s);
+            if (!outsideEnabled) w.outside = 0;
+        }
+        if (outsideEnabled) sampleOutside();
         var views = new HashMap<Long, View>();
         int done = 0;
         long last = cursor;
@@ -368,7 +379,7 @@ public final class Integrity {
                 view = new View(b.result, coordinator.model(island).components());
                 views.put(island, view);
             }
-            evaluate(id, w, view, s);
+            evaluate(id, w, view);
             w.evaluated = b.end;
             last = id;
             done++;
@@ -389,6 +400,23 @@ public final class Integrity {
         }
         weeps();
         flushAndRestate(s);
+    }
+
+    /** Reads the next walls' outside exposure from the installed pollution field, independent of process bookings. */
+    private void sampleOutside() {
+        var active = topology.active();
+        int sampled = 0;
+        for (var entries : List.of(walls.tailMap(outsideCursor, false), walls.headMap(outsideCursor, true))) {
+            for (var e : entries.entrySet()) {
+                long id = e.getKey();
+                var wall = e.getValue();
+                var r = active.get(id);
+                if (wall.kind == null || r == null) continue;
+                wall.outside = CorrosionLaw.outside(r.spec().metallurgy(), host.corrosiveAir(r.device().position()));
+                outsideCursor = id;
+                if (++sampled >= EVALUATIONS) return;
+            }
+        }
     }
 
     /** The walls that weep, as last told to the host (state, not saved: the first cadence after a load tells them again). */
@@ -427,7 +455,7 @@ public final class Integrity {
     }
 
     /** {@code w}'s rate, mechanism and fouling state from its island's last result. */
-    private void evaluate(long id, Record w, View view, Settings s) {
+    private void evaluate(long id, Record w, View view) {
         var r = topology.active().get(id);
         if (r == null) return;
         var metal = r.spec().metallurgy();
@@ -470,10 +498,9 @@ public final class Integrity {
             }
         }
         double share = edge >= 0 && w.kind == Kind.HEAT_SIDE ? view.solidShare(pipe) : 0;
-        // Both parts are set whatever the switches; the booking and the reads take each only while its switch is on.
+        // The inside and erosion rates are ready for their switches; the outside rate comes from the air snapshot.
         var in = CorrosionLaw.inside(metal, digest);
-        double inside = in.rate(), outside = 0, erosion = 0;
-        if (s.external()) outside = CorrosionLaw.outside(metal, host.corrosiveAir(r.device().position()));
+        double erosion = 0;
         if (w.kind == Kind.HEAT_SIDE && edge >= 0 && share > 0) {
             var row = view.row(pipe);
             var sections = g.pipes().get(edge).sections();
@@ -482,10 +509,9 @@ public final class Integrity {
             double speed = row != null && density > 0 && area > 0 ? Math.abs(row.massFlow()) / density / area : 0;
             erosion = ErosionLaw.wall(metal, share, speed);
         }
-        double corrosion = inside + outside;
-        w.corrosion = Double.isFinite(corrosion) && corrosion > 0 ? Math.min(corrosion, CorrosionLaw.MAX_RATE) : 0;
+        w.inside = in.rate();
         w.erosion = Double.isFinite(erosion) && erosion > 0 ? Math.min(erosion, CorrosionLaw.MAX_RATE) : 0;
-        w.corroding = w.corrosion <= 0 ? null : outside > inside ? Mechanism.CORROSIVE_AIR : in.mechanism();
+        w.corrodingInside = in.mechanism();
         if (w.kind == Kind.HEAT_SIDE) {
             w.flowing = edge >= 0 && Math.abs(view.flows[edge]) > IDLE_FLOW;
             w.asymptote = FoulingLaw.asymptote(digest, share);
@@ -816,8 +842,8 @@ public final class Integrity {
         if (w == null) return;
         if (mechanism == Mechanism.EROSION) w.erosion = rate;
         else {
-            w.corrosion = rate;
-            w.corroding = mechanism;
+            w.inside = rate;
+            w.corrodingInside = mechanism;
         }
     }
 }

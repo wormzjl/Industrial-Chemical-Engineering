@@ -27,8 +27,20 @@ public class EngineeringExport {
    else if(kind==EquipmentShape.Kind.AIR_COOLER){var ac=EquipmentShape.Kind.AIR_COOLER;var ad=UnitDesign.of(ac);emit("AIR_COOLER",EquipmentShape.unit(ac,2.5,5,heading,ad.minSupport(2.5,5)));emit("AIR_COOLER_3X4",EquipmentShape.unit(ac,3,4,heading,ad.defaultSupport(3,4)));emit("AIR_COOLER_LONG",EquipmentShape.unit(ac,3,12,heading,ad.defaultSupport(3,12)));emit("AIR_COOLER_MAX",EquipmentShape.unit(ac,6,12,heading,ad.defaultSupport(6,12)));emit("AIR_COOLER_BANK_MAX",EquipmentShape.unit(ac,6,12,heading,ad.defaultSupport(6,12),new ProcessUnit.Bank(2,1)));}
    else if(kind==EquipmentShape.Kind.EXCHANGER){emit("EXCHANGER_STANDARD",s);emit("EXCHANGER_CROSSFLOW",s.withExchangerType(ExchangerType.CROSSFLOW));}
    else if(kind==EquipmentShape.Kind.PLUNGER_PUMP){emit("PLUNGER_PUMP",s);emit("PLUNGER_PUMP_LARGEST",EquipmentShape.unit(kind,4,1,heading,0));}
+   else if(kind==EquipmentShape.Kind.VERTICAL_HEATER){
+    emit(form.name(),s);
+    var design=UnitDesign.of(kind);
+    emit("VERTICAL_HEATER_SMALLEST",EquipmentShape.unit(kind,design.minSize(),design.minLength(design.minSize()),heading,3));
+    emit("VERTICAL_HEATER_LARGEST",EquipmentShape.unit(kind,design.maxSize(),design.maxLength(design.maxSize()),heading,3));
+   }
+   else if(kind==EquipmentShape.Kind.CABIN_HEATER){
+    emit(form.name(),s);
+    emit("CABIN_HEATER_SINGLE",EquipmentShape.unit(kind,8,16,heading,3));
+    emit("CABIN_HEATER_SMALLEST",EquipmentShape.unit(kind,4,6,heading,3));
+    emit("CABIN_HEATER_LARGEST",EquipmentShape.unit(kind,12,48,heading,3));
+   }
    else if(kind.converter()){emit(form.name(),s);emit(form.name()+"_SMALLEST",EquipmentShape.unit(kind,1,2,heading,0));emit(form.name()+"_LARGEST",EquipmentShape.unit(kind,20,24,heading,0));}
-   else {emit(form.name(),s);if(kind==EquipmentShape.Kind.TANK){emit("TANK_COMPACT",new EquipmentShape(kind,4,4,s.orientation(),s.front(),0,null,List.of(),ProcessUnit.Bank.ONE,false,0,TowerBank.ONE,MachineDuty.NONE));emit("TANK_SLENDER",new EquipmentShape(kind,4,8,s.orientation(),s.front(),0,null,List.of(),ProcessUnit.Bank.ONE,false,0,TowerBank.ONE,MachineDuty.NONE));}if(kind==EquipmentShape.Kind.SPHERE)emit("SPHERE_SMALL",new EquipmentShape(kind,6,1,s.orientation(),s.front(),2,null,List.of(),ProcessUnit.Bank.ONE,false,0,TowerBank.ONE,MachineDuty.NONE));if(kind==EquipmentShape.Kind.CABIN_HEATER)emit("CABIN_HEATER_SINGLE",EquipmentShape.unit(kind,8,16,heading,3));}
+   else {emit(form.name(),s);if(kind==EquipmentShape.Kind.TANK){emit("TANK_COMPACT",new EquipmentShape(kind,4,4,s.orientation(),s.front(),0,null,List.of(),ProcessUnit.Bank.ONE,false,0,TowerBank.ONE,MachineDuty.NONE));emit("TANK_SLENDER",new EquipmentShape(kind,4,8,s.orientation(),s.front(),0,null,List.of(),ProcessUnit.Bank.ONE,false,0,TowerBank.ONE,MachineDuty.NONE));}if(kind==EquipmentShape.Kind.SPHERE)emit("SPHERE_SMALL",new EquipmentShape(kind,6,1,s.orientation(),s.front(),2,null,List.of(),ProcessUnit.Bank.ONE,false,0,TowerBank.ONE,MachineDuty.NONE));}
   }
   var horizontal=ConstructorDefaults.sizes(VesselPlacement.Form.LENGTHWISE);double bd=horizontal.diameter(),bl=horizontal.length();int bs=EquipmentShape.minimumBootSupport(bd,bl);
   emit("LENGTHWISE_BOOT",EquipmentShape.drum(bd,bl,EquipmentShape.Orientation.HORIZONTAL,heading,bs,EquipmentShape.defaultConnections(bd,bl,EquipmentShape.Orientation.HORIZONTAL,bs,true),true));

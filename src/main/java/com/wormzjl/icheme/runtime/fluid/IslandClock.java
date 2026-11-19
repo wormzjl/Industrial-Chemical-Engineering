@@ -77,9 +77,14 @@ public final class IslandClock {
     public void admitted(Slice slice){if(outstanding!=null||slice.startTick!=committedTick||slice.endTick>online())throw new IllegalStateException("Invalid clock admission");outstanding=slice;}
     /** An accepted result advances once; a held result retains all of its debt. */
     public void completed(Slice slice,boolean accepted) {
-        if(!slice.equals(outstanding))throw new IllegalStateException("Stale/duplicate clock completion");outstanding=null;
+        discard(slice);
         if(accepted){committedTick=slice.endTick;retryAtTick=0;}
         else retryAtTick=Math.addExact(online(),cadenceTicks);
+    }
+    /** Releases a proposal without a simulation outcome or any change to committed time or retry. */
+    void discard(Slice slice) {
+        if(!slice.equals(outstanding))throw new IllegalStateException("Stale/duplicate clock completion");
+        outstanding=null;
     }
     /**
      * Commits an identity or replay advance to {@code toTick} without a solve (a certified island's

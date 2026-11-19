@@ -211,7 +211,7 @@ public final class FluidCheckpointCodec {
     private static Sections sections(Reader r,String what) {
         try {
             int schema=r.varint(Integer.MAX_VALUE);
-            if(schema<1||schema>FluidFacts.SCHEMA)throw r.invalid("facts schema "+schema+": this build reads schemas 1 to "+FluidFacts.SCHEMA+", so a newer build wrote it");
+            if(!FluidFacts.readsSchema(schema))throw r.invalid("facts schema "+schema+": this build reads schemas 1 to 30 and 32 to "+FluidFacts.SCHEMA+", so a newer build wrote it");
             int factsLength=r.varint(Integer.MAX_VALUE);int factsOffset=r.position();r.skip(factsLength);
             int format=r.varint(Integer.MAX_VALUE);int stateLength=r.varint(Integer.MAX_VALUE);int stateOffset=r.position();r.skip(stateLength);r.end();
             return new Sections(schema,factsOffset,factsLength,format,stateOffset,stateLength);
@@ -839,7 +839,7 @@ public final class FluidCheckpointCodec {
         if(envelope!=ENVELOPE)throw new Unreadable("Fluid checkpoint envelope "+envelope+" cannot be read: this build reads envelope "+ENVELOPE+", so a newer build wrote it");
         int stateFormat=requireInt(tag,"StateFormat","checkpoint"),factsSchema=requireInt(tag,"FactsSchema","checkpoint");
         if(stateFormat<20)throw new Unreadable("Fluid checkpoint state format "+stateFormat+" in an envelope: envelopes carry state formats from 20 on");
-        if(factsSchema<1||factsSchema>FluidFacts.SCHEMA)throw new Unreadable("Fluid checkpoint facts schema "+factsSchema+" cannot be read: this build reads schemas 1 to "+FluidFacts.SCHEMA+", so a newer build wrote it");
+        if(!FluidFacts.readsSchema(factsSchema))throw new Unreadable("Fluid checkpoint facts schema "+factsSchema+" cannot be read: this build reads schemas 1 to 30 and 32 to "+FluidFacts.SCHEMA+", so a newer build wrote it");
         long epoch=requireLong(tag,"Epoch","checkpoint");if(epoch<0)throw new IllegalArgumentException("Negative world epoch");
         if(!(tag.get("Strings") instanceof ListTag stringList)||!stringList.isEmpty()&&stringList.getElementType()!=Tag.TAG_STRING)throw new IllegalArgumentException("Missing or mistyped fluid checkpoint field Strings");
         if(!(tag.get("Packages") instanceof ListTag packageList)||!packageList.isEmpty()&&packageList.getElementType()!=Tag.TAG_COMPOUND)throw new IllegalArgumentException("Missing or mistyped fluid checkpoint field Packages");

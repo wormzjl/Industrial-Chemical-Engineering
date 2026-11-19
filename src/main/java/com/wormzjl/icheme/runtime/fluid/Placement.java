@@ -306,7 +306,14 @@ final class Placement {
         var r=authority.topology.latest().get(id);
         return r==null||r.device().kind()!=TopologyCompiler.Kind.DIVERTER_VALVE?-1:PhysicalFluidTopology.diverterOutlet(r.device().facing(),r.device().joints());
     }
-    void remove(long id){authority.controls().removeHost(id);authority.instruments.recoverHost(id);var old=authority.registrations().get(id);if(old!=null)authority.submit(List.of(new WorldTopologyLedger.Edit(id,null)),authority.topology.nextIdentity(),old.device().filter()?new WorldTopologyLedger.Recovery(id,null):null);}
+    void remove(long id){remove(id,false);}
+    void remove(long id,boolean rupture) {
+        authority.controls().removeHost(id);
+        if(!rupture)authority.instruments.recoverHost(id);
+        var old=authority.registrations().get(id);
+        if(old!=null)authority.submit(List.of(new WorldTopologyLedger.Edit(id,null,rupture)),authority.topology.nextIdentity(),
+                old.device().filter()?new WorldTopologyLedger.Recovery(id,null):null);
+    }
     /**
      * Holds registration {@code id}, or releases it (decision S11, REGISTRY_FIRST_PLAN.md 4.1): held, it keeps what it holds
      * and joins nothing. A topology edit at its next revision, so its islands recompile on the engine's schedule. Whether an

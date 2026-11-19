@@ -31,6 +31,8 @@ condenser's cooling water, the reboiler's heating and each pumparound cooler's c
 exchanger's heat in transit; the column sets a water valve's flow where the water side's flow station is complete; an
 air condenser's fans run at the least speed that holds the duty; the members' fans and pumps draw power.
 
+If the full pumparound duty fails, `ColumnSolve` also tries 50%, 25% and 10% of that duty. The pumparound cooler is limited to 90% of condenser duty.
+
 ## Class map
 
 Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
@@ -43,22 +45,26 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
 | [`runtime/fluid/ColumnPower`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/ColumnPower.java) | `ColumnOperation.Power` over `ElectricStores` and `ShaftTrains`: fan sides on their store (`ElectricStores.member`), a casing's rated shaft power on its train (`ShaftTrains.held`), an in-line pump on its own store; `undriven` | 68 |
 | [`runtime/assembly/ColumnStarts`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/ColumnStarts.java) | From a complete assembly report to a start request (`build`, `port`): ports, the condenser's water sides, the air condenser's surface, the reboiler's and pumparound coolers' heat sides, the fan sides and the pumps' movers | 151 |
 | `runtime/fluid/FluidWorldAuthority` (`startColumn`, `stopColumn`, `editColumn`, `columnRemoved`, `columnView`, `columnCondenser`, `columnAlarms`, `columnLoop`, `columnInstrument`) | Start and Stop as one queued ledger event each; utility sides (`utilitySides`), held members; [runtime-registry.md](runtime-registry.md) | |
+| [`runtime/fluid/SavedEquipment`](../../../src/main/java/com/wormzjl/icheme/runtime/fluid/SavedEquipment.java) | Reads the built shape by origin for a solve and for assembly member inputs. Uses the registry's build facts and caches the saved-shell search for older worlds. | |
 | [`science/fluid/network/PortPlan`](../../../src/main/java/com/wormzjl/icheme/science/fluid/network/PortPlan.java), `PassiveStepSolver.ports` | One slice's mass target on a port's valve; an outlet's generator stated at its product | 32 |
 | [`science/equipment/ColumnOperatingPoint`](../../../src/main/java/com/wormzjl/icheme/science/equipment/ColumnOperatingPoint.java) | The design's solved input, a shape field of `ColumnTrays` (`operating`): package, assay, components, feed, pressures, condenser, reflux, reboiler, steam, draws, pumparounds; `of(input)`, `fits`, `input(trays, diameter)` | 123 |
 | [`client/gui/common/OperationColumn`](../../../src/main/java/com/wormzjl/icheme/client/gui/common/OperationColumn.java) | The Operation page ([client-equipment-screens.md](client-equipment-screens.md)) | 493 |
 
 ## Main flow
 
-1. **Start.** The tab sends `AssemblyNetwork.Action.START`, a queued command (`AssemblyPresentation.act`).
-   `AssemblyService.start` calls `ColumnStarts.build`, which reads the assembly report and the operating point and names
-   each port: its boundary valve, its cell and its estimated conditions. `FluidWorldAuthority.startColumn` does the
-   rest as one queued ledger event.
+1. **Start.** The Assembly tab queues `AssemblyNetwork.Action.START` through `AssemblyPresentation.act`. A linked DCS
+   queues Start through `ControlService`. Both reach `AssemblyService.start` at the built column's origin.
+   `ColumnStarts.build` reads the saved assembly report and operating point. It resolves ports, boundary valves,
+   utilities and powered members from the saved shapes and fluid registrations. `FluidWorldAuthority.startColumn`
+   builds one queued ledger event, even when the plant's chunks are unloaded.
 2. **Hold.** The event walks from the column's nozzles to the boundary valves, marks each device on the way
    `withSuspendedBy(unit)`, adds one port device per station and saves a `ColumnUnit`. Stations keep their accounts
    across a restart; a restart keeps the player's set points if they are `compatible` with the design.
 3. **First solve.** `ColumnOperation.refresh` makes a `Run` with status `STARTING`; the first cycle asks a START solve of
    the design (no seed), submitted through `Solves.submit` (`ProcessSolveServices.submitColumnUnit`,
    `ColumnUnitCommand(job, model, liquidSupplyScreenRatio)`). Nothing moves until the table applies.
+   The first solve and later solves get the built diameter, trays, operating point and condenser from the saved
+   structure, including after a restart with the shell unloaded.
 4. **Run.** `due` → `cycle` (→ `ColumnCycle.step`) each cycle; `IslandCoordinator` calls `plans` at an island's
    dispatch (→ `PortPlan` → `PassiveStepSolver.ports`) and `booked` at its commit; `decide` (the `Ports` hook, called
    at each decision point after the shafts) runs `due`.
@@ -231,15 +237,16 @@ and pressures and temperatures stay the table's; `DIFFERENTIAL` (`COLUMN:differe
 `differential_pressure`) reads the live drop. `FluidWorldAuthority.columnInstrument` is read-only.
 
 **The tab.** `AssemblyNetwork.Host.view` adds `AssemblyService.operation(level, origin, refusal, opening)` unless the
-column has no design; the view is `ColumnOperation.view` (a read of the last cycle), else the design's set points;
+column has no design; the view is `ColumnOperation.view` (a read of the last cycle), else the saved design's set points;
 `NOT_READY` "a vacuum column cannot run yet" for a column with an ejector. Each station shows its rate, temperature,
 pressure, fill and the valve's opening (`FluidNetwork.opening`, a stored read that advances no island); duties booked
 against the table at the set feed (an air condenser adds a FANS duty); `Solve` the trigger, warm or cold, the age; the
 run's `conditions`, `accepted` and `Trays`. Start, Stop and Apply are `OperationPayload` commands on the presentation
 bucket; `AssemblyService.setpoints` clamps the feed to the design rate and refuses a wrong count;
 `FluidWorldAuthority.editColumn` queues a set point and calls `ColumnOperation.edited`. A column that never ran gets a
-stopped unit with no stations when its set points are applied. A DCS sends the same three actions over the data link
-(`ColumnCommands`, [process-control.md](process-control.md)).
+stopped unit with no stations when its set points are applied. A linked DCS addresses the same operations by saved host
+and master position. The console can acknowledge Stop while the port-removal event is queued. It publishes the stopped
+view after the event commits. [Wired control and FE power](wired-control-power.md#a-column-on-the-dcs).
 
 ## Laws and constants
 
@@ -264,7 +271,10 @@ stopped unit with no stations when its set points are applied. A DCS sends the s
   advisories, the seed, the pending solve, the wakes and the draw curves. After a load each utility's heat rate starts
   from the table, and a unit whose pumparounds have cooler sides asks one Start solve to sample its draw curves.
 - **Shape**: `ColumnTrays.operating` (`ColumnDesignTags.writeOperating`, `ShapeRepair.SavedOperating.resolve`; an
-  unreadable one repairs to none). Corpus `src/test/resources/compat/equipment/shapes-4.snbt`.
+  unreadable one repairs to none). `BuildFacts` already stores the complete shape by origin. When a legacy save
+  lacks the build record, `SavedEquipment` reads existing shell tags through region storage without loading chunks.
+  The lookup caches a found shape or a miss until the registry changes that origin or a searched chunk loads.
+  Corpus `src/test/resources/compat/equipment/shapes-4.snbt`.
 - **Protocol**: the assembly protocol's operation view (`AssemblyView.operation`, `OperationPayload`,
   `AssemblyNetwork.encodeOperation`, `decodeOperation`; the DCS page reads the same bytes). Every number:
   [FORMATS.md](../FORMATS.md).
@@ -275,10 +285,12 @@ stopped unit with no stations when its set points are applied. A DCS sends the s
 |---|---|---|
 | Conservation, the fence, plans, booking, solves' timing, rules A and B in the world, Stop and dismantle, utilities, power, reloads | `ColumnOperation` | `ColumnRunTest` (with `aColumnsProductsDoNotDependOnWhenItsIslandsJobsComplete`, `aHorizonPassedBeforeItsDeadlineFiresWithACycleDueBehindIt`, `aStoppedUnitWithNoStationsSurvivesTheFacts`) |
 | Held devices, ports | `startColumn`, `PhysicalFluidTopology` | `ColumnSuspensionTest` |
+| Fresh solves with unloaded equipment | `SavedEquipment`, `ColumnOperation` | `ColumnRunTest` (`aColdReloadAsksForAFreshSolveFromTheRegistryOrAnOlderSavedShell`, `aLegacyShapeMissIsReadAgainWhenItsChunkLoads`) |
 | A boundary line's regulation | `PortPlan`, `PassiveStepSolver.ports` | `RegulatingValveHoldTest` ([fluid-step.md](fluid-step.md)) |
 | Probes, the live drop | `ColumnUnit.Probes`, `drop` | `ColumnProbeTest` (`theLiveDropIsTheSolvedOneAtTheTablesFeedAndItsDryPartGoesWithTheSquare`) |
 | Facts, shapes, the wire, the page | `ColumnFacts`, `ColumnUnit`, `OperationView`, `OperationColumn` | `FluidFactsCompatTest`, `EquipmentShapeCompatTest` (`equipmentGates`), `AssemblyNetworkCodecTest`, `AssemblyPresentationTest`, `OperationColumnTest` |
 | DCS and loops | `ColumnCommands`, `ControlLaw.column`, `ControlPlans.columnFeed`, `feedRate` | `ControlSystemTest`, `BuiltInInputsTest` |
+| DCS Operation and commands with unloaded equipment | `ControlHosts`, `ControlService`, `ColumnStarts` | GameTest `ColumnOperationGameTests.aRestoredDcsRunsAnUnloadedColumnAndItsMembers` |
 | In the game | the whole run | GameTests `ColumnOperationGameTests` (`aColumnRunsInItsPlantStopsAndLeaves`, `aDcsListsStartsAppliesStopsAndSeesABlockedProduct`, `aMenuReadAdvancesNoIsland`) |
 
 Hand reviews, not gates: `ColumnOperationReviewWorld.aCrudeColumnRuns` and
@@ -310,4 +322,4 @@ Off-line tools: `tools/column-operation/`, `tools/valve-hold-probes/`, `tools/co
   matching; the running column's solve and duty contract do not depend on them, and a layout or type mismatch is an
   assembly issue.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

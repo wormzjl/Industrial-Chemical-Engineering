@@ -599,10 +599,11 @@ final class StructureRegistration {
     private static void dropStillFuel(ServerLevel level, Vessel vessel) {
         var cell = ShapeRasterizer.fluidCell(vessel.shape());if (cell == null) return;
         var at = vessel.origin().offset(cell.x(), cell.y(), cell.z());
-        if (level.getBlockEntity(at) instanceof EquipmentShellBlockEntity shell) {
-            var stack = shell.dropFuel();
+        FluidWorldAuthority.find(level.getServer()).flatMap(world -> world.at(Positions.of(level, at))
+                .map(record -> world.stillFuel(record.device().id()))).ifPresent(slot -> {
+            var stack = slot.extractItem(0, Integer.MAX_VALUE, false);
             if (!stack.isEmpty()) net.minecraft.world.Containers.dropItemStack(level, at.getX() + .5, at.getY() + .5, at.getZ() + .5, stack);
-        }
+        });
     }
 
     /**

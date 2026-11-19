@@ -2,8 +2,13 @@ package com.wormzjl.icheme.fluid.gametest;
 
 import com.wormzjl.icheme.science.fluid.linalg.SparseLuSolver;
 import com.wormzjl.icheme.science.fluid.linalg.SparseMatrix;
+import com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity;
+import java.util.Collections;
+import java.util.HashSet;
+import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -21,8 +26,11 @@ public final class FluidHarnessGameTests {
         level.setBlock(source,com.wormzjl.icheme.registry.ModBlocks.FLUID_GENERATOR.get().defaultBlockState(),3);
         for(int x=1;x<128;x++)level.setBlock(source.east(x),com.wormzjl.icheme.registry.ModBlocks.FLUID_PIPE.get().defaultBlockState(),3);
         level.setBlock(reservoir,com.wormzjl.icheme.registry.ModBlocks.FLUID_RESERVOIR.get().defaultBlockState(),3);
-        long sourceId=((com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity)level.getBlockEntity(source)).fluidIdentity();
-        long tankId=((com.wormzjl.icheme.world.level.block.entity.FluidDeviceBlockEntity)level.getBlockEntity(reservoir)).fluidIdentity();
+        long sourceId=deviceId(level,source);
+        long tankId=deviceId(level,reservoir);
+        var fixtureIds = new HashSet<Long>();
+        for (int x = 0; x <= 128; x++) fixtureIds.add(deviceId(level, source.east(x)));
+        helper.assertTrue(fixtureIds.size() == 129 && !fixtureIds.contains(0L), "The test line did not register each block");
         var registration=world.registrations().get(sourceId);var spec=registration.spec();
         TankCharge.run(world,sourceId,new com.wormzjl.icheme.runtime.fluid.FluidDeviceSpec(spec.volume(),spec.temperature(),200000,spec.composition()));
         // A placed tank holds nothing (decision D54): no nitrogen at the start, and none may appear.
@@ -51,9 +59,21 @@ public final class FluidHarnessGameTests {
                 for(int x=0;x<=128;x++)level.removeBlock(source.east(x),false);phase[0]=3;
                 helper.assertTrue(false,"Waiting for test topology cleanup");
             }
-            var saved=world.capture();helper.assertTrue(saved.world().active().isEmpty()&&saved.world().events().isEmpty()&&saved.checkpoint().islands().isEmpty(),"Waiting for all cleanup transactions");
+            var saved = world.capture();
+            helper.assertTrue(Collections.disjoint(saved.world().active().keySet(), fixtureIds),
+                    "Waiting for all test line registrations to be removed");
+            helper.assertTrue(saved.world().events().stream().noneMatch(event -> !Collections.disjoint(event.touched(), fixtureIds)
+                            || event.edits().stream().anyMatch(edit -> fixtureIds.contains(edit.id()))),
+                    "Waiting for all test line cleanup transactions");
+            helper.assertTrue(saved.checkpoint().islands().stream().noneMatch(island ->
+                            island.snapshot().graph().reservoirs().stream().anyMatch(node -> fixtureIds.contains(node.id()))),
+                    "Waiting for all test line islands to be removed");
             helper.assertTrue(!level.getForcedChunks().contains(a.toLong())&&!level.getForcedChunks().contains(b.toLong()),"Test endpoint tickets leaked");
         });
+    }
+
+    private static long deviceId(ServerLevel level, BlockPos at) {
+        return ((FluidDeviceBlockEntity) level.getBlockEntity(at)).fluidIdentity();
     }
 
     @GameTest(template = "empty", timeoutTicks = 20)

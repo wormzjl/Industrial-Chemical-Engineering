@@ -62,14 +62,25 @@ public final class ValveSignal {
         return sensor == null || exempt(law) || linked.contains(sensor);
     }
 
-    /** Whether valve {@code host}'s law {@code law} has its signal; reads the accessory store and the data cables' facts. */
-    public static boolean linked(FluidWorldAuthority world, long host, FlowControl.ControlValve law) {
+    /** A valve's signal and whether it relies on the data bus. */
+    public enum Link { LOCAL, REMOTE, MISSING }
+
+    /** Resolves the selection through the accessory store and saved data cables. */
+    public static Link link(FluidWorldAuthority world, long host, FlowControl.ControlValve law) {
         var sensor = law.sensor();
-        if (sensor == null || exempt(law)) return true;
-        for (long h : hosts(world, host))
-            for (var s : world.instruments().sensors(h))
-                if (s.instance().equals(sensor)) return selectable(s.kind());
-        return false;
+        if (sensor == null || exempt(law) || selected(world, host, sensor)) return Link.LOCAL;
+        for (long h : world.controls().connectedHosts(host))
+            if (selected(world, h, sensor)) return Link.REMOTE;
+        return Link.MISSING;
+    }
+
+    private static boolean selected(FluidWorldAuthority world, long host, UUID sensor) {
+        return world.instruments().sensors(host).stream().anyMatch(s -> s.instance().equals(sensor) && selectable(s.kind()));
+    }
+
+    /** Whether valve {@code host}'s law has its signal. */
+    public static boolean linked(FluidWorldAuthority world, long host, FlowControl.ControlValve law) {
+        return link(world, host, law) != Link.MISSING;
     }
 
     /**

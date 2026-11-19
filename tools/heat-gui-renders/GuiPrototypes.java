@@ -297,7 +297,7 @@ public final class GuiPrototypes {
         var flare = ConstructorColumn.design(new ConstructorColumn.Design(VesselPlacement.Form.FLARE_STACK, .3, 1, 0, 0, 0, 0, new ProcessUnit.Bank(1, 1), null, outlet, 16, com.wormzjl.icheme.science.equipment.TowerBank.ONE), DIALOG);
         out.add(new Prototype("equipment-constructor-flare", 464, 254, (d, s) -> constructorDoor(d, flare, "Flare stack", "change", DIALOG.get(CONSTRUCTOR + "flare_rating", "212.4", "32"), Palette.ACCENT, Map.of()), true));
         out.add(new Prototype("equipment-constructor-choose-heat", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.HEAT,
-                ConstructorColumn.Equipment.FLARE_STACK, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true));
+                ConstructorColumn.Equipment.INDUCED_DRAFT_COOLING_TOWER, 16, DIALOG), "Constructor", "back", null, 0, Map.of()), true));
         return out;
     }
 
@@ -556,7 +556,7 @@ public final class GuiPrototypes {
         var quiet = casingInput().withSuction(new DeviceColumn.Suction("12.0", slowRequired, "0.0", "73.0"));
         var inline = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
                 phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.10", "bar"),
-                meter("throughput", "1995.0", "kmol/h"), meter("pressure_change", "2.40", "bar"))).withSuction(new DeviceColumn.Suction("9.5", "1.7", "0.0", "100.0"));
+                meter("throughput", "1995.0", "kmol/h"), meter("pressure_rise", "2.40", "bar"))).withSuction(new DeviceColumn.Suction("9.5", "1.7", "0.0", "100.0"));
         var inlineRows = DeviceColumn.rows(inline, TEXTS);
         return List.of(
                 devicePage("pump-readings-casing", WINDOW[0], WINDOW[1], casing, (d, s) -> {
@@ -608,7 +608,7 @@ public final class GuiPrototypes {
     static DeviceColumn.Input casingInput() {
         return new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
                 phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"), meter("throughput", "5530.0", "kmol/h"),
-                meter("pressure_change", "7.83", "bar"), new DeviceColumn.Meter("head", "80.0", "m", TEXTS.get("head.hint")), meter("speed_share", "100.0", "%"),
+                meter("pressure_rise", "7.83", "bar"), new DeviceColumn.Meter("head", "80.0", "m", TEXTS.get("head.hint")), meter("speed_share", "100.0", "%"),
                 meter("shaft_power", "24.9", "kW"), new DeviceColumn.Meter("efficiency", "70.0", "%", TEXTS.get("efficiency.hint"))),
                 new DeviceColumn.Drive(TEXTS.get("drive_line_poles", TEXTS.get("driver.motor"), "30.0", 2), TEXTS.get("drive_state", "RUNNING", "2950"), true, false), null);
     }
@@ -1211,6 +1211,10 @@ public final class GuiPrototypes {
                     columnDrawing(d, d.well(new Rect(d.w - 16 - 140, 16, 152, d.h - 32)));
                 }, true),
                 new Prototype("equipment-constructor-templates", 464, 254, (d, s) -> constructorDoor(d, templatePage, "Distillation column", "back", null, 0, Map.of()), true),
+                new Prototype("equipment-constructor-choose-separation", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.SEPARATION,
+                        ConstructorColumn.Equipment.COLUMN, 16, DIALOG), "Constructor", "back", null, 0, Map.of()), true),
+                new Prototype("equipment-constructor-choose-rotating", 320, 240, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.ROTATING,
+                        ConstructorColumn.Equipment.PUMP, 16, DIALOG), "Constructor", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor-choose", 464, 254, (d, s) -> constructorDoor(d, ConstructorColumn.choose(ConstructorColumn.Category.VESSELS,
                         ConstructorColumn.Equipment.VERTICAL_DRUM, 16, DIALOG), "Equipment constructor", "back", null, 0, Map.of()), true),
                 new Prototype("equipment-constructor", 464, 254, (d, s) -> constructorDoor(d, drum, "Vertical drum", "change", volume, Palette.ACCENT, Map.of()), true),
@@ -1250,13 +1254,13 @@ public final class GuiPrototypes {
      * {@code values}. Returns the column as placed, unscrolled (where the column scrolls, the palette is not drawn).
      */
     static Column constructorDoor(Door d, ConstructorColumn.Page page, String title, String key, String status, int tone, Map<String, String> values) {
-        int panel = ConstructorColumn.PANEL;
+        int panel = page.panelWidth();
         d.c.fill(panel, 0, d.w, d.h, 0xFF4A6B3A);
-        d.c.text("(the world and the ghost)", panel + 30, d.h / 2, 0xFFE0E0E0);
+        if (panel == ConstructorColumn.PANEL) d.c.text("(the world and the ghost)", panel + 30, d.h / 2, 0xFFE0E0E0);
         d.skin.page(d.c, new Rect(0, 0, panel, d.h));
         d.skin.title(d.c, 10, 10, title);
         if (key != null) d.skin.button(d.c, ConstructorColumn.TITLE_KEY, DIALOG.get(CONSTRUCTOR + key), Skin.Press.REST, false);
-        var area = ConstructorColumn.area(d.h, page.display());
+        var area = page.area(d.h);
         int tall = Column.place(page.rows(), area.x(), area.y(), area.w(), d.m, Column.Metrics.COMPACT).bounds().h();
         int width = tall > area.h() ? area.w() - ScrollView.BAR - 4 : area.w();
         var column = Column.place(page.rows(), area.x(), area.y(), width, d.m, Column.Metrics.COMPACT);
@@ -1584,7 +1588,7 @@ public final class GuiPrototypes {
     static Prototype pump() {
         var in = new DeviceColumn.Input(Kind.PUMP, true, true, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
                 phases("volume", 0, 1, 0, 0), List.of(meter("temperature", "25.0", "°C"), meter("suction_pressure", "1.20", "bar"),
-                meter("throughput", "554.8", "kmol/h"), meter("pressure_change", "2.40", "bar")));
+                meter("throughput", "554.8", "kmol/h"), meter("pressure_rise", "2.40", "bar")));
         return devicePage("fluid-pump", WINDOW[0], WINDOW[1], in, (d, s) -> {
             d.title("Centrifugal pump");
             d.tabs(0, "Overview", "Datasheet");
@@ -1646,7 +1650,7 @@ public final class GuiPrototypes {
                 .withIntegrity(new DeviceColumn.Wall("28.0", "0.4", "1.5", "Sulfidation", "Chrome steel"), null);
         var valve = new DeviceColumn.Input(Kind.VALVE, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.MASS_FLOW, new DeviceColumn.Opening(0.63, "Holding the set point"),
                 false, null, null, List.of(), phases("volume", 1, 0, 0, 0), List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"),
-                meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar"))).withIntegrity(null, new DeviceColumn.Trim("22.0", "10.0"));
+                meter("throughput", "2.5", "kg/s"), meter("pressure_drop", "1.10", "bar"))).withIntegrity(null, new DeviceColumn.Trim("22.0", "10.0"));
         // A drum V-101 as a reader sees it: a stainless shell weeping by sour water, 93 % used.
         var drum = new DeviceColumn.Input(Kind.RESERVOIR, false, false, true, "bar", "°C", "/h", DeviceColumn.Valve.NONE, null, false, null, null, List.of(),
                 null, List.of(meter("temperature", "45.0", "°C"), meter("pressure", "1.02", "bar")))
@@ -1720,8 +1724,8 @@ public final class GuiPrototypes {
     /** One valve page of the Sensor sheet: {@code selected} the index into {@code choices} (-1: none), its hover shown where {@code hover}. */
     static Prototype valveSensorPage(List<DeviceColumn.SensorChoice> choices, int selected, boolean editor, boolean hover) {
         boolean set = selected >= 0, pressure = set && choices.get(selected).label().startsWith("PT");
-        var meters = set ? List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"), meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar"))
-                : List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"), meter("throughput", "4.1", "kg/s"), meter("pressure_change", "-0.35", "bar"));
+        var meters = set ? List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"), meter("throughput", "2.5", "kg/s"), meter("pressure_drop", "1.10", "bar"))
+                : List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"), meter("throughput", "4.1", "kg/s"), meter("pressure_drop", "0.35", "bar"));
         var in = new DeviceColumn.Input(Kind.VALVE, editor, false, true, "bar", "°C", "/s", !set ? DeviceColumn.Valve.UNCONFIGURED : pressure ? DeviceColumn.Valve.PRESSURE : DeviceColumn.Valve.MASS_FLOW,
                 new DeviceColumn.Opening(set ? 0.63 : 1, set ? "Regulating" : ""), false, null, null, DeviceColumn.sensors(choices, editor, TEXTS), phases("volume", 1, 0, 0, 0), meters);
         var rows = DeviceColumn.rows(in, TEXTS);
@@ -1752,7 +1756,7 @@ public final class GuiPrototypes {
     static Prototype valve(String file, int fw, int fh) {
         var in = new DeviceColumn.Input(Kind.VALVE, true, false, true, "bar", "°C", "/s", DeviceColumn.Valve.MASS_FLOW, new DeviceColumn.Opening(0.63, "Holding the set point"),
                 false, null, null, List.of(), phases("volume", 1, 0, 0, 0), List.of(meter("temperature", "80.0", "°C"), meter("inlet_pressure", "3.10", "bar"),
-                meter("throughput", "2.5", "kg/s"), meter("pressure_change", "-1.10", "bar")));
+                meter("throughput", "2.5", "kg/s"), meter("pressure_drop", "1.10", "bar")));
         return devicePage(file, fw, fh, in, (d, s) -> {
             d.title("Control valve");
             d.tabs(0, "Overview");

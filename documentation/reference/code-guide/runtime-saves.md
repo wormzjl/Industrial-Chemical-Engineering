@@ -83,6 +83,8 @@ Save: `FluidWorldAuthority.capture` (on the server thread; it materialises certi
 
 The current values of `ENVELOPE`, `VERSION`, `SCHEMA` and `IslandCertificate.REPLAY_REVISION` are rows of [FORMATS.md](../FORMATS.md). A change to a facts schema or a shape field adds a corpus image under `src/test/resources/compat/fluid/` (AGENTS.md) and changes its row in `FORMATS.md` in the same commit.
 
+Schema 33 appends `RuptureFacts` as the last world-facts section. It records the identities destroyed at each block position until their old cells have left the chunk save. A queued removal edit can also carry a rupture flag so its release occurs with the removal at the same engine fence. Older checkpoints default to no pending cell cleanups and ordinary removals. Schema 31 remains reserved for the separate solute branch.
+
 ## Tests and gates
 
 | Rule | Test |
@@ -103,4 +105,4 @@ The reset itself has no test: no unit test opens a world. Tests edit images with
 - **The state format is not compatibility**: a mismatch drops the state and the engine rebuilds it; never write a migration for it.
 - **Do not test against player worlds**: the corpus images are the gates.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

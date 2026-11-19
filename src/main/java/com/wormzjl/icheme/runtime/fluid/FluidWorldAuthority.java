@@ -59,7 +59,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The chimneys (batch 2026-11-10-chimney). */
     final Chimneys chimneys;
     /** The batch stills (batch 2026-11-09-batch-distiller, W3 to W5). */
+    private long nextWaterCheck;
     final Stills stills;
+    private final StillFuelInventory stillFuel = new StillFuelInventory(this);
+    private final SavedChunkData chunkData = new SavedChunkData();
+    private final SavedEquipment savedEquipment = new SavedEquipment();
+    SavedEquipment savedEquipment(){return savedEquipment;}
     /** The steam ejectors' motive slice inputs (batch 2026-11-10-steam-ejector-flow). */
     private final Ejectors ejectors;
     /** The fluid converters (batch 2026-11-12-fluid-conversion, W2): their ports share the port hooks with the columns. */
@@ -165,7 +170,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The Create coupling (W6b): its stress rate; a world opened without Create lost its couplings' blocks, so their parts leave.
         shafts.stressPerFE(IChemE::stressPerFE);if(!net.neoforged.fml.ModList.get().isLoaded("create"))shafts.forget(com.wormzjl.icheme.science.machine.ShaftNetwork.Kind.CREATE_COUPLING);
         // The fired heaters' burners (batch 2026-11-09-furnace-fuel-power): the network's heating values in its conserved order.
-        burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.burners(burners);electric.moved(burners::powerMoved);
+        burners=new FiredHeaters(topology,runtime.coordinator(),electric,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.burners(burners);burners.islands(id->registry.islands(id));electric.moved(burners::powerMoved);
         flares=new Flares(topology,heatingValues(catalog,model),model.molecularWeights(),formulas(catalog,model));shafts.flares(flares);
         chimneys=new Chimneys(topology,model.molecularWeights());shafts.chimneys(chimneys);
         // The pollution releases (batch 2026-11-15-pollution-system, WP4): the hazard standard in the network's conserved order;
@@ -196,7 +201,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
             var request=new com.wormzjl.icheme.runtime.ProcessSolveServices.StillRequest(com.wormzjl.icheme.runtime.ProcessSolveServices.nextRequestId(),new com.wormzjl.icheme.runtime.ProcessSolveServices.StillTarget(dimension,pot),0,done);
             return com.wormzjl.icheme.runtime.ProcessSolveServices.submitStill(server,request,new com.wormzjl.icheme.runtime.ProcessSolveJobs.StillCommand(job,runtime.coordinator().model(island))).accepted();
         });
-        stills.fuel(this::takeStillFuel);
+        stillFuel.restore();
+        stills.fuel(stillFuel::burn);
         // The data network's firing and reflux setpoints (owner decision O1): the control service's last cadence.
         stills.plans(new Stills.Plans(){
             public double firing(long pot){return controls==null?Double.NaN:controls.stillFiring(pot);}
@@ -229,9 +235,18 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public static void start(MinecraftServer server) {
         if(SERVERS.containsKey(server))throw new IllegalStateException("Duplicate fluid world authority");
         var world=new FluidWorldAuthority(server);SERVERS.put(server,world);
+        // A facts-only restore can drop the queued removal while retaining its intent and the pre-fence stock.
+        for(var entry:world.topology.builds().ruptures().entrySet()) {
+            var p=entry.getKey();
+            world.chunks.indexRupture(p);
+            var existing=world.at(p).orElse(null);
+            if(existing!=null&&entry.getValue().contains(existing.device().id()))world.placement.remove(existing.device().id(),true);
+        }
         var early=EARLY_CHUNKS.remove(server);
         if(early!=null)for(var loaded:early)world.loadedChunk(loaded.dimension(),loaded.chunk());
         world.chunks.holdWithoutLevel();
+        world.controls().restoreSavedBindings();
+        com.wormzjl.icheme.runtime.assembly.AssemblyService.restoreExchangerLines(server,world);
     }
     /** Retain early chunk loads as well as normal ones; called only on this server's thread. */
     public static void loadedChunk(MinecraftServer server,ResourceKey<Level> dimension,long chunk) {
@@ -327,7 +342,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public WorldTopologyLedger.Structure structure(PhysicalFluidTopology.Position origin){owned();return topology.structure(origin);}
     /** Records the structure whose origin is {@code origin}; null removes it. A load of a chunk of its box queues it for its re-alignment. */
     public void structure(PhysicalFluidTopology.Position origin,WorldTopologyLedger.Structure structure) {
-        owned();var old=topology.structure(origin);if(old!=null){chunks.indexStructure(origin,old,false);nozzles.index(origin,old,false);}
+        owned();savedEquipment.invalidate(origin);var old=topology.structure(origin);if(old!=null){chunks.indexStructure(origin,old,false);nozzles.index(origin,old,false);}
         topology.structure(origin,structure);if(structure!=null){chunks.indexStructure(origin,structure,true);nozzles.index(origin,structure,true);}data.setDirty();
         // The far silhouettes follow the registry (W10): its subscribers see the change at the next presentation bucket.
         if(!Objects.equals(old,structure))silhouettes.changed(origin.dimension());
@@ -723,6 +738,23 @@ public final class FluidWorldAuthority implements AutoCloseable {
     /** The shaft trains (W3): queue their parts' events here; their views are reads. */
     public ShaftTrains shafts(){owned();return shafts;}
     /** The electric stores (W5): the FE ports' side and their views are reads and the FE protocol only. */
+    public WorldTopologyLedger powerTopology(){owned();return topology;}
+    /** A legacy cell's saved facts, including cells outside the active chunk set. */
+    public net.minecraft.nbt.CompoundTag savedBlockEntity(String dimension, BlockPos pos) {
+        owned();
+        var level = serverLevel(dimension);
+        return level == null ? null : chunkData.blockEntity(level, pos);
+    }
+    /** Structure origins whose registered bounds meet the inclusive chunk rectangle. */
+    public List<PhysicalFluidTopology.Position> structuresInChunks(String dimension,int firstX,int lastX,int firstZ,int lastZ) {
+        owned();
+        var index = chunks.structureChunks.getOrDefault(dimension, Map.of());
+        var found = new TreeSet<>(Comparator.comparingInt(PhysicalFluidTopology.Position::x)
+                .thenComparingInt(PhysicalFluidTopology.Position::y).thenComparingInt(PhysicalFluidTopology.Position::z));
+        for (int x = firstX; x <= lastX; x++) for (int z = firstZ; z <= lastZ; z++)
+            found.addAll(index.getOrDefault(net.minecraft.world.level.ChunkPos.asLong(x,z), Set.of()));
+        return List.copyOf(found);
+    }
     public ElectricStores electric(){owned();return electric;}
     /** The fired heaters' burners: their views and alarms are reads. */
     public FiredHeaters burners(){owned();return burners;}
@@ -796,17 +828,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         owned();var u=converters.unit(id);if(u==null||u.hopper())return java.util.Set.of();
         return Converters.alarms(converters.status(id),u.thresholds(),converterFill(id),u.forgeFill());
     }
-    /**
-     * A solid still's next item (W4): one taken from the fuel slot its pot's cell holds, its heat (J); 0 when the slot is
-     * empty or the pot's chunk is not loaded (the fire then burns out: NO FUEL).
-     */
-    private double takeStillFuel(long pot) {
-        var r=registrations().get(pot);if(r==null)return 0;
-        var p=r.device().position();var level=server.getLevel(dimension(p.dimension()));
-        var at=new BlockPos(p.x(),p.y(),p.z());
-        if(level==null||!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||shell.fluidIdentity()!=pot)return 0;
-        return shell.takeFuel();
-    }
+    /** Shared by hoppers, the still menu, dismantling and the engine's fire. */
+    public net.neoforged.neoforge.items.IItemHandler stillFuel(long pot){owned();return stillFuel.slot(pot);}
+
     /** The pressure a still's DISTILLATE and VENT generators stand at, Pa: a short liquid head over the atmosphere (an owner option, BATCH_STILL_ENGINE.md). */
     public static final double STILL_OUTLET_PRESSURE=150000;
     /**
@@ -997,14 +1021,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
             placed.add(moved);if(moved!=record)edits.add(new WorldTopologyLedger.Edit(ids[k],moved));
         }
         if(!edits.isEmpty())submit(edits,next);
-        topology.still(new StillUnit(pot,water,ids[0],ids[1],ids[2],design.volume(),design.heater(),design.condenser(),design.stages(),u.head(),u.venting(),u.burning(),u.firing(),u.reflux(),u.heated(),u.condensed()));
+        topology.still(new StillUnit(pot,water,ids[0],ids[1],ids[2],design.volume(),design.heater(),design.condenser(),design.stages(),u.head(),u.venting(),u.burning(),u.firing(),u.reflux(),u.heated(),u.condensed(),u.fuelStack()));
         stills.refresh();
         return placed;
     }
     /** The player's settings for the still whose pot is {@code pot} (W5): firing 0 to 1, reflux ratio (+Infinity closed). Null, or why not. */
     public @org.jetbrains.annotations.Nullable String stillSettings(long pot,double firing,double reflux){owned();if(closed)return "the fluid world is closed";return stills.settings(pot,firing,reflux);}
     /** A solid still's slot changed: its pot's island reads the fire again at its next slice (a wake, no solve). */
-    public void stillFuelChanged(long pot){owned();Long island=registry.owner(pot);if(island!=null)runtime.coordinator().controlsMoved(List.of(island));}
+    void stillFuelChanged(long pot){owned();data.setDirty();Long island=registry.owner(pot);if(island!=null)runtime.coordinator().controlsMoved(List.of(island));}
     /** The network package's formulas (atoms of C, H, N, O, S) in {@code model}'s conserved order, by component name. */
     static double[][] formulas(MaterialCatalog catalog,FluidThermodynamics model) {
         String id=com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.networkPackage(catalog);
@@ -1061,7 +1085,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
         @Override public double corrosiveAir(PhysicalFluidTopology.Position at) {
             if(!IChemE.pollutionEnabled())return 0;
             var service=com.wormzjl.icheme.runtime.pollution.PollutionService.find(server);
-            return service.isEmpty()?0:service.get().index(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),com.wormzjl.icheme.science.pollution.Channel.CORROSIVE);
+            return service.isEmpty()?0:service.get().measuredIndex(dimension(at.dimension()),new BlockPos(at.x(),at.y(),at.z()),com.wormzjl.icheme.science.pollution.Channel.CORROSIVE);
         }
         @Override public com.wormzjl.icheme.science.integrity.CorrosionStandard standard(List<String> compounds){return standards.apply(compounds);}
         /** A weeping wall (WP4) marks its device's loaded shell cell; the cell sends a change to the clients that track it. Never loads a chunk. */
@@ -1129,20 +1153,36 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * booked here: the removal books a vessel's contents as removed, as before. Returns the masses, or {@link Releases.Spilled#NONE}.
      */
     public Releases.Spilled releaseContents(long id) {
-        owned();if(closed||releases==null)return Releases.Spilled.NONE;
-        var r=registrations().get(id);Long owner=r==null?null:registry.owner(id);if(owner==null)return Releases.Spilled.NONE;
-        var snapshot=storedIsland(owner);int n=model.componentCount();double[] gas=new double[n],liquid=new double[n],dense=new double[n];boolean node=false;
-        for(var reservoir:snapshot.graph().reservoirs()) {
-            if(reservoir.id()!=id)continue;node=true;if(reservoir.fixed())return Releases.Spilled.NONE;
-            // By its state's phases; one dense fluid (P2 of batch 2026-11-16-supercritical-followups, item 16) by its liquid-like
-            // weight, whatever slot holds it (DenseReadings.release).
-            DenseReadings.release(reservoir.inventory().moles(),reservoir.state(),gas,liquid,dense);
-            break;
+        owned();
+        var r=registrations().get(id);
+        return r==null?Releases.Spilled.NONE:emit(contents(r,null));
+    }
+
+    private record ReleasedStock(PhysicalFluidTopology.Position at,double[] gas,double[] liquid,Releases.Spilled spill) {}
+
+    private Releases.Spilled emit(ReleasedStock stock) {
+        if(stock==null)return Releases.Spilled.NONE;
+        releases.contents(stock.at(),stock.gas(),stock.liquid());
+        return stock.spill();
+    }
+
+    private ReleasedStock contents(WorldTopologyLedger.Registration r,PassiveNetwork.Reservoir aligned) {
+        if(closed||releases==null)return null;
+        long id=r.device().id();
+        Long owner=registry.owner(id);
+        var snapshot=aligned!=null||owner==null?null:storedIsland(owner);
+        if(aligned==null&&snapshot==null)return null;
+        int n=model.componentCount();double[] gas=new double[n],liquid=new double[n],dense=new double[n];
+        if(aligned==null) {
+            for(var node:snapshot.graph().reservoirs())if(node.id()==id){aligned=node;break;}
         }
-        if(!node) {
+        if(aligned!=null) {
+            if(aligned.fixed())return null;
+            DenseReadings.release(aligned.inventory().moles(),aligned.state(),gas,liquid,dense);
+        } else {
             var result=snapshot.lastResult().orElse(null);var g=r.device().geometry();
             double volume=g.length()*Math.max(1,g.channels())*Math.PI*g.diameter()*g.diameter()/4;
-            if(result==null||!(volume>0))return Releases.Spilled.NONE;
+            if(result==null||!(volume>0))return null;
             for(var view:registry.pipeViews(id)) {
                 PipeTransfer moved=null;for(var t:result.pipeTransfers())if(t.pipeId()==view.pipeId()){moved=t;break;}
                 if(moved==null)continue;
@@ -1160,9 +1200,8 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // what the burst is heard as (dense carbon dioxide flashes whole: gas; a dense heavy cut stays on the ground: liquid).
         // Every other liquid is heard as before (DenseReadings.heard).
         var spilled=DenseReadings.heard(gas,liquid,releases.volatileMoles(dense),model.molecularWeights());
-        if(!(spilled.gasKilograms()+spilled.liquidKilograms()>0))return Releases.Spilled.NONE;
-        releases.contents(r.device().position(),gas,liquid);
-        return spilled;
+        if(!(spilled.gasKilograms()+spilled.liquidKilograms()>0))return null;
+        return new ReleasedStock(r.device().position(),gas,liquid,spilled);
     }
     /** The pumps' health (W10b): a repair kit queues its event here. */
     public MachineHealth health(){owned();return health;}
@@ -1509,29 +1548,13 @@ public final class FluidWorldAuthority implements AutoCloseable {
     }
     /**
      * The calculator input of the design of the column at {@code master}, as built (its shell's diameter), or null where it
-     * cannot be read: no operating point, or its chunk not loaded (a read never loads one).
+     * has no saved operating point. Legacy shell data is read without loading the chunk.
      */
     private com.wormzjl.icheme.science.column.v3.V3ColumnInput columnDesign(PhysicalFluidTopology.Position master) {
-        var vessel=columnVessel(master);
-        if(vessel==null)return null;
-        var trays=vessel.shape().trays();var point=trays.operating();
-        return point==null||!point.fits(trays)?null:point.input(trays,vessel.shape().diameter());
+        return SavedEquipment.columnInput(SavedEquipment.at(this,master));
     }
-    /** The condenser of the column at {@code master}'s design: water-cooled where it has none. */
     private com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser columnCondenser(PhysicalFluidTopology.Position master) {
-        var vessel=columnVessel(master);
-        return vessel==null||vessel.shape().trays().components()==null?com.wormzjl.icheme.science.equipment.ColumnComponents.Condenser.EXCHANGER:vessel.shape().trays().components().condenser();
-    }
-    /** The loaded column vessel at {@code master}, or null. */
-    private com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel columnVessel(PhysicalFluidTopology.Position master) {
-        for(var level:server.getAllLevels()) {
-            if(!level.dimension().location().toString().equals(master.dimension()))continue;
-            var at=new net.minecraft.core.BlockPos(master.x(),master.y(),master.z());
-            if(!level.isLoaded(at))return null;
-            var vessel=com.wormzjl.icheme.world.level.block.EquipmentStructure.at(level,at);
-            return vessel==null||vessel.shape().trays()==null?null:vessel;
-        }
-        return null;
+        return SavedEquipment.columnCondenser(SavedEquipment.at(this,master));
     }
     /** The column at {@code master} is gone (plan section 12): it stops, and its accounts leave the world, booked as destroyed. */
     public void columnRemoved(PhysicalFluidTopology.Position master) {
@@ -1583,6 +1606,32 @@ public final class FluidWorldAuthority implements AutoCloseable {
     public int diverterOutlet(long id){owned();return placement.diverterOutlet(id);}
     /** Reading committed static configuration never advances or materialises process state. */
     public Optional<PhysicalFluidTopology.Device> committedDevice(long id){owned();var record=topology.active().get(id);return record==null?Optional.empty():Optional.of(record.device());}
+    public void ruptureChunkTicket(String dimension,long chunk,boolean becomingFull) {
+        owned();chunks.ruptureTicket(dimension,chunk,becomingFull);
+    }
+    /** A previously ruptured standalone block still awaiting durable removal from its chunk. */
+    public boolean hasRuptureAt(PhysicalFluidTopology.Position position) {
+        owned();
+        return !topology.rupturesAt(position).isEmpty() && registry.at(position).isEmpty();
+    }
+
+    public boolean wasRuptured(PhysicalFluidTopology.Position position,long id) {
+        owned();return topology.rupturesAt(position).contains(id);
+    }
+
+    /** Remove this exact registered standalone device once. The pending cell removal shares its topology checkpoint. */
+    public boolean removeRupturedDevice(PhysicalFluidTopology.Position position,long id) {
+        owned();
+        var record=registry.at(position).orElse(null);
+        if(closed||record==null||record.device().id()!=id||!record.device().position().equals(position)
+                ||position.lane()!=0||record.device().port()||!record.device().ports().isEmpty())return false;
+        placement.remove(id,true);
+        topology.rupture(position,id);
+        chunks.indexRupture(position);
+        data.setDirty();
+        return true;
+    }
+
     public void remove(long id){owned();placement.remove(id);}
     /**
      * Holds registration {@code id}, or releases it (decision S11, REGISTRY_FIRST_PLAN.md 4.1): held, it keeps what it holds
@@ -1639,6 +1688,12 @@ public final class FluidWorldAuthority implements AutoCloseable {
      */
     private void tick() {
         owned();if(closed)return;refreshProperties();topology.tick();
+        chunks.reconcileFullChunks();
+        if (topology.onlineTick() >= nextWaterCheck) {
+            WaterIntakes.recheck(this);
+            nextWaterCheck = topology.onlineTick() + WaterIntakes.RECHECK_TICKS;
+        }
+        com.wormzjl.icheme.runtime.assembly.AssemblyService.refreshExchangerSignals(server,this,controlFacts.topologyRevision());
         holdValves();
         // Sample electrical supply before this cadence's shaft decisions and presentation, including idle trains.
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){electric.cadence();shafts.cadence();}
@@ -1684,35 +1739,10 @@ public final class FluidWorldAuthority implements AutoCloseable {
         // The far silhouettes and the noise levels (batch 2026-11-10-custom-shader-system), by watcher: reads only.
         if(topology.onlineTick()%100==0){publishSilhouettes();publishNoise();}
         if(topology.onlineTick()%ElectricStores.CADENCE==0&&propertyHold==null){health.cadence();integrity.cadence();}
-        // A generator's port pushes FE to its neighbours (the FE protocol, reading A65): stored FE only, nothing solves.
-        pushGenerators();
         com.wormzjl.icheme.network.AssemblyNetwork.presentationTick(server, topology.onlineTick());
         // The machine pages' views (W7, reading A85): on the same 100-tick buckets, only to the open pages.
         com.wormzjl.icheme.network.MachineNetwork.presentationTick(server, topology.onlineTick());
         data.setDirty();
-    }
-    /**
-     * Each charged generator's port pushes FE to the receivers on the six faces of its terminal cell (W5, reading A65): the
-     * FE protocol, moving stored FE only, where the terminal cell is loaded. The terminal is found through the cell of the
-     * generator's first shaft end, which is its structure's.
-     */
-    private void pushGenerators() {
-        var charged=electric.charged();if(charged.isEmpty())return;
-        for(long id:charged) {
-            var u=topology.shaft(id);if(u==null||u.ends().isEmpty())continue;
-            var end=u.ends().getFirst().cell();var level=server.getLevel(dimension(end.dimension()));if(level==null)continue;
-            var at=new BlockPos(end.x(),end.y(),end.z());
-            if(!level.isLoaded(at)||!(level.getBlockEntity(at) instanceof com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity shell)||shell.shape()==null||shell.origin()==null)continue;
-            var t=com.wormzjl.icheme.science.equipment.ShapeRasterizer.terminal(shell.shape());if(t==null)continue;
-            var terminal=shell.origin().offset(t.x(),t.y(),t.z());
-            for(var face:net.minecraft.core.Direction.values()) {
-                var beside=terminal.relative(face);if(!level.isLoaded(beside))continue;
-                var sink=level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.EnergyStorage.BLOCK,beside,face.getOpposite());
-                if(sink==null||!sink.canReceive())continue;
-                int offer=electric.extract(id,Integer.MAX_VALUE,true);if(offer<=0)break;
-                int taken=sink.receiveEnergy(offer,false);if(taken>0)electric.extract(id,taken,false);
-            }
-        }
     }
     /** Attempted when a recovery is queued and on its retry deadline, never polled; delivery stays exactly-once. */
     private void deliverRecoveries(){
@@ -1767,6 +1797,9 @@ public final class FluidWorldAuthority implements AutoCloseable {
         operate();
     }
     /** Heat side {@code side}'s lines as last reported, or null for none. */
+    public com.wormzjl.icheme.science.fluid.network.ExchangerRelay.Operation exchangerOperation(long side) {
+        owned();return runtime.coordinator().operation(PhysicalFluidTopology.sideIdentity(side));
+    }
     public @org.jetbrains.annotations.Nullable Lines lines(long side){owned();return lines.get(side);}
     /** The mass flow target the valve at node {@code valve} drives its connection at in its island as last committed, or null. */
     private @org.jetbrains.annotations.Nullable Double plannedTarget(long valve) {
@@ -1820,7 +1853,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
      * structures recorded over it, are queued for their re-alignment (REGISTRY_FIRST_PLAN.md 4.2, 4.4). Never loads a chunk
      * or runs a solve.
      */
-    public void loadedChunk(ResourceKey<Level> dimension,long chunk){owned();if(closed)return;chunks.loadedChunk(dimension,chunk);}
+    public void loadedChunk(ResourceKey<Level> dimension,long chunk) {
+        owned();
+        if (closed) return;
+        String name = dimension.location().toString();
+        savedEquipment.invalidate(name, chunk);
+        stillFuel.chunkLoaded(name, chunk);
+        chunks.loadedChunk(dimension,chunk);
+    }
     /**
      * The next registration of {@code dimension} the re-alignment checks, taken off its queue, or 0 when none is queued
      * (registry first, REGISTRY_FIRST_PLAN.md 4.2). Each registration of a loaded chunk is queued once, at the load.
@@ -2211,6 +2251,14 @@ public final class FluidWorldAuthority implements AutoCloseable {
         }
     }
     private final class RegistryHost implements PhysicalRegistry.Host {
+        @Override public Runnable prepareRupture(WorldTopologyLedger.Registration r,PassiveNetwork.Reservoir stock) {
+            var measured=contents(r,stock);
+            return ()->{
+                var spilled=emit(measured);
+                var level=serverLevel(r.device().position().dimension());
+                if(level!=null)com.wormzjl.icheme.runtime.pollution.BurstPipes.released(level,cell(r),spilled);
+            };
+        }
         public IslandCoordinator coordinator(){return runtime.coordinator();}
         public void topology(String name,Set<UUID> events,Set<Long> affected,List<IslandCoordinator.Replacement> replacements,long committed,long online,
                              Map<Long,PassiveNetwork.Reservoir> additions,Set<Long> removals,Map<Long,InlineFilter> releasedFilters,Runnable commit) {
@@ -2231,7 +2279,7 @@ public final class FluidWorldAuthority implements AutoCloseable {
             unboundBindings.removeAll(removed);publishedMenuData.keySet().removeAll(removed);for(long device:removed)displays.removed(device);
             columns.committed();
             // A batch still whose pot left takes its head's accounts along, booked as destroyed (batch 2026-11-09-batch-distiller).
-            for(long device:removed)if(topology.still(device)!=null){topology.removeStill(device);stills.removed(device);}
+            for(long device:removed)if(topology.still(device)!=null){topology.removeStill(device);stills.removed(device);stillFuel.removed(device);}
             // A converter whose vessel left leaves with it (W3); its Forge tank goes with the block. Swept against the registry,
             // not the batch's removals: a converter placed and broken before its registration applied never had an active vessel.
             if(!topology.converters().isEmpty())for(long id:List.copyOf(topology.converters().keySet()))if(!registrations().containsKey(id))converters.remove(id);

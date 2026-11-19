@@ -24,6 +24,30 @@ class VelocityClampTest {
         double limit=donor.mass()/donor.volume()*pipe.minimumArea()*model.velocityLimit(donor);
         assertTrue(Math.abs(q)<=limit*(1+2e-8)+1e-12,"q="+q+" cap="+limit);
     }
+
+    @Test void acousticLimitsDependOnCompositionAndStateRatherThanAmount() {
+        var model=model(100000);
+        double reference=0,referenceVapor=0;
+        for(double scale:new double[]{1,1e-170,1e170,1e-315}) {
+            int components=model.componentCount();
+            var vapor=new double[components];
+            vapor[model.components().indexOf("Nitrogen")]=scale;
+            var aqueous=new double[components];
+            aqueous[components-1]=40*scale;
+            var mixture=model.adoptingState(300,200_000,vapor,new double[components],aqueous,null);
+            double bulk=model.isothermalAcousticBound(mixture),gas=model.vaporVelocityLimit(mixture);
+            if(scale==1) {
+                reference=bulk;
+                referenceVapor=gas;
+                assertTrue(reference>0&&referenceVapor>0);
+            } else {
+                // The smallest volumes themselves are subnormal and have lower relative precision.
+                double relativeTolerance=scale<1e-300?1e-6:1e-13;
+                assertEquals(reference,bulk,reference*relativeTolerance,"bulk at quantity scale "+scale);
+                assertEquals(referenceVapor,gas,referenceVapor*relativeTolerance,"vapour at quantity scale "+scale);
+            }
+        }
+    }
     /** The velocity cap is part of the line's law (2026-10-18, M7/M8 option C): a 99 kPa drive on a 0.1 m line of 10 mm chokes it, and
      * the converged flow stands under the cap flow of the end it leaves, the saturation ({@link PassiveStepSolver#saturated})
      * of the flow the law gives for the driving pressure. */

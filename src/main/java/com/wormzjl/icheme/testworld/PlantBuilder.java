@@ -449,78 +449,17 @@ public final class PlantBuilder {
         return route(from, to, Set.of());
     }
 
-    /** {@link #route(BlockPos, BlockPos)}, its ends also allowed beside the pipes {@code joins}: a line that ends on another line. */
+    /**
+     * {@link #route(BlockPos, BlockPos)}, its ends also allowed beside the pipes {@code joins}: a line that ends on another line.
+     * With a {@link #bendCost} above 0, the least-cost line, a pipe 1 and a bend {@link #bendCost}, by a search over (block,
+     * heading), the first pipe off {@code from} free to leave any way ({@link RouteSearch}).
+     */
     public List<BlockPos> route(BlockPos from, BlockPos to, Set<BlockPos> joins) {
         var allowed = new HashSet<BlockPos>(joins);
         allowed.add(from);
         allowed.add(to);
-        if (bendCost > 0) return straightRoute(from, to, allowed);
-        var previous = new HashMap<BlockPos, BlockPos>();
-        var queue = new ArrayDeque<BlockPos>();
-        previous.put(from, from);
-        queue.add(from);
-        while (!queue.isEmpty() && !previous.containsKey(to)) {
-            var at = queue.poll();
-            for (var d : Direction.values()) {
-                var n = at.relative(d);
-                if (previous.containsKey(n) || !free(n, allowed)) continue;
-                previous.put(n, at);
-                queue.add(n);
-            }
-        }
-        if (!previous.containsKey(to)) throw new IllegalStateException("No route from " + from.toShortString() + " to " + to.toShortString());
-        var path = new ArrayList<BlockPos>();
-        for (var at = to; ; at = previous.get(at)) {
-            path.add(at);
-            if (at.equals(from)) break;
-        }
-        Collections.reverse(path);
-        for (var at : path) pipe(at);
-        return path;
-    }
-
-    /**
-     * {@link #route(BlockPos, BlockPos, Set)} by least cost, a pipe 1 and a bend {@link #bendCost}: a search over (block,
-     * heading), the first pipe off {@code from} free to leave any way.
-     */
-    private List<BlockPos> straightRoute(BlockPos from, BlockPos to, Set<BlockPos> allowed) {
-        var dirs = Direction.values();
-        record State(BlockPos at, int heading) {}
-        record Node(State state, int cost) {}
-        var best = new HashMap<State, Integer>();
-        var previous = new HashMap<State, State>();
-        var queue = new PriorityQueue<Node>(Comparator.comparingInt(Node::cost));
-        var first = new State(from, -1);
-        best.put(first, 0);
-        queue.add(new Node(first, 0));
-        State end = null;
-        while (!queue.isEmpty()) {
-            var node = queue.poll();
-            var s = node.state();
-            if (best.getOrDefault(s, Integer.MAX_VALUE) < node.cost()) continue;
-            if (s.at().equals(to)) {
-                end = s;
-                break;
-            }
-            for (int d = 0; d < 6; d++) {
-                var n = s.at().relative(dirs[d]);
-                if (!free(n, allowed)) continue;
-                int cost = node.cost() + 1 + (s.heading() < 0 || s.heading() == d ? 0 : bendCost);
-                var next = new State(n, d);
-                if (cost < best.getOrDefault(next, Integer.MAX_VALUE)) {
-                    best.put(next, cost);
-                    previous.put(next, s);
-                    queue.add(new Node(next, cost));
-                }
-            }
-        }
-        if (end == null) throw new IllegalStateException("No route from " + from.toShortString() + " to " + to.toShortString());
-        var path = new ArrayList<BlockPos>();
-        for (var s = end; ; s = previous.get(s)) {
-            path.add(s.at());
-            if (s.equals(first)) break;
-        }
-        Collections.reverse(path);
+        var search = new RouteSearch(this, from, to, allowed);
+        var path = bendCost > 0 ? search.leastCost(bendCost) : search.shortest();
         for (var at : path) pipe(at);
         return path;
     }

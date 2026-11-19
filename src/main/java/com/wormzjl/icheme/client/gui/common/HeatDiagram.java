@@ -152,7 +152,10 @@ public final class HeatDiagram {
         switch (unit) {
             case EXCHANGER -> d.exchanger(design);
             case AIR_COOLER -> d.airCooler();
-            case FIRED_HEATER -> d.heater(side);
+            case FIRED_HEATER -> {
+                d.heater();
+                d.tag(230, side == HeatSides.Side.CONVECTION ? 68 : 134, Align.CENTRE, Value.of(Show.DUTY, "duty"));
+            }
             case KETTLE -> d.kettle();
             // A batch still (batch 2026-11-09-batch-distiller): its page is phase 3; the kettle's drawing until then.
             case STILL -> d.kettle();
@@ -271,7 +274,15 @@ public final class HeatDiagram {
     // The fired heater, vertical cylindrical: the convection section over the radiant firebox, the transition cone between
     // them, the stack on top, the burners under the floor.
 
-    private void heater(HeatSides.Side side) {
+    static HeatDiagram furnace() {
+        var d = new HeatDiagram();
+        d.heater();
+        d.tag(230, 68, Align.CENTRE, Value.of(Show.DUTY, "coil:CONVECTION"));
+        d.tag(230, 134, Align.CENTRE, Value.of(Show.DUTY, "coil:RADIANT"));
+        return d;
+    }
+
+    private void heater() {
         part(BODY, Glyph.STACK, 216, 0, 28, 30, null);
         part(BODY, Glyph.CONVECTION, 180, 30, 100, 50, t("label.convection"));
         part(BODY, Glyph.TRANSITION, 160, 80, 140, 10, null);
@@ -290,7 +301,6 @@ public final class HeatDiagram {
         pill(4, 180, 100, "RADIANT_OUTLET", Value.of(Show.TEMPERATURE, "port:RADIANT_OUTLET"));
         tag(142, 34, Align.CENTRE, Value.of(Show.FLOW, "port:CONVECTION_INLET"));
         tag(320, 99, Align.CENTRE, Value.of(Show.FLOW, "port:RADIANT_INLET"));
-        tag(230, side == HeatSides.Side.CONVECTION ? 68 : 134, Align.CENTRE, Value.of(Show.DUTY, "duty"));
         // The burners under the floor; their flames rise in the firebox (RADIANT draws them over these).
         for (int x : HEATER_BURNERS) part(BODY, Glyph.BURNER, x - 6, 200, 12, 14, null);
         label(230, 226, t("label.burners"), Align.CENTRE);

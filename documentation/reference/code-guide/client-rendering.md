@@ -22,7 +22,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | **Chunk models (`model/`)** | | |
 | `EquipmentShellModel` | A shell cell's chunk model: quads per (`ShellVariant`, `CellKey`) from `ShapeRasterizer.fixedSurface`, moving parts left out, baked shade and sheen (BAKED) or flat sprites and unshaded colour (FLAT), paint channel as tint index, `Layers` (solid, glass, all), flow arrows baked in; `ATLAS`, `sprite` (current variant); shared with the line models: `bake`, `paintedLines`, `painted`, `lineTints` | 350 |
 | `ShellVariant` | No Minecraft class: BAKED, FLAT or REFLECTED (`of(pbrTextures, packInUse, reflections)`; REFLECTED bakes the shade without the sheen while the reflection pass draws, `sheen()`), the cache `Key`, the flat sprites' fallback (`flatSprites`) | 62 |
-| `ReflectionClass`, `ReflectionLaw`, `ReflectionDepth`, `ReflectionMesh` | No Minecraft class: the reflection pass's one table (PAINT, STEEL, CLADDING: F0, blur, highlight, tint, LabPBR values), its law (sky, Fresnel, highlight, sun and moon, range fade), the depth pull towards the eye, a structure's mesh from `ShapeRasterizer.renderBody` and the 32-block `region` | 120, 113, 49, 87 |
+| `ReflectionClass`, `ReflectionLaw`, `ReflectionDepth`, `ReflectionMesh` | No Minecraft class: the gloss pass's one table (PAINT, STEEL, CLADDING, GALVANISED: F0, highlight, LabPBR values), its law (a grey sheen of the horizon's brightness by Fresnel, the base `kept` by 1 - F, highlight, sun and moon, range fade; no mirror image, no colour), the depth pull towards the eye, a structure's mesh from `ShapeRasterizer.renderBody` without its pipe runs (`Mesh.Facet.run`) and the 32-block `region` | 78, 102, 49, 84 |
 | `FluidDeviceModel` | A pipe or fitting: key = block state + `FluidDeviceBlockEntity.Drawn` (bore, faces, flanges, spool, transition offsets) + a `Look` (fitting, paint mask); polygons from `LineGeometry` and the fitting geometries; a generator block's own `"body"` (`intake`, `hopper`) from `IntakeGeometry`, `HopperGeometry` | 188 |
 | `PipeRackModel` | A rack cell: the frame and each lane on painted sprites, tint index 2 × option + channel; key `Look` | 147 |
 | `ConduitModel` | A data or FE conduit block's model from its cable facts | 171 |
@@ -33,7 +33,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 | `EquipmentGhost` | The ghost of every loaded constructor's design within `RANGE` until its vessel stands (the open screen's draft instead), blocked cells of the focused ghost outlined red, rechecked every 10 ticks; `blockedCount` | 237 |
 | `EquipmentPaints` | The constructor's paint, remembered per account on the client | 54 |
 | `EquipmentBodyRenderer` | Coarse equipment bodies (and the natural tower shells) drawn whole: bodies whose origins share a 32-block square merged into one static mesh, one call per square in view; cached by shape, paint and detail; baked with the sheen only for a `ShellVariant.sheen()` variant | 207 |
-| `EquipmentReflectionRenderer` | The reflection pass (`icheme:equipment_reflection`, [effects.md](effects.md)): the shiny facets of structures within `reflection_range` merged per 32-block square, drawn after the solid blocks additive, LEQUAL without depth write, pulled by `ReflectionDepth.pull`, faded over the last quarter of the range and with the fog; `active()` (no pack, its switch, strength above 0, shader loaded, its `GUARD` closed); `release` | 420 |
+| `EquipmentReflectionRenderer` | The gloss pass (`icheme:equipment_reflection`, [effects.md](effects.md)): the glossy facets of structures within `reflection_range` merged per 32-block square, drawn after the solid blocks (blend ONE, ONE_MINUS_SRC_ALPHA: the base keeps 1 - F), LEQUAL without depth write, pulled by `ReflectionDepth.pull`, faded over the last quarter of the range and with the fog; `active()` (no pack, its switch, strength above 0, shader loaded, its `GUARD` closed); `release` | 412 |
 | `MachineAnimation` | Units' moving parts (`ShapeRasterizer.moving`) within `RANGE`, turned or slid by `ProcessUnit.Motion`; a constructed mover only while `MoverSounds.running`; `toggle`, `running` (the datasheet's switch, no re-mesh) | 268 |
 | `RotationAnimation` | Client-owned shaft speed snapshots and continuous angles on `VisualRotation`, watched through `ClientWatch` ([effects.md](effects.md)) | 246 |
 | `VertexBufferCache` | Uploaded meshes by key (render thread): past its soft size closes only meshes no frame drew for a second, past its hard size the least recently drawn | 69 |
@@ -59,7 +59,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 2. A pipe's update tag carries its bore, faces, transition offsets and the line's paints; a late data packet re-requests the model data and rebuilds the section. A fitting is part of the pipe's block state, so fitting, toggling or removing one re-meshes the section.
 3. Each frame after solid blocks: `MachineAnimation` draws moving parts of units within range from their cached buffers; `EquipmentBodyRenderer` draws coarse bodies by region; `EquipmentReflectionRenderer` adds the reflections by region; `TankRenderer`, `SightGlassRenderer`, `InstrumentRenderer`, `NameplateRenderer`, `DataControlRenderer` draw what is in view, in detail tiers by `RenderLod`.
 4. Once a second each watching renderer asks the server to watch its nearest devices and release the rest; the replies (`accept`) come on the device's bucket. Logout clears the caches (`IChemEClient`).
-5. While a constructor is loaded, `EquipmentGhost` draws its design until the vessel stands, and marks the cells it cannot take.
+5. While a constructor is loaded, `EquipmentGhost` draws its design until the vessel stands and marks blocked cells. Visible previews share one sorted translucent buffer. Camera or design changes invalidate the upload, and removing the last visible preview releases its GPU storage.
 
 ## Contracts
 
@@ -95,7 +95,7 @@ Models read the block entities' update tags (fields in [equipment-structure.md](
 | `client/RenderLodTest` | Detail tiers and their switch distances |
 | `client/model/PolygonBakeTest` | `PolygonBake` bit for bit against the loops it replaced |
 | `client/model/ShellVariantTest` | The shell variant's choice (REFLECTED included), its cache key and the flat sprites' fallback |
-| `client/model/ReflectionClassTest`, `ReflectionLawTest`, `ReflectionDepthTest`, `ReflectionMeshTest` | The reflection table against the sprites and the LabPBR maps; the law against hand numbers; the depth pull on a float rasterization of both routes; the pass's mesh content and draw calls |
+| `client/model/ReflectionClassTest`, `ReflectionLawTest`, `ReflectionDepthTest`, `ReflectionMeshTest` | The gloss table and the LabPBR maps; the law against hand numbers; the depth pull on a float rasterization of both routes; the pass's mesh content and draw calls |
 | `client/fx/EquipmentTexturesTest` | The relief sprites: sizes, LabPBR channels, no `_n` beside a baked sprite, baked mean colours kept, painted sprites neutral, the model's flat keys |
 | `science/equipment/PaintTest` (`equipmentGates`) | The tint shows the paint on the neutral sprite |
 | `ShapeRasterizerTest.outlineFollowsTheViewer` (`equipmentGates`) | The vessel outline |
@@ -113,4 +113,4 @@ Drawing itself (ghosts, animation, renderers, tints on racks) has no automated t
 - `EquipmentBodyRenderer` rebuilds its region map only when the hash of its structures (origin, shape, paint, light) or their count changes, or after `release`; it merges at most one changed square a frame, its last mesh standing meanwhile.
 - `DataControlRenderer` shows a port placed or removed up to `HOST_TICKS` late.
 
-**Snapshot:** `410c37fcb`, 2026-11-16; reflection pass rows 2026-11-18 (branch `claude/reflection-pass-20817f`).
+**Snapshot:** `d424a1a27`, 2026-11-19.

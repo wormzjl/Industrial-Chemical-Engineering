@@ -317,6 +317,28 @@ public final class ColumnSolve {
             V3InitializationOptions.WetStart.AUTO, 16, V3InitializationOptions.DEFAULT_BUDGET_POLLS, V3InitializationOptions.Correction.PROGRESS);
 
     /**
+     * The shares of the asked pumparound duties a solve tries, in order, after a failure {@link #retried} (package 6 of batch
+     * 2026-11-17-column-cold-feed). On the default crude at the set draws: half solves every feed from 470 to 580 K, a
+     * quarter from 530 K, a tenth from 565 K, 1 % none of them.
+     */
+    static final double[] PUMPAROUND_SHARES = {.5, .25, .1};
+
+    /** Whether a failed solve is tried again at a share of its pumparounds: V3's cooling bound or a nonconvergence. */
+    static boolean retried(V3ColumnOutcome.Failure failure) {
+        return failure.coolingBound() || failure.code() == com.wormzjl.icheme.science.column.v3.V3SolverFailureCode.NONCONVERGENCE;
+    }
+
+    /** {@code design}'s pumparounds at {@code share} of the duties per mole {@code ratios} (J/mol, column sign) at the feed {@code rate}, mol/s. */
+    private static List<V3PumparoundSpec> pumparounds(V3ColumnInput design, double[] ratios, double share, double rate) {
+        var out = new ArrayList<V3PumparoundSpec>();
+        for (int j = 0; j < design.pumparounds().size(); j++) {
+            var p = design.pumparounds().get(j);
+            out.add(new V3PumparoundSpec(p.returnTray(), p.drawTray(), ratios[j] * share * rate, p.split()));
+        }
+        return out;
+    }
+
+    /**
      * A column's condenser duty, W (column sign: removed is negative), as the closure of its energy on one basis (C5 of the
      * 2026-11-13 simplifications): what leaves ({@code out}) less what enters ({@code in}), the reboiler's duty and the
      * pumparounds' (each W, column sign). The running column closes on the network's enthalpies of the feed it took and the
@@ -416,20 +438,36 @@ public final class ColumnSolve {
         var draws = new ArrayList<V3SideDrawSpec>();
         double[] drawRatios = setpoints.drawsPerFeed();
         for (int j = 0; j < design.sideDraws().size(); j++) draws.add(new V3SideDrawSpec(design.sideDraws().get(j).trayNumber(), drawRatios[j] * rate));
-        var pumparounds = new ArrayList<V3PumparoundSpec>();
         // At the duties the job asks (L4): the set points' at a start or an edit, the relaxed ones that follow the coolers otherwise.
         double[] paRatios = job.pumparounds();
-        for (int j = 0; j < design.pumparounds().size(); j++) {
-            var p = design.pumparounds().get(j);
-            pumparounds.add(new V3PumparoundSpec(p.returnTray(), p.drawTray(), paRatios[j] * rate, p.split()));
-        }
         var input = new V3ColumnInput(design.schemaVersion(), packageId, design.assayId(), basis, flows, t, design.stageCount(), design.feedStageNumber(),
                 design.topPressurePascal(), design.stagePressureDropPascal(),
                 List.of(new V3ColumnSpecification.CondenserOutletTemperature(setpoints.condenserTemperature()),
                         new V3ColumnSpecification.OrganicRefluxRatio(setpoints.refluxRatio()),
                         new V3ColumnSpecification.ReboilerDuty(setpoints.reboilerPerFeed() * rate)),
-                draws, steamFeeds, pumparounds, design.columnDiameterMetres());
+                draws, steamFeeds, pumparounds(design, paRatios, 1, rate), design.columnDiameterMetres());
         var outcome = calculate(input, job.seed(), catalog, screen, ColdStart.CLASSICAL, checkpoint);
+        // Pumparounds over what a cold feed's column holds (package 6 of batch 2026-11-17-column-cold-feed): a feed that brings
+        // less vapour than they ask stops V3 on the bound of the cooling against the column's heat, or does not converge (on
+        // the default crude at 470 to 530 K: a draw tray's liquid). The same state at a share of the asked duties, the shares
+        // in order, the first that solves; where none does, the first failure stands.
+        if (!design.pumparounds().isEmpty() && outcome instanceof V3ColumnOutcome.Failure first && retried(first)) {
+            for (double share : PUMPAROUND_SHARES) {
+                var capped = new V3ColumnInput(input.schemaVersion(), input.packageId(), input.assayId(), input.componentBasis(), input.feedComponentMolarFlowsMolPerSecond(),
+                        input.feedTemperatureKelvin(), input.stageCount(), input.feedStageNumber(), input.topPressurePascal(), input.stagePressureDropPascal(),
+                        input.specifications(), input.sideDraws(), input.steamFeeds(), pumparounds(design, paRatios, share, rate), input.columnDiameterMetres(), input.refluxFreeWaterMolPerSecond());
+                var tried = calculate(capped, job.seed(), catalog, screen, ColdStart.CLASSICAL, checkpoint);
+                if (!(tried instanceof V3ColumnOutcome.Success)) continue;
+                outcome = tried;
+                input = capped;
+                double[] scaled = new double[paRatios.length];
+                for (int j = 0; j < scaled.length; j++) scaled[j] = paRatios[j] * share;
+                paRatios = scaled;
+                String capNote = String.format(java.util.Locale.ROOT, "pumparounds at %.0f %% of their duty: the column's heat", 100 * share);
+                note = note.isEmpty() ? capNote : note + "; " + capNote;
+                break;
+            }
+        }
         if (outcome instanceof V3ColumnOutcome.Failure failure) return new Failed(failure.code().name() + ": " + failure.summary());
         var success = (V3ColumnOutcome.Success) outcome;
         // A liquid that would settle into two is a notice, never a failure (W5 D5).

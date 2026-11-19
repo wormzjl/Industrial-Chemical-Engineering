@@ -19,10 +19,11 @@ class CellCacheTest {
     private static final long C = CubeKey.of(5, 2, 5);
     private static final long HIGH = CubeKey.of(0, 40, 0);
 
-    /** A world whose reads are logged; a cube's air count is its x + 100, so each read is told apart. */
+    /** A world whose reads are logged, and whose successive readings have different occupancies. */
     private static final class Log implements CellCache.World {
         final List<Long> reads = new ArrayList<>();
         final Set<Long> unloadedColumns = new HashSet<>();
+        final Set<Long> savedColumns = new HashSet<>();
         int air = 100;
 
         @Override
@@ -31,9 +32,10 @@ class CellCacheTest {
         }
 
         @Override
-        public Cell read(long cube) {
+        public CellCache.Reading read(long cube) {
             reads.add(cube);
-            return CellCache.cell(air++, true);
+            if (!chunkLoaded(cube) && !savedColumns.contains((long) CubeKey.x(cube))) return CellCache.Reading.UNKNOWN;
+            return new CellCache.Reading(CellCache.cell(air++, true), 9);
         }
     }
 
@@ -62,7 +64,7 @@ class CellCacheTest {
         var cache = new CellCache();
         var world = new Log();
         cache.snapshot(set(A, B), set(A, B), 0, 1200, 2, world, false, -4, 19);
-        Cell first = cache.get(B);
+        Cell first = cache.get(B).cell();
         // Stale at 1200, budget 1: A is read again, B keeps its old read.
         Environment e = cache.snapshot(set(A, B), set(A, B), 1200, 1200, 1, world, false, -4, 19);
         assertEquals(List.of(A, B, A), world.reads);
@@ -71,18 +73,34 @@ class CellCacheTest {
     }
 
     @Test
-    void anUnloadedChunkOrAHeightOutsideIsUnloadedAndTheCacheForgetsWhatIsNotWanted() {
+    void aSavedChunkStillFeedsTheSnapshotAndTheCacheForgetsWhatIsNotWanted() {
         var cache = new CellCache();
         var world = new Log();
         cache.snapshot(set(A, C), set(A, C, HIGH), 0, 1200, 9, world, false, -4, 19);
         assertEquals(List.of(A, C), world.reads, "the cube above the height is not read");
         world.unloadedColumns.add(5L);
-        Environment e = cache.snapshot(set(A), set(A, C), 2000, 1200, 9, world, false, -4, 19);
-        assertSame(Cell.UNLOADED, e.cell(C));
-        assertNotNull(cache.get(C), "a wanted cube of an unloaded chunk keeps its read");
-        cache.snapshot(set(A), set(A), 2001, 1200, 9, world, false, -4, 19);
+        world.savedColumns.add(5L);
+        Environment e = cache.snapshot(set(A), set(A, C), 20, 1200, 9, world, false, -4, 19);
+        assertEquals(List.of(A, C, C), world.reads, "switching source refreshes the cache");
+        assertTrue(e.cell(C).loaded(), "saved terrain advances the field");
+        assertEquals(9, cache.get(C).centreY());
+        cache.snapshot(set(A), set(A), 21, 1200, 9, world, false, -4, 19);
         assertNull(cache.get(C), "a cube no longer wanted is forgotten");
         assertEquals(1, cache.size());
+    }
+
+    @Test
+    void anUnsavedChunkWaitsAndIsRetriedAsSoonAsItLoads() {
+        var cache = new CellCache();
+        var world = new Log();
+        world.unloadedColumns.add(5L);
+        var keys = set(C);
+        assertSame(Cell.UNLOADED, cache.snapshot(keys, keys, 0, 1200, 1, world, false, -4, 19).cell(C));
+        assertSame(Cell.UNLOADED, cache.snapshot(keys, keys, 100, 1200, 1, world, false, -4, 19).cell(C));
+        assertEquals(List.of(C), world.reads, "a read miss is cached");
+        world.unloadedColumns.clear();
+        assertTrue(cache.snapshot(keys, keys, 200, 1200, 1, world, false, -4, 19).cell(C).loaded());
+        assertEquals(List.of(C, C), world.reads);
     }
 
     @Test
@@ -100,22 +118,25 @@ class CellCacheTest {
         WaterCache.World world = new WaterCache.World() {
             @Override
             public boolean chunkLoaded(long column) {
-                return column != 3;
+                return column == 1;
             }
 
             @Override
-            public boolean water(long column) {
+            public WaterCache.Surface water(long column) {
                 reads.add(column);
-                return column == 2;
+                return switch ((int) column) {
+                    case 1 -> WaterCache.Surface.LAND;
+                    case 2 -> WaterCache.Surface.WATER;
+                    default -> WaterCache.Surface.UNKNOWN;
+                };
             }
         };
         var e = cache.snapshot(wanted, 0, 1200, 1, world, false);
         assertEquals(List.of(1L), reads);
-        assertTrue(e.loaded(1) && e.loaded(2) && !e.loaded(3));
-        assertFalse(e.water(2), "over the budget with no read: land");
+        assertTrue(e.loaded(1) && !e.loaded(2) && !e.loaded(3));
         e = cache.snapshot(wanted, 10, 1200, 1, world, true);
         assertEquals(List.of(1L, 2L), reads);
-        assertTrue(e.water(2) && e.raining());
+        assertTrue(e.loaded(2) && e.water(2) && e.raining(), "saved terrain supplies the type of surface");
         assertEquals(2, cache.size());
         cache.snapshot(set(2), 20, 1200, 1, world, false);
         assertEquals(1, cache.size(), "the cache keeps only wanted columns");

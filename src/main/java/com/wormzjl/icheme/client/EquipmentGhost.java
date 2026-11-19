@@ -1,13 +1,23 @@
 package com.wormzjl.icheme.client;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexBuffer;
+import com.mojang.blaze3d.vertex.VertexSorting;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.client.gui.screens.EquipmentConstructorScreen;
+import com.wormzjl.icheme.client.model.EquipmentShellModel;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
+import com.wormzjl.icheme.science.equipment.Mesh.Polygon;
+import com.wormzjl.icheme.science.equipment.RenderDetail;
 import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentConstructorBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
+import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.LightTexture;
@@ -17,7 +27,9 @@ import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.InventoryMenu;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.HitResult;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -25,6 +37,9 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -53,6 +68,8 @@ public final class EquipmentGhost {
     private static final double RANGE = 48;
     /** Layouts and meshes kept for the shapes shown; a ghost's shape changes only when the player edits it. */
     private static final int CACHE = 16;
+    /** Vessel-local position, atlas UV, normal and paint channel for each quad vertex. */
+    private static final int STRIDE = 9;
     /** The painted shell sprite every ghost samples, its tint for unpainted parts, and its opacity (0-255). */
     private static final ResourceLocation PLATE = ResourceLocation.fromNamespaceAndPath(IChemE.MOD_ID, "block/painted_shell");
     private static final int UNPAINTED = 0xC8C8C8, ALPHA = 128;
@@ -67,8 +84,12 @@ public final class EquipmentGhost {
     /** The focused design's vessel already stands where it would be built, so it shows no ghost. */
     private static boolean standing;
     private static int age;
-    private static final Map<EquipmentShape, ShapeRasterizer.Layout> LAYOUTS = lru();
-    private static final Map<EquipmentShape, Mesh> MESHES = lru();
+    private static final Map<EquipmentShape, Footprint> LAYOUTS = lru();
+    private static final Map<EquipmentShape, float[]> MESHES = lru();
+
+    private static final Batch BATCH = new Batch();
+    private static TextureAtlasSprite plate;
+    private static RenderDetail detail;
 
     private EquipmentGhost() {
     }
@@ -100,8 +121,8 @@ public final class EquipmentGhost {
         if (mc.level != null && mc.player != null) {
             var screen = mc.screen instanceof EquipmentConstructorScreen open ? open : null;
             var aimed = mc.screen == null && mc.hitResult instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null;
-            if (screen != null && screen.vessel() != null) {
-                focus = screen.vessel();
+            if (screen != null) focus = screen.vessel();
+            if (focus != null) {
                 focusStanding = built(mc.level, focus);
                 if (!focusStanding) ghosts.add(new Ghost(focus, screen.design().paint()));
             }
@@ -118,7 +139,8 @@ public final class EquipmentGhost {
                 if (!stands) ghosts.add(new Ghost(vessel, constructor.design().paint()));
             }
         }
-        shown = List.copyOf(ghosts);
+        if (mc.level != checkedLevel || ghosts.isEmpty()) BATCH.release();
+        if (!ghosts.equals(shown)) shown = List.copyOf(ghosts);
         standing = focusStanding;
         if (focusStanding) focus = null;
 
@@ -155,12 +177,13 @@ public final class EquipmentGhost {
     }
 
     private static List<BlockPos> blocked(ClientLevel level, EquipmentStructure.Vessel vessel) {
-        var cells = layout(vessel.shape());
+        var cells = layout(vessel.shape()).cells();
         var out = new ArrayList<BlockPos>();
+        var position = new BlockPos.MutableBlockPos();
         for (var list : List.of(cells.shell(), cells.interior()))
             for (var cell : list) {
-                var position = vessel.origin().offset(cell.x(), cell.y(), cell.z());
-                if (level.isOutsideBuildHeight(position) || !level.hasChunkAt(position) || !level.getBlockState(position).canBeReplaced()) out.add(position);
+                position.setWithOffset(vessel.origin(), cell.x(), cell.y(), cell.z());
+                if (level.isOutsideBuildHeight(position) || !level.hasChunkAt(position) || !level.getBlockState(position).canBeReplaced()) out.add(position.immutable());
             }
         return out;
     }
@@ -170,68 +193,154 @@ public final class EquipmentGhost {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || shown.isEmpty()) return;
         var mc = Minecraft.getInstance();
         var sprite = mc.getModelManager().getAtlas(InventoryMenu.BLOCK_ATLAS).getSprite(PLATE);
-        var camera = event.getCamera().getPosition();
-        var pose = event.getPoseStack();
-        var buffers = mc.renderBuffers().bufferSource();
-        var consumer = buffers.getBuffer(TYPE);
+        var selected = EquipmentShellModel.detail();
+        if (sprite != plate || selected != detail) {
+            MESHES.clear();
+            BATCH.release();
+            plate = sprite;
+            detail = selected;
+        }
+        var visible = new ArrayList<Ghost>();
         for (var ghost : shown) {
-            var vessel = ghost.vessel();
-            var vertices = mesh(vessel.shape(), sprite).vertices;
-            // Each channel's tint as the chunk model shows it; unpainted parts light grey.
-            int[] tints = {Paint.tint(ghost.paint().body()), Paint.tint(ghost.paint().structure()), UNPAINTED};
-            pose.pushPose();
+            if (event.getFrustum().isVisible(ghost.bounds())) visible.add(ghost);
+        }
+        if (!visible.isEmpty()) BATCH.draw(visible, event);
+    }
+
+    /** One sorted batch across all visible ghosts, including previews that overlap. Keep vertices camera-relative
+     * because the entity shader also uses their positions for fog. A moving camera takes the normal re-sort path. */
+    private static final class Batch {
+        private VertexBuffer buffer;
+        private ByteBufferBuilder scratch;
+        private List<Ghost> ghosts = List.of();
+        private Vec3 camera;
+        private VertexSorting sorting;
+        private final Matrix4f position = new Matrix4f();
+        private final Matrix3f normal = new Matrix3f();
+        private boolean drawable;
+
+        void draw(List<Ghost> visible, RenderLevelStageEvent event) {
+            var eye = event.getCamera().getPosition();
+            var pose = event.getPoseStack();
+            var sorter = RenderSystem.getVertexSorting();
+            if (buffer == null) {
+                buffer = new VertexBuffer(VertexBuffer.Usage.DYNAMIC);
+                scratch = new ByteBufferBuilder(TYPE.bufferSize());
+            }
+            buffer.bind();
+            try {
+                if (!eye.equals(camera) || !visible.equals(ghosts) || sorter != sorting
+                        || !position.equals(pose.last().pose()) || !normal.equals(pose.last().normal())) {
+                    drawable = upload(visible, eye, pose, sorter);
+                    ghosts = List.copyOf(visible);
+                    camera = eye;
+                    sorting = sorter;
+                    position.set(pose.last().pose());
+                    normal.set(pose.last().normal());
+                }
+                if (drawable) {
+                    TYPE.setupRenderState();
+                    try {
+                        buffer.drawWithShader(RenderSystem.getModelViewMatrix(), RenderSystem.getProjectionMatrix(), RenderSystem.getShader());
+                    } finally {
+                        TYPE.clearRenderState();
+                    }
+                }
+            } finally {
+                VertexBuffer.unbind();
+            }
+        }
+
+        private boolean upload(List<Ghost> visible, Vec3 eye, PoseStack pose, VertexSorting sorter) {
+            var builder = new BufferBuilder(scratch, TYPE.mode(), TYPE.format());
+            for (var ghost : visible) write(builder, ghost, eye, pose);
+            try (var data = builder.build()) {
+                if (data == null) return false;
+                data.sortQuads(scratch, sorter);
+                buffer.upload(data);
+                return true;
+            }
+        }
+
+        void release() {
+            if (buffer == null) return;
+            buffer.close();
+            scratch.close();
+            buffer = null;
+            scratch = null;
+            ghosts = List.of();
+            camera = null;
+        }
+    }
+
+    private static void write(BufferBuilder builder, Ghost ghost, Vec3 camera, PoseStack pose) {
+        var vessel = ghost.vessel();
+        var vertices = MESHES.computeIfAbsent(vessel.shape(), EquipmentGhost::mesh);
+        int[] colours = {ALPHA << 24 | Paint.tint(ghost.paint().body()), ALPHA << 24 | Paint.tint(ghost.paint().structure()),
+                ALPHA << 24 | UNPAINTED};
+        pose.pushPose();
+        try {
             pose.translate(vessel.origin().getX() - camera.x, vessel.origin().getY() - camera.y, vessel.origin().getZ() - camera.z);
             var last = pose.last();
-            for (int i = 0; i < vertices.length; i += Mesh.STRIDE) {
-                int channel = (int) vertices[i + 8], tint = tints[channel < 0 ? 2 : channel];
-                consumer.addVertex(last, vertices[i], vertices[i + 1], vertices[i + 2]).setColor(tint >> 16 & 0xFF, tint >> 8 & 0xFF, tint & 0xFF, ALPHA)
-                        .setUv(vertices[i + 3], vertices[i + 4]).setOverlay(OverlayTexture.NO_OVERLAY).setLight(LightTexture.FULL_BRIGHT).setNormal(last, vertices[i + 5], vertices[i + 6], vertices[i + 7]);
+            var point = new Vector3f();
+            var normal = new Vector3f();
+            for (int i = 0; i < vertices.length; i += STRIDE) {
+                last.pose().transformPosition(vertices[i], vertices[i + 1], vertices[i + 2], point);
+                last.transformNormal(vertices[i + 5], vertices[i + 6], vertices[i + 7], normal);
+                int channel = (int) vertices[i + 8];
+                builder.addVertex(point.x, point.y, point.z, colours[channel < 0 ? 2 : channel], vertices[i + 3], vertices[i + 4],
+                        OverlayTexture.NO_OVERLAY, LightTexture.FULL_BRIGHT, normal.x, normal.y, normal.z);
             }
+        } finally {
             pose.popPose();
         }
-        buffers.endBatch(TYPE);
     }
 
-    private static ShapeRasterizer.Layout layout(EquipmentShape shape) {
-        return LAYOUTS.computeIfAbsent(shape, ShapeRasterizer::layout);
+    private record Footprint(ShapeRasterizer.Layout cells, ShapeRasterizer.Cell controller, AABB bounds) {}
+
+    private static Footprint layout(EquipmentShape shape) {
+        return LAYOUTS.computeIfAbsent(shape, key -> {
+            var cells = ShapeRasterizer.layout(key);
+            return new Footprint(cells, cells.controller(), new AABB(0, 0, 0, key.sizeX(), key.sizeY(), key.sizeZ()));
+        });
     }
 
-    /** The shell's quads in vessel-local coordinates, rebuilt when the plate sprite changes (resource reload). */
-    private static Mesh mesh(EquipmentShape shape, TextureAtlasSprite sprite) {
-        var mesh = MESHES.get(shape);
-        if (mesh != null && mesh.sprite == sprite) return mesh;
-        var out = new ArrayList<float[]>();
-        // A tower's preview is its whole facets; anything else, its cells as the chunks draw them.
-        if (com.wormzjl.icheme.client.model.EquipmentShellModel.detail() == com.wormzjl.icheme.science.equipment.RenderDetail.LOW)
-            for (var polygon : ShapeRasterizer.renderPreview(shape, com.wormzjl.icheme.science.equipment.RenderDetail.LOW)) quads(out, polygon, 0, 0, 0, sprite);
-        else if (shape.kind().coolingTower())
-            for (var polygon : ShapeRasterizer.towerPreview(shape)) quads(out, polygon, 0, 0, 0, sprite);
-        else for (var cell : layout(shape).shell())
-            for (var polygon : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z())))
-                quads(out, polygon, cell.x(), cell.y(), cell.z(), sprite);
-        var vertices = new float[out.size() * Mesh.STRIDE];
-        for (int i = 0; i < out.size(); i++) System.arraycopy(out.get(i), 0, vertices, i * Mesh.STRIDE, Mesh.STRIDE);
-        mesh = new Mesh(shape, sprite, vertices);
-        MESHES.put(shape, mesh);
-        return mesh;
+    private static float[] mesh(EquipmentShape shape) {
+        var out = new FloatArrayList();
+        if (detail == RenderDetail.LOW) {
+            for (var polygon : ShapeRasterizer.renderPreview(shape, detail)) quads(out, polygon, 0, 0, 0);
+        } else if (shape.kind().coolingTower()) {
+            for (var polygon : ShapeRasterizer.towerPreview(shape)) quads(out, polygon, 0, 0, 0);
+        } else {
+            for (var cell : layout(shape).cells().shell())
+                for (var polygon : ShapeRasterizer.surface(ShapeRasterizer.key(shape, cell.x(), cell.y(), cell.z())))
+                    quads(out, polygon, cell.x(), cell.y(), cell.z());
+        }
+        return out.toFloatArray();
     }
 
     /** A fan of quads, as the chunk model bakes it; a last single triangle repeats its final vertex. */
-    private static void quads(List<float[]> out, com.wormzjl.icheme.science.equipment.Mesh.Polygon polygon, int x, int y, int z, TextureAtlasSprite sprite) {
+    private static void quads(FloatArrayList out, Polygon polygon, int x, int y, int z) {
         double[] p = polygon.positions(), uv = polygon.uvs(), n = polygon.normals();
-        for (int first = 1; first + 1 < polygon.size(); first += 2)
-            for (int corner : new int[]{0, first, first + 1, Math.min(first + 2, polygon.size() - 1)})
-                out.add(new float[]{(float) (x + p[3 * corner]), (float) (y + p[3 * corner + 1]), (float) (z + p[3 * corner + 2]),
-                        sprite.getU((float) uv[2 * corner]), sprite.getV((float) uv[2 * corner + 1]),
-                        (float) n[3 * corner], (float) n[3 * corner + 1], (float) n[3 * corner + 2], polygon.material().channel()});
+        for (int first = 1; first + 1 < polygon.size(); first += 2) {
+            for (int k = 0; k < 4; k++) {
+                int corner = k == 0 ? 0 : Math.min(first + k - 1, polygon.size() - 1);
+                out.add((float) (x + p[3 * corner]));
+                out.add((float) (y + p[3 * corner + 1]));
+                out.add((float) (z + p[3 * corner + 2]));
+                out.add(plate.getU((float) uv[2 * corner]));
+                out.add(plate.getV((float) uv[2 * corner + 1]));
+                out.add((float) n[3 * corner]);
+                out.add((float) n[3 * corner + 1]);
+                out.add((float) n[3 * corner + 2]);
+                out.add(polygon.material().channel());
+            }
+        }
     }
 
-    /** A ghost: the vessel a design would build, and its paint. */
-    private record Ghost(EquipmentStructure.Vessel vessel, Paint paint) {
-    }
-
-    /** Position, texture coordinate, normal and paint channel ({@link com.wormzjl.icheme.science.equipment.Mesh.Material#channel}) of every quad vertex of the shell. */
-    private record Mesh(EquipmentShape shape, TextureAtlasSprite sprite, float[] vertices) {
-        static final int STRIDE = 9;
+    private record Ghost(EquipmentStructure.Vessel vessel, Paint paint, AABB bounds) {
+        Ghost(EquipmentStructure.Vessel vessel, Paint paint) {
+            this(vessel, paint, layout(vessel.shape()).bounds().move(vessel.origin()));
+        }
     }
 }

@@ -14,6 +14,8 @@ Up: [code guide](README.md). Which test proves which rule, the GameTests and the
 
 The mod builds with ModDevGradle on a Java 21 toolchain, `mod_version` in [gradle.properties](../../../gradle.properties) as its one version number. Four source sets: `main`, `test` (JUnit 5, with the Minecraft class path so codecs and NBT are tested for real), `fluidGameTest` (server GameTests, review worlds and the paced benchmark, loaded only by their own runs) and `mcpCompat` (the dev client's bridge mod). The everyday `test` task leaves out three things, each with a task of its own: the slow gate classes (`holdGates`), the column and equipment tests (`columnGates`, `equipmentGates`, each on a narrowed copy of what it loads), and `fluid/benchmark/**` (`fluidSolverRegression`). `slowGates` runs the three groups side by side, and `check` depends on it. The **final lane** (`tools/merge-lane/lane.sh head`) runs once per batch on final code: only the test classes the batch's changes can reach (by their recorded load sets), chain-100 exact and the fluid GameTests when what they load changed, and the 1000-seed campaign when one of its inputs changed since `main`.
 
+`RouteSearch` searches the test plant’s bounded placement grid. The Create World screen starts `SizingCache` for the column-test preset, and the server uses the sized plant for matching material resources.
+
 ## Class map
 
 The lane's tool, [`tools/merge-lane/`](../../../tools/merge-lane/). Lines at the snapshot.
@@ -110,4 +112,4 @@ Which check decides what, in the least measurement (AGENTS.md):
 - Under memory load the GameTest server can fail to start; rerun on a new run id. GameTest worlds persist between runs of one id: use a fresh id.
 - `lane.sh` warns, and does not stop, when other test or client JVMs run.
 
-**Snapshot:** `549b9faab`, 2026-11-17.
+**Snapshot:** `b88a52c20`, 2026-11-19.

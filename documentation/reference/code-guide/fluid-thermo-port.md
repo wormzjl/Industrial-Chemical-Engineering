@@ -17,6 +17,8 @@ Up: [code guide](README.md). The engine behind it: [equilibrium-engine.md](equil
 
 `FluidThermodynamics` is the network's property model: an immutable model of the network package (`forNetwork`), viewed on an island's own compound list (`on`, `island`), with the property state `State` that every node, stream and checkpoint carries. A `State` holds T, P and three fluid slots on the model's conserved basis (the compounds, then water last): a vapour, a liquid and a second liquid. The phases are decided by the equilibrium engine through `NetworkPhaseEngine` (TP, PH, UV); residuals never flash. Each fluid phase is the derived cubic (`HydrocarbonModel` on `TranslatedPengRobinson`, the kernel's translated PR78) at the state pressure on its own root, its volume and enthalpy on the balance book (the cubic plus water's IF97 share), its `ln phi` on the equilibrium book. Water is a compound of the cubic on a list that carries it; a list without water (a dry island) has no water fugacity. The package's crystals and ice Ih are solid populations (`NetworkCrystals`, `state/SolidInventory`), exchanged with their component only at a vessel's refresh or in a warm junction ([fluid-interval.md](fluid-interval.md)). Past its data a property continues with continuous value and slope, and `DataRangeNotices` writes the island's non-blocking notice; only capability limits hold (`ThermoHold`).
 
+`NetworkStreams` computes the acoustic bound from phase compliance and keeps it finite at extreme positive volume and mass scales.
+
 ## Class map
 
 Under `src/main/java/com/wormzjl/icheme/science/fluid/`. Lines at `d6f721b94`.
@@ -127,4 +129,4 @@ Gradle: `fluidScienceTest` (all of `science.fluid.*`). A change to the model's n
 - **A solid population below `Double.MIN_NORMAL` kg is roundoff zero** and is dropped: no double states its volume or heat capacity.
 - **`initialNitrogenCharge` is a placement initializer only**; persistence never calls it again, and its first argument is a volume (m³).
 
-**Snapshot:** `410c37fcb`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

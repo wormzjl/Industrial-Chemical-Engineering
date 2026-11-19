@@ -347,7 +347,7 @@ public final class RegistryRealignment {
     /**
      * Re-aligns the cell of alarm beacon {@code id} (batch 2026-11-15-fluid-interfaces, W9) to its facts, as a controller's:
      * a missing beacon is placed where its cell is free, turned as its socket says; a cell another block holds keeps that
-     * block, and the beacon is not decided there (no hold).
+     * block. The beacon's decision is replayed only on its own block.
      */
     public static Check alarm(ServerLevel level, FluidWorldAuthority world, java.util.UUID id) {
         var facts = world.controls().facts();

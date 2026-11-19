@@ -5,7 +5,13 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.wormzjl.icheme.runtime.fluid.ConverterUnit;
 import com.wormzjl.icheme.runtime.fluid.Converters;
 import com.wormzjl.icheme.runtime.fluid.EquipmentAlarm;
+import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology.Position;
+import com.wormzjl.icheme.runtime.instrument.Instrument;
+import com.wormzjl.icheme.runtime.instrument.Sensor;
+import com.wormzjl.icheme.science.assembly.AssemblyReport;
+import com.wormzjl.icheme.science.assembly.Blueprint;
 import com.wormzjl.icheme.science.equipment.ConduitGeometry;
+import com.wormzjl.icheme.science.equipment.EquipmentShape;
 
 import net.minecraft.core.*;
 import net.minecraft.nbt.*;
@@ -16,6 +22,83 @@ import java.nio.file.*;
 import java.util.*;
 
 class ControlSystemTest {
+    @Test
+    void aColumnMemberRemainsReachableUntilItsStoredReportDropsIt() throws Exception {
+        var saved = corpus();
+        var controller = saved.panels().iterator().next();
+        long column = saved.ports().values().stream().filter(p -> p.host() > 0).findFirst().orElseThrow().host();
+        var hosts = new ControlHosts(null, saved);
+        long placed = new BlockPos(32, 70, 0).asLong();
+        var slot = new AssemblyReport.SlotReport(new Blueprint.Slot("condenser", 0), AssemblyReport.State.OK,
+                placed, AssemblyReport.NONE, "");
+        var report = new AssemblyReport(List.of(slot), List.of(), Set.of(), List.of(placed));
+        var shape = EquipmentShape.unit(EquipmentShape.Kind.EXCHANGER, 1.5, 6, EquipmentShape.Heading.NORTH, 2);
+        long member = 51, second = 52;
+        var binding = new BuiltInInputs.Binding(member, shape, new Position(controller.dimension(), 32, 70, 0),
+                List.of(member, second));
+
+        hosts.refreshColumnMembers(column, report, origin -> {
+            assertEquals(placed, origin);
+            return binding;
+        });
+        assertEquals(Set.of(column, member, second), hosts.visibleHosts(controller.id()));
+        hosts.refreshColumnMembers(column, report, origin -> null);
+        assertTrue(hosts.wired(controller.id(), second), "the last binding survives an unavailable member");
+
+        hosts.refreshColumnMembers(column, new AssemblyReport(List.of(), List.of(), Set.of(), List.of()), origin -> null);
+        assertEquals(Set.of(column), hosts.visibleHosts(controller.id()));
+        assertFalse(hosts.wired(controller.id(), second));
+    }
+
+    @Test
+    void anUnloadedBeaconClearsItsAcknowledgementAndRearmsOnTheNextRise() throws Exception {
+        var facts = corpus();
+        var panel = facts.panels().iterator().next();
+        var panelPort = facts.port(panel.id());
+        var source = facts.ports().values().stream().filter(p -> p.host() > 0).findFirst().orElseThrow();
+        var input = ControlInput.builtIn(source.host(), source.host(), "alarm_no_power", Sensor.Kind.ALARM, "ALARM:NO_POWER");
+
+        facts.removePanel(panel.id());
+        facts.port(new DataPort(panelPort.id(), DataPort.Kind.ALARM, 0, panelPort.dimension(), panelPort.owner(),
+                panelPort.centre(), panelPort.cell(), panelPort.face(), panelPort.u(), panelPort.v()));
+        facts.alarm(new ControlFacts.Alarm(panel.id(), panel.dimension(), panel.position(), 0,
+                new AlarmSettings("", true, AlarmSettings.Source.INPUT, input.instance(), Sensor.Unit.METRE,
+                        AlarmSettings.Comparison.ABOVE, 0)));
+        var saved = ControlFacts.load(facts.save(new CompoundTag(), null));
+        var alarms = new ControlAlarms(dimension -> null, saved, new ControlHosts(null, saved));
+        var inputs = Map.of(input.instance(), input);
+        var raised = new Sensor.Reading(input.instance(), input.kind(), input.channel(), 1, 0, 0, 100,
+                Instrument.Availability.AVAILABLE);
+        var clear = new Sensor.Reading(input.instance(), input.kind(), input.channel(), 0, 0, 0, 300,
+                Instrument.Availability.AVAILABLE);
+        alarms.run(inputs, Map.of(input.instance(), raised));
+        assertEquals(AlarmLaw.Status.ACTIVE, alarms.status(panel.id()));
+        alarms.acknowledge(panel.id());
+        alarms.run(inputs, Map.of(input.instance(), raised));
+        assertEquals(AlarmLaw.Status.ACKNOWLEDGED, alarms.status(panel.id()));
+        alarms.run(inputs, Map.of(input.instance(), clear));
+        assertEquals(AlarmLaw.Status.CLEAR, alarms.status(panel.id()));
+        alarms.run(inputs, Map.of(input.instance(), raised));
+        assertEquals(AlarmLaw.Status.ACTIVE, alarms.status(panel.id()));
+    }
+
+    @Test
+    void aSavedMotorPortStillReachesItsShaftControlsWithoutTheMotorBlockEntity() throws Exception {
+        var facts = corpus();
+        var panel = facts.panels().iterator().next();
+        var opposite = facts.port(panel.id());
+        facts.removePanel(panel.id());
+        var port = facts.ports().values().stream().filter(p -> p.host() > 0).findFirst().orElseThrow();
+        facts.port(new DataPort(port.id(), DataPort.Kind.ACTUATOR, port.host(), port.dimension(), port.owner(),
+                port.centre(), port.cell(), port.face(), port.u(), port.v()));
+        long mover = port.host() + 1;
+        facts.port(new DataPort(opposite.id(), DataPort.Kind.ACTUATOR, mover, opposite.dimension(), opposite.owner(),
+                opposite.centre(), opposite.cell(), opposite.face(), opposite.u(), opposite.v()));
+        var saved = ControlFacts.load(facts.save(new CompoundTag(), null));
+        var hosts = new ControlHosts(null, saved);
+        assertEquals(Set.of(mover), hosts.connectedHosts(port.host()));
+    }
+
     @Test
     void removingASensorSocketLeavesItsCableAndHistoricalIdRoundTrippable() throws Exception {
         var facts = corpus();
@@ -110,6 +193,25 @@ class ControlSystemTest {
                 }
             }
         }
+    }
+
+    @Test
+    void onlyAnExplicitCreativePlacementCanProvideCreativeFe() throws Exception {
+        var current = ControlFacts.load(TagParser.parseTag(Files.readString(
+                Path.of("src/test/resources/compat/control/control-6-power.snbt"))));
+        var source = new DataBus.Site("minecraft:overworld", BlockPos.ZERO, 0);
+        assertTrue(current.powerReady());
+        assertEquals(Set.of(source), current.creativePower());
+        assertEquals(7, current.port(new UUID(0, 2)).host());
+        assertEquals(7, current.port(new UUID(0, 3)).host());
+        current.creativePower(source, false);
+        assertTrue(ControlFacts.load(current.save(new CompoundTag(), null)).creativePower().isEmpty());
+
+        var legacy = ControlFacts.load(TagParser.parseTag(Files.readString(
+                Path.of("src/test/resources/compat/control/control-3-omni-power.snbt"))));
+        assertFalse(legacy.powerReady());
+        assertTrue(legacy.creativePower().isEmpty());
+        assertFalse(ControlFacts.load(legacy.save(new CompoundTag(), null)).powerReady());
     }
 
     @Test

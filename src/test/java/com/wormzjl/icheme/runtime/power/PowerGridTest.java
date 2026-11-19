@@ -34,7 +34,7 @@ class PowerGridTest {
                     new DataPort(
                             id,
                             i == 0 ? DataPort.Kind.POWER_OUTPUT : DataPort.Kind.POWER_INPUT,
-                            0,
+                            i + 1,
                             DIM,
                             cell.relative(face),
                             cell.getCenter(),
@@ -49,7 +49,7 @@ class PowerGridTest {
                             new ConduitGeometry.Key(48, 0, CableMedium.POWER),
                             0,
                             Map.of(face, id)));
-            var address = new PowerGrid.Address(DIM, p.owner(), face.getOpposite());
+            var address = new PowerGrid.Address(DIM, p.owner(), face.getOpposite(), i + 1);
             addresses.add(address);
             stores.put(address, i == 0 ? source : i == 1 ? first : second);
         }

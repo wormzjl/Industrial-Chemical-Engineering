@@ -481,6 +481,8 @@ public final class Stills implements IslandCoordinator.Ports {
                 double burning=Math.max(0,u.burning()-drawn);
                 double want=u.heater().drawn(firing(u)*u.design().rating())*refillSeconds();
                 for(int item=0;item<64&&burning<want;item++){double next=fuel.take(u.id());if(!(next>0))break;burning+=next;}
+                // Taking a fuel item also updates the pot's inventory fact.
+                u=topology.still(u.id());
                 if(burning!=u.burning())u=u.withBurning(burning);
             }
             case ELECTRIC->electric.draw(u.id(),seconds>0?drawn/seconds:0,end);

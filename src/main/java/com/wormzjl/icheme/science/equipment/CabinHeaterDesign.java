@@ -4,7 +4,6 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Nozzle;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Orientation;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Role;
-import com.wormzjl.icheme.science.equipment.Mesh.Frame;
 import com.wormzjl.icheme.science.equipment.Mesh.Material;
 import com.wormzjl.icheme.science.equipment.ProcessUnit.Breeching;
 import com.wormzjl.icheme.science.equipment.ProcessUnit.Solid;
@@ -123,13 +122,14 @@ final class CabinHeaterDesign extends UnitDesign {
                     else u.knees(p, q, low, cased);
                 }
             }
+            // The leg casings cover the girder ends. The floor and the end legs also cover the side girders’ tops.
             for (int side = -1; side <= 1; side += 2) {
                 double leg = ac + side * (w / 2 - .15);
-                u.box(new double[]{leg - ProcessUnit.GIRDER_HALF, low, zs - cased / 2}, new double[]{leg + ProcessUnit.GIRDER_HALF, y0, ze + cased / 2}, Material.STEELWORK, true);
+                u.box(new double[]{leg - ProcessUnit.GIRDER_HALF, low, zs - cased / 2}, new double[]{leg + ProcessUnit.GIRDER_HALF, y0, ze + cased / 2}, Mesh.ALL_FACES & ~(8 | 16 | 32), Material.STEELWORK, true);
             }
             for (double z : new double[]{zs, ze}) {
                 double left = ac - (w / 2 - .15), right = ac + (w / 2 - .15);
-                u.box(new double[]{left + cased / 2, low, z - ProcessUnit.GIRDER_HALF}, new double[]{right - cased / 2, y0, z + ProcessUnit.GIRDER_HALF}, Material.STEELWORK, true);
+                u.box(new double[]{left + cased / 2, low, z - ProcessUnit.GIRDER_HALF}, new double[]{right - cased / 2, y0, z + ProcessUnit.GIRDER_HALF}, Mesh.ALL_FACES & ~(1 | 2), Material.STEELWORK, true);
                 u.knees(new double[]{left, z}, new double[]{right, z}, low, cased);
             }
             for (int side = -1; side <= 1; side += 2) {
@@ -167,10 +167,18 @@ final class CabinHeaterDesign extends UnitDesign {
         var at = new double[rows.size() * each][];
         for (int row = 0; row < rows.size(); row++)
             for (int i = 0; i < each; i++) at[row * each + i] = new double[]{rows.get(row), zs + length * (i + .5) / each};
-        u.burners(at, register, y0, yFuel, pipe);
+        u.burners(at, register, y0);
         double zHeader = zs + .3;
-        for (double x : rows) u.mesh.cylinder(Frame.of(new double[]{x, yFuel, 0}, 2, 1), pipe, zHeader, zs + length * (each - .5) / each, 8, Material.PIPE);
-        if (rows.size() > 1) u.mesh.cylinder(Frame.of(new double[]{0, yFuel, zHeader}, 0, 1), pipe, rows.getFirst(), rows.getLast(), 8, Material.PIPE);
+        for (int row = 0; row < rows.size(); row++) {
+            double x = rows.get(row);
+            for (int i = 0; i < each - 1; i++) u.burnerRiser(x, at[row * each + i][1], yFuel, y0, pipe);
+            double zLast = at[(row + 1) * each - 1][1];
+            // Outer rows form the cross header from the inlet. Inner rows tee into it.
+            // Each row turns up into its last burner, with enough straight length inside the muffler for the elbow.
+            double startX = row == 0 || row == rows.size() - 1 ? a : x;
+            u.fuelPipe(pipe, new double[]{startX, yFuel, zHeader}, new double[]{x, yFuel, zHeader},
+                    new double[]{x, yFuel, zLast}, new double[]{x, y0 - ProcessUnit.BURNER_DROP + .15, zLast});
+        }
         // The convection section along the whole roof, a stack over each of its parts (a twin's flue gas through stacks
         // √2 as wide).
         double y2 = yr + hc, stack = Math.min(3.5, (.25 * w + .3) * Math.sqrt(cells));

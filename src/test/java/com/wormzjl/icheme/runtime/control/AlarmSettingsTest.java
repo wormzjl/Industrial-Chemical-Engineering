@@ -101,11 +101,7 @@ class AlarmSettingsTest {
     /** An empty current-format store. */
     private static final class TagParserHolder {
         static CompoundTag empty() {
-            var t = new CompoundTag();
-            t.putInt("format", ControlFacts.FORMAT);
-            for (var list : new String[] {"cables", "ports", "panels", "sensorIds", "alarms"}) t.put(list, new net.minecraft.nbt.ListTag());
-            t.putLong("nextSensorId", 1);
-            return t;
+            return new ControlFacts().save(new CompoundTag(), null);
         }
     }
 }

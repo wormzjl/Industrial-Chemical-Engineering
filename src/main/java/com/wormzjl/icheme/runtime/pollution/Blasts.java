@@ -9,9 +9,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -227,16 +231,12 @@ public final class Blasts {
     private void detonate(ServerLevel level, PollutionService service, Blast blast, int now) {
         var key = level.dimension();
         long cube = blast.cube();
-        double index = service.index(key, cube, Channel.COMBUSTIBLE);
+        double index = service.measuredIndex(key, cube, Channel.COMBUSTIBLE);
         // Burnt by an earlier blast, decayed or diluted since it was queued.
         if (!Ignition.ignites(index)) {
             return;
         }
-        if (level.getChunkSource().getChunkNow(blast.x() >> 4, blast.z() >> 4) == null) {
-            return;
-        }
-        var cell = service.cell(key, cube);
-        double air = cell.loaded() ? cell.airShare() : 1.0;
+        double air = service.cell(key, cube).airShare();
         double power = power(index, air, cap);
         // The burn first: the explosion's own Detonate event then finds the cube burnt and ignites nothing again.
         double burnt = service.burn(key, cube, burntAmount(index, air, service.settings().closedAirShare()), SOOT_SHARE);
@@ -244,24 +244,59 @@ public final class Blasts {
             return;
         }
         if (power >= MINIMUM_POWER) {
-            boolean keep = keepBlocks;
-            level.explode(null, blast.x() + 0.5, blast.y() + 0.5, blast.z() + 0.5, (float) power, !keep,
-                    keep || !blockDamage ? Level.ExplosionInteraction.NONE : Level.ExplosionInteraction.BLOCK);
+            applyDamage(level, new Vec3(blast.x() + 0.5, blast.y() + 0.5, blast.z() + 0.5), (float) power, blockDamage);
         }
         if (IChemE.calculationLoggingEnabled()) {
             IChemE.LOGGER.info("pollution status=BLAST dimension={} cube={},{},{} index={} air={} power={} burnt={}", key.location(),
                     CubeKey.x(cube), CubeKey.y(cube), CubeKey.z(cube), index, air, power, burnt);
         }
-        for (long neighbour : chain(cube, k -> service.index(key, k, Channel.COMBUSTIBLE))) {
-            ignite(key, neighbour, centre(level, neighbour), now + CHAIN_TICKS);
+        for (long neighbour : chain(cube, k -> service.measuredIndex(key, k, Channel.COMBUSTIBLE))) {
+            ignite(key, neighbour, centre(level, service, neighbour), now + CHAIN_TICKS);
         }
+    }
+
+    /** Dispatch a pollution blast with the configured block-damage permission. */
+    public static void applyDamage(ServerLevel level, Vec3 centre, float power, boolean blockDamage) {
+        boolean keep = keepBlocks;
+        boolean damage = blockDamage && !keep;
+        if (vanillaAreaLoaded(level, centre, power)) {
+            level.explode(null, centre.x, centre.y, centre.z, power, !keep,
+                    damage ? Level.ExplosionInteraction.BLOCK : Level.ExplosionInteraction.NONE);
+        } else {
+            PlantExplosion.detonate(level, centre, power, damage);
+        }
+    }
+
+    /** Vanilla's blast and visibility rays use ordinary chunk lookups, so check their footprint before calling them. */
+    private static boolean vanillaAreaLoaded(ServerLevel level, Vec3 centre, float power) {
+        double radius = 2.0 * power;
+        var bounds = new AABB(centre, centre).inflate(radius + 2);
+        if (!areaLoaded(level, bounds)) return false;
+        // Visibility is sampled across the target's whole bounding box, including unusually large entities.
+        for (var entity : level.getEntities((Entity) null, bounds)) {
+            if (entity.distanceToSqr(centre) <= radius * radius && !areaLoaded(level, entity.getBoundingBox().inflate(1))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean areaLoaded(ServerLevel level, AABB bounds) {
+        int x0 = Mth.floor(bounds.minX) >> 4, x1 = Mth.floor(bounds.maxX) >> 4;
+        int z0 = Mth.floor(bounds.minZ) >> 4, z1 = Mth.floor(bounds.maxZ) >> 4;
+        for (int cx = x0; cx <= x1; cx++) {
+            for (int cz = z0; cz <= z1; cz++) {
+                if (level.getChunkSource().getChunkNow(cx, cz) == null) return false;
+            }
+        }
+        return true;
     }
 
     /**
      * Where a neighbour's flame starts: the centre block of its cube, or the nearest air block above it in the cube when the
-     * centre is solid; the centre when none is, or its chunk is not loaded (the blast then waits on the chunk check).
+     * centre is solid; the centre when none is. Unloaded chunks use the same search result from the terrain snapshot.
      */
-    static BlockPos centre(ServerLevel level, long cube) {
+    private static BlockPos centre(ServerLevel level, PollutionService service, long cube) {
         int x = CubeKey.x(cube) * 16 + 8;
         int y = CubeKey.y(cube) * 16 + 8;
         int z = CubeKey.z(cube) * 16 + 8;
@@ -269,7 +304,7 @@ public final class Blasts {
         try {
             LevelChunk chunk = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
             if (chunk == null) {
-                return centre;
+                return centre.offset(0, service.blastCentreY(level.dimension(), cube) - 8, 0);
             }
             for (int dy = 0; dy < 8; dy++) {
                 var at = centre.above(dy);

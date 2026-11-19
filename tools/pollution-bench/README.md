@@ -9,8 +9,11 @@ From the worktree root, after `./gradlew compileJava`. A timed run runs alone: n
 ```
 java -cp build/classes/java/main tools/pollution-bench/Bench.java air-4096 60 60
 java -cp build/classes/java/main tools/pollution-bench/Bench.java counts
-java -cp build/classes/java/main tools/pollution-bench/Digest.java
+# Digest and Retained also need the map-backed test fixture. Compile it with ./gradlew testClasses first.
+java -cp "build/classes/java/main:build/classes/java/test" tools/pollution-bench/Digest.java
 ```
+
+On Windows use a semicolon between classpath entries. Use the same two entries for `Retained.java`.
 
 ## Entry points
 

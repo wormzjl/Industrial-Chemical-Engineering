@@ -24,9 +24,10 @@ import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
- * Software renders of the equipment reflection pass (batch 2026-11-18-equipment-reflections): a drum, a column, an
- * exchanger and a pump, each from two views, as the chunk mesh draws them today (shade and baked sheen) and with the pass
- * (shade without sheen, plus {@link ReflectionLaw#added} with the classes of {@link ReflectionClass}): the production law
+ * Software renders of the equipment reflection pass (batch 2026-11-18-equipment-reflections): a drum, a column, a
+ * 4 m column, an exchanger and a pump, each from above and from below, as the chunk mesh draws them without the pass
+ * (shade and baked sheen) and with it (shade without sheen times {@link ReflectionLaw#kept}, plus {@link ReflectionLaw#added}
+ * with the classes of {@link ReflectionClass}): the production law
  * and table, not a copy. Colours: each material's sprite mean from the shell model JSON, painted ones in the default
  * paint (RAL 9006 body, RAL 7031 structure). Sky: the law's preview constants at noon-like daylight, the sun at 44 degrees
  * in the east. Lightmap full, no fog, no textures, no nozzles (the pass draws none).
@@ -38,14 +39,15 @@ public final class ReflectionRender {
     private static final int W = 520, H = 420;
     private static final double SHEEN = .2, SUN_ANGLE = -.8;
 
-    private record Tri(double[][] p, double[][] n, Mesh.Material m, boolean curved) {}
+    /** A triangle; {@code reflected} where the pass draws on it (its class, and not a pipe run). */
+    private record Tri(double[][] p, double[][] n, Mesh.Material m, boolean curved, boolean reflected) {}
 
     public static void main(String[] args) throws Exception {
         var out = new File(args.length > 0 ? args[0] : "tmp/reflection-render");
         out.mkdirs();
         var colours = colours();
-        var shapes = new EquipmentShape[]{drum(), column(), exchanger(), pump()};
-        var names = new String[]{"drum", "column", "exchanger", "pump"};
+        var shapes = new EquipmentShape[]{drum(), column(), largeColumn(), exchanger(), pump()};
+        var names = new String[]{"drum", "column", "large-column", "exchanger", "pump"};
         var rows = new ArrayList<BufferedImage>();
         for (int s = 0; s < shapes.length; s++) {
             var tris = triangles(shapes[s]);
@@ -54,7 +56,7 @@ public final class ReflectionRender {
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             g.setColor(Color.WHITE);
             g.fillRect(0, 0, row.getWidth(), row.getHeight());
-            double[][] views = {{35, 22}, {215, 8}};
+            double[][] views = {{35, 22}, {215, -25}};
             int k = 0;
             for (var view : views)
                 for (boolean pass : new boolean[]{false, true}) {
@@ -62,7 +64,7 @@ public final class ReflectionRender {
                     g.drawImage(image, k * W, 22, null);
                     g.setColor(Color.BLACK);
                     g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-                    g.drawString(String.format("%s  view %.0f/%.0f deg  %s", names[s], view[0], view[1], pass ? "reflection pass (sheen 0)" : "today: baked sheen 0.2"), k * W + 8, 16);
+                    g.drawString(String.format("%s  view %.0f/%.0f deg  %s", names[s], view[0], view[1], pass ? "reflection pass (sheen 0)" : "no pass: baked sheen 0.2"), k * W + 8, 16);
                     k++;
                 }
             g.dispose();
@@ -85,6 +87,11 @@ public final class ReflectionRender {
 
     private static EquipmentShape column() {
         return EquipmentShape.column(2, ColumnTrays.simple(12, 6), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(2));
+    }
+
+    /** A 4 m clad column of 30 trays, as the owner's screenshots of 2026-11-18. */
+    private static EquipmentShape largeColumn() {
+        return EquipmentShape.column(4, ColumnTrays.simple(30, 15), EquipmentShape.Heading.NORTH, EquipmentShape.minimumSkirt(4));
     }
 
     private static EquipmentShape designed(EquipmentShape.Kind kind, double size) {
@@ -131,7 +138,11 @@ public final class ReflectionRender {
 
     private static List<Tri> triangles(EquipmentShape shape) {
         var out = new ArrayList<Tri>();
+        // The pass's polygons: the body without its pipe runs (ReflectionMesh.polygons), matched by position.
+        var reflected = new java.util.HashSet<String>();
+        for (var polygon : ReflectionMesh.polygons(shape, RenderDetail.NORMAL)) reflected.add(java.util.Arrays.toString(polygon.positions()));
         for (var polygon : ShapeRasterizer.renderBody(shape, RenderDetail.NORMAL)) {
+            boolean mirror = reflected.contains(java.util.Arrays.toString(polygon.positions()));
             double[] p = polygon.positions(), n = polygon.normals();
             boolean curved = false;
             for (int i = 1; i < polygon.size(); i++)
@@ -143,7 +154,7 @@ public final class ReflectionRender {
                     pp[j] = new double[]{p[3 * c[j]], p[3 * c[j] + 1], p[3 * c[j] + 2]};
                     nn[j] = new double[]{n[3 * c[j]], n[3 * c[j] + 1], n[3 * c[j] + 2]};
                 }
-                out.add(new Tri(pp, nn, polygon.material(), curved));
+                out.add(new Tri(pp, nn, polygon.material(), curved, mirror));
             }
         }
         return out;
@@ -203,8 +214,7 @@ public final class ReflectionRender {
             int x0 = (int) Math.max(0, Math.floor(Math.min(s[0][0], Math.min(s[1][0], s[2][0])))), x1 = (int) Math.min(W - 1, Math.ceil(Math.max(s[0][0], Math.max(s[1][0], s[2][0]))));
             int y0 = (int) Math.max(0, Math.floor(Math.min(s[0][1], Math.min(s[1][1], s[2][1])))), y1 = (int) Math.min(H - 1, Math.ceil(Math.max(s[0][1], Math.max(s[1][1], s[2][1]))));
             var base = colours.get(tri.m);
-            var type = ReflectionClass.of(tri.m);
-            int tint = type == null ? 0xffffff : ReflectionClass.tint(tri.m, Paint.DEFAULT.body());
+            var type = tri.reflected ? ReflectionClass.of(tri.m) : null;
             for (int py = y0; py <= y1; py++)
                 for (int px = x0; px <= x1; px++) {
                     double X = px + .5, Y = py + .5;
@@ -228,8 +238,9 @@ public final class ReflectionRender {
                     double[] c = {base[0] * sh, base[1] * sh, base[2] * sh};
                     if (pass && type != null) {
                         double[] v = unit(new double[]{eye[0] - p[0], eye[1] - p[1], eye[2] - p[2]});
-                        var add = ReflectionLaw.added(n, v, type, tint, ReflectionLaw.ZENITH, ReflectionLaw.HORIZON, 1, light, 1, 1, 1);
-                        for (int i = 0; i < 3; i++) c[i] += add[i];
+                        double add = ReflectionLaw.added(n, v, type, ReflectionLaw.HORIZON, light, 1, 1, 1);
+                        double kept = ReflectionLaw.kept(n, v, type, 1, 1, 1);
+                        for (int i = 0; i < 3; i++) c[i] = c[i] * kept + add;
                     }
                     image.setRGB(px, py, rgb(c));
                 }

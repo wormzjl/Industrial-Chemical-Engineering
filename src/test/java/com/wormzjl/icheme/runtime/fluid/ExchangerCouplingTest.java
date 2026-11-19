@@ -778,4 +778,110 @@ class ExchangerCouplingTest {
         assertTrue(warmed<.9*radiant,"the warmer feed needs less firing: "+warmed);
         assertEquals(ConvectionCoil.flueOf(warmed),law.flue(),1e-3*law.flue(),"the woken convection coil follows");
     }
+    private static final long RELAY_RADIANT=800,RELAY_CONVECTION=801;
+
+    private Rig certificationPair(int producerCadence,int recheckSeconds) {
+        return certificationPair(producerCadence,recheckSeconds,true);
+    }
+
+    private Rig certificationPair(int producerCadence,int recheckSeconds,boolean furnace) {
+        var rig=new Rig(new CertificatePolicy(true,1e-7,1e-6,17_280,1,recheckSeconds));
+        rig.hotIsland=1;rig.coldIsland=2;
+        var radiant=new PassiveNetwork(List.of(source(31,water(320,300_000)),sink(32,200_000)),
+                List.of(new PassiveNetwork.Pipe(RELAY_RADIANT,0,1,STUB)
+                        .withHeat(furnace?new FiredCoil(370,1e6,1,RELAY_CONVECTION):certificationSide(RELAY_CONVECTION))));
+        var still=new PassiveNetwork(List.of(source(33,water(300,200_000)),sink(34,200_000)),
+                List.of(new PassiveNetwork.Pipe(RELAY_CONVECTION,0,1,STUB)
+                        .withHeat(furnace?new ConvectionCoil(2000,RELAY_RADIANT,0):certificationSide(RELAY_RADIANT))));
+        rig.register(rig.hotIsland,radiant,producerCadence);
+        rig.register(rig.coldIsland,still,20);
+        return rig;
+    }
+
+    private static HeatSide certificationSide(long partner) {
+        return new HeatSide(20,HeatCurve.Films.DEFAULT,new double[]{300,300},0,0,partner,1);
+    }
+
+    @Test void newlySettledHeatTransitRejectsOldEvidenceWithAnUnchangedPartnerStream() {
+        for(boolean settled:new boolean[]{true,false}) {
+            var rig=certificationPair(100,0,false);
+            rig.lags.put(rig.coldIsland,20);
+            rig.ticks(20);
+            assertEquals(1,rig.attempts.size());
+            var producer=rig.coordinator.coupled.get(RELAY_RADIANT);
+            // The producer's donor and rate have not moved. Only the heat it put in transit changed.
+            int end=settled?20:40;
+            producer.record(new ExchangerCoupling.SideRecord(end,producer.current.stream(),-300));
+            producer.book(end-20,end,-300);
+            rig.coordinator.transit(RELAY_RADIANT,300);
+            if(settled)rig.coordinator.islands.get(rig.hotIsland).clock.rest(20,Long.MAX_VALUE);
+            rig.lags.clear();
+            rig.drain();
+
+            var reader=rig.coordinator.islands.get(rig.coldIsland);
+            assertEquals(20,reader.clock.committedTick());
+            if(settled) {
+                assertNull(reader.certificate);
+                assertEquals("dependencies changed during the interval",reader.refusal);
+            } else assertNotNull(reader.certificate,"bookings ahead of the reader do not count as settled transit");
+        }
+    }
+
+    @Test void aRadiantCommitCannotCertifyAnOutstandingReaderOfThePreviousRate() {
+        var rig=certificationPair(20,0);
+        rig.ticks(20);
+        assertTrue(rig.coordinator.coupled.get(RELAY_RADIANT).current.rate()>1000,"the first partner commit moves the admitted zero read");
+        var reader=rig.coordinator.islands.get(rig.coldIsland);
+        assertEquals(20,reader.clock.committedTick(),"the already-admitted reader still commits");
+        assertNull(reader.certificate);
+        assertEquals("dependencies changed during the interval",reader.refusal,"the prior read supplies no replay evidence");
+
+        rig.ticks(20);
+        assertTrue(rig.island(rig.coldIsland).certificate().isPresent(),"the unchanged new partner rate lets the reader certify");
+    }
+
+    @Test void aKnownLaterPartnerRecordAllowsReplayThroughItsEffectiveTick() {
+        var rig=certificationPair(100,0);
+        rig.lags.put(rig.coldIsland,100);
+        rig.ticks(20);
+        assertEquals(1,rig.attempts.size(),"only the convection reader is in flight");
+        // A producer record can be available ahead of this reader, whose admitted interval ends at 20.
+        var producingSide=rig.coordinator.coupled.get(RELAY_RADIANT);
+        producingSide.record(new ExchangerCoupling.SideRecord(60,null,4000));
+        producingSide.book(40,60,4000*model.time().seconds(20));
+        rig.lags.clear();
+        rig.drain();
+        assertTrue(rig.island(rig.coldIsland).certificate().isPresent(),"a later change does not discard earlier replay");
+
+        rig.epoch[0]=50;
+        var beforeWake=rig.coordinator.snapshot(rig.coldIsland);
+        assertEquals(50,beforeWake.clock().committedTick());
+        assertTrue(beforeWake.certificate().orElseThrow().saved().isEmpty(),"the ephemeral replay limit cannot survive a checkpoint");
+        var restored=rig.reloaded().island(rig.coldIsland);
+        assertEquals(50,restored.clock().committedTick(),"the save retains the materialized state before the wake");
+        assertTrue(restored.certificate().isEmpty(),"reopening solves before any further progress");
+        rig.epoch[0]=85;
+        assertEquals(60,rig.coordinator.presentation(rig.coldIsland).clock().committedTick(),"a preview honors the known wake");
+        assertEquals(60,rig.coordinator.snapshot(rig.coldIsland).clock().committedTick(),"engine replay stops at the effective tick");
+
+        rig.coordinator.islands.get(rig.hotIsland).clock.rest(60,Long.MAX_VALUE);
+        rig.coordinator.coupling.flushWakes();
+        assertFalse(rig.island(rig.coldIsland).certificate().isPresent(),"the old certificate ends at the dated change");
+    }
+
+    @Test void aDatedChangeAtTheHorizonCannotRenewTheOldCertificate() {
+        var rig=certificationPair(100,1);
+        rig.ticks(20);
+        var previous=rig.coordinator.islands.get(rig.coldIsland).certificate;
+        assertNotNull(previous);
+        assertEquals(40,previous.horizonTick());
+
+        rig.epoch[0]=40;
+        assertTrue(rig.coordinator.movedAt(rig.coldIsland,40));
+        var reader=rig.coordinator.islands.get(rig.coldIsland);
+        assertEquals(40,reader.clock.committedTick());
+        assertNull(reader.certificate);
+        assertNull(reader.revalidating,"the old horizon interval was measured under the previous input");
+    }
+
 }

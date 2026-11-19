@@ -393,7 +393,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         if(accessory()&&tabs.size()<4){tabs.add("accessory");pages.add(Page.ACCESSORY);}
         if(valveOnly()){tabs.clear();pages.clear();tabs.add("safety_valve");pages.add(Page.ACCESSORY);}
         var tabSlots=FluidGuiLayout.tabs(imageWidth,tabs.size());
-        for(int i=0;i<tabs.size();i++){Page target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(true).active=page!=target;}
+        for(int i=0;i<tabs.size();i++){Page target=pages.get(i);var slot=tabSlots.get(i);doorAction(tabs.get(i),slot.x(),29,slot.width(),()->changePage(target)).latched(page == target).active = page != target;}
         tabIds=List.copyOf(tabs);tabPages=List.copyOf(pages);
         // The theme key shows the contrast sign; its hover names the panel shown, its message stays for narration.
         String theme=tr(ClientConfig.theme()==ClientConfig.Theme.DARK?"theme.dark":"theme.light");
@@ -752,7 +752,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var m=deviceMeters();var input=new DeviceColumn.Input(data.kind(),canEdit()&&!fixed(),switchable(),powerOn,pressureUnit.symbol(),temperatureUnit.symbol(),flowRateUnit.suffix(),valve,opening,
             view.filter()!=null&&!view.filter().captured().empty(),m.level(),junction,lead,m.phases(),m.meters(),m.drive(),m.power(),m.suction())
             // The wall and the trim (batch 2026-11-16-fouling-corrosion, WP4); the names are lines under gui.icheme.
-            .withIntegrity(m.wall((key,args)->Component.translatable("gui.icheme."+key,args).getString()),m.trim()).withCarried(m.carried());
+            .withIntegrity(burners() && page == Page.OVERVIEW ? null : m.wall((key,args)->Component.translatable("gui.icheme."+key,args).getString()),m.trim()).withCarried(m.carried());
         return data.controls().fixedMover()?input.withFixedDuty(tr(data.kind()==TopologyCompiler.Kind.PUMP?"inline.pump_rating":"inline.compressor_rating",value(data.controls().volumeFlow()*3600))):input;
     }
     /** The selected sensor among the valve's published choices (the draft), or null: a law whose sensor is not linked shows none selected. */
@@ -1022,13 +1022,15 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     @Override protected void containerTick(){super.containerTick();nameEntry.follow();}
     private FluidGuiLayout.ControlSlots controlSlots(){return FluidGuiLayout.control(imageWidth);}
     private int drawingRight(){return controlSlots().drawingRight();}
-    private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit.symbol(),deviceMeters().power());}
+    private HeatControlColumn.Input controlInput(){return new HeatControlColumn.Input(heat(),menu.clientData().controls().heat(),canEdit(),controllable(),heatMode,powerOn,temperatureUnit,pressureUnit,flowRateUnit,deviceMeters().power());}
     /**
      * The Control column on the GUI kit (batch 2026-10-28-gui-toolkit): placed once from the columns' widths, at compact
      * heights; its fields and buttons are kept at their slots and moved as it scrolls, so a scroll rebuilds nothing. Both
      * columns scroll together, in one view with one bar.
      */
+    private com.wormzjl.icheme.runtime.fluid.FluidView lastControlView;
     private void buildControl(){
+        lastControlView = menu.clientData().view();
         var slots=controlSlots();
         door.layout(controlAreas(imageWidth),slots.scrollX(),controlRows(imageWidth),GuiCanvas.measure(font));
         keepWidgets(this::controlAction);
@@ -1059,6 +1061,16 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     private List<Column.Row> deviceRows(){
         var state=menu.clientData().view().state();
         var rows=new ArrayList<>(page==Page.ACCESSORY?accessoryRows():DeviceColumn.rows(deviceInput(),FluidDeviceScreen::tr));
+        if (page == Page.OVERVIEW && burners()) {
+            var input = controlInput();
+            rows.addAll(HeatControlColumn.furnaceCoils(input, FluidDeviceScreen::tr));
+            for (String side : List.of("CONVECTION", "RADIANT")) {
+                var coil = heat().coil(side);
+                var integrity = side.equals(heat().side()) ? menu.clientData().view().integrity() : coil == null ? null : coil.wall();
+                var wall = DeviceMeters.wall(integrity, (key,args) -> Component.translatable("gui.icheme." + key,args).getString());
+                if (wall != null) rows.add(DeviceColumn.integrity(wall, tr("coil_corrosion", tr("heat_side." + side.toLowerCase(Locale.ROOT))), side + ":wall:", FluidDeviceScreen::tr));
+            }
+        }
         var ids=new ArrayList<>(com.wormzjl.icheme.client.InstrumentRenderer.identities(minecraft.level,menu.position()));
         if(menu.clientData().valve()!=null)ids.add(String.format(Locale.ROOT,"CV-%04d",menu.identity()));
         rows.addAll(DeviceColumn.instrumentIds(ids,FluidDeviceScreen::tr));
@@ -1161,7 +1173,7 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
     }
     private HeatFlowsheet flowsheet(){
         var heat=heat();var design=design(heat);String key=heat.unit()+"/"+heat.side()+"/"+design;
-        if(flowsheet==null||!key.equals(flowsheetKey)){flowsheetKey=key;flowsheet=new HeatFlowsheet(HeatDiagram.of(unitKind(),sideKind(),design),HeatDiagram.roles(unitKind(),sideKind()));}
+        if(flowsheet==null||!key.equals(flowsheetKey)){flowsheetKey=key;flowsheet=HeatFlowsheet.forDevice(unitKind(), sideKind(), design);}
         return flowsheet;
     }
     private final HeatFlowsheet.Data flowData=new HeatFlowsheet.Data(){
@@ -1182,6 +1194,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
             Double t=null,f=null;
             if(source.startsWith("port:")){var p=heat.port(source.substring(5));if(p==null)continue;t=p.temperature();f=p.temperature()==null?null:Math.abs(p.massFlow());}
             else if(source.startsWith("part:")){var p=heat.lines()==null?null:heat.lines().part(source.substring(5));if(p==null)continue;t=p.temperature();f=p.massFlow()==null?null:Math.abs(p.massFlow());}
+            else if (source.startsWith("coil:")) {
+                var coil = heat.coil(source.substring(5));
+                return coil == null ? "—" : quantity(coil.heatWatt() / 1000, "kW");
+            }
             else if(source.equals("duty"))return quantity(Math.abs(heat.heatWatt())/1000,"kW");
             else if(source.equals("ua")){if(heat.ua()==null)continue;return quantity(heat.ua()/1000,"kW/K");}
             else if(source.equals("air"))return Component.translatable(HeatDiagram.KEY+"air",quantity(temperatureUnit.display(com.wormzjl.icheme.science.equipment.HeatSides.AIR_TEMPERATURE),temperatureUnit.symbol())).getString();
@@ -1273,6 +1289,10 @@ public final class FluidDeviceScreen extends AbstractContainerScreen<FluidDevice
         var slots=controlSlots();
         skin.vDivider(canvas,slots.leftX()-6,controlTop(),controlBottom());
         if(slots.split())skin.vDivider(canvas,slots.rightX()-7,controlTop(),controlBottom());
+        if (lastControlView != menu.clientData().view()) {
+            lastControlView = menu.clientData().view();
+            door.placeAll(controlRows(imageWidth), GuiCanvas.measure(font));
+        }
         // The columns as placed: drawn clipped to their view, a row's hint read on hover.
         drawDoor(canvas,skin);
     }

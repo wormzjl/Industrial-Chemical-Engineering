@@ -1,10 +1,13 @@
 package com.wormzjl.icheme.runtime.control;
 
+import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.fluid.*;
 import com.wormzjl.icheme.runtime.instrument.*;
 import com.wormzjl.icheme.science.fluid.network.*;
 import com.wormzjl.icheme.world.inventory.ControlPanelMenu;
 import com.wormzjl.icheme.world.level.block.entity.*;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 
 import java.util.*;
 
@@ -54,11 +57,16 @@ public final class ControlService {
         law = new ControlLaw(world, hosts);
         plans = new ControlPlans(world);
         publication = new ControlPublication(world, facts, hosts);
-        alarms = new ControlAlarms(world, facts, hosts);
+        alarms = new ControlAlarms(world::serverLevel, facts, hosts);
     }
 
     public ControlFacts facts() {
         return facts;
+    }
+
+    /** Restores the engine's hosts from the saved wiring once, on the server thread. */
+    public void restoreSavedBindings() {
+        hosts.restoreSavedBindings();
     }
 
     /** The firing the controllers set for still {@code pot} at the last cadence, NaN for none (owner decision O1). */
@@ -342,6 +350,7 @@ public final class ControlService {
         if (tick % CADENCE != 0) return;
         if (facts.panels().isEmpty() && publication.idle() && edits.isEmpty() && columnCommands.isEmpty() && converterCommands.isEmpty() && plans.isEmpty() && alarms.idle())
             return;
+        restoreSavedBindings();
         long busRevision = hosts.busRevision();
         if (driveRevision != busRevision) {
             driveRevision = busRevision;
@@ -401,10 +410,13 @@ public final class ControlService {
             var request = columnCommands.removeFirst();
             var menu = request.menu();
             var console = facts.panel(menu.panel());
-            var cell = hosts.column(request.command().host());
+            long host = request.command().host();
+            var master = hosts.columnMaster(host);
+            var level = master == null ? null : world.serverLevel(master.dimension());
             boolean allowed = menu.stillValid(menu.player()) && menu.player().mayBuild();
-            boolean wired = console != null && cell != null && hosts.wired(console.id(), request.command().host());
-            menu.answer(menu.panel(), ColumnCommands.run(console != null && console.dcs(), allowed, wired, request.command(), door(cell)));
+            boolean wired = console != null && level != null && hosts.wired(console.id(), host);
+            var door = wired ? door(level, new BlockPos(master.x(), master.y(), master.z())) : null;
+            menu.answer(menu.panel(), ColumnCommands.run(console != null && console.dcs(), allowed, wired, request.command(), door));
         }
     }
 
@@ -434,26 +446,22 @@ public final class ControlService {
         }
     }
 
-    /** The Operation actions of the column whose loaded cell is {@code cell}, at its origin. */
-    private static ColumnCommands.Door door(EquipmentShellBlockEntity cell) {
+    /** The Operation actions of the column at its saved {@code origin}. */
+    private static ColumnCommands.Door door(ServerLevel level, BlockPos origin) {
         return new ColumnCommands.Door() {
             @Override
             public String start(long host) {
-                return com.wormzjl.icheme.runtime.assembly.AssemblyService.start(level(), cell.origin());
+                return AssemblyService.start(level, origin);
             }
 
             @Override
             public void stop(long host) {
-                com.wormzjl.icheme.runtime.assembly.AssemblyService.stop(level(), cell.origin());
+                AssemblyService.stop(level, origin);
             }
 
             @Override
             public String setpoints(long host, List<Double> values) {
-                return com.wormzjl.icheme.runtime.assembly.AssemblyService.setpoints(level(), cell.origin(), values);
-            }
-
-            private net.minecraft.server.level.ServerLevel level() {
-                return (net.minecraft.server.level.ServerLevel) cell.getLevel();
+                return AssemblyService.setpoints(level, origin, values);
             }
         };
     }

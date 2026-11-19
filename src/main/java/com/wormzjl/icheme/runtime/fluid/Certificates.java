@@ -45,6 +45,7 @@ final class Certificates {
         long committed=island.clock.committedTick(),online=island.clock.onlineTick();
         long wake=certificate.horizonTick();
         long target=Math.min(Math.min(Math.min(online,cap),island.fence()),Math.min(island.holdTick,wake));
+        target=Math.min(target,coordinator.coupling.replayThrough(island.id));
         if(target>committed) {
             // The island keeps its last solved interval as its result (what a save records and a view reads, whose
             // rates replay repeats); the replayed span with its scaled accounting goes to the replay listener only.
@@ -57,9 +58,9 @@ final class Certificates {
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.materialisations);
             FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.replayedTicks,target-committed);
             if(coordinator.suspension==null)island.status=certifiedStatus(island);
-            // A certified payload records the base, not the materialised state, so materialisation changes nothing a
-            // checkpoint keeps - except that an island stopped at its fence reads "WAITING: event alignment".
-            if(target==island.fence())island.touch();
+            // A persisted certificate records its base. A dated dependency limit omits that certificate and retains
+            // the materialized state, so the checkpoint then needs a new payload whenever replay advances it.
+            if(target==island.fence()||!island.savesCertificate())island.touch();
             var stored=island.snapshot();
             coordinator.replayed.published(List.of(new Snapshot(stored.id(),stored.revision(),stored.graph(),stored.clock(),Optional.of(replay),stored.status(),stored.fences(),stored.certificate(),stored.payloadGeneration())));
         }
@@ -74,6 +75,16 @@ final class Certificates {
         island.certificate=null;island.revalidating=null;island.certifiedSince=-1;island.signature=null;island.retained=new RetainedSolver();
         island.lastInterval=null;island.streak=0;island.status="WAITING: an exchanger's other side changed";island.touch();
         FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.couplingWakes);coordinator.reconsider(island);
+    }
+    /** A new dependency plan supersedes the previous plan's qualifying intervals and any horizon comparison. */
+    void inputsChanged(Island island) {
+        if(island.revalidating!=null)island.certifiedSince=-1;
+        island.revalidating=null;island.lastInterval=null;island.streak=0;island.evidence=null;
+    }
+    /** Drop only evidence from before a change that the island has now reached. */
+    void inputsChangedAt(Island island,long tick) {
+        if(island.revalidating!=null&&island.revalidating.interval().startTick()<tick
+                ||island.lastInterval!=null&&island.lastInterval.startTick<tick)inputsChanged(island);
     }
     /** Ends a certificate at its horizon: fresh solver caches, no evidence; the island keeps the certificate its first
      * slice is compared with. */
@@ -91,12 +102,18 @@ final class Certificates {
      * revalidating slice renews the certificate from its solved state if it repeats the certified interval, and
      * otherwise starts a fresh streak.
      */
-    void qualify(Island island,ProcessSolveJobs.FluidIslandSolveResult accepted,PassiveNetwork before,Attempt attempt) {
+    void qualify(Island island,ProcessSolveJobs.FluidIslandSolveResult accepted,PassiveNetwork before,Attempt attempt,boolean currentInputs) {
         var revalidation=island.revalidating;island.revalidating=null;var policy=coordinator.settings.certificates();
         boolean usable=policy.enabled()&&!coordinator.stopped&&coordinator.suspension==null&&accepted!=null;
         if(!usable) {
             island.lastInterval=null;island.streak=0;island.evidence=null;if(revalidation!=null)island.certifiedSince=-1;
             island.refusal=!policy.enabled()?null:accepted==null?"no accepted interval":"stopped or suspended";return;
+        }
+        if(!currentInputs) {
+            inputsChanged(island);
+            if(revalidation!=null)island.certifiedSince=-1;
+            island.refusal="dependencies changed during the interval";
+            return;
         }
         var summary=new IslandCertificate.Summary(new IslandCertificate.Interval(attempt.slice().startTick(),attempt.slice().endTick(),before,accepted.candidate().orElseThrow()),island.model.molecularWeights(),island.model.time());
         if(revalidation!=null) {

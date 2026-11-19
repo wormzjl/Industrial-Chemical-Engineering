@@ -14,6 +14,8 @@ Up: [code guide](README.md). Shapes, cells and collision: [equipment-geometry.md
 
 Every kind but the drum and the column has one design, a `UnitDesign`, found by `UnitDesign.of(kind)`. A design states its constant sizes, constructor rows and moving parts in one `Sizes` record, its declared layout revision with them; it overrides only what it computes, and its `build` draws the unit with the shared kit, `ProcessUnit`. A design uses the kit, never another design's file. Machines carry a design point (`MachineDuty`), a fact of their shape. A column is laid out by its trays (`ColumnTrays`) and dressed by `ColumnStructure` (cladding, platforms, ladders, davit, process nozzles); its component design (`ColumnComponents`) says what its plant needs, and `ColumnDesign` is what a process simulator saves or sends. `UnitRatings` holds the datasheet and sizing ratings the kit, the designs, `HeatSides`, `UnitDesign` and the sizing classes share.
 
+The cabin and vertical heaters use braced supports and an underfloor fuel manifold with joined corners. The manifold uses the plain pipe finish.
+
 ## Class map
 
 Paths under [`src/main/java/com/wormzjl/icheme/science/equipment/`](../../../src/main/java/com/wormzjl/icheme/science/equipment/). Lines at the snapshot.
@@ -127,4 +129,4 @@ Offline: `tools/new-units/` (sweeps every size through the walk, climb and pipe 
 - `withTrays` and `withFeed` drop a column's components; `withComponents(null)` drops its operating point.
 - New kinds join the simulator (`FlowsheetCatalog`), the reference items and pages (`EquipmentInfoCoverageTest`, `GuideCoverageTest`, [tutorial.md](tutorial.md)); a renamed kind needs a `ShapeRepair` alias and an item alias.
 
-**Snapshot:** `9195b5161`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

@@ -23,14 +23,8 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.EmptyBlockGetter;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.LevelChunk;
-import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.levelgen.Heightmap;
 
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,7 +41,7 @@ import java.util.TreeMap;
  * step and returns; the drain installs the result. Crash-proof (owner, 2026-11-15): every entry point catches at its
  * edge, logs one line and carries on; after {@link #FAILURE_LIMIT} failed passes in a row (snapshot, job or install)
  * pollution turns itself off for the session ({@code pollution status=DISABLED}): reads answer 0 and releases are
- * dropped. The world never loads or generates a chunk for it ({@code getChunkNow} only).</p>
+ * dropped. Known terrain is sampled from live chunks or from the existing saves, without loading or generating chunks.</p>
  */
 public final class PollutionService {
     /** Server ticks between two passes of a dimension: 5 s of play, 20 process seconds at the default time factor. */
@@ -58,7 +52,6 @@ public final class PollutionService {
     public static final int CELL_BUDGET = 256;
     /** Failed passes in a row that turn pollution off for the session. */
     public static final int FAILURE_LIMIT = 3;
-    private static final int SECTION_BLOCKS = 4096;
 
     private static final Map<MinecraftServer, PollutionService> SERVERS = new IdentityHashMap<>();
 
@@ -279,6 +272,15 @@ public final class PollutionService {
         return position == null ? 0 : index(dimension, cube(position), channel);
     }
 
+    /** Index used by damage laws, which wait until the cube's geometry is known. */
+    public double measuredIndex(ResourceKey<Level> dimension, BlockPos position, Channel channel) {
+        return measuredIndex(dimension, cube(position), channel);
+    }
+
+    double measuredIndex(ResourceKey<Level> dimension, long cube, Channel channel) {
+        return cell(dimension, cube).loaded() ? index(dimension, cube, channel) : 0;
+    }
+
     /** The installed field of a dimension (before a pass in flight); EMPTY when disabled or unknown. */
     public PollutionField field(ResourceKey<Level> dimension) {
         var d = disabled ? null : dimensions.get(dimension);
@@ -318,7 +320,14 @@ public final class PollutionService {
     public Environment.Cell cell(ResourceKey<Level> dimension, long cube) {
         var d = dimensions.get(dimension);
         var cached = d == null ? null : d.cells.get(cube);
-        return cached == null ? Environment.Cell.UNLOADED : cached;
+        return cached == null ? Environment.Cell.UNLOADED : cached.cell();
+    }
+
+    /** Local Y of the nearest air block at or above the centre of a measured cube, otherwise its centre. */
+    int blastCentreY(ResourceKey<Level> dimension, long cube) {
+        var d = dimensions.get(dimension);
+        var cached = d == null ? null : d.cells.get(cube);
+        return cached == null ? 8 : cached.centreY();
     }
 
     public boolean enabled() {
@@ -393,7 +402,7 @@ public final class PollutionService {
 
     private static double airShare(Dimension d, long cube) {
         var cached = d.cells.get(cube);
-        return cached == null ? 1.0 : cached.airShare();
+        return cached == null || !cached.cell().loaded() ? 1.0 : cached.cell().airShare();
     }
 
     /** The dimension's runtime, made on first use from what the store carried for it, if anything. */
@@ -515,8 +524,9 @@ public final class PollutionService {
         Environment environment;
         GroundEnvironment groundEnvironment;
         try {
-            environment = environment(level, d, now);
-            groundEnvironment = groundEnvironment(level, d, now);
+            var terrain = new PollutionTerrain(level);
+            environment = environment(level, terrain, d, now);
+            groundEnvironment = groundEnvironment(level, terrain, d, now);
         } catch (RuntimeException failure) {
             engine.failed("snapshot: " + failure);
             failed(d, "snapshot", engine.lastFailure());
@@ -598,149 +608,35 @@ public final class PollutionService {
     // ---------------------------------------------------------------------------------------------------------------
     // The world snapshot, on the server thread.
 
-    /**
-     * The cells of every cube the next pass reads: the cubes that hold or wait for something first, then their
-     * neighbours. A cube of a chunk that is not loaded is unloaded, every pass; a cell older than {@link #CELL_TICKS} is
-     * read again, at most {@link #CELL_BUDGET} per pass; a cube over the budget uses its older read, or is unloaded for
-     * this pass.
-     */
-    private Environment environment(ServerLevel level, Dimension d, int now) {
+    /** The air snapshot reads the cubes that hold or wait for something first, then their face neighbours. */
+    private Environment environment(ServerLevel level, PollutionTerrain terrain, Dimension d, int now) {
         long[] core = d.engine.core();
         long[] wanted = KeySets.cubeFaces(core);
-        var chunks = new Chunks(level);
         return d.cells.snapshot(core, wanted, now, CELL_TICKS, CELL_BUDGET, new CellCache.World() {
             @Override
             public boolean chunkLoaded(long cube) {
-                return chunks.get(CubeKey.x(cube), CubeKey.z(cube)) != null;
+                return terrain.live(CubeKey.x(cube), CubeKey.z(cube));
             }
 
             @Override
-            public Environment.Cell read(long cube) {
-                return PollutionService.read(chunks.get(CubeKey.x(cube), CubeKey.z(cube)), CubeKey.y(cube));
+            public CellCache.Reading read(long cube) {
+                return terrain.read(CubeKey.x(cube), CubeKey.y(cube), CubeKey.z(cube));
             }
         }, level.isRaining(), level.getMinSection(), level.getMaxSection() - 1);
     }
 
-    /** The chunks a snapshot looked up, by column: a chunk is looked up once a pass, loaded or not. */
-    private static final class Chunks {
-        private final ServerLevel level;
-        private final HashMap<Long, LevelChunk> seen = new HashMap<>();
-        private long lastColumn;
-        private LevelChunk last;
-        private boolean any;
-
-        Chunks(ServerLevel level) {
-            this.level = level;
-        }
-
-        LevelChunk get(int x, int z) {
-            long column = (long) x << 32 | (z & 0xFFFFFFFFL);
-            if (any && column == lastColumn) {
-                return last;
-            }
-            LevelChunk chunk;
-            if (seen.containsKey(column)) {
-                chunk = seen.get(column);
-            } else {
-                chunk = loaded(level, x, z);
-                seen.put(column, chunk);
-            }
-            any = true;
-            lastColumn = column;
-            last = chunk;
-            return chunk;
-        }
-    }
-
-    /**
-     * The ground's view of the world for the next pass (G2): which of the wanted columns are loaded now, and which have a
-     * surface that is mostly water (at least 9 of 16 sampled surface blocks hold water), read at most {@link #CELL_BUDGET}
-     * columns per pass and kept {@link #CELL_TICKS}; a column over the budget uses its older read, or counts as land.
-     */
-    private GroundEnvironment groundEnvironment(ServerLevel level, Dimension d, int now) {
-        var chunks = new Chunks(level);
+    /** The ground snapshot includes each wanted column whose terrain can be sampled. */
+    private GroundEnvironment groundEnvironment(ServerLevel level, PollutionTerrain terrain, Dimension d, int now) {
         return d.water.snapshot(d.engine.groundWanted(), now, CELL_TICKS, CELL_BUDGET, new WaterCache.World() {
             @Override
             public boolean chunkLoaded(long column) {
-                return chunks.get(MapColumns.x(column), MapColumns.z(column)) != null;
+                return terrain.live(MapColumns.x(column), MapColumns.z(column));
             }
 
             @Override
-            public boolean water(long column) {
-                return surfaceWater(chunks.get(MapColumns.x(column), MapColumns.z(column)));
+            public WaterCache.Surface water(long column) {
+                return terrain.water(MapColumns.x(column), MapColumns.z(column));
             }
         }, level.isRaining());
-    }
-
-    /** Whether at least 9 of 16 surface blocks (a 4 × 4 grid) of the chunk hold water; any failure answers land. */
-    static boolean surfaceWater(LevelChunk chunk) {
-        try {
-            int wet = 0;
-            var position = new BlockPos.MutableBlockPos();
-            int baseX = chunk.getPos().getMinBlockX(), baseZ = chunk.getPos().getMinBlockZ();
-            for (int i = 0; i < 4; i++) {
-                for (int j = 0; j < 4; j++) {
-                    int x = 2 + 4 * i, z = 2 + 4 * j;
-                    int top = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
-                    position.set(baseX + x, top, baseZ + z);
-                    if (chunk.getFluidState(position).is(net.minecraft.tags.FluidTags.WATER)) {
-                        wet++;
-                    }
-                }
-            }
-            return wet >= 9;
-        } catch (RuntimeException failure) {
-            return false;
-        }
-    }
-
-    /** The chunk if it is loaded now; never loads or generates one. */
-    private static LevelChunk loaded(ServerLevel level, int x, int z) {
-        try {
-            return level.getChunkSource().getChunkNow(x, z);
-        } catch (RuntimeException failure) {
-            return null;
-        }
-    }
-
-    /**
-     * A cube's cell from its section: the share of its blocks that hold air (air, or no collision shape and no fluid),
-     * counted per palette entry; open when its top block is at or above the column's surface. Any failure (damaged chunk
-     * data) answers unloaded.
-     */
-    static Environment.Cell read(LevelChunk chunk, int sectionY) {
-        try {
-            int index = chunk.getSectionIndexFromSectionY(sectionY);
-            if (index < 0 || index >= chunk.getSectionsCount()) {
-                return Environment.Cell.UNLOADED;
-            }
-            LevelChunkSection section = chunk.getSection(index);
-            int air;
-            if (section.hasOnlyAir()) {
-                air = SECTION_BLOCKS;
-            } else {
-                int[] count = {0};
-                section.getStates().count((state, n) -> {
-                    if (passes(state)) {
-                        count[0] += n;
-                    }
-                });
-                air = Math.max(0, Math.min(SECTION_BLOCKS, count[0]));
-            }
-            boolean open = (sectionY << 4) + 15 >= chunk.getHeight(Heightmap.Types.WORLD_SURFACE, 8, 8);
-            return CellCache.cell(air, open);
-        } catch (RuntimeException failure) {
-            return Environment.Cell.UNLOADED;
-        }
-    }
-
-    /** Air for the field: air, or a block with no collision shape and no fluid (grass, torches, open doors). */
-    private static boolean passes(BlockState state) {
-        try {
-            return state.isAir() || state.getFluidState().isEmpty()
-                    && state.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).isEmpty();
-        } catch (RuntimeException failure) {
-            return false;
-        }
     }
 }

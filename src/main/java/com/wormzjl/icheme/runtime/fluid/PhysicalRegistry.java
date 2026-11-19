@@ -39,6 +39,8 @@ public final class PhysicalRegistry {
         /** An application committed; {@code removed} are the devices it took out of the registry, {@code recompiled} the
          * surviving devices of the part it compiled: their island (or the absence of one) may have changed. */
         void committed(Set<Long> removed,Set<Long> recompiled);
+        /** Capture the removed stock at its fence; only a successful topology swap publishes the release. */
+        default Runnable prepareRupture(WorldTopologyLedger.Registration device,PassiveNetwork.Reservoir stock){return ()->{};}
     }
     private record ChunkKey(String dimension,long chunk) {}
     private final WorldTopologyLedger topology;
@@ -479,10 +481,12 @@ public final class PhysicalRegistry {
         var changed=new LinkedHashMap<Long,Optional<WorldTopologyLedger.Registration>>();
         var additions=new LinkedHashMap<Long,PassiveNetwork.Reservoir>();var removed=new LinkedHashMap<Long,PassiveNetwork.Reservoir>();
         var constructed=new ArrayList<PassiveNetwork.Reservoir>();var destroyed=new ArrayList<PassiveNetwork.Reservoir>();
+        var ruptures=new ArrayList<Runnable>();
         for(var event:events)for(var edit:event.edits()) {
             var old=current(changed,active,edit.id());var replacement=edit.replacement();
             if(replacement==null) {
                 changed.put(edit.id(),Optional.empty());var previous=stock.remove(edit.id());
+                if(edit.rupture()&&old!=null)ruptures.add(host.prepareRupture(old,previous==null?null:IslandSets.paddedNode(previous,models.get(edit.id()),model)));
                 if(previous!=null&&previous.kind()==PassiveNetwork.NodeKind.RESERVOIR){destroyed.add(IslandSets.paddedNode(previous,models.get(edit.id()),model));if(additions.remove(edit.id())==null)removed.put(edit.id(),previous);}
             } else {
                 changed.put(edit.id(),Optional.of(replacement));
@@ -610,6 +614,7 @@ public final class PhysicalRegistry {
             for(var future:topology.events())for(long owner:reached(future,component.keySet()))
                 if(fresh.contains(owner)&&!coordinator.hasFence(owner,future.id()))coordinator.fence(future.id(),future.tick(),List.of(owner));
         }
+        ruptures.forEach(Runnable::run);
         return recovered!=null;
     }
     /**

@@ -18,7 +18,6 @@ import com.wormzjl.icheme.client.model.ReflectionDepth;
 import com.wormzjl.icheme.client.model.ReflectionLaw;
 import com.wormzjl.icheme.client.model.ReflectionMesh;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
-import com.wormzjl.icheme.science.equipment.Paint;
 import com.wormzjl.icheme.science.equipment.RenderDetail;
 import com.wormzjl.icheme.world.level.block.entity.EquipmentShellBlockEntity;
 import com.wormzjl.icheme.world.level.block.entity.LoadedEquipment;
@@ -45,7 +44,7 @@ import java.util.WeakHashMap;
  * Render thread only: the equipment reflection pass (owner, 2026-11-18: "Build B"; batch 2026-11-18-equipment-reflections,
  * REFLECTION_PASS_REVIEW.md). After the solid blocks, the shiny facets of every structure within
  * {@code reflection_range} ({@link ReflectionMesh}) are drawn again through {@code icheme:equipment_reflection}, which
- * ADDS the mirrored sky, ground and sun ({@link ReflectionLaw}) to what the chunk mesh drew there: additive blend, depth
+ * keeps {@code 1 - F} of what the chunk mesh drew there and adds a grey sheen and the sun's highlight ({@link ReflectionLaw}): depth
  * test LEQUAL with no depth write, each vertex pulled towards the eye by {@link ReflectionDepth#pull}, back faces culled
  * as the shells are. As {@link EquipmentBodyRenderer}, the structures whose origins share a {@link #REGION}-block square
  * are merged into one static mesh, merged again (one a frame) when a member or its light changes, and drawn in one call
@@ -67,9 +66,9 @@ public final class EquipmentReflectionRenderer {
     /** The pass's breaker: a failure turns it off for the session. */
     public static final FxGuard GUARD = FxGuard.effect("equipment_reflection");
 
-    private record Key(EquipmentShape shape, Paint paint, RenderDetail detail) {}
+    private record Key(EquipmentShape shape, RenderDetail detail) {}
 
-    private record Member(BlockPos origin, EquipmentShape shape, Paint paint, int light) {}
+    private record Member(BlockPos origin, EquipmentShape shape, int light) {}
 
     private static final class Region {
         final BlockPos corner;
@@ -96,7 +95,7 @@ public final class EquipmentReflectionRenderer {
         long due = Long.MIN_VALUE;
     }
 
-    /** Meshes by shape, paint and detail; equal structures share one. Bounded: a region merge rebuilds what it misses. */
+    /** Meshes by shape and detail; equal structures share one. Bounded: a region merge rebuilds what it misses. */
     private static final Map<Key, ReflectionMesh> MESHES = new LinkedHashMap<>(16, .75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<Key, ReflectionMesh> eldest) {
@@ -186,7 +185,7 @@ public final class EquipmentReflectionRenderer {
                 light.value = level.getBrightness(LightLayer.SKY, BlockPos.containing(origin.getX() + shape.sizeX() / 2.0, origin.getY() + shape.sizeY(), origin.getZ() + shape.sizeZ() / 2.0));
                 light.due = tick + LIGHT_TICKS + Math.floorMod(origin.hashCode(), LIGHT_TICKS);
             }
-            hash = (((hash * 31 + origin.asLong()) * 31 + System.identityHashCode(shape)) * 31 + System.identityHashCode(structure.paint())) * 31 + light.value;
+            hash = ((hash * 31 + origin.asLong()) * 31 + System.identityHashCode(shape)) * 31 + light.value;
             count++;
         }
         if (hash != seenHash || count != seenCount) {
@@ -245,10 +244,14 @@ public final class EquipmentReflectionRenderer {
         }
     }
 
-    /** The render state and the frame's uniforms: additive blend, LEQUAL without depth write, culled; the sky, the light, the pull, the fade. */
+    /**
+     * The render state and the frame's uniforms: the base kept by 1 - alpha (the mirrored share) plus the reflection, the
+     * framebuffer's alpha untouched; LEQUAL without depth write, culled; the sky, the light, the pull, the fade.
+     */
     private static void setUp(ShaderInstance shader, RenderLevelStageEvent event, ClientLevel level, int range) {
         RenderSystem.enableBlend();
-        RenderSystem.blendFunc(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE);
+        RenderSystem.blendFuncSeparate(GlStateManager.SourceFactor.ONE, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
+                GlStateManager.SourceFactor.ZERO, GlStateManager.DestFactor.ONE);
         RenderSystem.enableDepthTest();
         RenderSystem.depthFunc(515);
         RenderSystem.depthMask(false);
@@ -256,25 +259,15 @@ public final class EquipmentReflectionRenderer {
         var mc = Minecraft.getInstance();
         float partial = event.getPartialTick().getGameTimeDeltaPartialTick(false);
         FxShaders.defaultUniforms(shader, event.getModelViewMatrix(), event.getProjectionMatrix(), mc.getWindow());
-        var sky = level.getSkyColor(event.getCamera().getPosition(), partial);
         float[] fog = RenderSystem.getShaderFogColor();
-        double daylight = level.getSkyDarken(partial);
         double[] light = ReflectionLaw.celestial(level.getSunAngle(partial), level.getRainLevel(partial));
-        set(shader, "Zenith", (float) sky.x, (float) sky.y, (float) sky.z);
         set(shader, "Horizon", fog[0], fog[1], fog[2]);
-        set(shader, "NearGround", scaled(ReflectionLaw.NEAR_GROUND, daylight));
-        set(shader, "Ground", scaled(ReflectionLaw.GROUND, daylight));
-        set(shader, "Powers", (float) ReflectionLaw.SKY_POWER, (float) ReflectionLaw.GROUND_POWER);
         set(shader, "Light", (float) light[0], (float) light[1], (float) light[2], (float) light[3]);
         set(shader, "HighlightSky", (float) ReflectionLaw.HIGHLIGHT_SKY_FROM, (float) ReflectionLaw.HIGHLIGHT_SKY_TO);
         set(shader, "Strength", (float) ClientConfig.reflectionStrength());
         set(shader, "Fade", (float) (range * (1 - ReflectionLaw.FADE)), (float) range);
         set(shader, "Pull", (float) ReflectionDepth.POSITION, (float) ReflectionDepth.SNAP, (float) ReflectionDepth.QUANTUM, (float) ReflectionDepth.TAN_CAP);
         shader.apply();
-    }
-
-    private static float[] scaled(double[] c, double s) {
-        return new float[]{(float) (c[0] * s), (float) (c[1] * s), (float) (c[2] * s)};
     }
 
     private static void set(ShaderInstance shader, String name, float... values) {
@@ -309,7 +302,7 @@ public final class EquipmentReflectionRenderer {
             if (shape == null || !near(origin, shape, x, y, z, keep)) continue;
             var light = LIGHTS.get(structure);
             long id = ReflectionMesh.region(origin.getX(), origin.getZ());
-            now.computeIfAbsent(id, k -> new ArrayList<>()).add(new Member(origin, shape, structure.paint(), light == null ? 15 : light.value));
+            now.computeIfAbsent(id, k -> new ArrayList<>()).add(new Member(origin, shape, light == null ? 15 : light.value));
         }
         var gone = REGIONS.entrySet().iterator();
         while (gone.hasNext()) {
@@ -339,14 +332,14 @@ public final class EquipmentReflectionRenderer {
     private static long signature(List<Member> members) {
         long h = members.size();
         for (var m : members)
-            h = ((h * 31 + m.origin().asLong()) * 31 + System.identityHashCode(m.shape())) * 31 + System.identityHashCode(m.paint()) * 31L + m.light();
+            h = ((h * 31 + m.origin().asLong()) * 31 + System.identityHashCode(m.shape())) * 31 + m.light();
         return h;
     }
 
     /**
-     * One region's mesh from its members' meshes, offset from the region's corner: each vertex's tint and sky light
-     * (read at the block just outside the surface, 0 to 15) in Color, F0 and blur in UV0, the highlight's power and
-     * strength x 100 in UV2, the smooth normal in Normal.
+     * One region's mesh from its members' meshes, offset from the region's corner: each vertex's sky light (read at the
+     * block just outside the surface, 0 to 15) in Color's alpha, F0 in UV0, the highlight's power and strength x 100 in
+     * UV2, the smooth normal in Normal.
      */
     private static void merge(Region region, ClientLevel level, RenderDetail detail) {
         region.dirty = false;
@@ -354,10 +347,10 @@ public final class EquipmentReflectionRenderer {
         int vertices = 0;
         double x0 = Double.MAX_VALUE, y0 = Double.MAX_VALUE, z0 = Double.MAX_VALUE, x1 = -Double.MAX_VALUE, y1 = -Double.MAX_VALUE, z1 = -Double.MAX_VALUE, size = 0;
         for (var m : region.members) {
-            var key = new Key(m.shape(), m.paint(), detail);
+            var key = new Key(m.shape(), detail);
             var mesh = MESHES.get(key);
             if (mesh == null) {
-                mesh = ReflectionMesh.of(m.shape(), detail, m.paint().body());
+                mesh = ReflectionMesh.of(m.shape(), detail);
                 MESHES.put(key, mesh);
             }
             meshes.add(mesh);
@@ -388,12 +381,11 @@ public final class EquipmentReflectionRenderer {
                 float[] p = mesh.positions(), n = mesh.normals();
                 for (int v = 0; v < mesh.vertices(); v++) {
                     var type = classes[mesh.classes()[v]];
-                    int tint = mesh.tints()[v];
                     cursor.set(Math.floor(o.getX() + p[3 * v] + .5 * n[3 * v]), Math.floor(o.getY() + p[3 * v + 1] + .5 * n[3 * v + 1]), Math.floor(o.getZ() + p[3 * v + 2] + .5 * n[3 * v + 2]));
                     int sky = skyLights.computeIfAbsent(cursor.asLong(), k -> level.getBrightness(LightLayer.SKY, cursor));
                     builder.addVertex(p[3 * v] + dx, p[3 * v + 1] + dy, p[3 * v + 2] + dz)
-                            .setColor(tint >> 16 & 255, tint >> 8 & 255, tint & 255, sky * 17)
-                            .setUv((float) type.f0, (float) type.blur)
+                            .setColor(255, 255, 255, sky * 17)
+                            .setUv((float) type.f0, 0)
                             .setUv2((int) type.exponent, (int) Math.round(type.strength * 100))
                             .setNormal(n[3 * v], n[3 * v + 1], n[3 * v + 2]);
                 }

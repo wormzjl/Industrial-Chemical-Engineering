@@ -184,20 +184,20 @@ public final class EquipmentStructure {
         return found;
     }
 
-    /** The heat sides registered at {@code vessel}'s nodes, by registry identity: a heat unit's sides (a column's condenser, C6b). */
-    public static List<Long> heatSides(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+    /** The heat sides registered at the nodes of the shape built at {@code origin}, in node order. */
+    public static List<Long> heatSides(FluidWorldAuthority world, PhysicalFluidTopology.Position origin, EquipmentShape shape) {
         var sides = new ArrayList<Long>();
-        for (long id : heldAtNodes(world, level, vessel)) {
+        for (long id : registrationsAtNodes(world, origin, shape)) {
             var r = world.registrations().get(id);
             if (r != null && r.device().heat() != null) sides.add(id);
         }
         return sides;
     }
 
-    /** The fluid movers registered at {@code vessel}'s nodes: a pump casing's (W5 of batch 2026-11-10-column-failure-modes). */
-    public static List<Long> movers(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+    /** The movers registered at the nodes of the shape built at {@code origin}, in node order. */
+    public static List<Long> movers(FluidWorldAuthority world, PhysicalFluidTopology.Position origin, EquipmentShape shape) {
         var out = new ArrayList<Long>();
-        for (long id : heldAtNodes(world, level, vessel)) {
+        for (long id : registrationsAtNodes(world, origin, shape)) {
             var r = world.registrations().get(id);
             if (r != null && r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover) out.add(id);
         }
@@ -206,10 +206,16 @@ public final class EquipmentStructure {
 
     /** The identities registered at {@code vessel}'s nodes. */
     static List<Long> heldAtNodes(FluidWorldAuthority world, ServerLevel level, Vessel vessel) {
+        return registrationsAtNodes(world, Positions.of(level, vessel.origin()), vessel.shape()).stream()
+                .filter(id -> id > 0).toList();
+    }
+
+    /** The registered identities in the shape's fluid node order, with 0 for a missing node. */
+    public static List<Long> registrationsAtNodes(FluidWorldAuthority world, PhysicalFluidTopology.Position origin, EquipmentShape shape) {
         var ids = new ArrayList<Long>();
-        for (var node : nodes(vessel)) {
-            var held = Positions.of(level, node);
-            heldAt(world, held).ifPresent(r -> ids.add(r.device().id()));
+        for (var cell : ShapeRasterizer.fluidCells(shape)) {
+            var at = new PhysicalFluidTopology.Position(origin.dimension(), origin.x() + cell.x(), origin.y() + cell.y(), origin.z() + cell.z());
+            ids.add(heldAt(world, at).map(r -> r.device().id()).orElse(0L));
         }
         return ids;
     }
@@ -336,10 +342,17 @@ public final class EquipmentStructure {
     public static @Nullable Vessel at(BlockGetter level, BlockPos origin) {
         var vessel = find(level, origin);
         if (vessel != null && vessel.origin().equals(origin)) return vessel;
+        return at(origin, pos -> level.getBlockEntity(pos) instanceof EquipmentShellBlockEntity shell && shell.shape() != null
+                ? new Vessel(shell.origin(), shell.shape()) : null);
+    }
+
+    /** The same bottom-layer origin search over a supplied shell reader, which may read saved cells without a level. */
+    public static @Nullable Vessel at(BlockPos origin, java.util.function.Function<BlockPos, Vessel> shellAt) {
         for (int dx = 0; dx <= FIND_STEPS; dx++)
-            for (int dz = 0; dz <= FIND_STEPS; dz++)
-                if (level.getBlockEntity(origin.offset(dx, 0, dz)) instanceof EquipmentShellBlockEntity shell && shell.shape() != null && origin.equals(shell.origin()))
-                    return new Vessel(origin, shell.shape());
+            for (int dz = 0; dz <= FIND_STEPS; dz++) {
+                var candidate = shellAt.apply(origin.offset(dx, 0, dz));
+                if (candidate != null && origin.equals(candidate.origin())) return candidate;
+            }
         return null;
     }
 

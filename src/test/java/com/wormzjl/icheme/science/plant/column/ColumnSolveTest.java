@@ -213,6 +213,32 @@ class ColumnSolveTest {
         assertTrue(DriftBands.check(b, step, setpoints.designFeedRate() * SECONDS).isEmpty(), "inside its own bands");
     }
 
+    /**
+     * Package 6 of batch 2026-11-17-column-cold-feed: a 510 K feed on the design does not converge at the set-point
+     * pumparounds (a draw tray's liquid; the probe of 2026-11-18: 470 to 530 K the same, each solved at half) and solves at
+     * the first share of {@link ColumnSolve#PUMPAROUND_SHARES}, half; the table carries the duties it was solved at and the
+     * note says so.
+     */
+    @Test void aColdFeedSolvesAtAShareOfThePumparounds() {
+        var catalog = com.wormzjl.icheme.science.material.TiaJuanaTestCatalog.catalog();
+        V3ColumnInput design = V3ColumnPresets.input(catalog.presets().column("tia_juana_nitrogen"), catalog);
+        var model = column(catalog, design);
+        double[] feed = feedOnTheNetwork(model, design);
+        var setpoints = Setpoints.of(ColumnOperatingPoint.of(design));
+        var steam = design.steamFeeds().stream().map(s -> new ColumnSolve.Steam(s.molarFlowMolPerSecond(), s.temperatureKelvin(), Double.NaN)).toList();
+        double rate = Arrays.stream(feed).sum(), p = design.topPressurePascal() + design.feedStageNumber() * design.stagePressureDropPascal();
+        double cold = model.whole().flashTP(510, p, feed.clone(), () -> {}).enthalpy() / rate;
+        var outcome = ColumnSolve.run(new ColumnSolve.Job(DriftBands.Trigger.START, design, setpoints, new ColumnSolve.Taken(feed, cold, steam), null),
+                model, V3ColumnCalculator.DEFAULT_LIQUID_SUPPLY_SCREEN_RATIO, () -> {});
+        var solved = assertInstanceOf(ColumnSolve.Solved.class, outcome, outcome::toString);
+        double[] set = setpoints.pumparoundsPerFeed(), at = solved.table().reference().pumparounds();
+        double share = at[0] / set[0];
+        assertEquals(ColumnSolve.PUMPAROUND_SHARES[0], share, 1e-12, "half, the first share");
+        for (int j = 0; j < set.length; j++) assertEquals(set[j] * share, at[j], 1e-9 * Math.abs(set[j]), "pumparound " + j + " at the share");
+        assertTrue(solved.note().contains("pumparounds at"), solved.note());
+        assertEquals(510, solved.table().reference().feedTemperature(), .5, "the cold feed's own table");
+    }
+
     /** The design's feed on the network's compound list. */
     /**
      * W3b: the model a column of {@code design} solves on in a world: the network package's view of the design's compounds with

@@ -29,6 +29,62 @@ import static org.junit.jupiter.api.Assertions.*;
  * saddles and frames, its flange clear of the other flanges (pipes may touch: owner, 2026-11-10).
  */
 class ProcessUnitTest {
+    @Test
+    void cabinHeaterGirdersLeaveTheConcreteLegFacesExposed() {
+        for (int length : List.of(6, 48)) {
+            var shape = EquipmentShape.unit(Kind.CABIN_HEATER, length == 6 ? 4 : 12, length, Heading.NORTH, 3);
+            for (var detail : RenderDetail.values()) {
+                var facets = ProcessUnit.of(shape).mesh(detail).facets();
+                var legs = facets.stream().filter(f -> f.material() == Mesh.Material.CONCRETE
+                        && f.max()[1] > 1).toList();
+                assertFalse(legs.isEmpty());
+                var steel = facets.stream().filter(f -> f.material() == Mesh.Material.STEELWORK
+                        && f.max()[1] <= shape.support() - .3 + 1e-8).toList();
+                assertFalse(steel.isEmpty());
+                for (var leg : legs) for (var face : steel) for (int axis = 0; axis < 3; axis++) {
+                    double planeWidth = Math.max(leg.max()[axis], face.max()[axis]) - Math.min(leg.min()[axis], face.min()[axis]);
+                    if (planeWidth > 1e-8) continue;
+                    int along = (axis + 1) % 3, across = (axis + 2) % 3;
+                    double width = Math.min(leg.max()[along], face.max()[along]) - Math.max(leg.min()[along], face.min()[along]);
+                    double height = Math.min(leg.max()[across], face.max()[across]) - Math.max(leg.min()[across], face.min()[across]);
+                    assertFalse(width > 1e-8 && height > 1e-8, "Steel overlaps concrete at " + leg.min()[axis] + " (" + detail + ")");
+                }
+            }
+        }
+    }
+
+    @Test
+    void burnerPipeCornersShareTheirEdgesAndStayOutOfTheReflectionPass() {
+        var shapes = List.of(EquipmentShape.unit(Kind.CABIN_HEATER, 4, 6, Heading.NORTH, 3),
+                EquipmentShape.unit(Kind.CABIN_HEATER, 8, 16, Heading.SOUTH, 4),
+                EquipmentShape.unit(Kind.CABIN_HEATER, 12, 48, Heading.EAST, 3),
+                EquipmentShape.unit(Kind.VERTICAL_HEATER, 2.5, 4, Heading.WEST, 3),
+                EquipmentShape.unit(Kind.VERTICAL_HEATER, 12, 20, Heading.NORTH, 4));
+        for (var shape : shapes) for (var detail : RenderDetail.values()) {
+            var faces = ProcessUnit.of(shape).mesh(detail).facets().stream().filter(f ->
+                    f.material() == Mesh.Material.PIPE && f.max()[1] < shape.support() - .3).toList();
+            var edgeUses = new HashMap<Set<Vertex>, Integer>();
+            var bendEdges = new HashSet<Set<Vertex>>();
+            for (var face : faces) {
+                assertTrue(face.run(), "Fuel piping must use the renderer's pipe-run exclusion");
+                var points = face.positions();
+                for (int i = 0; i < points.size(); i++) {
+                    var edge = Set.of(Vertex.at(points.get(i)), Vertex.at(points.get((i + 1) % points.size())));
+                    edgeUses.merge(edge, 1, Integer::sum);
+                    if (face.shading() instanceof Mesh.Torus) bendEdges.add(edge);
+                }
+            }
+            assertFalse(bendEdges.isEmpty(), "The fuel header must have joined bends");
+            for (var edge : bendEdges) assertEquals(2, edgeUses.get(edge), () -> shape + " open or doubled edge " + edge);
+        }
+    }
+
+    private record Vertex(long x, long y, long z) {
+        static Vertex at(double[] p) {
+            return new Vertex(Math.round(p[0] * 1e7), Math.round(p[1] * 1e7), Math.round(p[2] * 1e7));
+        }
+    }
+
     /**
      * Every size a player can choose of every unit kind, at its least second size and the lowest support, and at its most
      * too where the kind has at most nine sizes, else at its smallest and largest (2026-10-18: every kind's design is

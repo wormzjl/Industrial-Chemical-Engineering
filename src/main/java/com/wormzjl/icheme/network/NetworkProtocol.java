@@ -25,7 +25,7 @@ package com.wormzjl.icheme.network;
  */
 public final class NetworkProtocol {
     /** The version every registrar of the mod carries. */
-    public static final String VERSION = "icheme-7";
+    public static final String VERSION = "icheme-9";
 
     private NetworkProtocol() {
     }

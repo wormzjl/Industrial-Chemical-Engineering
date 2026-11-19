@@ -59,7 +59,7 @@ class HoldFuzzTest {
         }
     }
     record Placement(long tick,Block block) {}
-    record Held(long tick,long island,long committed,String status) {}
+    record Held(long tick,long island,long committed,String status,String state) {}
     record Outcome(long seed,List<Placement> placements,List<Held> held,List<String> exceptions,List<String> refused,long millis,long finalTick,String islands) {}
 
     // ---------------- world generation ----------------
@@ -170,7 +170,12 @@ class HoldFuzzTest {
                 public long nextRequestId(){return ++requests;}
                 public boolean submit(IslandCoordinator.Attempt attempt,ProcessSolveJobs.FluidIslandCommand command){attempts.put(attempt.slice().requestId(),attempt);commands.put(attempt.slice().requestId(),command);return true;}
                 public void cancel(long request){}
-            },changed->{for(var s:changed)if(s.status().startsWith("HELD"))held.add(new Held(ledger.onlineTick(),s.id(),s.clock().committedTick(),s.status()));},
+            },changed->{
+                for(var snapshot:changed)if(held.isEmpty()&&snapshot.status().startsWith("HELD")) {
+                    held.add(new Held(ledger.onlineTick(),snapshot.id(),snapshot.clock().committedTick(),snapshot.status(),describe(snapshot)));
+                    break;
+                }
+            },
                     ()->0L,new IslandCoordinator.Settings(Long.getLong("holdFuzz.wallNanos",2_000_000_000L),Long.getLong("holdFuzz.softNanos",1_500_000_000L),64,false,100,CertificatePolicy.defaults()).withTime(TIME),ledger::onlineTick);
             registry=new PhysicalRegistry(ledger,model,InlineFilter.empty(),new PhysicalRegistry.Host() {
                 public IslandCoordinator coordinator(){return coordinator;}
@@ -212,15 +217,18 @@ class HoldFuzzTest {
             }
             coordinator.pump();
         }
-        void runTo(long tick){while(ledger.onlineTick()<tick)tick();}
-        String describe(long island) {
-            var s=coordinator.observe(island);var b=new StringBuilder("island "+island+" committed="+s.clock().committedTick()+" status="+s.status()+"\n");
+        void runTo(long tick){while(held.isEmpty()&&ledger.onlineTick()<tick)tick();}
+        static String describe(IslandCoordinator.Snapshot s) {
+            var b=new StringBuilder("island "+s.id()+" committed="+s.clock().committedTick()+" status="+s.status()+"\n");
             var g=s.graph();
             for(int i=0;i<g.reservoirs().size();i++){var n=g.reservoirs().get(i);var st=n.state();
-                b.append("    node ").append(i).append(" id=").append(n.id()).append(' ').append(n.kind()).append(" z=").append(n.elevation()).append(" P=").append(st.pressure()).append(" T=").append(st.temperature()).append(" m=").append(st.mass()).append(" liq=").append(FluidThermodynamics.phaseVolume(st,FluidThermodynamics.OIL)).append(" water=").append(FluidThermodynamics.phaseVolume(st,FluidThermodynamics.AQUEOUS)).append(" vap=").append(st.vaporVolume()).append('\n');}
+                b.append("    node ").append(i).append(" id=").append(n.id()).append(' ').append(n.kind()).append(" z=").append(n.elevation()).append(" P=").append(st.pressure()).append(" T=").append(st.temperature()).append(" m=").append(st.mass()).append(" liq=").append(FluidThermodynamics.phaseVolume(st,FluidThermodynamics.OIL)).append(" water=").append(FluidThermodynamics.phaseVolume(st,FluidThermodynamics.AQUEOUS)).append(" vap=").append(st.vaporVolume())
+                        .append(" stockMol=").append(Arrays.toString(n.inventory().moles()))
+                        .append(" stockJ=").append(n.inventory().internalEnergy())
+                        .append(" solidKg=").append(n.inventory().solids().massKg()).append('\n');}
             for(int i=0;i<g.pipes().size();i++){var p=g.pipes().get(i);
-                b.append("    pipe ").append(i).append(' ').append(p.first()).append("->").append(p.second()).append(' ').append(p.control()).append(" d=").append(p.minimumArea()).append(" blocked=").append(p.blockedDirections()).append(" filter=").append(p.filter()!=null).append(" ports=").append(p.firstPort()).append('/').append(p.secondPort()).append('\n');}
-            s.lastResult().ifPresent(r->b.append("    last modes=").append(r.endpointModes()).append(" flows=").append(Arrays.toString(r.averageMassFlows())).append('\n'));
+                b.append("    pipe ").append(i).append(' ').append(p.first()).append("->").append(p.second()).append(' ').append(p.control()).append(" areaM2=").append(p.minimumArea()).append(" blocked=").append(p.blockedDirections()).append(" filter=").append(p.filter()!=null).append(" ports=").append(p.firstPort()).append('/').append(p.secondPort()).append('\n');}
+            s.lastResult().ifPresent(r->b.append("    last modes=").append(r.endpointModes()).append(" endpoint flows=").append(Arrays.toString(r.endpointFlows())).append(" average flows=").append(Arrays.toString(r.averageMassFlows())).append('\n'));
             return b.toString();
         }
     }
@@ -233,20 +241,15 @@ class HoldFuzzTest {
             w=new World(MODELS.get());
             for(var p:placements) {
                 w.runTo(p.tick);
+                if(!w.held.isEmpty())break;
                 try{w.place(p.block);}
                 catch(IllegalArgumentException invalid){refused.add(p.block.label()+": "+invalid.getMessage());}
             }
             long end=placements.getLast().tick+100L*slices;
-            int reported=0;
-            while(w.ledger.onlineTick()<end) {
-                w.tick();
-                if(verbose&&w.held.size()>reported){for(var h:w.held.subList(reported,w.held.size()))System.out.println("FUZZ_VERBOSE_HELD seed="+seed+" "+h+"\n"+w.describe(h.island()));reported=w.held.size();}
-                // Owner, 2026-11-10: a seed stops at its first hold. A held island is retried at every publication, so running on
-                // to the window's end only burns its wall deadline again (seed 575: 119 times, 400 s); the first hold classifies the seed.
-                if(!w.held.isEmpty())break;
-            }
+            while(w.held.isEmpty()&&w.ledger.onlineTick()<end)w.tick();
+            if(verbose)for(var h:w.held)System.out.println("FUZZ_VERBOSE_HELD seed="+seed+" tick="+h.tick()+"\n"+h.state());
             var b=new StringBuilder();for(var s:w.coordinator.observe())b.append(s.id()).append(':').append(s.status().length()>60?s.status().substring(0,60):s.status()).append(';');islands=b.toString();
-            if(verbose)for(var s:w.coordinator.observe())System.out.println("FUZZ_VERBOSE_END seed="+seed+" "+w.describe(s.id()));
+            if(verbose)for(var s:w.coordinator.observe())System.out.println("FUZZ_VERBOSE_END seed="+seed+" "+World.describe(s));
         } catch(Throwable failure) {
             var sw=new StringWriter();failure.printStackTrace(new PrintWriter(sw));var lines=sw.toString().lines().limit(12).toList();
             exceptions.add(String.join(" | ",lines));
@@ -312,7 +315,7 @@ class HoldFuzzTest {
                     .append(" holds=").append(o.held.size()).append(" classes=").append(seedClasses).append(" refused=").append(o.refused.size()).append(" islands=").append(o.islands).append('\n');
             if(perSeed.containsKey(o.seed))report.append("  COUNTERS_SEED").append(perSeed.get(o.seed)).append('\n');
             report.append("  layout ");for(var p:o.placements)report.append(p.tick).append(':').append(p.block.label()).append(' ');report.append('\n');
-            for(var h:o.held)report.append("  HELD tick=").append(h.tick()).append(" island=").append(h.island()).append(" committed=").append(h.committed()).append(" class=").append(classify(h.status())).append(" status=").append(h.status()).append('\n');
+            for(var h:o.held)report.append("  HELD tick=").append(h.tick()).append(" island=").append(h.island()).append(" committed=").append(h.committed()).append(" class=").append(classify(h.status())).append(" status=").append(h.status()).append('\n').append("  STATE ").append(h.state()).append('\n');
             for(var e:o.exceptions)report.append("  EXCEPTION ").append(e).append('\n');
             for(var e:o.refused)report.append("  REFUSED ").append(e).append('\n');
         }

@@ -463,6 +463,38 @@ class ColumnCycleTest {
         }
     }
 
+    /**
+     * Package 6 of batch 2026-11-17-column-cold-feed: a table solved with its pumparound at a quarter of its set point (a
+     * cold feed's capped solve) books past that duty at most 0.9 of its condenser duty, a NOTICE naming the column's heat;
+     * the condenser keeps a tenth of its solved duty, nothing trips or passes, and the energy closes.
+     */
+    @Test
+    void aPumparoundTakesOverAtMostNineTenthsOfTheCondenser() {
+        var whole = table();
+        // A pumparound set at 100 kJ/mol of feed, the table solved at a quarter of it: the condenser that closes the reference
+        // state takes the rest.
+        double demand = 500, set = -100_000, quarter = set / 4;
+        var setpoints = new Setpoints(100, 100, 332, 4, 0, new double[] {.4}, new double[] {.1}, new double[] {set});
+        double condenser = whole.condenserPerFeed() + (-20_000 - quarter);
+        var capped = new SplitTable(AXIS, whole.products(), 0, new double[] {quarter}, condenser, whole.reference(), whole.held());
+        ColumnCycle.ProductEnergy energy = (k, n) -> energy(capped, k, n);
+        var step = ColumnCycle.step(capped, setpoints, 5, FEED, List.of(STEAM), OPEN, ColumnCycle.Rooms.NONE, energy, false);
+        double allowed = ColumnCycle.PUMPAROUND_TAKEOVER * -condenser * demand, wanted = (quarter - set) * demand;
+        assertTrue(allowed < wanted, "the take-over binds in this case: " + allowed + " J against " + wanted + " J");
+        assertFalse(step.tripped(), step.conditions().toString());
+        assertFalse(step.passing(), step.conditions().toString());
+        assertEquals(500, step.feedMoles(), 1e-12, "the feed is kept");
+        assertEquals(quarter * demand - allowed, step.pumparounds()[0], 1e-6, "the table's duty plus 0.9 of its condenser");
+        assertEquals(.1 * condenser * demand, step.condenser(), Math.abs(condenser * demand) * 1e-9, "the overhead keeps a tenth");
+        var notice = Condition.find(step.conditions(), Condition.PUMPAROUND_SHORT);
+        assertNotNull(notice, step.conditions().toString());
+        assertTrue(notice.text().contains("the column's heat"), notice.text());
+        double in = step.feed().energy() + step.steam().getFirst().energy(), out = 0;
+        for (var p : step.products()) out += p.energy();
+        assertEquals(out, in + step.reboiler() + step.condenser() + step.pumparounds()[0], Math.abs(out) * 1e-12, "the energy closes on the condenser");
+        assertEquals(DriftBands.Trigger.PUMPAROUND, DriftBands.check(capped, step, 500).orElseThrow().trigger(), "the booked duty asks a solve");
+    }
+
     private static double TRIP_DEPARTURE() {
         return ColumnCycle.TRIP_DEPARTURE;
     }

@@ -4,6 +4,7 @@ import com.wormzjl.icheme.runtime.assembly.AssemblyStore.Status;
 import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.SavedEquipment;
 import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
 import com.wormzjl.icheme.science.assembly.ColumnBlueprint;
 import com.wormzjl.icheme.science.plant.column.Port;
@@ -14,7 +15,9 @@ import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.equipment.NozzlePorts;
 import com.wormzjl.icheme.science.equipment.ShapeRasterizer;
+import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
+import com.wormzjl.icheme.world.level.block.Positions;
 import java.util.ArrayList;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -47,21 +50,21 @@ public final class ColumnStarts {
 
     /** The Start of the column at {@code origin}. */
     public static Built build(ServerLevel level, FluidWorldAuthority world, BlockPos origin) {
-        var vessel = EquipmentStructure.at(level, origin);
-        if (vessel == null || !AssemblyService.designed(vessel.shape())) return refused(Refusal.NO_DESIGN.text());
-        var trays = vessel.shape().trays();
+        var master = Positions.of(level, origin);
+        var shape = SavedEquipment.at(world, master);
+        if (shape == null || !AssemblyService.designed(shape)) return refused(Refusal.NO_DESIGN.text());
+        var trays = shape.trays();
         var point = trays.operating();
         if (point == null) return refused(Refusal.NO_SAVED_POINT.text());
         if (trays.components().ejector()) return refused(Refusal.VACUUM.text());
-        var entry = AssemblyStore.of(level).entry(vessel.origin().asLong());
+        var entry = AssemblyStore.of(level).entry(origin.asLong());
         if (entry == null || entry.status() != Status.COMPLETE || entry.report() == null) return refused(Refusal.INCOMPLETE.text());
-        String dimension = level.dimension().location().toString();
-        var o = vessel.origin();
+        String dimension = master.dimension();
         var nozzles = new ArrayList<PhysicalFluidTopology.Position>();
         // Each nozzle's pipe block: the cell in front of its flange face, by the rule a pipe's drawing and the assembly walk keep.
-        for (var p : ShapeRasterizer.ports(vessel.shape())) {
+        for (var p : ShapeRasterizer.ports(shape)) {
             var front = NozzlePorts.front(p);
-            nozzles.add(new PhysicalFluidTopology.Position(dimension, o.getX() + front.x(), o.getY() + front.y(), o.getZ() + front.z()));
+            nozzles.add(Positions.of(level, origin.offset(front.x(), front.y(), front.z())));
         }
         var spots = new ArrayList<FluidWorldAuthority.PortSpot>();
         for (var s : entry.report().slots()) {
@@ -70,7 +73,7 @@ public final class ColumnStarts {
             int index = s.slot().index() == 0 ? 0 : s.slot().index() - 1;
             // The fitting that fills the slot (its member; the slot report's at is where a fault lies).
             var at = BlockPos.of(s.member());
-            var valve = world.at(new PhysicalFluidTopology.Position(dimension, at.getX(), at.getY(), at.getZ())).orElse(null);
+            var valve = world.at(Positions.of(level, at)).orElse(null);
             if (valve == null) return refused(Refusal.VALVE_UNREGISTERED.text());
             // The valve's arrow points along the stream: an inlet's column side is ahead of it, an outlet's behind it.
             var facing = valve.device().facing();
@@ -80,7 +83,6 @@ public final class ColumnStarts {
             var c = PortConditions.estimate(point, trays, port, index);
             spots.add(new FluidWorldAuthority.PortSpot(port, index, valve.device().id(), cell, toward, c.pressure(), c.temperature()));
         }
-        var master = new PhysicalFluidTopology.Position(dimension, o.getX(), o.getY(), o.getZ());
         // A water-cooled condenser's sides: the column holds its process side, its water side stays in the network (C6b);
         // every shell in parallel the same (S3b); an air-then-water condenser's from its trim (COOLER_MODEL_PLAN.md section 6).
         var cooled = ColumnBlueprint.waterCooled(trays.components().condenser());
@@ -98,10 +100,11 @@ public final class ColumnStarts {
             for (var s : entry.report().slots())
                 if (s.slot().equals(ColumnBlueprint.CONDENSER))
                     for (long unit : s.units()) {
-                        var member = EquipmentStructure.at(level, BlockPos.of(unit));
-                        if (member != null && member.shape().kind() == EquipmentShape.Kind.AIR_COOLER) {
-                            for (var side : HeatSides.of(member.shape())) air += side.area();
-                            for (long side : EquipmentStructure.heatSides(world, level, member)) {
+                        var at = Positions.of(level, BlockPos.of(unit));
+                        var member = SavedEquipment.at(world, at);
+                        if (member != null && member.kind() == EquipmentShape.Kind.AIR_COOLER) {
+                            for (var side : HeatSides.of(member)) air += side.area();
+                            for (long side : EquipmentStructure.heatSides(world, at, member)) {
                                 var r = world.registrations().get(side);
                                 if (r != null && r.device().heat().fans()) fans.add(side);
                             }
@@ -113,21 +116,21 @@ public final class ColumnStarts {
         var members = new ColumnUnit.Members(fans, movers(level, world, entry, ColumnBlueprint.REFLUX_PUMP), pumps);
         // The column's material of construction (WP8 of batch 2026-11-16-fouling-corrosion): its unit's wall corrodes and wears as it.
         return new Built(new FluidWorldAuthority.ColumnStart(master, Setpoints.of(point), nozzles, spots, condenser, air, reboiler, pumparounds, members,
-                vessel.shape().material()), null);
+                shape.material()), null);
     }
 
     /** The fluid movers of every unit or fitting the report places in pump slot {@code slot}: a casing's, or an in-line pump's. */
     private static ArrayList<Long> movers(ServerLevel level, FluidWorldAuthority world, AssemblyStore.Entry entry, Slot slot) {
         var out = new ArrayList<Long>();
-        String dimension = level.dimension().location().toString();
         for (var s : entry.report().slots())
             if (s.slot().equals(slot))
                 for (long unit : s.units()) {
-                    var at = BlockPos.of(unit);
-                    var member = EquipmentStructure.at(level, at);
-                    if (member != null) out.addAll(EquipmentStructure.movers(world, level, member));
-                    else world.at(new PhysicalFluidTopology.Position(dimension, at.getX(), at.getY(), at.getZ()))
-                            .filter(r -> r.device().control() instanceof com.wormzjl.icheme.science.fluid.network.FlowControl.Mover)
+                    var at = Positions.of(level, BlockPos.of(unit));
+                    if (entry.report().members().contains(unit)) {
+                        var member = SavedEquipment.at(world, at);
+                        if (member != null) out.addAll(EquipmentStructure.movers(world, at, member));
+                    } else world.at(at)
+                            .filter(r -> r.device().control() instanceof FlowControl.Mover)
                             .ifPresent(r -> out.add(r.device().id()));
                 }
         return out;
@@ -139,8 +142,9 @@ public final class ColumnStarts {
         for (var s : entry.report().slots())
             if (s.slot().equals(slot))
                 for (long unit : s.units()) {
-                    var member = EquipmentStructure.at(level, BlockPos.of(unit));
-                    if (member != null) sides.addAll(EquipmentStructure.heatSides(world, level, member));
+                    var at = Positions.of(level, BlockPos.of(unit));
+                    var member = SavedEquipment.at(world, at);
+                    if (member != null) sides.addAll(EquipmentStructure.heatSides(world, at, member));
                 }
         return sides;
     }

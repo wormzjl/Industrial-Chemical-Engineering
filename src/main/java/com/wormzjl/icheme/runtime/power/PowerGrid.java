@@ -14,7 +14,11 @@ import java.util.function.Function;
  * operation.
  */
 public final class PowerGrid {
-    public record Address(String dimension, BlockPos owner, Direction face) {
+    public record Address(String dimension, BlockPos owner, Direction face, long host) {
+        public Address(String dimension, BlockPos owner, Direction face) {
+            this(dimension, owner, face, 0);
+        }
+
         public Address {
             owner = owner.immutable();
         }
@@ -54,7 +58,7 @@ public final class PowerGrid {
                 var owner = new Owner(p.dimension(), p.owner());
                 owners.add(owner);
                 portOwners.put(id, owner);
-                var address = new Address(p.dimension(), p.owner(), p.face().getOpposite());
+                var address = new Address(p.dimension(), p.owner(), p.face().getOpposite(), p.host());
                 if (p.kind() != DataPort.Kind.POWER_OUTPUT)
                     inputs.computeIfAbsent(owner, k -> new ArrayList<>()).add(address);
                 if (p.kind() != DataPort.Kind.POWER_INPUT)

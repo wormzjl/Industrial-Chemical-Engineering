@@ -1065,7 +1065,7 @@ public final class ProcessUnit {
     }
     private void generatorPanels(int first) {
         var polygons=mesh.facets();
-        for(int i=first;i<polygons.size();i++) {var p=polygons.get(i);if(p.material()==Material.MOTOR_FRAME||p.material()==Material.MOTOR_PANEL)polygons.set(i,new Mesh.Facet(p.positions(),p.normal(),p.min(),p.max(),p.shading(),Material.GENERATOR_PANEL,p.u(),p.v(),p.part()));}
+        for(int i=first;i<polygons.size();i++) {var p=polygons.get(i);if(p.material()==Material.MOTOR_FRAME||p.material()==Material.MOTOR_PANEL)polygons.set(i,new Mesh.Facet(p.positions(),p.normal(),p.min(),p.max(),p.shading(),Material.GENERATOR_PANEL,p.u(),p.v(),p.part(),p.run()));}
     }
     void largeGenerator(double x,double y,double z0,double across,double length,double floor){int first=mesh.facets().size();largeMotor(x,y,z0,across,length,floor);generatorPanels(first);}
 
@@ -1235,6 +1235,7 @@ public final class ProcessUnit {
 
     /** A {@link #line(double, Material, double[]...)} of {@code sides} sides: a drawn line in any direction that does not collide. */
     void line(double r, int sides, Material material, double[]... points) {
+        boolean was = mesh.run(true);
         for (int k = 0; k + 1 < points.length; k++) {
             var along = sub(points[k + 1], points[k]);
             double length = Math.sqrt(dot(along, along));
@@ -1244,6 +1245,7 @@ public final class ProcessUnit {
             mesh.prism(new Frame(points[k], dir, unit(cross(dir, ref))), r, 0, length, sides, material);
             if (k > 0) mesh.sphere(points[k], r * 1.05, sides, material);
         }
+        mesh.run(was);
     }
 
     /** A {@link #pipe(double, int, Material, boolean, double[]...)} with a pipe's facets ({@link PipeSizes#sides}). */
@@ -1261,6 +1263,16 @@ public final class ProcessUnit {
      * its ends by r (a hose inside a derrick, a moving part, does not collide).
      */
     void pipe(double r, int sides, Material material, boolean solid, double[]... points) {
+        pipe(r, sides, material, solid, false, points);
+    }
+
+    /** A burner header with open branches and tangent elbows. The eight-sided straight and bend end rings coincide. */
+    void fuelPipe(double radius, double[]... points) {
+        pipe(radius, 8, Material.PIPE, false, true, points);
+    }
+
+    private void pipe(double r, int sides, Material material, boolean solid, boolean smoothElbows, double[]... points) {
+        boolean was = mesh.run(true);
         var p = legs(points);
         double od = 2 * r, bend = Math.max(.15, od);
         int m = p.length, segments = od > .2 ? 3 : 2;
@@ -1268,7 +1280,7 @@ public final class ProcessUnit {
         double[] cut = new double[m], reach = new double[m];
         for (int k = 1; k + 1 < m; k++) {
             cut[k] = Math.min(bend, .5 * Math.min(Math.sqrt(dot(sub(p[k], p[k - 1]), sub(p[k], p[k - 1]))), Math.sqrt(dot(sub(p[k + 1], p[k]), sub(p[k + 1], p[k])))));
-            reach[k] = (cut[k] + r) * tan;
+            if (!smoothElbows) reach[k] = (cut[k] + r) * tan;
         }
         for (int k = 0; k + 1 < m; k++) {
             double[] a = p[k], b = p[k + 1], along = sub(b, a);
@@ -1287,8 +1299,11 @@ public final class ProcessUnit {
         for (int k = 1; k + 1 < m; k++) {
             var d0 = unit(sub(p[k], p[k - 1]));
             var d1 = unit(sub(p[k + 1], p[k]));
-            mesh.bend(new Frame(plus(p[k], plus(scale(d0, -cut[k]), scale(d1, cut[k]))), cross(d0, d1), neg(d1)), cut[k], r, 0, Math.PI / 2, segments, sides, false, material);
+            var frame = new Frame(plus(p[k], plus(scale(d0, -cut[k]), scale(d1, cut[k]))), cross(d0, d1), neg(d1));
+            if (smoothElbows) mesh.torus(frame, cut[k], r, 0, Math.PI / 2, 3, sides, material);
+            else mesh.bend(frame, cut[k], r, 0, Math.PI / 2, segments, sides, false, material);
         }
+        mesh.run(was);
     }
 
     /**
@@ -1316,7 +1331,9 @@ public final class ProcessUnit {
      */
     double[] elbow(double[] start, double[] d0, double[] d1, double bend, double r, int n, int segments, Material material) {
         var centre = plus(start, scale(d1, bend));
+        boolean was = mesh.run(true);
         mesh.bend(new Frame(centre, cross(d0, d1), neg(d1)), bend, r, 0, Math.PI / 2, segments, n, true, material);
+        mesh.run(was);
         return plus(centre, scale(d0, bend));
     }
 
@@ -1902,12 +1919,15 @@ public final class ProcessUnit {
     /** How far a burner's muffler hangs under the floor, m. */
     static final double BURNER_DROP = 1.05;
 
+    void burnerRiser(double x, double z, double yFuel, double floor, double pipe) {
+        fuelPipe(.7 * pipe, new double[]{x, yFuel, z}, new double[]{x, floor - BURNER_DROP + .05, z});
+    }
+
     /**
      * A heater's burners under its floor ({@code y0}) at {@code at}, {x, z} each: the air register drum ({@code register}
-     * across, its louvre band and lever) under the floor, the muffler drum (1.3 times as wide, open underneath) under it,
-     * and the gas riser from the fuel header at {@code yFuel} up through the muffler.
+     * across, its louvre band and lever) under the floor, the muffler drum (1.3 times as wide, open underneath) under it.
      */
-    void burners(double[][] at, double register, double y0, double yFuel, double pipe) {
+    void burners(double[][] at, double register, double y0) {
         double muffler = 1.3 * register, low = y0 - BURNER_DROP;
         for (var p : at) {
             var up = Frame.of(new double[]{p[0], 0, p[1]}, 1, 1);
@@ -1918,7 +1938,6 @@ public final class ProcessUnit {
             mesh.annulus(up, register, muffler, y0 - .45, 12, 1, Material.MACHINE);
             mesh.annulus(up, .55 * muffler, muffler, low, 12, -1, Material.MACHINE);
             mesh.annulus(up, 0, .55 * muffler, low + .05, 12, -1, Material.OPENING);
-            mesh.prism(up, .7 * pipe, yFuel, low + .05, 8, Material.PIPE);
             solids.add(Solid.rod(new double[]{p[0], 0, p[1]}, 1, low, y0, muffler, 0));
         }
     }
@@ -3039,7 +3058,9 @@ public final class ProcessUnit {
      */
     double[] reducer(double[] start, double[] dir, double r0, double r1, double length, int sides, Material material, boolean solid) {
         double[] ref = Math.abs(dir[1]) < .9 ? new double[]{0, 1, 0} : new double[]{1, 0, 0}, end = plus(start, scale(dir, length));
+        boolean was = mesh.run(true);
         mesh.frustum(new Frame(start, dir, unit(cross(dir, ref))), r0, r1, 0, length, sides, material);
+        mesh.run(was);
         if (solid) {
             int axis = Math.abs(dir[0]) > .9 ? 0 : Math.abs(dir[1]) > .9 ? 1 : 2;
             double[] centre = start.clone();

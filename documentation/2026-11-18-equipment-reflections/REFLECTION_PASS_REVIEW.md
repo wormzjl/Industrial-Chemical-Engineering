@@ -298,3 +298,37 @@ stretched and lower, the vertical ones stretched upright; the 0.5 and 2 m/s rows
 
 **Not verified.** No client: the GLSL is compiled by no test; the highlight's size, the rim's softness and the depth
 against the baked glass are unseen.
+
+## 13. Part 4: a grey gloss, not a mirror; structure pipe runs left plain
+
+Owner, from a client on 0.35.2: a large column "looks really weird", "looks better from above but very weird from below",
+"too shiny"; the fired heater's crossover the same; "platforms are too shiny as well"; the crossover "needs to be in-line
+with pipes" (choice: structure pipe runs out of the pass); then "it doesn't need to reflect color" and "doesn't need to be
+real reflection".
+
+**What the code did.** The pass added `sky(R) F tint` on top of the full base. Metal had F0 0.55: a clad wall seen 40
+degrees from below got 0.62 + 0.49 = 1.11 in blue, clamped white-blue; from above it mirrored the darker ground. The
+jacketing was the sharpest class (blur 0.18, highlight 120 / 1.6): the flashing rings' tops showed as white lines and the
+head and the heater's crossovers carried a hard sun spot. Grating was bare steel (F0 0.55, 60 / 1.6). Pipe runs that are
+part of a structure (a heater's crossover, a manifold, an overhead) took the pass while laid pipes beside them do not.
+
+**Change (the final form).**
+- Law (`ReflectionLaw`): a grey sheen, `added = (surround F + highlight) x sky light x strength x fade`, the same in every
+  channel; `surround` is the luma of the fog colour (0.947 for the preview horizon; it follows time of day and weather);
+  `kept = 1 - F x the same factors`. The shader writes `F x scale` as alpha; blend ONE, ONE_MINUS_SRC_ALPHA on colour,
+  ZERO, ONE on alpha. Removed: the sky and ground gradient (`sky`, `ZENITH`, `NEAR_GROUND`, `GROUND`, the powers), the
+  per-vertex reflection colour (`ReflectionMesh.tints`, `ReflectionClass.tint`, `tinted`, the measured albedos), the paint
+  in the mesh cache key, and the shader's `Zenith`, `NearGround`, `Ground`, `Powers` uniforms.
+- Table: PAINT 0.05, 120 / 0.9 (unchanged); STEEL 0.20, 60 / 0.8; CLADDING 0.20, 30 / 0.5; new GALVANISED (GRATING)
+  0.10, 15 / 0.2. A larger share greys dark metal (a nut, base 0.26, would rise to 0.58 at F0 0.55) and washes out a light
+  jacket. `blur` stays only for the LabPBR maps; GALVANISED's 0.50 gives smoothness 75 (`equipment_grating_flat_s.png`
+  regenerated, the only map that differed; F0 id 230, LabPBR has no zinc).
+- Pipe runs: `Mesh.Facet.run`, set by `ProcessUnit.line`, `pipe`, `elbow` and `reducer`; `ShapeRasterizer.renderBody(shape,
+  detail, false)` leaves them out and `ReflectionMesh.polygons` uses it, so they show the plain shade as laid pipes do.
+- Numbers: a clad wall (base 0.615) seen 40 degrees from below or above: 0.615 x 0.799 + 0.947 x 0.201 = 0.682, the
+  same both ways (`ReflectionLawTest.theSheenIsTheSameFromAboveAndBelow`); paint head-on gains 0.047.
+- `tools/reflection-render`: the composite `base x kept + added`; a 4 m, 30-tray column; the second view from 25 degrees
+  below; pipe runs drawn without the pass. The pass panels now sit close to the plain shade with a soft grey rim.
+
+**Not verified.** No client look yet; the GLSL is compiled by no test. Tests: the selection (`affected.mjs select`) runs
+once the look is accepted.

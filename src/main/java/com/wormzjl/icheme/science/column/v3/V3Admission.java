@@ -126,6 +126,6 @@ final class V3Admission {
         if (!Double.isFinite(available) || cooling <= available + heating) return null;
         return terminalFailure(V3SolverFailureCode.INFEASIBLE_SPECIFICATION,
                 V3HeatFeasibility.staticAdmissionDetail(cooling, available, heating),
-                "input/heat-" + input.pumparounds().size(), List.of());
+                V3ColumnOutcome.STATIC_COOLING_PATH + input.pumparounds().size(), List.of());
     }
 }

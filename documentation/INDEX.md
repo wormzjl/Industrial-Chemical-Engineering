@@ -14,19 +14,26 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-19-release-0353/](2026-11-19-release-0353/README.md) | Equipment and unloaded-plant release preparation | Implemented 2026-11-19 (0.35.3) |
+| [2026-11-18-furnace-model/](2026-11-18-furnace-model/README.md) | Furnace leg faces and burner fuel pipe joints | Implemented 2026-11-19 (0.35.3) |
+| [2026-11-18-junction-lag/](2026-11-18-junction-lag/README.md) | Junction thermal fronts, rollback and watch-world hold causes | Abandoned 2026-11-19, implementation reverted |
+| [2026-11-18-unloaded-chunks/](2026-11-18-unloaded-chunks/README.md) | Unloaded plant operation, remote controls and blast reconciliation | Implemented 2026-11-19 (0.35.3) |
+| [2026-11-18-device-gui-labels/](2026-11-18-device-gui-labels/README.md) | Device tabs, combined furnace coils and engineering labels | Implemented 2026-11-19 (0.35.3) |
+| [2026-11-18-constructor-ghost-rendering/](2026-11-18-constructor-ghost-rendering/README.md) | Constructor ghost rendering and equipment chooser | Implemented 2026-11-19 (0.35.3) |
 | [2026-11-18-default-equipment-names/](2026-11-18-default-equipment-names/README.md) | Constructor-built equipment takes a default plant tag (P-101) as its name | In progress since 2026-11-18 (built and tested; GameTest not run, not seen in a client) |
 | [2026-11-18-co2-column-input/](2026-11-18-co2-column-input/README.md) | CO2 in the gas intake's air; a column with CO2 in its feed solves, dry ice decided by the crystal equilibrium of its products and coldest tray | In progress since 2026-11-18 (built and tested; owner items O1, O2) |
 | [2026-11-18-respirator/](2026-11-18-respirator/README.md) | A respirator worn on the head or a Curios slot, with a consumable filter, against polluted air | In progress since 2026-11-18 (built and tested; not seen in a client) |
-| [2026-11-18-equipment-reflections/](2026-11-18-equipment-reflections/README.md) | View-dependent reflections on equipment in the mod's own shader; a switch for every custom shader | In progress since 2026-11-18 (built and tested; not seen in a client) |
+| [2026-11-18-equipment-reflections/](2026-11-18-equipment-reflections/README.md) | View-dependent reflections on equipment in the mod's own shader; a switch for every custom shader | Implemented 2026-11-19 (0.35.3) |
 | [2026-11-18-tutorial-photos/](2026-11-18-tutorial-photos/README.md) | Redistributable photographs in the Field Guide: a thumbnail row per chapter and a viewer | In progress since 2026-11-18 |
 | [2026-11-18-pollution-propagation/](2026-11-18-pollution-propagation/README.md) | Air pollution drifts upward (horizontal spread unchanged); bench and a faster, bit-identical step | In progress since 2026-11-18; P1 and P2 built, not merged |
+| [2026-11-18-column-test-world-speed/](2026-11-18-column-test-world-speed/README.md) | The column test world's build: the line search on a flat grid, same lines, 72 s to 3.4 s; the sizing kept and started from the Create World screen | Implemented 2026-11-19 (0.35.3) |
 | [2026-11-18-prune-tests/](2026-11-18-prune-tests/README.md) | Tests that guard no behaviour pruned (source-text checks, removed-code checks) | Merged 2026-11-18 (0.35.2 kept) |
 | [2026-11-18-ground-pollution/](2026-11-18-ground-pollution/README.md) | Ground pollution by chunk column: compound inventory, spread, slow decay, map and meter, growth, water and block effects | In progress since 2026-11-18; G1 to G4, G4b (polluted soil), the G3 layer key and G5's status line built; G5 delivery open until the solute batch's WP2 |
 | [2026-11-18-water-intake-outfall/](2026-11-18-water-intake-outfall/README.md) | A water intake that draws from a real water body; a waste outfall that pollutes the air at its cube | In progress since 2026-11-18 |
 | [2026-11-17-rust-solver-archive/](2026-11-17-rust-solver-archive/README.md) | The Rust column library leaves the build for `tools/rust-column-archive/` | In progress since 2026-11-17 |
 | [2026-11-17-three-phase-separator/](2026-11-17-three-phase-separator/README.md) | Drums and the desalter separate gas, oil and water by their size | In progress 2026-11-17 (packages 1 and 2 of 4; package 4's sizer and drum page; the gas space law and the demister) |
 | [2026-11-17-dynamic-settling/](2026-11-17-dynamic-settling/README.md) | A vessel's liquids settle over time; a level of separation on the drum page | In build 2026-11-17 (1a, G built) |
-| [2026-11-17-column-cold-feed/](2026-11-17-column-cold-feed/README.md) | A running column on a cold feed: pass to the bottoms, pumparound duty from its cooler | Built 2026-11-17: packages 0 to 4 (outlet at its account's energy, the pass, pumparound duty from its cooler, the cooler's wall against the draw, the tab); check in the world open |
+| [2026-11-17-column-cold-feed/](2026-11-17-column-cold-feed/README.md) | A running column on a cold feed: pass to the bottoms, pumparound duty from its cooler | Implemented 2026-11-19 (0.35.3) for the pumparound and heater follow-ups |
 | [2026-11-17-column-internal-hydraulics/](2026-11-17-column-internal-hydraulics/README.md) | A running column limited by its internal lines, pumps and port heads | Planned 2026-11-17 |
 | [2026-11-16-agents-md-token-usage/](2026-11-16-agents-md-token-usage/README.md) | AGENTS.md cut to the core of each subject; the full rules in `reference/rules/` | Implemented 2026-11-16 |
 | [2026-11-16-final-lane-cost/](2026-11-16-final-lane-cost/README.md) | The final lane within 8 minutes: watch seeds, left-out tests, shared JVMs, steps by their last run; whole-suite runs blocked | Implemented 2026-11-16 |

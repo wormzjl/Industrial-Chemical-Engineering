@@ -51,6 +51,11 @@ public final class DeterministicMath {
         return StrictMath.cbrt(x);
     }
 
+    /** The Euclidean norm of two components, without intermediate overflow or underflow. */
+    public static double hypot(double x, double y) {
+        return StrictMath.hypot(x, y);
+    }
+
     public static double cos(double x) {
         return StrictMath.cos(x);
     }

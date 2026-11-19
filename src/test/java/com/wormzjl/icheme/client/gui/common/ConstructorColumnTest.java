@@ -272,7 +272,7 @@ class ConstructorColumnTest {
     void eachPageFitsTheDoorWithItsBoxesInLine() {
         var texts = new HeatControlColumnTest.Recording("gui.icheme.");
         for (var c : cases(texts))
-            for (int width : new int[]{ConstructorColumn.WIDTH, ConstructorColumn.WIDTH - BAR}) {
+            for (int width : new int[]{c.page().area(HEIGHT).w(), c.page().area(HEIGHT).w() - BAR}) {
                 var column = Column.place(c.page().rows(), ConstructorColumn.LEFT, DialogColumns.TOP, width, M, Column.Metrics.COMPACT);
                 var bounds = column.bounds();
                 String at = c.name() + " at " + width;
@@ -347,12 +347,19 @@ class ConstructorColumnTest {
     @Test
     void eachPageShowsItsKeysWithTheCurrentPositionsLatched() {
         var t = new HeatControlColumnTest.Recording("gui.icheme.");
-        var choose = buttons(ConstructorColumn.choose(Category.VESSELS, Equipment.COLUMN, 16, t));
-        assertEquals(List.of("category:vessels", "category:heat", "category:machines", "category:reactors", "category:solid_fuel", "category:vacuum", "category:power", "import", "kind:vertical_drum", "kind:horizontal_drum",
-                "kind:column", "kind:floating_roof_tank", "kind:sphere", "kind:adsorber", "kind:cyclone", "kind:fluid_converter", "kind:gas_converter"), List.copyOf(choose.keySet()));
-        assertTrue(choose.get("category:vessels").latched() && !choose.get("category:vessels").active() && choose.get("category:heat").active());
-        assertTrue(choose.get("kind:column").latched() && choose.get("kind:column").active() && choose.get("kind:sphere").active() && !choose.get("kind:sphere").latched(),
-                "the draft's kind latched, and still pressed to return to its design");
+        var page = ConstructorColumn.choose(Category.SEPARATION, Equipment.COLUMN, 16, t);
+        var choose = buttons(page);
+        var saved = (Column.Group) page.rows().getFirst();
+        assertEquals(List.of("import"), ConstructorColumn.buttons(saved.rows()).stream().map(Column.Button::key).toList());
+        assertEquals(List.of("import", "category:vessels", "category:separation", "category:heat", "category:reactors", "category:solid_fuel",
+                "category:utilities", "category:rotating", "kind:column", "kind:batch_still", "kind:adsorber", "kind:cyclone"), List.copyOf(choose.keySet()));
+        assertTrue(choose.get("category:separation").latched() && !choose.get("category:separation").active() && choose.get("category:heat").active());
+        assertTrue(choose.get("kind:column").latched() && choose.get("kind:column").active());
+        assertEquals("Distillation column", choose.get("kind:column").text());
+        assertEquals("Cyclone separator [WIP]", choose.get("kind:cyclone").text());
+        assertEquals(Category.ROTATING, Equipment.LIQUID_RING_PUMP.category);
+        assertEquals(Category.ROTATING, Equipment.GAS_TURBINE.category);
+        assertEquals(Category.UTILITIES, Equipment.EJECTOR.category);
         var elsewhere = buttons(ConstructorColumn.choose(Category.HEAT, Equipment.COLUMN, 16, t));
         assertTrue(elsewhere.values().stream().filter(b -> b.key().startsWith("kind:")).noneMatch(Column.Button::latched), "the draft's kind latched only in its group");
         for (var category : Category.values())

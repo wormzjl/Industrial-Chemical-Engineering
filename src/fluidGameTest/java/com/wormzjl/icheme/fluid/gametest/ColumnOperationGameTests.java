@@ -4,6 +4,7 @@ import com.wormzjl.icheme.testworld.PlantBuilder;
 import com.wormzjl.icheme.testworld.CrudeUnitPlant;
 import com.wormzjl.icheme.IChemE;
 import com.wormzjl.icheme.registry.ModBlocks;
+import com.wormzjl.icheme.network.AssemblyNetwork;
 import com.wormzjl.icheme.network.FluidNetwork;
 import com.wormzjl.icheme.runtime.assembly.AssemblyService;
 import com.wormzjl.icheme.runtime.fluid.ColumnUnit;
@@ -14,17 +15,26 @@ import com.wormzjl.icheme.science.plant.column.Port;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
 import com.wormzjl.icheme.runtime.assembly.AssemblyStore;
 import com.wormzjl.icheme.runtime.control.ColumnCommands;
+import com.wormzjl.icheme.runtime.control.ControlFacts;
+import com.wormzjl.icheme.runtime.control.ControlService;
 import com.wormzjl.icheme.science.equipment.CableMedium;
+import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.science.plant.column.Setpoints;
 import com.wormzjl.icheme.world.inventory.ControlPanelMenu;
+import com.wormzjl.icheme.world.level.block.EquipmentStructure;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -271,6 +281,198 @@ public final class ColumnOperationGameTests {
                     if (life.failed()) helper.fail(life.failure[0]);
                 })
                 .thenSucceed();
+    }
+
+    /** A restored console can read and run the entire plant while only the console's end of its cable is loaded. */
+    @GameTest(template = "empty", timeoutTicks = 6000, batch = "column-dcs-unloaded")
+    public static void aRestoredDcsRunsAnUnloadedColumnAndItsMembers(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var remote = helper.absolutePos(BlockPos.ZERO).east(1536);
+        level.getChunk(remote);
+        var ground = level.getHeight(Heightmap.Types.WORLD_SURFACE, remote.getX(), remote.getZ());
+        var rig = CrudeUnitPlant.rig(level, new BlockPos(remote.getX(), ground, remote.getZ()), CrudeUnitPlant.Options.REVIEW);
+        var fixture = new RemoteDcs(helper, rig);
+        var life = fixture.life;
+        var plant = rig.plant;
+        life.stage(rig::build);
+        helper.onEachTick(fixture::tick);
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || plant.valvesInstalled()
+                        && PlantBuilder.port(plant, plant.column.origin(), CableMedium.DATA) != null, "Waiting for the plant's valves and data socket"))
+                .thenExecute(() -> life.stage(fixture::wire))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || fixture.unloaded(), "Waiting for every remote plant chunk to unload"))
+                .thenExecute(() -> life.stage(fixture::open))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || fixture.view() != null, "Waiting for the restored DCS's Operation view"))
+                .thenExecute(() -> life.stage(() -> {
+                    life.check(listed(fixture.operator, fixture.host), "The wired column is listed from its saved socket");
+                    var view = fixture.view();
+                    life.check(view.phase() == OperationView.Phase.STOPPED && view.setpoints().feedRate() == fixture.design.feedRate()
+                            && life.unit() == null, "The never-started column replays its design without creating an engine unit");
+                    var set = fixture.design;
+                    var values = new ArrayList<Double>(List.of(fixture.feed, set.condenserTemperature(), set.refluxRatio(), set.reboilerPerFeed()));
+                    for (double value : set.steamPerFeed()) values.add(value);
+                    for (double value : set.drawsPerFeed()) values.add(value);
+                    for (double value : set.pumparoundsPerFeed()) values.add(value);
+                    fixture.command(ColumnCommands.Action.APPLY, values);
+                    life.check(life.unit() == null, "APPLY queues until the control cadence");
+                }))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || answered(fixture.operator, 1), "Waiting for remote APPLY"))
+                .thenExecute(() -> life.stage(() -> {
+                    fixture.checkApplied(ColumnCommands.Action.APPLY);
+                    life.check(life.unit() != null && !life.unit().running() && life.unit().setpoints().feedRate() == fixture.feed,
+                            "APPLY installs the requested setpoints on a stopped unit");
+                    fixture.command(ColumnCommands.Action.START, List.of());
+                }))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || answered(fixture.operator, 2), "Waiting for remote START"))
+                .thenExecute(() -> life.stage(() -> {
+                    fixture.checkApplied(ColumnCommands.Action.START);
+                    var unit = life.unit();
+                    life.check(unit != null && unit.running() && unit.setpoints().feedRate() == fixture.feed,
+                            "START runs the column with its applied feed rate");
+                    if (unit == null || !unit.running()) return;
+                    life.check(fixture.view() != null && fixture.view().running(), "The console publishes the running Operation view");
+                    life.check(unit.condensers().equals(fixture.condenser), "The remote condenser's water side remains assigned");
+                    life.check(unit.utilities().pumparounds().equals(fixture.coolers), "Every remote pumparound's cooling side remains assigned");
+                    life.check(unit.members().reflux().equals(fixture.pumps.getFirst())
+                            && unit.members().pumparounds().equals(fixture.pumps.subList(1, fixture.pumps.size())),
+                            "Every remote constructed pump remains assigned");
+                    fixture.command(ColumnCommands.Action.STOP, List.of());
+                }))
+                .thenWaitUntil(() -> helper.assertTrue(life.failed() || answered(fixture.operator, 3), "Waiting for remote STOP"))
+                .thenExecute(() -> life.stage(() -> fixture.checkApplied(ColumnCommands.Action.STOP)))
+                // STOP is acknowledged on the control cadence. The unit stops when its port removals commit.
+                .thenWaitUntil(() -> {
+                    if (life.failed()) return;
+                    var unit = life.unit();
+                    var view = fixture.view();
+                    helper.assertTrue(unit != null && !unit.running() && view != null && view.phase() == OperationView.Phase.STOPPED,
+                            "Waiting for remote STOP to commit and be published");
+                })
+                .thenExecute(() -> {
+                    life.stage(() -> life.check(fixture.view().setpoints().feedRate() == fixture.feed,
+                            "STOP is published with the applied setpoints kept"));
+                    fixture.clean();
+                })
+                .thenWaitUntil(() -> helper.assertTrue(plant.removed(), "Waiting for the remote plant to leave"))
+                .thenExecute(() -> {
+                    plant.release();
+                    if (fixture.cabling != null) fixture.cabling.release();
+                    if (life.failed()) helper.fail(life.failure[0]);
+                })
+                .thenSucceed();
+    }
+
+    private static final class RemoteDcs {
+        final GameTestHelper helper;
+        final Life life;
+        final PlantBuilder plant;
+        final List<ChunkPos> plantChunks;
+        PlantBuilder cabling;
+        BlockPos console;
+        CompoundTag wiring;
+        long host;
+        ControlLoopGameTests.ViewCapture operator;
+        ControlPanelMenu menu;
+        ControlService restored;
+        Setpoints design;
+        double feed;
+        List<Long> condenser;
+        List<List<Long>> coolers, pumps;
+
+        RemoteDcs(GameTestHelper helper, CrudeUnitPlant.Rig rig) {
+            this.helper = helper;
+            life = new Life(rig);
+            plant = rig.plant;
+            plantChunks = plant.chunks();
+        }
+
+        void wire() {
+            var socket = PlantBuilder.port(plant, plant.column.origin(), CableMedium.DATA);
+            host = socket.host();
+            var entry = AssemblyService.validate(plant.level, plant.controller());
+            life.check(entry != null && entry.status() == AssemblyStore.Status.COMPLETE, "The remote plant is complete: " + plant.faults());
+            design = Setpoints.of(life.rig.design.trays().operating());
+            feed = design.feedRate() * .75;
+            condenser = life.rig.condensers.stream().flatMap(v -> sides(v).stream()).toList();
+            coolers = life.rig.coolers.stream().map(this::sides).toList();
+            pumps = life.rig.pumps.stream().map(v -> Arrays.stream(EquipmentStructure.sideIdentities(plant.level, v)).boxed().toList()).toList();
+            life.check(!condenser.isEmpty() && !coolers.isEmpty() && coolers.stream().allMatch(s -> s.size() == 1)
+                    && pumps.size() == coolers.size() + 1 && pumps.stream().allMatch(p -> p.size() == 1 && p.getFirst() > 0),
+                    "The loaded plant must have registered utility sides and constructed movers");
+
+            // Forced chunks extend two full-status rings beyond the console. Run the cable beyond those rings.
+            console = new BlockPos(plant.high.getX() + 64, plant.base.getY(), socket.cell().getZ());
+            cabling = new PlantBuilder(plant.level, console, new BlockPos(socket.cell().getX() - console.getX() - 8, 0, -8),
+                    new BlockPos(4, Math.max(12, socket.cell().getY() - console.getY() + 6), 8));
+            cabling.hold();
+            var box = ColumnFailureModesReviewWorld.panel(cabling, console, Direction.WEST, true);
+            var cables = PlantBuilder.lay(cabling, List.of(box.dataPort(), socket), CableMedium.DATA);
+            var facts = new ControlFacts();
+            facts.panel(plant.world.controls().facts().panel(box.identity()));
+            facts.port(box.dataPort());
+            facts.port(socket);
+            cables.forEach(facts::cable);
+            wiring = facts.save(new CompoundTag(), plant.level.registryAccess());
+            plant.level.getChunkSource().save(true);
+            plant.release();
+            var consoleChunk = new ChunkPos(console);
+            for (var chunk : cabling.chunks())
+                if (!chunk.equals(consoleChunk)) plant.level.setChunkForced(chunk.x, chunk.z, false);
+        }
+
+        private List<Long> sides(EquipmentStructure.Vessel vessel) {
+            return Arrays.stream(EquipmentStructure.sideIdentities(plant.level, vessel)).filter(id -> id > 0
+                    && plant.world.registrations().get(id).device().heat().side() == HeatSides.Side.TUBE).boxed().toList();
+        }
+
+        boolean unloaded() {
+            return plantChunks.stream().noneMatch(chunk -> plant.level.getForcedChunks().contains(chunk.toLong())
+                    || plant.level.getChunkSource().getChunkNow(chunk.x, chunk.z) != null);
+        }
+
+        void open() {
+            operator = ControlLoopGameTests.operator(plant.level, console);
+            ControlPanelMenu.open(operator.player, console);
+            menu = ControlLoopGameTests.menu(helper, operator);
+            plant.world.controls().unwatch(menu);
+            // Start the control service with only the round-tripped facts. It has never seen any of the plant's cells.
+            restored = new ControlService(plant.world, ControlFacts.load(wiring));
+            restored.selectColumn(menu, host);
+            restored.watch(menu);
+            life.check(operator.views.isEmpty(), "Opening a cold control service waits for the scheduled publication");
+        }
+
+        void tick() {
+            if (restored == null || life.failed()) return;
+            restored.tick(plant.world.onlineTick());
+            life.check(unloaded(), "A DCS publication or command loaded a remote plant chunk");
+        }
+
+        OperationView view() {
+            if (operator.views.isEmpty()) return null;
+            var data = operator.views.getLast().data();
+            return data.getLong("column") == host ? AssemblyNetwork.decodeOperation(data.getByteArray("operation")) : null;
+        }
+
+        void command(ColumnCommands.Action action, List<Double> values) {
+            restored.column(menu, new ColumnCommands.Command(host, action, values));
+        }
+
+        void checkApplied(ColumnCommands.Action action) {
+            life.check(answer(operator).equals(ColumnCommands.APPLIED), action + " is answered APPLIED: " + answer(operator));
+        }
+
+        void clean() {
+            if (restored != null) restored.unwatch(menu);
+            restored = null;
+            if (operator != null) operator.player.closeContainer();
+            plant.hold();
+            if (cabling != null) {
+                cabling.hold();
+                cabling.remove();
+            }
+            plant.remove();
+        }
     }
 
     /** A free cell, with the one above it, on the ground near {@code near}, for a DCS. */

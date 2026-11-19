@@ -94,7 +94,7 @@ class ReflectionMeshTest {
         assertFalse(pass.containsKey(Mesh.Material.CONCRETE));
         for (var e : pass.entrySet())
             assertTrue(e.getValue() <= chunk.getOrDefault(e.getKey(), 0), e.getKey() + ": whole facets, never more triangles than the chunk's cut pieces");
-        var mesh = ReflectionMesh.of(shape, RenderDetail.NORMAL, 0xa1a1a0);
+        var mesh = ReflectionMesh.of(shape, RenderDetail.NORMAL);
         assertEquals(3 * pass.values().stream().mapToInt(Integer::intValue).sum(), mesh.vertices());
     }
 
@@ -126,7 +126,7 @@ class ReflectionMeshTest {
         int triangles = 0;
         var b = new StringBuilder("review plant: structure, pass triangles\n");
         for (var p : plant) {
-            int t = ReflectionMesh.of(p.shape(), RenderDetail.NORMAL, 0xa1a1a0).triangles();
+            int t = ReflectionMesh.of(p.shape(), RenderDetail.NORMAL).triangles();
             triangles += t;
             regions.add(ReflectionMesh.region(p.x(), p.z()));
             b.append(String.format("  %-12s %6d%n", p.name(), t));

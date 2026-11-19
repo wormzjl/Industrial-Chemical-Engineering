@@ -95,10 +95,37 @@ pumparounds work only as far as their trays hold liquid.
   `SizingPageTest.theDoorFitsInEveryViewForEveryItemInChinese`, is the separator batch's `sizing.demister` keys with no
   Chinese line (commit `4fd766c56`): it waits for the translation commit. The solver regression (chain-100) was not run.
 
+- 2026-11-18: package 6 built ([PUMPAROUND_CAP_PLAN.md](PUMPAROUND_CAP_PLAN.md), owner: "B only"): the pumparounds
+  capped by the column's heat. `ColumnSolve` retries a failed solve that is cooling-bound
+  (`V3ColumnOutcome.Failure.coolingBound`: the static cooling admission, the condenser bound, the condensation cap) or
+  NONCONVERGENCE with the pumparounds at 50, 25 and 10 % of their duty (`PUMPAROUND_SHARES`). The first that solves
+  stands, with the note "pumparounds at N % of their duty: the column's heat". `ColumnCycle` books a cooler-capped
+  pumparound duty, but the extra cooling it takes beyond the solved duties is at most 0.9 of the condenser's solved duty
+  (`PUMPAROUND_TAKEOVER`). The ladder differs from the plan: NONCONVERGENCE also retries, and there is no table-duties
+  step. Probe (read, then removed): the half solves feeds of 470 to 580 K, a quarter from 530 K, a tenth from 565 K,
+  1 % none. Tests: `ColumnCycleTest` 22 of 22, `ColumnSolveTest` passing.
+- 2026-11-18: a fired coil's set point is its outlet's temperature at its outlet's pressure
+  (`PassiveStepSolver.curvePressure`). The coil's heat curve was sampled at its inlet's pressure. Tests:
+  `HeatSideTopologyTest` 12 of 12, with a coil whose drop is over 1 bar; `FiredCoilTest` 5 of 5.
+- 2026-11-18: the burners relight after a reload (`FiredHeaters.fuelIslands`). Measured in the owner's save: `NO FUEL` for
+  five minutes after a reload, because the fuel island was saved at rest and the radiant demand woke no island (a
+  heater knows its fuel island only after a fuel booking). The demand now wakes every island that holds the burners.
+  `FiredHeaterFuelTest` 9 of 9. The save rerun (`tools/column-soak`, save batch): the coils' outlet reached 638.1 K (set
+  point 638.15 K) by tick 1800.
+- 2026-11-18: in the same rerun, measured:
+  - at tick 2000 the burners went `NO POWER`, a headless server with no player, so the save's creative power sources
+    did not tick (batch `2026-11-18-unloaded-chunks`);
+  - with the chunks forced, there was no `NO POWER`. From tick 4800 the outlet stood 6 K under its set point with
+    `LOW FUEL`, the fuel target held at 0.899 kg/s;
+  - the coil flow swung over the first 3000 ticks, at two points running backwards through one coil.
+
+  Open. The full `affected.mjs` selection was not run.
+
 ## Documents
 
 - [COLD_FEED_REVIEW.md](COLD_FEED_REVIEW.md)
 - [COLD_FEED_PLAN.md](COLD_FEED_PLAN.md)
+- [PUMPAROUND_CAP_PLAN.md](PUMPAROUND_CAP_PLAN.md)
 
 ## Code areas (when built)
 
@@ -113,3 +140,8 @@ pumparounds work only as far as their trays hold liquid.
 - A reload with pumparound coolers solves at the set points (D6's Start solve), then relaxes again over a few solves.
 - Not measured: where the heat-integrated review plant settles when its pumparounds are cut; T2's flash against V3
   at the 455 to 460 K edge; another crude.
+- The owner's save, with its chunks forced: `LOW FUEL` with the outlet 6 K under its set point from tick 4800, the
+  fuel target fixed at 0.899 kg/s. Read in code: `FiredHeaters.booked` wakes the fuel island on a 1 % move from the last
+  booking. The cause is not verified.
+- The coil flow swings at start in the same save, with a reverse flow through one coil: cause not known.
+- The full `affected.mjs` selection for package 6 and the two heater fixes.

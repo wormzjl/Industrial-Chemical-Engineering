@@ -243,10 +243,14 @@ public final class DeviceColumn {
 
     /** The Integrity group: the wall left, its rate and life, LED meters, then the governing mechanism and the material. */
     public static Column.Group integrity(Wall w, HeatControlColumn.Texts t) {
-        return new Column.Group(t.get("device_group.integrity"), t.get("device_group.integrity.hint"), List.of(
-                new Column.Reading("wall:left", t.get("wall_left"), w.left(), "%", t.get("wall_left.hint")),
-                new Column.Reading("wall:rate", t.get("wall_rate"), w.rate(), "mm/y", t.get("wall_rate.hint")),
-                new Column.Reading("wall:life", t.get("life_left"), w.life(), "min", t.get("wall_life.hint")),
+        return integrity(w, t.get("device_group.integrity"), "wall:", t);
+    }
+
+    public static Column.Group integrity(Wall w, String title, String prefix, HeatControlColumn.Texts t) {
+        return new Column.Group(title, t.get("device_group.integrity.hint"), List.of(
+                new Column.Reading(prefix + "left", t.get("wall_left"), w.left(), "%", t.get("wall_left.hint")),
+                new Column.Reading(prefix + "rate", t.get("wall_rate"), w.rate(), "mm/y", t.get("wall_rate.hint")),
+                new Column.Reading(prefix + "life", t.get("wall_life"), w.life(), "min", t.get("wall_life.hint")),
                 new Column.Paragraph(t.get("wall_mechanism", w.mechanism()), Palette.TEXT, t.get("wall_mechanism.hint")),
                 new Column.Paragraph(t.get("wall_material", w.material()), Palette.TEXT, t.get("wall_material.hint"))));
     }
@@ -255,7 +259,7 @@ public final class DeviceColumn {
     public static Column.Group trim(Trim v, HeatControlColumn.Texts t) {
         return new Column.Group(t.get("device_group.trim"), t.get("device_group.trim.hint"), List.of(
                 new Column.Reading("trim:health", t.get("trim_health"), v.health(), "%", t.get("trim_health.hint")),
-                new Column.Reading("trim:life", t.get("life_left"), v.life(), "min", t.get("trim_life.hint"))));
+                new Column.Reading("trim:life", t.get("trim_life"), v.life(), "min", t.get("trim_life.hint"))));
     }
 
     /** The Drive group: the driver's line and state, then Open driver, a push button (it opens a page; A100). */

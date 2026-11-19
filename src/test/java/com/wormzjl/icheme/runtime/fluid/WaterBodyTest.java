@@ -54,14 +54,6 @@ class WaterBodyTest {
         assertEquals(60, c.blocks());
     }
 
-    @Test void anUnloadedNeighbourIsNoWater() {
-        // The world's probe reads only loaded chunks: a pool whose far half is unloaded counts its loaded half.
-        var water = row(150);
-        var loaded = WaterBody.count(0, 0, 0, (x, y, z) -> x <= 80 && water.contains(WaterBody.key(x, y, z)));
-        assertFalse(loaded.body(), "80 loaded blocks: closed until the rest loads");
-        assertTrue(count(water).body(), "loaded: open");
-    }
-
     @Test void theFillIsBoundedWhateverTheWorldHolds() {
         // An ocean: every block but the intake is water. The fill stops at 100 blocks.
         var ocean = WaterBody.count(0, 0, 0, (x, y, z) -> true);

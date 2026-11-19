@@ -135,6 +135,14 @@ public final class ProcessSolveServices {
     public static Diagnostics diagnostics(MinecraftServer server) {
         requireServerThread(server);var state=STATES.get(server);return state==null?Diagnostics.EMPTY:Diagnostics.from(state.service.diagnostics());
     }
+
+    /** Reports the logical server's remaining terminal-routing slots for this tick without draining. */
+    public static int remainingCompletionBudget(MinecraftServer server) {
+        requireServerThread(server);
+        var state = STATES.get(server);
+        return state == null || state.stopResult != null ? 0 : state.remainingCompletionBudget(server.getTickCount());
+    }
+
     /** Independent fluid owners report readiness without queueing their snapshots. The column and still
      * jobs already owned by the service share the same demand budget. */
     public static void fluidWorkerDemand(MinecraftServer server,int eligibleOwners) {
@@ -220,8 +228,9 @@ public final class ProcessSolveServices {
         if (state == null) {
             return List.of();
         }
-        int tick=server.getTickCount();if(state.lastDrainTick!=tick){state.lastDrainTick=tick;state.drainedThisTick=0;}
-        int remaining=Math.min(maximum,Math.max(0,MAXIMUM_COMPLETIONS_PER_TICK-state.drainedThisTick));
+        int tick=server.getTickCount();
+        int remaining=Math.min(maximum,state.remainingCompletionBudget(tick));
+        if(state.lastDrainTick!=tick){state.lastDrainTick=tick;state.drainedThisTick=0;}
         // A wakeup can arrive after this tick has consumed its budget. Keep the terminal
         // message queued for the next tick; the underlying service requires a positive drain.
         if(remaining==0){owe(server,state,tick);return List.of();}
@@ -547,6 +556,10 @@ public final class ProcessSolveServices {
             this.config = config;
             this.wakeup=wakeup;
             this.allocator=config.dynamicWorkers()?new WorkerAllocation.Demand(config.workerCount()):null;
+        }
+
+        private int remainingCompletionBudget(int tick) {
+            return tick == lastDrainTick ? MAXIMUM_COMPLETIONS_PER_TICK - drainedThisTick : MAXIMUM_COMPLETIONS_PER_TICK;
         }
     }
 

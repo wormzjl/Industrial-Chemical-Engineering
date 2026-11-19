@@ -36,9 +36,14 @@ final class NetworkStreams {
         // Solids are incompressible here: a state holding no fluid (a vessel holding only solids, D33) has no acoustic
         // bound, and the configured clamp alone limits what would leave it (nothing does: its ends are dry).
         if(compliance==0&&!holdsFluid(state))return Double.POSITIVE_INFINITY;
-        double speed=state.volume()/Math.sqrt(state.mass()*compliance);
-        if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
-        return speed;
+        if(positiveNormal(compliance))return acoustic(state.volume(),state.mass(),compliance);
+        // If the sum itself rounded out of range, divide each phase volume before multiplying by its compressibility.
+        double compressibility=0;
+        for(int slot=0;slot<3;slot++) {
+            var phase=state.phase(slot);
+            if(phase!=null&&state.slotVolume(slot)>0)compressibility+=(state.slotVolume(slot)/state.volume())*phase.isothermalCompressibility();
+        }
+        return acousticFromCompressibility(state.volume(),state.mass(),compressibility);
     }
     /**
      * The gas's ideal-gas heat capacity ratio {@code k = c_p/(c_p − R)} at the state's temperature, for a compressor's
@@ -166,18 +171,27 @@ final class NetworkStreams {
     /** The vapour stream's velocity limit: {@code min(maximum, V_v/sqrt(M_v V_v kappa_v))}. */
     public double vaporVelocityLimit(State state) {
         var gas=state.phase(State.VAPOR);
-        double compliance=gas==null?0:state.vaporVolume()*gas.isothermalCompressibility();
-        return Math.min(model.maximumVelocity,acoustic(state.vaporVolume(),vaporMass(state),compliance));
+        return Math.min(model.maximumVelocity,phaseAcoustic(state.vaporVolume(),vaporMass(state),gas==null?0:gas.isothermalCompressibility()));
     }
     /**
      * {@code V / sqrt(M C)}. The product of a phase's mass and compliance goes subnormal for a trace phase (a vanishing
      * nitrogen vapour below about 2e-150 mol) and is zero below about 2e-158 mol, the bound then infinite; such a product
-     * is evaluated as {@code sqrt(V/M) sqrt(V/C)}, ratios of like-sized quantities, and every product at or above
-     * {@link Double#MIN_NORMAL} takes the original expression, bit for bit.
+     * is evaluated as {@code sqrt(V/M) sqrt(V/C)}, ratios of like-sized quantities. An overflowing product takes the same
+     * path. A finite normal product takes the original expression, bit for bit.
      */
     private static double acoustic(double volume,double mass,double compliance) {
         double product=mass*compliance;
-        double speed=product>=Double.MIN_NORMAL?volume/Math.sqrt(product):Math.sqrt(volume/mass)*Math.sqrt(volume/compliance);
+        return checkedAcoustic(positiveNormal(product)?volume/Math.sqrt(product):Math.sqrt(volume/mass)*Math.sqrt(volume/compliance));
+    }
+    private static double phaseAcoustic(double volume,double mass,double compressibility) {
+        double compliance=volume*compressibility;
+        return positiveNormal(compliance)?acoustic(volume,mass,compliance):acousticFromCompressibility(volume,mass,compressibility);
+    }
+    private static double acousticFromCompressibility(double volume,double mass,double compressibility) {
+        return checkedAcoustic(Math.sqrt(volume/mass)/Math.sqrt(compressibility));
+    }
+    private static boolean positiveNormal(double value){return value>=Double.MIN_NORMAL&&Double.isFinite(value);}
+    private static double checkedAcoustic(double speed) {
         if(!Double.isFinite(speed)||speed<=0)throw new IllegalArgumentException("Invalid acoustic flow-domain bound");
         return speed;
     }
@@ -278,8 +292,7 @@ final class NetworkStreams {
         if(phase==GAS)return vaporVelocityLimit(state);
         int slot=state.slot(phase);
         if(slot<0||slot!=state.oneFluidSlot()||!state.dense())return model.maximumVelocity;
-        double volume=state.slotVolume(slot);
-        return Math.min(model.maximumVelocity,acoustic(volume,phaseMass(state,phase),volume*state.phase(slot).isothermalCompressibility()));
+        return Math.min(model.maximumVelocity,phaseAcoustic(state.slotVolume(slot),phaseMass(state,phase),state.phase(slot).isothermalCompressibility()));
     }
     /** A phase stream's viscosity: {@link #vaporViscosity} for the gas; a liquid's own viscosity (one log-mixing rule over
      * its components, water among them) with the slurry correction for its share of the solids, over the stream's volume. */

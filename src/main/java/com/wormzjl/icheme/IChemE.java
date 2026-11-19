@@ -304,6 +304,7 @@ public final class IChemE {
         gameEventBus.addListener(IChemE::onServerStopping);
         gameEventBus.addListener(IChemE::onServerStopped);
         gameEventBus.addListener(IChemE::onFluidChunkLoaded);
+        gameEventBus.addListener(IChemE::onPlantChunkTicket);
         gameEventBus.addListener(IChemE::onPlayerLoggedIn);
         gameEventBus.addListener(IChemE::onPlayerLoggedOut);
         // The world type "IChemE column test": builds and starts the crude unit test plant in a fresh world of its preset.
@@ -357,6 +358,15 @@ public final class IChemE {
             com.wormzjl.icheme.runtime.pollution.PollutionMaps.forget(player);
         }
     }
+    private static void onPlantChunkTicket(net.neoforged.neoforge.event.level.ChunkTicketLevelUpdatedEvent event) {
+        int full=net.minecraft.server.level.ChunkLevel.byStatus(net.minecraft.server.level.FullChunkStatus.FULL);
+        boolean nowFull=event.getNewTicketLevel()<=full;
+        if(nowFull==(event.getOldTicketLevel()<=full))return;
+        var level=event.getLevel();
+        com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority.find(level.getServer()).ifPresent(
+                world->world.ruptureChunkTicket(level.dimension().location().toString(),event.getChunkPos(),nowFull));
+    }
+
     private static void onFluidChunkLoaded(net.neoforged.neoforge.event.level.ChunkEvent.Load event) {
         if(event.getLevel() instanceof net.minecraft.server.level.ServerLevel level) {
             var server=level.getServer();var dimension=level.dimension();long chunk=event.getChunk().getPos().toLong();

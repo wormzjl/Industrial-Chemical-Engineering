@@ -10,6 +10,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.energy.IEnergyStorage;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -17,6 +18,15 @@ import java.util.*;
 /** Physical FE terminals, independent of process readings and sensor identities. */
 public final class PowerPorts {
     private PowerPorts() {}
+
+    public static final IEnergyStorage CREATIVE = new IEnergyStorage() {
+        @Override public int receiveEnergy(int amount, boolean simulate) { return 0; }
+        @Override public int extractEnergy(int amount, boolean simulate) { return Math.max(0, amount); }
+        @Override public int getEnergyStored() { return Integer.MAX_VALUE; }
+        @Override public int getMaxEnergyStored() { return Integer.MAX_VALUE; }
+        @Override public boolean canExtract() { return true; }
+        @Override public boolean canReceive() { return false; }
+    };
 
     public static boolean eligible(BlockEntity be) {
         if (be instanceof CreativePowerBlockEntity) return true;
@@ -27,14 +37,17 @@ public final class PowerPorts {
             var terminal = ShapeRasterizer.terminal(shell.shape());
             return terminal != null
                     && terminal.equals(shell.cell())
-                    && switch (shell.shape().kind()) {
-                        case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER, VERTICAL_HEATER, CABIN_HEATER -> true;
-                        // An electric batch still's terminal box (batch 2026-11-09-batch-distiller, W6).
-                        case BATCH_STILL -> com.wormzjl.icheme.science.equipment.EquipmentServices.electricStill(shell.shape());
-                        default -> false;
-                    };
+                    && eligible(shell.shape());
         }
         return false;
+    }
+
+    static boolean eligible(EquipmentShape shape) {
+        return switch (shape.kind()) {
+            case MOTOR, GENERATOR, AIR_COOLER, INDUCED_DRAFT_COOLING_TOWER, VERTICAL_HEATER, CABIN_HEATER -> true;
+            case BATCH_STILL -> EquipmentServices.electricStill(shape);
+            default -> false;
+        };
     }
 
     public static DataPort create(BlockEntity be) {
@@ -58,12 +71,13 @@ public final class PowerPorts {
                             true);
             centre = DataPorts.at(socket, pipe.getBlockPos());
             outward = Direction.values()[socket.face()];
-        } else {
-            centre = be.getBlockPos().getCenter().add(.52, 0, 0);
-            outward = Direction.EAST;
-            kind = DataPort.Kind.POWER_OUTPUT;
-        }
+        } else return creative(level.dimension().location().toString(), be.getBlockPos());
         return DataPorts.power(UUID.randomUUID(), kind, level, be.getBlockPos(), centre, outward);
+    }
+
+    static DataPort creative(String dimension, BlockPos owner) {
+        return new DataPort(UUID.randomUUID(), DataPort.Kind.POWER_OUTPUT, 0, dimension, owner,
+                owner.getCenter().add(.52, 0, 0), owner.east(), Direction.WEST, 0, 0);
     }
 
     public static DataPort refresh(DataPort old, BlockEntity be, boolean wired) {

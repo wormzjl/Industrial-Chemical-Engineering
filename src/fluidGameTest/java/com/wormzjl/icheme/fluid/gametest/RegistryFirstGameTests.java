@@ -450,9 +450,12 @@ public final class RegistryFirstGameTests {
         var pipe = cell(origin, nozzle.cell()).relative(face);
         var generator = pipe.relative(face);
         level.setBlock(generator, ModBlocks.FLUID_GENERATOR.get().defaultBlockState(), 3);
+        long generatorId = ((FluidDeviceBlockEntity) level.getBlockEntity(generator)).fluidIdentity();
         var nitrogen = FluidDeviceSpec.nitrogen(com.wormzjl.icheme.science.material.MaterialRuntime.active()).composition();
-        TankCharge.run(world, ((FluidDeviceBlockEntity) level.getBlockEntity(generator)).fluidIdentity(), new FluidDeviceSpec(1, 298.15, 200000, nitrogen));
+        TankCharge.run(world, generatorId, new FluidDeviceSpec(1, 298.15, 200000, nitrogen));
         level.setBlock(pipe, ModBlocks.FLUID_PIPE.get().defaultBlockState(), 3);
+        long pipeId = ((FluidDeviceBlockEntity) level.getBlockEntity(pipe)).fluidIdentity();
+        var fixtureIds = java.util.Set.of(id, generatorId, pipeId);
         String[] failure = {null};
         double[] before = {0};
         helper.startSequence()
@@ -461,7 +464,15 @@ public final class RegistryFirstGameTests {
                     level.removeBlock(generator, false);
                     level.removeBlock(pipe, false);
                 })
-                .thenWaitUntil(() -> helper.assertTrue(world.capture().world().events().isEmpty() && alone(world, id), "Waiting for the drum to stand alone"))
+                .thenWaitUntil(() -> {
+                    var saved = world.capture().world();
+                    helper.assertTrue(!saved.active().containsKey(generatorId) && !saved.active().containsKey(pipeId),
+                            "Waiting for the drum's charging line to be removed");
+                    helper.assertTrue(saved.events().stream().noneMatch(event -> !java.util.Collections.disjoint(event.touched(), fixtureIds)
+                                    || event.edits().stream().anyMatch(edit -> fixtureIds.contains(edit.id()))),
+                            "Waiting for the drum's topology transactions");
+                    helper.assertTrue(alone(world, id), "Waiting for the drum to stand alone");
+                })
                 .thenExecute(() -> {
                     before[0] = moles(world, id);
                     EquipmentStructure.rename(level, new EquipmentStructure.Vessel(origin, shape), "V-1 Nitrogen drum");

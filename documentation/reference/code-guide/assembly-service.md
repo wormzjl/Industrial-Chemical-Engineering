@@ -23,9 +23,9 @@ code of every block it relied on in `AssemblyStore`. A fluid edit, a structure p
 or removed, or a chunk load that changes a coded block reverts the report to not validated. The column's screen is an
 engine presentation session (`AssemblyPresentation`): opening it shows the stored view at once, a check or a command
 answers on the engine's bucket (AGENTS.md, "Engine schedule and player-facing updates"). An exchanger's report reaches
-its sides' controls as `FluidWorldAuthority.Lines` (`ExchangerLines`). A column whose report is complete can be started:
-`ColumnStarts` turns its boundary valves, nozzles and members into a `FluidWorldAuthority.ColumnStart`. The laying tool
-watches the reports of the columns near the player (`AssemblyWatch`).
+its sides' controls as `FluidWorldAuthority.Lines` (`ExchangerLines`). A column with a complete report can start from
+its Assembly screen or a DCS linked to its data socket. `ColumnStarts` uses the saved report, built shapes and registry
+to name its boundary valves, nozzles and members. The laying tool watches the reports of nearby columns (`AssemblyWatch`).
 
 ## Class map
 
@@ -38,7 +38,7 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 | [`runtime/assembly/AssemblyPresentation`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/AssemblyPresentation.java) | The column screens' sessions on a `PresentationMailbox`: `open`, `validate`, `act` (Start, Stop or Apply, queued as Validate is), `close` (a command queued before still runs), `tick`; `Host` | 101 |
 | [`runtime/assembly/AssemblyWatch`](../../../src/main/java/com/wormzjl/icheme/runtime/assembly/AssemblyWatch.java) | The laying tool's watch within `RANGE`: `start`, `stop`, `tick`; `Host` | 81 |
 | `runtime/assembly/ColumnStarts` (pp) | `build(level, world, origin)` gives a `Built(request, refusal)`: the boundary valves of a complete report as `FluidWorldAuthority.PortSpot`s, the design's set points, the nozzles, the condenser's water sides, the air condenser's bare tube, the members (`ColumnUnit.Members`) and the shape's material of construction | 151 |
-| `runtime/assembly/ExchangerLines` (pp) | `design(level, world, vessel)` reads the lines each side's registered control asks for (`HeatUnit.lines()`, through `EquipmentStructure.sideIdentities`); `publish(level, world, vessel, entry)` sets each such side's `FluidWorldAuthority.Lines` | 94 |
+| `runtime/assembly/ExchangerLines` (pp) | `design(world, origin)` reads each side's registered control. `publish(world, origin, entry)` resolves the valve and its signal and sets each side's `FluidWorldAuthority.Lines`. | |
 | [`network/AssemblyNetwork`](../../../src/main/java/com/wormzjl/icheme/network/AssemblyNetwork.java) | The packets on `NetworkProtocol.VERSION` (main thread); `open(player, vessel, cell)`, `target`, `closed`, `datasheet`, `presentationTick`, `forget`; the `VIEW` codec, `encodeOperation`/`decodeOperation` (also read by the DCS's column page); `Action` START, STOP, APPLY, CLEAN (a stopped column's trays, answered by a chat line); `REFUSALS` (each server's last refused Start per master, until the next press, not saved) | 612 |
 | [`world/inventory/AssemblyMenu`](../../../src/main/java/com/wormzjl/icheme/world/inventory/AssemblyMenu.java) | Menu `assembly`: origin, cell (a shell cell of the column), anchor, reach (`REACH` plus the clicked structure's largest size), selected member; client `view()`/`accept`; `removed` ends the session | 102 |
 | [`client/gui/screens/inventory/AssemblyScreen`](../../../src/main/java/com/wormzjl/icheme/client/gui/screens/inventory/AssemblyScreen.java) | The column's screen on the kit's door and glass: the drawing beside the parts list, Check parts, Open unit, Datasheet, the column's name in the title strip (saved by `EquipmentNetwork.rename`); tabs Structure and Operation (`OperationColumn`, when the report is complete and the view has an operation); its help tours (`LINES_STEP`) | 685 |
@@ -67,7 +67,8 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
    screens show it at the next bucket (table below).
 5. **Start, Stop, Apply.** `icheme:assembly_operation` → `AssemblyPresentation.act`, queued as Validate is →
    `AssemblyService.start` (→ `ColumnStarts.build` → `FluidWorldAuthority.startColumn`), `stop`, `setpoints`; every open
-   screen of the column gets the answer.
+   screen of the column gets the answer. The DCS routes its queued commands through the same service at the column's
+   saved master position. [Wired control and FE power](wired-control-power.md#a-column-on-the-dcs).
 
 ## Contracts
 
@@ -89,12 +90,10 @@ Paths are relative to `src/main/java/com/wormzjl/icheme/`.
 - A dropped store is marked `rebuild`: each designed column's controller cell queues one validation when it loads
   (`controllerLoaded`), only for a column with no entry yet.
 
-**The exchanger's lines** (`ExchangerLines.publish`). After every validation, revert and chunk check, each asking side's
-`FluidWorldAuthority.Lines`: NOT_VALIDATED, CHECKED (parts not in place counted), UNMETERED (complete, but the operated
-valve carries no flowmeter, so it stands open) or COMPLETE (the valve carries its flowmeter), with the operated valve's
-identity and the slot states the side's screen colours its parts by. A side asking for no lines gets none. The fluid
-world keeps lines only while the server runs; a chunk check publishes them again. A COMPLETE side's control sets the real
-valve's flow target and its internal bypass stays shut ([heat-units.md](heat-units.md)).
+**The exchanger's lines** (`ExchangerLines.publish`). The engine derives each side's `FluidWorldAuthority.Lines` from
+the saved shape, report and valve signal. Startup, validation, report invalidation and relevant topology changes use the
+same resolver. The engine can assign a valve and release it while both exchanger nodes are unloaded. A COMPLETE side's
+control sets the real valve's flow target and closes its internal bypass. [Heat units](heat-units.md)
 
 **Start** (`ColumnStarts.build`, refusals in order, texts from `Refusal`): `NO_DESIGN`, `NO_SAVED_POINT`, `VACUUM` (a
 design with a vacuum top, `ColumnComponents.ejector`, whether an ejector or a vacuum pump draws it), `INCOMPLETE`, `VALVE_UNREGISTERED`; the tab shows the text as a NOT_READY
@@ -105,15 +104,16 @@ engine line. The ledger side has its own ([column-run.md](column-run.md)).
   not from `at`. An inlet's column side is against the valve's facing, an outlet's along it, and the port's cell is one
   step from the valve on that side. Conditions come from `PortConditions.estimate`.
 - **Nozzles** are `ShapeRasterizer.ports` of the column's shape; `startColumn` walks from their pipe blocks to the
-  boundary valves.
+  boundary valves in the fluid registry.
 - **Condenser.** The water sides come from every unit (`SlotReport.units`) of the slot `ColumnBlueprint.waterCooled`
   names (the condenser's shells for an exchanger, the trim's for air then water, none for an air cooler;
-  `EquipmentStructure.heatSides`). Where the condenser slot is not water-cooled, the start carries the bare tube of every
-  air cooler bank it holds (`HeatSides.of(...).area()`).
-- **Members.** The heat sides of every unit in slot `REBOILER` and in each `pumparoundCooler(i)`, the air condenser's
-  fan sides (an AIR_COOLER member's sides whose heat unit has fans) and the movers of `REFLUX_PUMP` and each
-  `pumparoundPump(i)` (a casing's through `EquipmentStructure.movers`, or an in-line pump's registration at the slot's
-  place), as `ColumnUnit.Members`.
+  `EquipmentStructure.heatSides`). Air and air-then-water condensers contribute the bare-tube area of every air cooler
+  bank in the condenser slot (`HeatSides.of(...).area()`).
+- **Members.** The saved assembly identifies each unit in `REBOILER` and `pumparoundCooler(i)`, each air condenser bank,
+  and each pump at `REFLUX_PUMP` and `pumparoundPump(i)`. `SavedEquipment.at` resolves constructed members' shapes by
+  origin. `EquipmentStructure.registrationsAtNodes` resolves their heat sides and movers in layout order, and an in-line
+  pump uses the device registered at the slot's position. The Start request carries the reboiler and pumparound sides
+  for utility assignment, and the fan sides and movers as `ColumnUnit.Members`.
 - **A start reverts nothing.** A held device keeps its structural code, and a port has ports, so `LevelGround.piece` is
   null and it has no code.
 - **Stops.** `revert` and `removed` call `stopColumn` first. A dismantle also calls `dismantled`
@@ -121,9 +121,9 @@ engine line. The ledger side has its own ([column-run.md](column-run.md)).
   alone, so its unit stays, stopped.
 - **Set points.** `setpoints(level, origin, values)` takes feed, condenser, reflux, reboiler, steam…, draws…,
   pumparounds…, holds the feed to the design rate and refuses a wrong count. A column that has not run yet takes them on
-  its design's set points (a stopped unit with no stations), unless it has no operating point or is a vacuum column.
-- **`operation`** gives the tab's snapshot, a read: the unit's view; otherwise stopped on the design's set points
-  (editable unless a vacuum column), or NOT_READY for a vacuum column or a refused Start; null without an operating point.
+  its saved design's set points (a stopped unit with no stations), unless it has no operating point or is a vacuum column.
+- **`operation`** reads the unit's published state or uses the saved design for a stopped column with no unit. A vacuum
+  column or a locally refused Start shows NOT_READY. Without a unit or an operating point it returns null.
 
 **The laying tool's watch** (`AssemblyWatch`, `AssemblyToolClient`).
 
@@ -143,10 +143,9 @@ engine line. The ledger side has its own ([column-run.md](column-run.md)).
   nozzles directly and other equipment through its watched report. Diagrams are cached by design and cleared with the
   watch or its next view.
 
-**Other readers.** `ControlHosts.refreshColumnMembers` (each `ControlService` cadence, before it validates edits) reads
-the accepted cached report and the loaded members' registration identities for the column's C1 instrumentation; it does
-not walk, load chunks or run the column solver ([wired-control-power.md](wired-control-power.md)). `AssemblyNetwork`'s
-scheduled send to an open screen also fires `TutorialTriggers.assemblyShown` ([tutorial.md](tutorial.md)).
+**Other readers.** Before each control cadence applies edits, `ControlHosts.refreshColumnMembers` resolves the column's
+C1 instrumentation from the stored report, saved member shapes and registry identities. [Wired control and FE power](wired-control-power.md).
+`AssemblyNetwork`'s scheduled send to an open screen also fires `TutorialTriggers.assemblyShown`. [Tutorial](tutorial.md).
 
 ## Laws and constants
 
@@ -217,9 +216,9 @@ saves. The same run builds `HeatExchangerReviewWorld` (batch `review-heat`, [hea
 - Should two reports hold one unit (one validated while the other was reverted), a click opens the least master's
   screen (`holder`). `cellOf` looks for a loaded shell cell among the report's coded nozzles: a member whose cells are
   not loaded cannot be opened from the list.
-- **An exchanger's lines are state twice over.** Its entry is in the store; the sides' `Lines` are in the fluid world and
-  last only while the server runs. Every path that changes an exchanger's entry calls `published` or
-  `ExchangerLines.publish`; a new path must too, or a side keeps working a valve its report no longer holds.
+- **An exchanger's lines are derived state.** `AssemblyService.publishExchanger` updates the runtime binding and
+  records which reports depend on the data bus. `refreshExchangerSignals` revisits those reports when the topology
+  revision changes.
 - **A vacuum column does not start** in the world (`Refusal.VACUUM`), though its assembly checks.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

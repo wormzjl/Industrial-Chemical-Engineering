@@ -3,8 +3,8 @@
 #moj_import <fog.glsl>
 
 // The equipment reflection pass (batch 2026-11-18-equipment-reflections; EquipmentReflectionRenderer packs the vertices).
-// BLOCK layout, repacked: Position = m from the region corner; Color = the reflection's tint (rgb) and the vertex's sky light
-// (a, 0 to 1); UV0 = Fresnel F0 and the horizon blur; UV2 = the highlight's power and its strength x 100; Normal = the smooth
+// BLOCK layout, repacked: Position = m from the region corner; Color = white (rgb, unused) and the vertex's sky light
+// (a, 0 to 1); UV0 = Fresnel F0 (x; y unused); UV2 = the highlight's power and its strength x 100; Normal = the smooth
 // normal (world axes: the mesh is only translated).
 in vec3 Position;
 in vec4 Color;

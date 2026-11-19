@@ -1,18 +1,22 @@
 package com.wormzjl.icheme.runtime.assembly;
 
 import com.wormzjl.icheme.runtime.assembly.AssemblyStore.Entry;
+import com.wormzjl.icheme.runtime.control.ValveSignal;
 import com.wormzjl.icheme.runtime.fluid.FluidWorldAuthority;
 import com.wormzjl.icheme.runtime.fluid.PhysicalFluidTopology;
+import com.wormzjl.icheme.runtime.fluid.SavedEquipment;
+import com.wormzjl.icheme.runtime.fluid.WorldTopologyLedger.Registration;
 import com.wormzjl.icheme.science.assembly.AssemblyReport;
+import com.wormzjl.icheme.science.assembly.Blueprint.Slot;
 import com.wormzjl.icheme.science.assembly.ExchangerBlueprint;
 import com.wormzjl.icheme.science.equipment.EquipmentShape;
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.world.level.block.EquipmentStructure;
-import com.wormzjl.icheme.world.level.block.EquipmentStructure.Vessel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerLevel;
 import org.jetbrains.annotations.Nullable;
+
+import java.util.List;
 
 /**
  * A shell-and-tube exchanger's control lines as an assembly (batch 2026-10-27-heat-exchanger-design, plan section 7, W8):
@@ -23,22 +27,19 @@ final class ExchangerLines {
     private ExchangerLines() {
     }
 
-    /** Whether {@code vessel} may have control lines: an exchanger, or a kettle, whose tubes a column may set (W4). */
-    private static boolean lined(Vessel vessel) {
-        var kind = vessel.shape().kind();
-        return kind == EquipmentShape.Kind.EXCHANGER || kind == EquipmentShape.Kind.KETTLE;
+    /** A kettle's tubes can also have control lines. */
+    static boolean lined(@Nullable EquipmentShape shape) {
+        return shape != null && (shape.kind() == EquipmentShape.Kind.EXCHANGER || shape.kind() == EquipmentShape.Kind.KETTLE);
     }
 
-    /** The lines {@code vessel}'s sides' controls ask for; {@link ExchangerBlueprint.Design#NONE} for anything but an exchanger or a kettle. */
-    static ExchangerBlueprint.Design design(ServerLevel level, FluidWorldAuthority world, Vessel vessel) {
-        if (!lined(vessel)) return ExchangerBlueprint.Design.NONE;
+    /** The lines the built exchanger's registered sides ask for. */
+    static ExchangerBlueprint.Design design(FluidWorldAuthority world, PhysicalFluidTopology.Position origin) {
+        var shape = SavedEquipment.at(world, origin);
+        if (!lined(shape)) return ExchangerBlueprint.Design.NONE;
         var tube = ExchangerBlueprint.Lines.NONE;
         var shell = ExchangerBlueprint.Lines.NONE;
-        // Each side by its registration's own side: a kettle's shell is its pool, which asks for none.
-        for (long id : EquipmentStructure.sideIdentities(level, vessel)) {
-            var r = id == 0 ? null : world.registrations().get(id);
-            var heat = r == null ? null : r.device().heat();
-            if (heat == null) continue;
+        for (long id : EquipmentStructure.heatSides(world, origin, shape)) {
+            var heat = world.registrations().get(id).device().heat();
             if (heat.side() == HeatSides.Side.TUBE) tube = heat.lines();
             else if (heat.side() == HeatSides.Side.SHELL) shell = heat.lines();
         }
@@ -46,17 +47,16 @@ final class ExchangerLines {
     }
 
     /**
-     * Publishes {@code entry} (null: none) as the lines of each of {@code vessel}'s sides whose control asks for lines: not
+     * Publishes {@code entry} (null: none) as the lines of each registered heat side whose control asks for lines: not
      * validated, checked with the parts not in place counted, or complete with the valve its control works (the
-     * registration at the position the operated slot holds).
+     * registration at the position the operated slot holds). Returns whether any valve needs an external signal.
      */
-    static void publish(ServerLevel level, FluidWorldAuthority world, Vessel vessel, @Nullable Entry entry) {
-        if (!lined(vessel)) return;
-        for (long id : EquipmentStructure.sideIdentities(level, vessel)) {
-            if (id == 0) continue;
-            var r = world.registrations().get(id);
-            var heat = r == null ? null : r.device().heat();
-            if (heat == null) continue;
+    static boolean publish(FluidWorldAuthority world, PhysicalFluidTopology.Position origin, @Nullable Entry entry) {
+        var shape = SavedEquipment.at(world, origin);
+        if (!lined(shape)) return false;
+        boolean externalSignal = false;
+        for (long id : EquipmentStructure.heatSides(world, origin, shape)) {
+            var heat = world.registrations().get(id).device().heat();
             var asked = heat.lines();
             if (asked == ExchangerBlueprint.Lines.NONE || entry == null) {
                 world.lines(id, null);
@@ -64,32 +64,35 @@ final class ExchangerLines {
             }
             var report = entry.report();
             // The report's slot states go with the lines: the side's screen draws each part in its colour (the heat GUI).
-            var slots = report == null ? java.util.List.<AssemblyReport.SlotReport>of() : report.slots();
+            var slots = report == null ? List.<AssemblyReport.SlotReport>of() : report.slots();
             world.lines(id, switch (entry.status()) {
                 case NOT_VALIDATED -> new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.NOT_VALIDATED, 0, 0);
                 case CHECKED -> new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, report.missing() + report.misplaced(), 0, slots);
                 case COMPLETE -> {
-                    long valve = valve(level, world, report, ExchangerBlueprint.operated(heat.side(), asked));
+                    var found = valve(origin.dimension(), world, report, ExchangerBlueprint.operated(heat.side(), asked));
+                    if (found == null || !(found.device().control() instanceof FlowControl.ControlValve law))
+                        yield new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, 1, 0, slots);
                     // A control valve regulates by its sensor: a bare one stands open, whatever its target.
-                    var found = valve == 0 ? null : world.registrations().get(valve);
-                    boolean metered = found != null && found.device().control() instanceof FlowControl.ControlValve law && !law.bare()
-                            && com.wormzjl.icheme.runtime.control.ValveSignal.linked(world, valve, law);
-                    yield valve == 0 ? new FluidWorldAuthority.Lines(FluidWorldAuthority.Lines.Status.CHECKED, 1, 0, slots)
-                            : new FluidWorldAuthority.Lines(metered ? FluidWorldAuthority.Lines.Status.COMPLETE : FluidWorldAuthority.Lines.Status.UNMETERED, 0, valve, slots);
+                    long valve = found.device().id();
+                    var signal = ValveSignal.link(world, valve, law);
+                    externalSignal |= signal != ValveSignal.Link.LOCAL;
+                    boolean metered = !law.bare() && signal != ValveSignal.Link.MISSING;
+                    yield new FluidWorldAuthority.Lines(metered ? FluidWorldAuthority.Lines.Status.COMPLETE : FluidWorldAuthority.Lines.Status.UNMETERED, 0, valve, slots);
                 }
             });
         }
+        return externalSignal;
     }
 
-    /** The registration at the position {@code report} binds to {@code slot}, or 0 where it binds none (a design the report predates). */
-    private static long valve(ServerLevel level, FluidWorldAuthority world, @Nullable AssemblyReport report, @Nullable com.wormzjl.icheme.science.assembly.Blueprint.Slot slot) {
-        if (report == null || slot == null) return 0;
+    /** The unheld valve at the reported fitting's position, if the report still names it. */
+    private static @Nullable Registration valve(String dimension, FluidWorldAuthority world, AssemblyReport report, @Nullable Slot slot) {
+        if (slot == null) return null;
         for (var s : report.slots()) {
             if (!s.slot().equals(slot) || s.member() == AssemblyReport.NONE) continue;
             var at = BlockPos.of(s.member());
-            var found = world.at(new PhysicalFluidTopology.Position(level.dimension().location().toString(), at.getX(), at.getY(), at.getZ()));
-            return found.map(r -> r.device().id()).orElse(0L);
+            var position = new PhysicalFluidTopology.Position(dimension, at.getX(), at.getY(), at.getZ());
+            return world.at(position).filter(r -> !r.device().held()).orElse(null);
         }
-        return 0;
+        return null;
     }
 }
