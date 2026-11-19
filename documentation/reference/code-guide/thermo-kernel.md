@@ -31,6 +31,8 @@ plain doubles. `science/math` gives the elementary functions that are not correc
 every JVM, and the small dense solves. None of these classes imports `science/material`, `science/thermo/phase`, the
 column or the network (`ThermoLayeringTest`).
 
+Tangent-plane stability evaluates root Gibbs values on the same mixture and cubic, then forms the fixed-temperature, fixed-pressure composition derivative block on the selected root.
+
 ## Class map
 
 Paths under [`src/main/java/com/wormzjl/icheme/science/`](../../../src/main/java/com/wormzjl/icheme/science/). Lines at
