@@ -1,0 +1,52 @@
+// Opt-in measurement sources, kept outside every shipped source set and normal test task.
+gradle.beforeProject { project ->
+    project.afterEvaluate {
+        def folder = project.file('tools/junction-cost')
+        def classes = project.layout.buildDirectory.dir('junction-cost/classes')
+        def compile = project.tasks.register('compileJunctionCost', JavaCompile) {
+            dependsOn project.tasks.named('testClasses')
+            source folder, project.file('tools/codebase-review-bench/ColumnBench.java')
+            include '**/*.java'
+            classpath = project.sourceSets.test.runtimeClasspath
+            destinationDirectory.set(classes)
+            options.encoding = 'UTF-8'
+        }
+        [junctionCircuitCost: 'com.wormzjl.icheme.runtime.fluid.CircuitBench',
+         junctionCheckpointDigest: 'com.wormzjl.icheme.runtime.fluid.CircuitLedgerDigest',
+         junctionColumnCost: 'ColumnRepeat'].each { taskName, entry ->
+            project.tasks.register(taskName, JavaExec) {
+                dependsOn compile
+                mainClass.set(entry)
+                classpath = project.files(classes) + project.sourceSets.test.runtimeClasspath
+                minHeapSize = '512m'
+                maxHeapSize = '4g'
+                jvmArgs '-XX:+UseG1GC'
+            }
+        }
+        def world = project.findProperty('junctionWorld')
+        if (world != null) {
+            def inputWorld = project.file(world)
+            if (!new File(inputWorld, 'world/data/icheme_fluid_core.dat').isFile()) {
+                throw new GradleException('Supply an isolated game directory with a saved plant under world/')
+            }
+            def observer = project.tasks.register('prepareJunctionObserver', Sync) {
+                into project.layout.buildDirectory.dir('junction-cost/observer')
+                from folder, { include 'PerfSample.java' }
+                from(project.file('tools/column-soak/ColumnSoakReviewWorld.java')) {
+                    boolean attached = false
+                    filter { line ->
+                        if (!attached && line.contains('int t = ++ticks[0];')) {
+                            attached = true
+                            return line + '\n                    if (t % 20 == 0) PerfSample.at(t);'
+                        }
+                        return line
+                    }
+                }
+            }
+            project.sourceSets.fluidGameTest.java.srcDir(observer)
+            def run = project.neoForge.runs.getByName('reviewWorldServer')
+            run.gameDirectory.set(inputWorld)
+            run.jvmArguments.addAll('-Xms512m','-Xmx4g','-XX:+UseG1GC')
+        }
+    }
+}

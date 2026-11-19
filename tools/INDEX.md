@@ -8,13 +8,14 @@ Keep the paths below stable: `build.gradle` applies `tools/development.gradle` w
 
 | Folder | Purpose | Batch | Status |
 |---|---|---|---|
+| [junction-cost/](junction-cost/README.md) | Saved-plant resource samples, circuit checkpoints and fixed-input column costs | `2026-11-18-junction-lag` | Archived 2026-11-19 |
 | [column-soak/](column-soak/README.md) | Column drift and burner measurements, cold-start save review, remote controls, water intake and blast fixtures | `2026-11-17-column-cold-feed`, `2026-11-18-unloaded-chunks` | In use since 2026-11-18 |
 | [respirator-sheets/](respirator-sheets/README.md) | Software-rendered look options of the respirator (three masks on a head form, icons) and its placeholder textures | `2026-11-18-respirator` | In use since 2026-11-18 |
 | [sight-glass-frames/](sight-glass-frames/README.md) | Frame strip of the sight glass bubble law (horizontal and vertical runs, 8 frames each), shading copied from the GLSL | `2026-11-18-equipment-reflections` | In use since 2026-11-18 |
 | [reflection-render/](reflection-render/README.md) | Software renders of the equipment reflection law (drum, column, exchanger, pump; two views, sheen and pass) | `2026-11-18-equipment-reflections` | In use since 2026-11-18 |
 | [tutorial-photos/](tutorial-photos/README.md) | Writes the Field Guide's photo PNGs (crop, 384 px, 256 colours) and `photos.json` | `2026-11-18-tutorial-photos` | In use since 2026-11-18 |
 | [polluted-soil-texture/](polluted-soil-texture/README.md) | Draws the polluted soil texture and its option sheet | `2026-11-18-ground-pollution` | Option C installed 2026-11-18 |
-| [pollution-bench/](pollution-bench/README.md) | Times the pollution field and ground steps on fixed fields; the field digest of the drift test | `2026-11-18-pollution-propagation` | Bench 2026-11-18 |
+| [pollution-bench/](pollution-bench/README.md) | Fixed-field pollution timings and test-classpath drift digests | `2026-11-18-pollution-propagation` | Bench 2026-11-18 |
 | [load-hold/](load-hold/README.md) | Scratch test that loads a saved world's fluid checkpoint and prints each job's solver counters; the crude island's carried and fresh starts under a pump speed step | `2026-11-16-review-plant-sizing` | Diagnosis probe 2026-11-17 |
 | [valve-hold/](valve-hold/README.md) | Scratch tests of a flow valve whose change of target holds its island (run as tests, never committed in `src/test`), and the Newton and balance trace patch with its reader; the start-hold probe and its trace | `2026-11-16-review-plant-sizing` | Planning probe 2026-11-17 |
 | [dynamic-settling/](dynamic-settling/README.md) | The dynamic settling plan's band law run on the review plant's numbers (node, no mod code) | `2026-11-17-dynamic-settling` | Planning check 2026-11-17 |
