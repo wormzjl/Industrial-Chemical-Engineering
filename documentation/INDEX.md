@@ -17,6 +17,8 @@ Status words:
 | [2026-11-18-furnace-model/](2026-11-18-furnace-model/README.md) | Furnace leg faces and burner fuel pipe joints | In progress since 2026-11-18 |
 | [2026-11-18-junction-lag/](2026-11-18-junction-lag/README.md) | Junction thermal fronts and same-slice feed enthalpy | Abandoned 2026-11-19, implementation reverted |
 | [2026-11-18-unloaded-chunks/](2026-11-18-unloaded-chunks/README.md) | Unloaded plant operation, remote controls and blast reconciliation | In progress since 2026-11-18 |
+| [2026-11-18-device-gui-labels/](2026-11-18-device-gui-labels/README.md) | Device tabs, combined furnace coils and engineering labels | In progress since 2026-11-18 (integrated into the materials worktree 2026-11-19) |
+| [2026-11-18-constructor-ghost-rendering/](2026-11-18-constructor-ghost-rendering/README.md) | Constructor ghost rendering and equipment chooser | In progress since 2026-11-18 (integrated into the materials worktree 2026-11-19) |
 | [2026-11-18-default-equipment-names/](2026-11-18-default-equipment-names/README.md) | Constructor-built equipment takes a default plant tag (P-101) as its name | In progress since 2026-11-18 (built and tested; GameTest not run, not seen in a client) |
 | [2026-11-18-co2-column-input/](2026-11-18-co2-column-input/README.md) | CO2 in the gas intake's air; a column with CO2 in its feed solves, dry ice decided by the crystal equilibrium of its products and coldest tray | In progress since 2026-11-18 (built and tested; owner items O1, O2) |
 | [2026-11-18-respirator/](2026-11-18-respirator/README.md) | A respirator worn on the head or a Curios slot, with a consumable filter, against polluted air | In progress since 2026-11-18 (built and tested; not seen in a client) |

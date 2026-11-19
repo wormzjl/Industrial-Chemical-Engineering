@@ -13,6 +13,8 @@ Up: [code guide](README.md). The kit these screens are built on: [client-kit.md]
 
 A fluid device screen shows what the engine last published for one device: switches, set points and meters on the door column, phases and tables on the glass, and its status said once. It sends inputs as one bounded `FluidNetwork.Controls` record with Apply (or a unit's own payload), and the answer comes back on the engine's schedule, about every 5 s of online time; the screen never computes process state (AGENTS.md, "Engine schedule"). Typed text lives in drafts outside the widgets, which parse to SI and build the exact record Apply sends, so tests pin it without Minecraft. Minecraft-free builders lay out each door: `DeviceColumn` (every page but Control), `HeatControlColumn` (the Control tab), `MachineColumn` (a machine's page), `DialogColumns` (gauge, pipe tools, datasheet), `ConverterDoor` and `StillDoor` (rows a device column leads with), `ControlColumns` (controllers and the DCS). `DeviceMeters` builds the meters' values; `HeatDiagram` and `HeatFlowsheet` draw a heat unit's flowsheet.
 
+A fired heater’s Overview and Control pages show the convection and radiant coils together. The shared burner control holds the radiant outlet temperature. The convection coil uses the exhaust heat. Each coil’s duty comes from the heat booked in its own island interval. The Corrosion group shows remaining allowance, total loss rate and time to wall failure.
+
 ## Class map
 
 Paths under [`src/main/java/com/wormzjl/icheme/client/gui/`](../../../src/main/java/com/wormzjl/icheme/client/gui/). Lines at the snapshot.

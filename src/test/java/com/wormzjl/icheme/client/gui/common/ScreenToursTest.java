@@ -202,7 +202,7 @@ public class ScreenToursTest {
     public static List<Variant> constructor(ScreenTours.Constructor page, int height, Measure m) {
         var out = new ArrayList<Variant>();
         for (var shown : pages(page)) {
-            var area = ConstructorColumn.area(height, shown.display());
+            var area = shown.area(height);
             for (int door : List.of(area.w(), area.w() - ScrollView.BAR - 4))
                 out.add(new Variant(page + " " + out.size(), 464, height, ScreenTours.constructor(464, height, page, "Vertical drum", m, shown),
                         List.of(Column.place(shown.rows(), area.x(), area.y(), door, m, Column.Metrics.COMPACT)), area.bottom()));

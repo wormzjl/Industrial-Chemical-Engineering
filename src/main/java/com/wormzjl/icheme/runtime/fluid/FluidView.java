@@ -354,11 +354,11 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
      */
     public record Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,
                        Double burners,Double setPoint,Double maximumWatt,Double bypass,
-                       String actuator,Double effort,String limit,List<Port> ports,Lines lines,Fuel fuel,Double fouling,Double ua,Double uaClean) {
+                       String actuator,Double effort,String limit,List<Port> ports,Lines lines,Fuel fuel,Double fouling,Double ua,Double uaClean,Coil partnerCoil) {
         /** A side without its deposit's readings. */
         public Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,Double burners,Double setPoint,Double maximumWatt,Double bypass,
                     String actuator,Double effort,String limit,List<Port> ports,Lines lines,Fuel fuel) {
-            this(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,null,null,null);
+            this(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,null,null,null,null);
         }
         public Heat(String unit,String side,boolean paired,double outletTemperature,double heatWatt,Double fans,Double fanPowerWatt,Double burners,Double setPoint,Double maximumWatt,Double bypass,
                     String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
@@ -384,21 +384,40 @@ public record FluidView(long identity,long inputRevision,long committedTick,long
         }
         /** This side with its control's actuator and effort, its limit, the unit's ports and lines. */
         public Heat with(String actuator,Double effort,String limit,List<Port> ports,Lines lines) {
-            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,fouling,ua,uaClean);
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,fouling,ua,uaClean,partnerCoil);
         }
         /** A fired heater's side with its burners' readings. */
-        public Heat withFuel(Fuel value){return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,value,fouling,ua,uaClean);}
+        public Heat withFuel(Fuel value){return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,value,fouling,ua,uaClean,partnerCoil);}
         /** This side with its fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): {@code rf} m²K/W. */
         public Heat withFouling(double rf){
-            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,rf,ua,uaClean);
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,rf,ua,uaClean,partnerCoil);
         }
         /** This side with the unit's UA and clean UA, W/K, as last planned (decision D16), each null where none is known. */
         public Heat withConductance(Double value,Double clean){
-            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,fouling,value,clean);
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,actuator,effort,limit,ports,lines,fuel,fouling,value,clean,partnerCoil);
         }
+        public Heat withPartnerCoil(Coil partner) {
+            return new Heat(unit,side,paired,outletTemperature,heatWatt,fans,fanPowerWatt,burners,setPoint,maximumWatt,bypass,
+                    actuator,effort,limit,ports,lines,fuel,fouling,ua,uaClean,partner);
+        }
+
+        /** Both furnace sections are read from their own committed interval, whichever nozzle opened the menu. */
+        public Coil coil(String section) {
+            return side.equals(section) ? new Coil(heatWatt,maximumWatt,fouling,null) : partnerCoil;
+        }
+
         /** The port of nozzle role {@code role}, or null. */
         public Port port(String role){for(var p:ports)if(p.role().equals(role))return p;return null;}
     }
+    /** Furnace coil heat absorbed (W), available radiant duty (W) and fouling resistance (m²K/W). */
+    public record Coil(double heatWatt, Double maximumWatt, Double fouling, Integrity wall) {
+        public Coil {
+            if (!Double.isFinite(heatWatt) || maximumWatt != null && !(Double.isFinite(maximumWatt) && maximumWatt >= 0)
+                    || fouling != null && !(Double.isFinite(fouling) && fouling >= 0))
+                throw new IllegalArgumentException("Invalid furnace coil readings");
+        }
+    }
+
     /**
      * The stream at one of a heat unit's nozzles over the last completed interval (fluid-16): the nozzle's role by name
      * ({@code TUBE_INLET}, a kettle shell's {@code FEED}), its temperature (K) and pressure (Pa), null while the node holds

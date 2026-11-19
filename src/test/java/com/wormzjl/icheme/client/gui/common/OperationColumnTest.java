@@ -229,7 +229,7 @@ public class OperationColumnTest {
         assertTrue(first <= AssemblyColumn.glass(624, 344, true).h() - 4, "the usual tables on the glass: " + first);
         // The integrity table (layout B, 2026-11-16) comes fourth, under the last solve, where the glass scrolls: the usual
         // column's first four tables take 272 px of a 231 px glass (measured 2026-11-16; the three take 214).
-        assertEquals("Integrity", OperationColumn.tables(usual.view(), UNITS.getFirst(), t).get(3).getFirst()[0]);
+        assertEquals("Corrosion", OperationColumn.tables(usual.view(), UNITS.getFirst(), t).get(3).getFirst()[0]);
     }
 
     private static Map<String, Column.Button> buttons(List<Column.Row> rows) {
@@ -420,10 +420,10 @@ public class OperationColumnTest {
         var s = designs().get(1);
         var running = new OperationColumn.Input(running(s, Phase.RUNNING), false, u);
         var wear = OperationColumn.wear(running.view(), t);
-        assertArrayEquals(new String[]{"Integrity", "Carbon steel"}, wear.get(0));
+        assertArrayEquals(new String[]{"Corrosion", "Carbon steel"}, wear.get(0));
         assertArrayEquals(new String[]{"Tray capacity", "86 %"}, wear.get(1));
-        assertArrayEquals(new String[]{"Wall left", "72 %"}, wear.get(2));
-        assertArrayEquals(new String[]{"Wall rate", "0.42 mm/y"}, wear.get(3));
+        assertArrayEquals(new String[]{"Corrosion allowance left", "72 %"}, wear.get(2));
+        assertArrayEquals(new String[]{"Corrosion rate", "0.42 mm/y"}, wear.get(3));
         assertSame(wear.getFirst()[0], OperationColumn.tables(running.view(), u, t).get(3).getFirst()[0], "the integrity fourth, after the last solve");
         assertArrayEquals(wear.get(1), OperationColumn.tables(running.view(), u, t).get(3).get(1));
         var idle = new OperationColumn.Input(OperationView.idle(Phase.STOPPED, "STOPPED", s, true), false, u);

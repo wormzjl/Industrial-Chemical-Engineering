@@ -6,6 +6,9 @@ import com.wormzjl.icheme.client.gui.common.kit.Palette;
 import com.wormzjl.icheme.runtime.fluid.FluidView;
 import com.wormzjl.icheme.runtime.fluid.HeatUnit;
 import com.wormzjl.icheme.science.equipment.HeatSides;
+import com.wormzjl.icheme.science.display.DisplayUnit.TemperatureUnit;
+import com.wormzjl.icheme.science.display.DisplayUnit.PressureUnit;
+import com.wormzjl.icheme.science.display.DisplayUnit.FlowRateUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -40,10 +43,10 @@ public final class HeatControlColumn {
      * cooler's switch); the player's temperature unit symbol; a fan unit's power (W7, reading A86), or null.
      */
     public record Input(FluidView.Heat heat, @Nullable HeatUnit.Control applied, boolean canEdit, boolean controllable,
-                        HeatUnit.Mode mode, boolean powerOn, String temperatureUnit, @Nullable DeviceColumn.Power power) {
+                        HeatUnit.Mode mode, boolean powerOn, TemperatureUnit temperatureUnit, PressureUnit pressureUnit, FlowRateUnit flowUnit, @Nullable DeviceColumn.Power power) {
         /** A side without fans' power. */
-        public Input(FluidView.Heat heat, @Nullable HeatUnit.Control applied, boolean canEdit, boolean controllable, HeatUnit.Mode mode, boolean powerOn, String temperatureUnit) {
-            this(heat, applied, canEdit, controllable, mode, powerOn, temperatureUnit, null);
+        public Input(FluidView.Heat heat, @Nullable HeatUnit.Control applied, boolean canEdit, boolean controllable, HeatUnit.Mode mode, boolean powerOn, TemperatureUnit temperatureUnit) {
+            this(heat, applied, canEdit, controllable, mode, powerOn, temperatureUnit, PressureUnit.KILOPASCAL, FlowRateUnit.PER_SECOND, null);
         }
 
         HeatSides.Unit unit() {
@@ -75,9 +78,10 @@ public final class HeatControlColumn {
 
     /** The whole column, as one column on a narrow screen: the left's rows, then the right's. */
     public static List<Column.Row> rows(Input in, Texts t) {
-        var two = columns(in, t);
+        var two = controls(in, t);
         var rows = new ArrayList<>(two.left());
         rows.addAll(two.right());
+        if (in.burners()) rows.addAll(furnaceCoils(in, t));
         return rows;
     }
 
@@ -91,13 +95,23 @@ public final class HeatControlColumn {
      * right.
      */
     public static Columns columns(Input in, Texts t) {
+        var two = controls(in, t);
+        if (in.burners()) {
+            var coils = furnaceCoils(in, t);
+            two.left().add(coils.getFirst());
+            two.right().add(coils.getLast());
+        }
+        return two;
+    }
+
+    private static Columns controls(Input in, Texts t) {
         var left = new ArrayList<Column.Row>(sideSelector(in, t));
         var right = new ArrayList<Column.Row>();
         if (in.pool()) left.add(new Column.Paragraph(t.get("pool_note"), Palette.MUTED));
         else if (in.burners() || in.controllable()) {
             boolean on = in.on();
             String actuator = t.get("heat_actuator." + actuator(in)), hints = in.burners() ? "heat_switch.burners_" : in.fans() ? "heat_switch.fans_" : "heat_switch.";
-            left.add(new Column.Group(t.get("heat_group.control"), null, List.of(new Column.Buttons(List.of(
+            left.add(new Column.Group(t.get(in.burners() ? "heat_acting.burners" : "heat_group.control"), null, List.of(new Column.Buttons(List.of(
                     position("power:off", t.get("heat_switch.off"), t.get(hints + "off.hint", actuator), !on, in.canEdit()),
                     position("power:on", t.get("heat_switch.on"), t.get(hints + "on.hint", actuator), on, in.canEdit()))))));
             if (on && in.controllable()) {
@@ -111,11 +125,14 @@ public final class HeatControlColumn {
         }
         // The side's fouling deposit (batch 2026-11-16-fouling-corrosion, WP5): before the rows that follow the plant's state, so
         // its Clean key keeps its slot.
-        if (in.heat().fouling() != null) right.add(deposit(in, t));
+        if (in.burners()) {
+            if (in.canEdit() && in.heat().fouling() != null)
+                right.add(new Column.Buttons(List.of(new Column.Button("clean", t.get("clean_coils"), true, t.get("clean.hint")))));
+        } else if (in.heat().fouling() != null) right.add(deposit(in, t));
         // What acts now, named by the server, how hard it works, and the lines it works through.
         var acting = new ArrayList<Column.Row>();
         String now = in.heat().actuator();
-        if (!now.equals("none")) {
+        if (!now.equals("none") && !in.burners()) {
             Double effort = in.heat().effort();
             if (effort != null) {
                 acting.add(new Column.Bar(Math.clamp(effort, 0, 1)));
@@ -165,10 +182,46 @@ public final class HeatControlColumn {
         if (!in.heat().paired()) return null;
         return switch (in.unit()) {
             case EXCHANGER -> new String[]{"tube", "shell"};
-            case FIRED_HEATER -> new String[]{"convection", "radiant"};
             case KETTLE -> new String[]{"kettle_tube", "pool"};
             default -> null;
         };
+    }
+
+    /** The two coil groups in process-flow order. Missing port measurements stay blank. */
+    public static List<Column.Row> furnaceCoils(Input in, Texts t) {
+        var groups = new ArrayList<Column.Row>(2);
+        for (var side : List.of(HeatSides.Side.CONVECTION, HeatSides.Side.RADIANT)) {
+            var roles = HeatDiagram.roles(HeatSides.Unit.FIRED_HEATER, side);
+            var inlet = in.heat().port(roles.getFirst());
+            var outlet = in.heat().port(roles.getLast());
+            var coil = in.heat().coil(side.name());
+            String section = side.name().toLowerCase(Locale.ROOT);
+            String prefix = section + ":";
+            var rows = new ArrayList<Column.Row>();
+            var temp = in.temperatureUnit();
+            rows.add(new Column.Reading(prefix + "inlet", t.get("inlet_temperature"), inlet == null || inlet.temperature() == null ? "—" : Format.number(temp.display(inlet.temperature())), temp.symbol(), null));
+            rows.add(new Column.Reading(prefix + "outlet", t.get("outlet_temperature"), outlet == null || outlet.temperature() == null ? "—" : Format.number(temp.display(outlet.temperature())), temp.symbol(), null));
+            var flow = in.flowUnit();
+            rows.add(new Column.Reading(prefix + "flow", t.get("coil_mass_flow"), inlet == null || inlet.temperature() == null ? "—" : Format.number(flow.display(inlet.massFlow())), flow.unit("kg"), null));
+            var pressure = in.pressureUnit();
+            Double pin = inlet == null ? null : inlet.pressure(), pout = outlet == null ? null : outlet.pressure();
+            rows.add(new Column.Reading(prefix + "pin", t.get("inlet_pressure"),
+                    pin == null ? "—" : pressure.number(pin), pressure.symbol(), null));
+            rows.add(new Column.Reading(prefix + "pout", t.get("coil_outlet_pressure"),
+                    pout == null ? "—" : pressure.number(pout), pressure.symbol(), null));
+            String drop = pin == null || pout == null ? "—" : pressure.number(pin - pout);
+            rows.add(new Column.Reading(prefix + "drop", t.get("pressure_drop"), drop, pressure.symbol(), null));
+            rows.add(new Column.Reading(prefix + "duty", t.get("coil_heat"), coil == null ? "—" : Format.number(coil.heatWatt() / 1000), "kW", null));
+            if (side == HeatSides.Side.RADIANT) {
+                rows.add(new Column.Reading(prefix + "limit", t.get("duty_available"), coil == null || coil.maximumWatt() == null ? "—" : Format.number(coil.maximumWatt() / 1000), "kW", t.get("duty_available.hint")));
+                String load = coil == null || coil.maximumWatt() == null || coil.maximumWatt() <= 0 ? "—"
+                        : Format.number(100 * Math.clamp(coil.heatWatt() / coil.maximumWatt(), 0, 1));
+                rows.add(new Column.Reading(prefix + "load", t.get("radiant_load"), load, "%", null));
+            }
+            rows.add(new Column.Reading(prefix + "deposit", t.get("fouling_rf"), coil == null || coil.fouling() == null ? "—" : Format.number(coil.fouling() * 1000), "m²K/kW", t.get("fouling_rf.hint")));
+            groups.add(new Column.Group(t.get("heat_side." + section), t.get("heat_side." + section + ".hint"), rows));
+        }
+        return groups;
     }
 
     /** Which of the selector's two sides this is. */
@@ -222,8 +275,8 @@ public final class HeatControlColumn {
      */
     static List<Column.Row> settings(Input in, Texts t) {
         var list = new ArrayList<Column.Row>();
-        String unit = in.temperatureUnit();
-        if (in.burners() && in.on()) list.add(new Column.Field("temperature", t.get("heat_field.outlet"), unit, null));
+        String unit = in.temperatureUnit().symbol();
+        if (in.burners() && in.on()) list.add(new Column.Field("temperature", t.get("radiant_outlet_target"), unit, null));
         if (in.controllable() && !(in.fans() && !in.on())) {
             switch (in.mode()) {
                 case OUTLET_TEMPERATURE -> list.add(new Column.Field("heatTemperature", t.get("heat_field.outlet"), unit, null));

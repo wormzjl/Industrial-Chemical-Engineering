@@ -131,13 +131,13 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
             rows.add(new DeviceColumn.Meter("top_pressure",pressureValue(vessel==null?(state==null?null:state.pressure()):vessel.topPressure()),p,tr("top_pressure.hint")));
             rows.add(new DeviceColumn.Meter("bottom_pressure",pressureValue(vessel==null?null:vessel.bottomPressure()),p,tr("bottom_pressure.hint")));
             rows.add(meter("mass",value(state!=null?state.mass():empty?0:Double.NaN),"kg"));
-        }else if(!pipe()&&data.kind()!=TopologyCompiler.Kind.FILTER){
+        }else if(!pipe()&&!burners()&&data.kind()!=TopologyCompiler.Kind.FILTER){
             boolean side=data.kind()==TopologyCompiler.Kind.HEAT_SIDE;
             if(data.kind()!=TopologyCompiler.Kind.VOID)rows.add(meter(side?"inlet_temperature":"temperature",state==null?"—":temperatureValue(state.temperature()),t));
             String key=data.kind()==TopologyCompiler.Kind.PUMP||data.kind()==TopologyCompiler.Kind.COMPRESSOR?"suction_pressure":data.kind()==TopologyCompiler.Kind.VALVE||side?"inlet_pressure":"pressure";
             rows.add(meter(key,pressureValue(state==null?null:state.pressure()),p));
         }
-        rows.add(new DeviceColumn.Meter(tank()?"net_flow":"throughput",value(displayedFlow()),flowUnit(),tr(tank()?"net_flow.hint":"throughput.hint")));
+        if (!burners()) rows.add(new DeviceColumn.Meter(tank()?"net_flow":"throughput",value(displayedFlow()),flowUnit(),tr(tank()?"net_flow.hint":"throughput.hint")));
         if(pipe()){
             var connections=view.pipeInfo().connections();
             range(rows,"velocity",connections,com.wormzjl.icheme.runtime.fluid.FluidView.PipeConnection::velocityMetresPerSecond,DeviceMeters::value,"m/s",tr("velocity.hint"));
@@ -152,7 +152,10 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
         // (owner 2026-10-28, option A: its page fits the device screen's 338 px view at 2560x1440).
         boolean ratio=data.kind()==TopologyCompiler.Kind.COMPRESSOR&&view.devicePressureChange()!=null&&state!=null&&state.pressure()>0;
         if(ratio)rows.add(new DeviceColumn.Meter("pressure_ratio",value((state.pressure()+view.devicePressureChange())/state.pressure()),"",tr("pressure_ratio.hint",pressureValue(view.devicePressureChange())+" "+p)));
-        else if(view.devicePressureChange()!=null)rows.add(meter("pressure_change",pressureValue(view.devicePressureChange()),p));
+        else if (view.devicePressureChange() != null && !burners()) {
+            boolean mover = data.kind() == TopologyCompiler.Kind.PUMP || data.kind() == TopologyCompiler.Kind.COMPRESSOR;
+            rows.add(meter(mover ? "pressure_rise" : "pressure_drop", pressureValue(view.devicePressureChange()), p));
+        }
         // A driven casing's readings (W7, build plan section 3): a pump's head, its speed share, the shaft power it takes
         // and its efficiency (the fluid's power over the shaft's), from the view the bucket sent.
         var drive=view.drive();
@@ -165,8 +168,8 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
             rows.add(new DeviceColumn.Meter("efficiency",drive.shaftPower()>0&&fluid>0&&data.kind()==TopologyCompiler.Kind.PUMP?value(100*fluid/drive.shaftPower()):"—","%",tr("efficiency.hint")));
         }
         if(view.heat()!=null){var heat=view.heat();
-            rows.add(meter("outlet_temperature",temperatureValue(heat.outletTemperature()),t));
-            rows.add(new DeviceColumn.Meter("duty",value(Math.abs(heat.heatWatt())/1000),"kW",tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
+            if (!burners()) rows.add(meter("outlet_temperature",temperatureValue(heat.outletTemperature()),t));
+            if (!burners()) rows.add(new DeviceColumn.Meter("duty",value(Math.abs(heat.heatWatt())/1000),"kW",tr(heat.burners()!=null?"duty.fired":heat.heatWatt()<0?"duty.cooled":"duty.heated")));
             // The unit's overall UA (batch 2026-11-16-fouling-corrosion, D16): both sides' films and deposits, its whole surface.
             if(heat.ua()!=null)rows.add(new DeviceColumn.Meter("ua",value(heat.ua()/1000),"kW/K",tr("ua.hint")));
             // The control itself (mode, set point, low limit) is on the Control tab; this column keeps what the actuator does.
@@ -175,7 +178,6 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
             if(heat.fans()!=null&&control!=null&&control.mode()!=HeatUnit.Mode.OFF)rows.add(new DeviceColumn.Meter("fans_speed",value(heat.fans()*100),"%",tr("fans_speed.hint")));
             if(heat.fanPowerWatt()!=null)rows.add(new DeviceColumn.Meter("fan_power",value(heat.fanPowerWatt()/1000),"kW",tr("fan_power.hint")));
             if(heat.setPoint()!=null)rows.add(meter("set_temperature",temperatureValue(heat.setPoint()),t));
-            if(heat.maximumWatt()!=null)rows.add(new DeviceColumn.Meter("duty_available",value(heat.maximumWatt()/1000),"kW",tr("duty_available.hint")));
             // The burners (batch 2026-11-09-furnace-fuel-power): the fuel into the firebox, the heat it fires against the heat
             // asked for, the combustion-air fans' draw. The alarms stand on the status display.
             var fuel=heat.fuel();
@@ -345,7 +347,10 @@ public record DeviceMeters(Data data,@Nullable FluidView.Port port,PhaseRatioBas
      * under {@code gui.icheme.}: {@code mechanism.<name>}, {@code metallurgy.<name>}); null for a device with no booked wall.
      */
     public DeviceColumn.Wall wall(HeatControlColumn.Texts names){
-        var w=data.view().integrity();if(w==null)return null;
+        return wall(data.view().integrity(), names);
+    }
+    public static DeviceColumn.Wall wall(FluidView.Integrity w, HeatControlColumn.Texts names) {
+        if (w == null) return null;
         String mechanism=w.mechanism()==null||w.mechanism().isEmpty()?"—":names.get(mechanismKey(w.mechanism()));
         String material=w.material()==null||w.material().isEmpty()?"—":names.get("metallurgy."+w.material().toLowerCase(java.util.Locale.ROOT));
         return new DeviceColumn.Wall(value(100*(1-Math.clamp(w.usedShare(),0,1))),value(w.rate()),w.lifePlaySeconds()==null?"—":value(w.lifePlaySeconds()/60),mechanism,material);
