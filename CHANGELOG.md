@@ -17,18 +17,21 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Changed
 
-- A new column test world builds its plant in about 5 s instead of 74 s (`2026-11-18-column-test-world-speed`, on `claude/column-test-world-perf-96ee33`): the plant builder's line search runs on a flat grid of the plant's box and lays the same lines, block for block. Its sizing starts in the background once the Create World screen has the column test world type, and is kept for the game's run (`SizingCache`).
+- Constructor previews reuse their sorted translucent buffer and skip equipment outside the view. The chooser groups equipment by function, marks unfinished equipment and offers simulator import under Saved designs (`1e176216e`, `87d414280`, `2026-11-18-constructor-ghost-rendering`).
+- Both furnace coils now appear in the same device view, with separate flow, pressure drop, duty and condition readings. Constructor and equipment labels and Field Guide tours use the revised engineering terms. The shared wire protocol advances to `icheme-9` (`3b456a2da`, `b9bc1576b`, `2026-11-18-device-gui-labels`).
+- A new column test world builds its plant in about 5 s instead of 74 s (`c3bb8b10a`, `2026-11-18-column-test-world-speed`, on `claude/column-test-world-perf-96ee33`): the plant builder's line search runs on a flat grid of the plant's box and lays the same lines, block for block. Its sizing starts in the background once the Create World screen has the column test world type, and is kept for the game's run (`SizingCache`).
 
 ### Fixed
 
-- Unloaded plant equipment now retains external exchanger valve control, water intake eligibility, and DCS column commands. Secondary equipment nodes can bind independently. Pollution blasts rupture standalone fluid devices on either side of a loaded chunk boundary and record their release at the removal fence (`2026-11-18-unloaded-chunks`).
-
-- IChemE power, column operation, alarms and solid-fired stills continue when a plant's chunks unload. Pollution can still damage registered equipment, subject to the existing external-corrosion and explosion settings (`2026-11-18-unloaded-chunks`).
-- Column on a cold feed, follow-ups (`2026-11-17-column-cold-feed`, on `claude/large-column-surface-shader-f22680`): a column that cannot solve with its pumparounds at full duty solves at 50, 25 or 10 % of it; a pumparound's cooler takes over at most 90 % of the condenser's duty; a fired coil reaches its set point at its outlet's pressure; the burners relight after a world reload.
-- Equipment reflections are a soft grey gloss (`2026-11-18-equipment-reflections`, on `claude/large-column-surface-shader-f22680`): no mirror image of the sky and ground and no colour, the shell keeps 1 - F of its own colour under the sheen, bare steel and jacketing take a fifth head-on, grating a tenth; pipe runs that belong to a structure (a heater's crossover, manifolds) stay plain like laid pipes. Clad columns no longer turn white-blue from below or dark from above, and their rings, heads, the crossovers and the platforms no longer shine.
+- Registered plant power, columns, alarms, still fuel, water intakes and remote controls keep working across unloaded chunks. Pollution damage and blast releases follow the registered equipment and its removal fence (`1681e72e4`, `690e9db55`, `b2fca74bf`, `2026-11-18-unloaded-chunks`).
+- Furnace support faces no longer overlap. The underfloor fuel manifold has continuous corners and plain pipe shading (`e79246057`, `633b9ab9f`, `2026-11-18-furnace-model`).
+- Restored pre-task junction mixing and checkpoint behavior. Independent fixes cover dated exchanger replay, clean solver shutdown and the Curios respirator renderer (`311471725`, `0f4c08c41`, `a7ca38a54`, `affd38064`, `2026-11-18-junction-lag`).
+- Column on a cold feed, follow-ups (`803d8dc6e`, `2a4055ce9`, `f215ac5d2`, `2026-11-17-column-cold-feed`, on `claude/large-column-surface-shader-f22680`): a column that cannot solve with its pumparounds at full duty solves at 50, 25 or 10 % of it; a pumparound's cooler takes over at most 90 % of the condenser's duty; a fired coil reaches its set point at its outlet's pressure; the burners relight after a world reload.
+- Equipment reflections are a soft grey gloss (`57ae3271f`, `2026-11-18-equipment-reflections`, on `claude/large-column-surface-shader-f22680`): no mirror image of the sky and ground and no colour, the shell keeps 1 - F of its own colour under the sheen, bare steel and jacketing take a fifth head-on, grating a tenth; pipe runs that belong to a structure (a heater's crossover, manifolds) stay plain like laid pipes. Clad columns no longer turn white-blue from below or dark from above, and their rings, heads, the crossovers and the platforms no longer shine.
 
 ### Removed
 
+- Moved the map-backed pollution test environment out of the mod jar. Offline pollution digests use the test classpath (`2026-11-19-release-0353`).
 - Tests that guard no behaviour (`2026-11-18-prune-tests`, on `claude/prune-tests-97440b`, `7b9ba01c4`): four tests and four assertions that read source text for helper, method or field names, or asserted that removed code stays removed. No game change.
 
 ## [0.35.2] - 2026-11-18
