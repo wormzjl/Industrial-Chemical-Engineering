@@ -229,10 +229,12 @@ public final class IslandCoordinator {
         private String failure;
         boolean terminal,closed,lateResult;
         private final long dispatchedAtTick,admittedNanos,dependencyRevision;
+        private final String priorStatus;
         // What the slice read of each coupled side's other side at its dispatch (plan section 5.2).
         private Map<Long,ExchangerRelay.Read> reads=Map.of();
-        private Pending(Attempt attempt,long dispatchedAtTick,long admittedNanos,long dependencyRevision){
+        private Pending(Attempt attempt,long dispatchedAtTick,long admittedNanos,long dependencyRevision,String priorStatus){
             this.attempt=attempt;this.dispatchedAtTick=dispatchedAtTick;this.admittedNanos=admittedNanos;this.dependencyRevision=dependencyRevision;
+            this.priorStatus=priorStatus;
         }
     }
     private final Thread owner=Thread.currentThread();
@@ -758,8 +760,10 @@ public final class IslandCoordinator {
                 var dispatched=ports.dispatch(island.id,com.wormzjl.icheme.science.fluid.network.ShaftPlan.apply(controlled,shafts.plans(island.id,controlled)),slice);
                 var command=new ProcessSolveJobs.FluidIslandCommand(island.model,dispatched,slice.seconds(settings.time),PassiveIntervalSolver.Settings.defaults(settings.time),settings.hardBudgetNanos,island.retained,reads,ports.plans(island.id,dispatched,slice));
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
+                String priorStatus=island.status;
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
-                var entry=new Pending(attempt,island.clock.snapshot().onlineTick(),nanoClock.getAsLong(),dependencyRevision);entry.dispatched=dispatched;entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
+                var entry=new Pending(attempt,island.clock.onlineTick(),nanoClock.getAsLong(),dependencyRevision,priorStatus);
+                entry.dispatched=dispatched;entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
                 reconsider(island);
             }
             if(!admitted.isEmpty()){var round=new Round(roundSequence=Math.addExact(roundSequence,1),List.copyOf(admitted),roundStarted);rounds.add(round);scheduleRoundTimeout(round,settings.hardBudgetNanos);}
@@ -971,12 +975,21 @@ public final class IslandCoordinator {
      * placement, destruction and material delivery need their own explicitly balanced transactions.
      */
     public void topology(Set<UUID> events,Set<Long> affected,List<Replacement> replacements,FluidThermodynamics model,long committed,long online,Map<Long,PassiveNetwork.Reservoir> additions,Set<Long> removals,Map<Long,com.wormzjl.icheme.science.fluid.network.InlineFilter> releasedFilters,Runnable metadataCommit){topologyChange.topology(events,affected,replacements,model,committed,online,additions,removals,releasedFilters,metadataCommit);}
-    /** Stops admission; unresolved proposals are held. Actual execution capacity is owned by the shared pool. */
+    /** Stops admission and discards uncommitted proposals. The shared pool still owns actual execution. */
     public void stop() {
         owned();if(stopped)return;stopped=true;
-        var closing=List.copyOf(rounds);rounds.clear();
-        for(var round:closing){for(var entry:round.entries)entry.result=null;closeRound(round);}
+        var discarded=List.copyOf(pending.values());pending.clear();rounds.clear();
+        for(var entry:discarded) {
+            var island=require(entry.attempt.islandId());
+            island.pendingEntries--;
+            if(entry.closed)continue;
+            island.clock.discard(entry.attempt.slice());
+            if(island.status.equals("SOLVING"))island.status=entry.priorStatus;
+            island.touch();
+        }
+        for(var island:islands.values())reconsider(island);
         scheduler.clear();externalTicks.clear();externalActions.clear();
+        for(var entry:discarded)if(!entry.closed&&!entry.terminal)dispatcher.cancel(entry.attempt.slice().requestId());
     }
     Island require(long id){var value=islands.get(id);if(value==null)throw new IllegalArgumentException("Unknown island "+id);return value;}
 

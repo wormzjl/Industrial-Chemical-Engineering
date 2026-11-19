@@ -35,9 +35,12 @@ class IslandCoordinatorTest {
         }
         public void cancel(long request){cancelled.add(request);}
         private IslandCoordinator.Attempt finish(long request) {
+            return finish(coordinator,request);
+        }
+        private IslandCoordinator.Attempt finish(IslandCoordinator owner,long request) {
             var attempt=attempts.remove(request);var command=commands.remove(request);
             var result=new PassiveIntervalSolver(model).solve(command.snapshot(),command.durationSeconds(),command.settings(),()->{});
-            coordinator.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
+            owner.completed(attempt,Optional.of(new ProcessSolveJobs.FluidIslandSolveResult(Optional.of(result),"FULL",10)));
             return attempt;
         }
     }
@@ -62,6 +65,8 @@ class IslandCoordinatorTest {
         register(1,100,0);register(2,100,0);coordinator.pump();dispatch.finish(1);
         time.set(1000);coordinator.pump();
         assertEquals(100,coordinator.snapshot(1).clock().committedTick());assertEquals(0,coordinator.snapshot(2).clock().committedTick());
+        assertEquals("HELD: round deadline",coordinator.snapshot(2).status());
+        assertEquals(200,coordinator.snapshot(2).clock().retryAtTick());
         assertTrue(dispatch.cancelled.contains(2L));assertEquals(1,coordinator.pendingCount());
         var late=dispatch.finish(2);coordinator.pump();assertEquals(0,coordinator.snapshot(2).clock().committedTick());assertEquals(0,coordinator.pendingCount());
         coordinator.completed(late,Optional.empty());assertEquals(0,coordinator.snapshot(2).clock().committedTick());
@@ -123,11 +128,59 @@ class IslandCoordinatorTest {
         register(2,200,0);var solving=UUID.randomUUID();coordinator.fence(solving,150,List.of(2L));
         assertFalse(coordinator.aligned(solving,List.of(2L)),"an owner that was not held solves to the fence");
     }
-    @Test void staleStampAndStopCannotPublishAnUncommittedCandidate() {
-        register(1,100,0);coordinator.pump();var actual=dispatch.attempts.get(1L);
-        coordinator.completed(new IslandCoordinator.Attempt(1,1,actual.slice()),Optional.empty());assertEquals(1,coordinator.pendingCount());
-        dispatch.finish(1);coordinator.stop();assertEquals(0,coordinator.snapshot(1).clock().committedTick());assertEquals(0,coordinator.pendingCount());
-        coordinator.pump();assertTrue(dispatch.attempts.isEmpty());
+    @Test void stoppingAGroupDiscardsCompletedAndRunningProposalsAndRestartsWithoutBackoff() {
+        register(1,100,0);register(2,100,0);
+        var before=coordinator.snapshots();
+        coordinator.pump();
+        var actual=dispatch.attempts.get(1L);
+        coordinator.completed(new IslandCoordinator.Attempt(1,1,actual.slice()),Optional.empty());
+        dispatch.finish(1);
+        coordinator.stop();
+        assertEquals(Set.of(2L),dispatch.cancelled);
+        assertEquals(0,coordinator.pendingCount());
+        assertTrue(publications.isEmpty());
+        var saved=coordinator.snapshots();
+        for(int i=0;i<saved.size();i++) {
+            assertEquals(before.get(i).clock(),saved.get(i).clock());
+            assertEquals(before.get(i).status(),saved.get(i).status());
+            assertEquals(before.get(i).graph(),saved.get(i).graph());
+            assertEquals(before.get(i).lastResult(),saved.get(i).lastResult());
+        }
+        dispatch.finish(2);coordinator.pump();
+        assertEquals(saved,coordinator.snapshots());
+        assertTrue(publications.isEmpty());
+
+        var restartedDispatch=new FakeDispatch();
+        var restarted=new IslandCoordinator(restartedDispatch,publications::add,time::get,new IslandCoordinator.Settings(1000,750,64,false));
+        for(var snapshot:saved)restarted.register(snapshot,model);
+        restarted.pump();
+        assertEquals(2,restartedDispatch.attempts.size());
+        for(long request:List.copyOf(restartedDispatch.attempts.keySet()))restartedDispatch.finish(restarted,request);
+        restarted.pump();
+        assertTrue(restarted.snapshots().stream().allMatch(snapshot->snapshot.clock().committedTick()==100&&snapshot.status().equals("FULL")));
+    }
+    @Test void stoppingAnActiveRetryPreservesTheRealHoldAndItsRetryDate() {
+        register(1,100,0);
+        coordinator.pump();
+        time.set(1000);coordinator.pump();
+        dispatch.finish(1);
+        var held=coordinator.snapshot(1);
+        assertEquals("HELD: round deadline",held.status());
+        assertEquals(200,held.clock().retryAtTick());
+        for(int tick=0;tick<100;tick++)coordinator.tick();
+        assertEquals(50,dispatch.attempts.get(2L).slice().endTick());
+        var active=coordinator.snapshot(1);
+        coordinator.stop();
+        var saved=coordinator.snapshot(1);
+        assertEquals(held.status(),saved.status());
+        assertEquals(active.clock(),saved.clock());
+        assertEquals(held.graph(),saved.graph());
+        assertEquals(Set.of(1L,2L),dispatch.cancelled);
+        assertEquals(1,publications.size());
+        var restartedDispatch=new FakeDispatch();
+        var restarted=new IslandCoordinator(restartedDispatch,publications::add,time::get,new IslandCoordinator.Settings(1000,750,64,false));
+        restarted.register(saved,model);restarted.pump();
+        assertEquals(saved.clock().committedTick(),restartedDispatch.attempts.get(1L).slice().startTick());
     }
     @Test void splitAndMergeAtAnAlignedFencePreserveEveryInventoryAndOnlineDebt() {
         register(1,200,150);register(2,200,150);var merge=UUID.randomUUID();coordinator.fence(merge,150,List.of(1L,2L));
