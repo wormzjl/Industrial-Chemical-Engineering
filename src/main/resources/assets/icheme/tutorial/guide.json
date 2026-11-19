@@ -19,6 +19,8 @@
     "stream": "simulator/sheet",
     "side_draw": "simulator/balance",
     "heat_duty": "simulator/heat",
+    "convection_coil": "start/fuel",
+    "radiant_coil": "start/fuel",
     "pumparound": "unit/tower"
   },
   "chapters": [
