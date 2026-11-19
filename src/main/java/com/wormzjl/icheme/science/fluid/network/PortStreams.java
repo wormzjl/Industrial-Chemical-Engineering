@@ -175,9 +175,11 @@ public final class PortStreams {
     }
     /** The heat curve of the stream drawn through {@code port} from state {@code s} over {@code [low, high]} K, or null where it
      * draws nothing: a coupled exchanger side's and a kettle's tubes, on the model of the island the stream is in (S-06). */
-    static HeatCurve spanned(FluidThermodynamics model,FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume,double low,double high,HeatCurve.Films films,Runnable checkpoint) {
+    static HeatCurve spanned(FluidThermodynamics model,FluidThermodynamics.State s,PassiveNetwork.PhasePort port,double volume,double low,double high,HeatCurve.Films films,Runnable checkpoint,HeatCurve.Samples samples) {
         double[] amounts=endMoles(model,s,port,volume);double total=0;for(double n:amounts)total+=n;
-        return total>0&&endMass(model,s,port,volume)>0?HeatCurve.sample(model,amounts,s.pressure(),low,high,films,checkpoint):null;
+        if(!(total>0&&endMass(model,s,port,volume)>0))return null;
+        return samples==null?HeatCurve.sample(model,amounts,s.pressure(),low,high,films,checkpoint)
+                :samples.sample(model,amounts,s.pressure(),low,high,films,checkpoint,null);
     }
     /**
      * What a phase-port outflow the pass drew carries per kilogram of fluid ({@code rates}, the six entries of

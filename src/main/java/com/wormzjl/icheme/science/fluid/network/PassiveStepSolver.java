@@ -471,12 +471,19 @@ public final class PassiveStepSolver {
     private double deliveryWindow;
     private double deliveryElapsed;
     private double[] deliveredInWindow;
+    /** Lazy, inside the interval's worker latch, released even when the interval is cancelled. */
+    private HeatCurve.Samples sampledCurves;
     void startDeliveryWindow(double duration) {
         deliveryWindow=duration;
         deliveryElapsed=0;
         deliveredInWindow=null;
+        sampledCurves=null;
     }
     void clearDeliveryWindow(){startDeliveryWindow(0);}
+    private HeatCurve.Samples sampledCurves() {
+        if (sampledCurves == null && deliveryWindow > 0) sampledCurves = new HeatCurve.Samples();
+        return sampledCurves;
+    }
     private Result solvePasses(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {
         // A junction minted by its constructor and not yet sized to its connections is sized here (no-op otherwise).
         inputGraph=PassiveNetwork.sizeJunctionHoldups(inputGraph,model);
@@ -1521,11 +1528,18 @@ public final class PassiveStepSolver {
         if(total>0&&PortStreams.endMass(model,start,port,volume)>0) {
             double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(start.temperature(),law.coldest())-10);
             double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(start.temperature(),law.hottest())+10);
-            heatCurveSamples++;if(inResidual)heatCurvesInResidual++;
-            curve=HeatCurve.sample(model,amounts,pressure,low,high,law.films(),checkpoint);
+            var samples=sampledCurves();
+            if(samples==null) {
+                countSideCurveSample();
+                curve=HeatCurve.sample(model,amounts,pressure,low,high,law.films(),checkpoint);
+            }else curve=samples.sample(model,amounts,pressure,low,high,law.films(),checkpoint,this::countSideCurveSample);
         }
         kept[end]=new SideCurve(law.coldest(),law.hottest(),law.films(),port,volume,start,pressure,curve);
         return curve;
+    }
+    private void countSideCurveSample() {
+        heatCurveSamples++;
+        if(inResidual)heatCurvesInResidual++;
     }
     /**
      * The pressure {@code pipe}'s curve from {@code node} is sampled at: the node's, except a fired coil's, whose set point is
@@ -1694,8 +1708,8 @@ public final class PassiveStepSolver {
                 // A column's heating side (W4) gives its heat down to its floor, through its condensation: the curve spans it.
                 if(read.gives())low=Math.min(low,read.ceiling());
                 low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,low-10);high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,high+10);
-                var curve=PortStreams.spanned(model,start,port,pipe.volume(),low,high,side.films(),checkpoint);
-                var other=!drawn||pool?null:PortStreams.spanned(partnerModel(partner),partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint);
+                var curve=PortStreams.spanned(model,start,port,pipe.volume(),low,high,side.films(),checkpoint,sampledCurves());
+                var other=!drawn||pool?null:PortStreams.spanned(partnerModel(partner),partner.donor(),partner.port(),partner.volume(),low,high,partner.law().films(),checkpoint,sampledCurves());
                 var stream=curve==null?null:new ExchangerRelay.Stream(curve,own,flow,side,true);
                 if(stream!=null&&pool)planned=ExchangerRelay.plan(side,stream,partner.bath(),read);
                 else if(stream!=null)planned=ExchangerRelay.plan(side,stream,
@@ -1841,7 +1855,7 @@ public final class PassiveStepSolver {
                 if(tube!=null&&!tube.pool()&&PortStreams.endMass(partnerModel(tube),tube.donor(),tube.port(),tube.volume())>0) {
                     double low=Math.max(NumericalBox.MINIMUM_TEMPERATURE,Math.min(contents.temperature(),tube.donor().temperature())-10);
                     double high=Math.min(NumericalBox.MAXIMUM_TEMPERATURE,Math.max(contents.temperature(),tube.donor().temperature())+10);
-                    var curve=PortStreams.spanned(partnerModel(tube),tube.donor(),tube.port(),tube.volume(),low,high,tube.law().films(),checkpoint);
+                    var curve=PortStreams.spanned(partnerModel(tube),tube.donor(),tube.port(),tube.volume(),low,high,tube.law().films(),checkpoint,sampledCurves());
                     if(curve!=null)stream=new ExchangerRelay.Stream(curve,PortStreams.endSpecificEnthalpy(partnerModel(tube),tube.donor(),tube.port(),tube.volume()),tube.massFlow(),tube.law(),true);
                 }
                 planned=ExchangerRelay.planPool(pool,bath,stream,read,seconds);
