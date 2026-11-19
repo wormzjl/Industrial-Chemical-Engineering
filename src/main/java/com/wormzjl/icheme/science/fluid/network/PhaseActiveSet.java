@@ -84,21 +84,27 @@ final class PhaseActiveSet {
         }
         return null;
     }
-    /**
-     * The check of a failed pass's last iterate, node by node (owner decisions D28 A' and D39): the iterate with the
-     * phases it empties folded, by the trace fold and the vanishing rule against the step's start (the solve's input states, {@link PassiveStepSolver.SolveConstants}),
-     * one node per call; null when it empties none. A failed iterate is not a state: this trial layout neither reads nor
-     * writes the A85 record and adds no phase, so no own split is formed and no hold is raised at a point the network
-     * never reaches.
-     */
     /** Whether {@code node} is a vessel whose wall is rigid (batch 2026-11-10-rigid-reservoir): its gas is judged by volume. */
     static boolean rigid(PassiveNetwork.Reservoir node){return node.kind()==PassiveNetwork.NodeKind.RESERVOIR&&!node.junction()&&node.inventory()!=null&&node.inventory().rigid();}
-    List<FluidThermodynamics.State> foldedIterate(PassiveNetwork graph,List<FluidThermodynamics.State> states) {
-        for(int i=0;i<states.size();i++) {
-            var state=states.get(i);var node=graph.reservoirs().get(i);if(node.fixed())continue;
-            var folded=model.folded(state,node.junction(),rigid(node),solver.constants.inputStates.get(i));
-            if(folded==state)continue;
-            var corrected=new ArrayList<>(states);corrected.set(i,folded);return corrected;
+    /**
+     * A failed iterate can identify a vanishing phase (owner decisions D28 A' and D39). Fold that phase on the previous
+     * seed so the next pass keeps its pressure, temperature and conserved amounts. Change one node per call.
+     */
+    List<FluidThermodynamics.State> foldedIterate(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,
+                                                  List<FluidThermodynamics.State> iterate) {
+        for(int i=0;i<iterate.size();i++) {
+            var node=graph.reservoirs().get(i);
+            if(node.fixed())continue;
+            var trial=iterate.get(i);
+            var folded=model.folded(trial,node.junction(),rigid(node),solver.constants.inputStates.get(i));
+            int removed=FluidThermodynamics.phaseBits(trial)&~FluidThermodynamics.phaseBits(folded);
+            if(removed==0)continue;
+            var seed=seeds.get(i);
+            var next=model.folded(seed,rigid(node),removed);
+            if(next==seed)continue;
+            var corrected=new ArrayList<>(seeds);
+            corrected.set(i,next);
+            return corrected;
         }
         return null;
     }

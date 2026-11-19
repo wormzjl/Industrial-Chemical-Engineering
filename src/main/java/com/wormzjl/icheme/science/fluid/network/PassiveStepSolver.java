@@ -618,7 +618,7 @@ public final class PassiveStepSolver {
                     int refuted=proposal.phases()&FluidThermodynamics.collapsing(proposal.seed(),iterate.get(proposal.node()),PhaseActiveSet.rigid(graph.reservoirs().get(proposal.node())));
                     if(refuted!=0){foldedPhases[proposal.node()]|=refuted;SolverDiagnostics.count(SolverDiagnostics.phaseRefusals);seeds=proposal.point();proposal=null;continue;}
                 }
-                var changedSeeds=phaseSet.foldedIterate(graph,iterate);
+                var changedSeeds=phaseSet.foldedIterate(graph,seeds,iterate);
                 // Decision D11: a phase a vessel's ports draw at their full capacity leaves the vessel within the step; a
                 // pass whose seed still holds it may have no root (see drainedSeeds).
                 if(changedSeeds==null)changedSeeds=equations.drainedSeeds(checkpoint);
