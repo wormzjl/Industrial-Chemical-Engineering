@@ -1818,11 +1818,11 @@ final class StepEquations implements SparseNewton.Equations {
                     int column=offsets[node]+local;
                     double step=differenceStep*differenceScale(column,x[column]);
                     trial[column]+=step;
-                    double temperature=layout[node].temperature(trial,offsets[node]);
+                    double temperature=local==layout[node].temperatureVariable()?layout[node].temperature(trial,offsets[node]):baseStates[node].temperature();
                     var prepared=basePrepared[node]!=null&&basePrepared[node].temperature()==temperature?basePrepared[node]
                             :probe(node,temperature);
                     long exactBefore=SolverDiagnostics.ENABLED&&tangents?SolverDiagnostics.jacobianExactPhases.sum():0;
-                    var state=layout[node].decode(trial,offsets[node],prepared,nodeTangents);
+                    var state=layout[node].decodeProbe(trial,offsets[node],local,baseStates[node],prepared,nodeTangents);
                     if(SolverDiagnostics.ENABLED&&tangents&&SolverDiagnostics.jacobianExactPhases.sum()>exactBefore)SolverDiagnostics.jacobianExactColumns.increment();
                     st[node]=state;pr[node]=prepared;
                     tr[node]=transport(node,state,prepared);

@@ -173,6 +173,10 @@ public final class SparseNewton {
         public void invalidate(){owned();matrix=null;factorization=null;jacobianPoint=null;}
         /** Reuse immutable sparsity/coloring/order for another timestep, with fresh numeric factors. */
         public Workspace forkStructure(){owned();var fork=new Workspace(this);fork.pattern=pattern;fork.ordering=ordering;return fork;}
+        /** Reuse only work arrays, once no retained workspace still needs this family's factors or sparsity. */
+        public Workspace forkStorage(){owned();return new Workspace(this);}
+        /** A factorization on either workspace supersedes factors from the other. */
+        public boolean sharesStorage(Workspace other){owned();return shared==other.shared;}
         /** Seed modified Newton with the previous timestep's Jacobian. All uses remain sequential
          * on this worker; poor contraction, a failed line search or a sibling's refactorization
          * refreshes from current equations. The current nonlinear residual, not this approximation,

@@ -211,10 +211,10 @@ public final class UpLookingLu {
         if(lColumns.length<n+1){lColumns=new int[n+1];uColumns=new int[n+1];}
         size=n;
         Arrays.fill(pinv,0,n,-1);
-        // EJML's initial L and U capacity, 4 nnz + n; a refill keeps what earlier factorizations grew.
-        int capacity=4*nonzeros+n;
-        if(lValues.length<capacity){lRows=new int[capacity];lValues=new double[capacity];}
-        if(uValues.length<capacity){uRows=new int[capacity];uValues=new double[capacity];}
+        // The actual fill decides how much the factor arrays grow. A slightly denser input
+        // on the next refresh does not retire arrays that already have room for its factors.
+        if(lValues.length==0){lRows=new int[nonzeros];lValues=new double[nonzeros];}
+        if(uValues.length==0){uRows=new int[nonzeros];uValues=new double[nonzeros];}
     }
     /** The kept slot of this pattern; where none holds it, the least recently used slot takes it, with nothing complete. */
     private Kept keptPattern(int n,int[] columns,int[] rows,int nonzeros) {

@@ -141,6 +141,8 @@ public final class PassiveStepSolver {
     long heatCurvesInResidual(){return heatCurvesInResidual;}
     private final Map<WorkspaceKey,SparseNewton.Workspace> workspaces=new LinkedHashMap<>();
     private final Map<WorkspaceKey,SparseNewton.Workspace> structures=new LinkedHashMap<>();
+    /** Capacity of a workspace whose family no longer has any numeric preconditioner in either map. */
+    private SparseNewton.Workspace spareWorkspace;
     /**
      * The point a solve carries to the next (S-04, batch 2026-11-13-codebase-review), set in one statement wherever a pass
      * hands its point on. {@code pipes} and {@code nodeIds}: the structure it was solved on. {@code flows} and {@code heads}:
@@ -306,7 +308,7 @@ public final class PassiveStepSolver {
         // fork that keeps its pattern, colouring and ordering (functions of the structure) and no Jacobian or LU. An
         // invalidated workspace left under its dt key would not inherit the chord this job builds on its first step, so a
         // carried job refreshed its Jacobian where a fresh one reused it (RetainedSolverTest).
-        workspaces.clear();
+        while(!workspaces.isEmpty())retireWorkspace(workspaces.remove(workspaces.keySet().iterator().next()));
         for(var entry:structures.entrySet())entry.setValue(entry.getValue().forkStructure());
         carry=CarriedPoint.none();constants=constants.withInputStates(List.of());
         keepOpen=Set.of();lastSolve=null;acceptedOpenings.clear();
@@ -671,8 +673,20 @@ public final class PassiveStepSolver {
                     structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors,structure.solidRows,structure.weirRows);
             var workspace=workspaces.get(key);
             SolverDiagnostics.count(workspace==null?SolverDiagnostics.workspaceBuilds:SolverDiagnostics.workspaceReuses);
-            if(workspace==null){if(workspaces.size()>=4)workspaces.remove(workspaces.keySet().iterator().next());var previous=structures.get(structure);workspace=previous==null?new SparseNewton.Workspace(ownership):previous.forkPreconditioner();workspaces.put(key,workspace);}
-            if(structures.size()>=4&&!structures.containsKey(structure))structures.remove(structures.keySet().iterator().next());structures.put(structure,workspace);
+            if(workspace==null) {
+                if(workspaces.size()>=4)retireWorkspace(workspaces.remove(workspaces.keySet().iterator().next()));
+                var previous=structures.get(structure);
+                if(previous==null) {
+                    if(structures.size()>=4)retireWorkspace(structures.remove(structures.keySet().iterator().next()));
+                    workspace=spareWorkspace==null?new SparseNewton.Workspace(ownership):spareWorkspace;
+                    spareWorkspace=null;
+                }else workspace=previous.forkPreconditioner();
+                workspaces.put(key,workspace);
+            }
+            if(structures.size()>=4&&!structures.containsKey(structure))
+                retireWorkspace(structures.remove(structures.keySet().iterator().next()));
+            var previous=structures.put(structure,workspace);
+            if(previous!=null&&!previous.sharesStorage(workspace))retireWorkspace(previous);
             SparseNewton.Result numerical;
             // One tolerance for every island: a taut vessel's rows carry the precision its pressure needs as weights in the
             // norm the Newton converges on (owner decision D12, {@link StepEquations#rowWeights}), in place of the tenth of
@@ -1036,6 +1050,13 @@ public final class PassiveStepSolver {
         try{at=model.equilibriumPH(s.temperature(),p,h,x.clone(),checkpoint);}catch(IllegalArgumentException refused){return PH_OTHER;}
         if(at==null||!(FluidThermodynamics.holdsPhase(at,FluidThermodynamics.OIL)||FluidThermodynamics.holdsPhase(at,FluidThermodynamics.AQUEOUS)))return PH_OTHER;
         return FluidThermodynamics.holdsPhase(at,FluidThermodynamics.GAS)?PH_VAPOUR:PH_LIQUID;
+    }
+    private void retireWorkspace(SparseNewton.Workspace retired) {
+        // A dt entry and a structure's latest preconditioner can share live factors. Reuse
+        // the storage only after the last slot in both maps no longer needs that family.
+        for(var current:workspaces.values())if(retired.sharesStorage(current))return;
+        for(var current:structures.values())if(retired.sharesStorage(current))return;
+        spareWorkspace=retired.forkStorage();
     }
     /** Value key over compact codes instead of rendered strings and boxed lists; the arrays belong
      * to the key from construction on, so a caller must hand over a snapshot of anything it mutates.

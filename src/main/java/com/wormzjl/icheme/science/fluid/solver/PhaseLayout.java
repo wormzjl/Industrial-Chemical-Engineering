@@ -34,6 +34,8 @@ public final class PhaseLayout {
     private final int[][] slotIndex;
     /** Where each present component's total amount lives; -1 for an absent one. */
     private final int[] amountIndex;
+    /** Conserved component of each amount or phase-ratio column, before the temperature and pressure columns. */
+    private final int[] columnComponent;
     /** Per component, its reference storage slot; -1 for an absent one. */
     private final int[] referenceSlot;
     private final byte[] support;
@@ -117,6 +119,8 @@ public final class PhaseLayout {
             int slot=ORDER_SLOT[k];slotIndex[i][slot]=offset++;
             if(referenceSlot[i]<0){referenceSlot[i]=slot;amountIndex[i]=slotIndex[i][slot];}
         }
+        columnComponent=new int[offset];
+        for(int i:components)for(int column:slotIndex[i])if(column>=0)columnComponent[column]=i;
         temperatureIndex=offset++;pressureIndex=offset++;
         solidIndex=solidSupport?offset:-1;if(solidSupport)offset+=3;size=offset;
         solidBasis=seed.solids();solidReference=seed.solidMoments().values();
@@ -161,6 +165,7 @@ public final class PhaseLayout {
         return traceDifferenceScale(Math.max(Math.abs(value),Math.min(Math.abs(differenceScales[local]),Math.max(seed,LOG_READ_SPAN*seed))));
     }
     /** The local column of the pressure unknown, {@code ln(P / 1e5)}; every layout has one. */
+    public int temperatureVariable(){return temperatureIndex;}
     public int pressureVariable(){return pressureIndex;}
     /** The number of component balance rows: one per present component, water among them. */
     public int componentBalanceCount(){return components.length;}
@@ -323,24 +328,48 @@ public final class PhaseLayout {
      */
     public FluidThermodynamics.State decode(double[] variables,int offset,FluidThermodynamics.Prepared prepared,
                                             com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangents) {
-        int n=amountIndex.length;double[][] out=new double[3][n];
-        for(int i:components) {
-            double amount=amountScale*variables[offset+amountIndex[i]];
-            int ref=referenceSlot[i],last=ref;double largest=0;
-            for(int slot=0;slot<3;slot++){int at=slotIndex[i][slot];if(at<0||slot==ref)continue;double r=variables[offset+at];if(r>=largest){largest=r;last=slot;}}
-            if(last==ref&&!hasOther(i)){out[ref][i]=amount;continue;}
-            // Each slot but the largest is amount / sum_j exp(r_j - r_k), the largest takes the remainder: two slots give
-            // the split l = n/(1 + e^r), v = n - l (r >= 0) and v = n/(1 + e^-r), l = n - v of the layout before W3b, to the bit.
-            double rest=amount;
-            for(int slot=0;slot<3;slot++) {
-                if(slotIndex[i][slot]<0||slot==last)continue;
-                double rk=ratio(variables,offset,i,slot),denominator=0;
-                for(int j=0;j<3;j++)if(slotIndex[i][j]>=0)denominator+=j==slot?1:DeterministicMath.exp(ratio(variables,offset,i,j)-rk);
-                out[slot][i]=amount/denominator;rest-=out[slot][i];
-            }
-            out[last][i]=rest;
+        double[][] out=new double[3][amountIndex.length];
+        for(int component:components)split(variables,offset,component,out);
+        return decodedState(variables,offset,prepared,tangents,out,temperature(variables,offset),
+                1e5*DeterministicMath.exp(variables[offset+pressureIndex]));
+    }
+
+    /** A finite-difference trial relative to the exact decode of the same vector before column {@code local} changed.
+     * Each component's split depends only on its own amount and ratios. Unchanged phase arrays are immutable
+     * in both states, like the arrays shared by State.withSolidState. */
+    public FluidThermodynamics.State decodeProbe(double[] variables,int offset,int local,FluidThermodynamics.State base,
+                                                 FluidThermodynamics.Prepared prepared,com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangents) {
+        double[][] out={base.vaporAmountsView(),base.liquidAmountsView(),base.aqueousAmountsView()};
+        if(local<columnComponent.length) {
+            int component=columnComponent[local];
+            for(int slot=0;slot<out.length;slot++)if(slotIndex[component][slot]>=0)out[slot]=out[slot].clone();
+            split(variables,offset,component,out);
         }
-        double t=350*DeterministicMath.exp(variables[offset+temperatureIndex]),p=1e5*DeterministicMath.exp(variables[offset+pressureIndex]);
+        double t=local==temperatureIndex?temperature(variables,offset):base.temperature();
+        double p=local==pressureIndex?1e5*DeterministicMath.exp(variables[offset+pressureIndex]):base.pressure();
+        return decodedState(variables,offset,prepared,tangents,out,t,p);
+    }
+
+    private void split(double[] variables,int offset,int i,double[][] out) {
+        double amount=amountScale*variables[offset+amountIndex[i]];
+        int ref=referenceSlot[i],last=ref;double largest=0;
+        for(int slot=0;slot<3;slot++){int at=slotIndex[i][slot];if(at<0||slot==ref)continue;double r=variables[offset+at];if(r>=largest){largest=r;last=slot;}}
+        if(last==ref&&!hasOther(i)){out[ref][i]=amount;return;}
+        // Each slot but the largest is amount / sum_j exp(r_j - r_k), the largest takes the remainder: two slots give
+        // the split l = n/(1 + e^r), v = n - l (r >= 0) and v = n/(1 + e^-r), l = n - v of the layout before W3b, to the bit.
+        double rest=amount;
+        for(int slot=0;slot<3;slot++) {
+            if(slotIndex[i][slot]<0||slot==last)continue;
+            double rk=ratio(variables,offset,i,slot),denominator=0;
+            for(int j=0;j<3;j++)if(slotIndex[i][j]>=0)denominator+=j==slot?1:DeterministicMath.exp(ratio(variables,offset,i,j)-rk);
+            out[slot][i]=amount/denominator;rest-=out[slot][i];
+        }
+        out[last][i]=rest;
+    }
+
+    private FluidThermodynamics.State decodedState(double[] variables,int offset,FluidThermodynamics.Prepared prepared,
+                                                   com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangents,
+                                                   double[][] out,double t,double p) {
         if(prepared!=null)prepared.carry(carried);
         var state=tangents==null?model.adoptingState(t,p,out[0],out[1],out[2],prepared):model.adoptingState(t,p,out[0],out[1],out[2],prepared,tangents);
         if(solidIndex<0)return state;
