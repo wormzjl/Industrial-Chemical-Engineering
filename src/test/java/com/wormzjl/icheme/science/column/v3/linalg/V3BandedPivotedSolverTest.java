@@ -121,6 +121,27 @@ class V3BandedPivotedSolverTest {
                 workspace.updatedEntries() + " of " + workspace.fullWidthEntries());
     }
 
+    @Test
+    void swappingInAShortPivotKeepsTheDisplacedRowsLongerTail() {
+        var matrix = new V3BandedMatrix(6, 2, 3);
+        matrix.set(0, 1, 8.0);
+        matrix.set(0, 2, 4.0);
+        matrix.set(1, 0, 2.0);
+        matrix.set(1, 1, 1.0);
+        matrix.set(2, 0, 1.0);
+        matrix.set(2, 2, 8.0);
+        matrix.set(2, 3, 2.0);
+        for (int row = 3; row < matrix.size(); row++) matrix.set(row, row, 4.0);
+        double[] rightHandSide = {28.0, 4.0, 33.0, 16.0, 20.0, 24.0};
+
+        var workspace = new V3BandedPivotedSolver.Workspace();
+        var result = assertInstanceOf(V3BandedPivotedSolver.Result.Success.class,
+                V3BandedPivotedSolver.solve(matrix, rightHandSide, workspace));
+        assertBitsEqual(fullWidthReference(matrix, rightHandSide), result.solution());
+        assertEquals(1, result.pivotSwaps());
+        assertEquals(2, workspace.updatedEntries());
+    }
+
     /**
      * A negative entry that row scaling takes to -0.0 (10 and -2^-1074 on one row) sends its solve through the full fill
      * width, which keeps the sign of that zero: the bits of the full-width elimination.
