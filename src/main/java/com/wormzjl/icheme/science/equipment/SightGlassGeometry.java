@@ -234,7 +234,8 @@ public final class SightGlassGeometry {
      * within its own extent of the rim so the whole ring stays inside {@link #APERTURE}, 0 outside.
      */
     public static double fallbackScale(Bubble bubble){
-        double extent=bubble.radius()*Math.max(1,bubble.stretch()),room=APERTURE-Math.hypot(bubble.x(),bubble.y());
+        double extent=bubble.radius()*Math.max(1,bubble.stretch());
+        double room=APERTURE-DeterministicMath.hypot(bubble.x(),bubble.y());
         return room>=extent?1:Math.max(0,room/extent);
     }
 
