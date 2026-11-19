@@ -21,3 +21,5 @@ Abandoned November 19, 2026. Commit `affd38064` restored the pre-task junction i
 - 2026-11-18: revised the plan after the conservation and replay review. The owner selected 0.5 K and kept passive hot and cold inlets in scope. Solver and plant qualification are in progress.
 
 - 2026-11-19: reverted the junction implementation and its follow-up performance changes after the final candidate still exceeded the CPU baseline and a saved-plant trial had a late charge deadline. The rollback preserved the earlier unloaded-equipment and furnace appearance work.
+
+- 2026-11-19: [Watch-world cause review](WATCH_HOLD_CAUSES_REVIEW.md) sorts all 13 rollback holds by failure mechanism and records which causes the stored worker traces establish.

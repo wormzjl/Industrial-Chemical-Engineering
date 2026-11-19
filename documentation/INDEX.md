@@ -15,7 +15,7 @@ Status words:
 | Batch | Purpose | Status |
 |---|---|---|
 | [2026-11-18-furnace-model/](2026-11-18-furnace-model/README.md) | Furnace leg faces and burner fuel pipe joints | In progress since 2026-11-18 |
-| [2026-11-18-junction-lag/](2026-11-18-junction-lag/README.md) | Junction thermal fronts and same-slice feed enthalpy | Abandoned 2026-11-19, implementation reverted |
+| [2026-11-18-junction-lag/](2026-11-18-junction-lag/README.md) | Junction thermal fronts, rollback and watch-world hold causes | Abandoned 2026-11-19, implementation reverted |
 | [2026-11-18-unloaded-chunks/](2026-11-18-unloaded-chunks/README.md) | Unloaded plant operation, remote controls and blast reconciliation | In progress since 2026-11-18 |
 | [2026-11-18-device-gui-labels/](2026-11-18-device-gui-labels/README.md) | Device tabs, combined furnace coils and engineering labels | In progress since 2026-11-18 (integrated into the materials worktree 2026-11-19) |
 | [2026-11-18-constructor-ghost-rendering/](2026-11-18-constructor-ghost-rendering/README.md) | Constructor ghost rendering and equipment chooser | In progress since 2026-11-18 (integrated into the materials worktree 2026-11-19) |
