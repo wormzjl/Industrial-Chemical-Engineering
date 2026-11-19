@@ -18,6 +18,8 @@ Up: [code guide](README.md). Beside it: [runtime-registry.md](runtime-registry.m
 
 Only online time moves the plant: one server tick is one online tick at a nominal 20 TPS, times the time factor in process seconds. Nothing advances while the server is off. `IslandCoordinator` keeps one deadline per island in `IslandScheduler`, on an `IslandClock` over the shared epoch (the ledger's online tick). When a slice falls due, the coordinator sends an immutable command to the shared worker pool (`BoundedCpuSolveService` through `ProcessSolveServices`); the worker runs the interval solver on the island's `RetainedSolver`. Completions are drained on the server thread (`ProcessSolveCoordinator`), and a round's results are committed together, all or nothing. A commit is a publication: it only marks loaded devices dirty ([runtime-presentation.md](runtime-presentation.md)). An island whose interval repeats is certified (`Certificates`, `IslandCertificate`) and advances by a linear replay instead of solving. Coupled heat sides in two islands wait for each other behind a fence (`ExchangerCoupling`); a running column's or still's ports and the shaft trains join through the coordinator's `Ports` and `Shafts` hooks ([runtime-units.md](runtime-units.md)).
 
+During normal server shutdown the solve service discards unfinished work. Islands retain the last committed state and cancellation creates no held retry.
+
 ## Class map
 
 Under `src/main/java/com/wormzjl/icheme/runtime/`. Lines at `d6f721b94`.
@@ -128,4 +130,4 @@ The coordinator's state is saved through the checkpoint ([runtime-saves.md](runt
 - **A certified island's view is a preview**, not a materialisation: no clock, booking, metrics, replay listener or payload moves, so bookings and the heat in transit are the same bits with or without viewers.
 - **`IslandSets` positions are not compound ids** across islands; map by id.
 
-**Snapshot:** `05c02394f`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

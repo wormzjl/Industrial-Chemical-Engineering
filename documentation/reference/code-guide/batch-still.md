@@ -176,4 +176,4 @@ All under `test`: `--tests 'com.wormzjl.icheme.science.fluid.network.BatchStillT
 - **A still woken by a dated change** shows the coupling's status text ("an exchanger's other side changed").
 - `Stills` and `ColumnOperation` share the fence and the cycle (`PortAccounts.FENCE_TICKS`, `CYCLE_TICKS`): a change there changes both.
 
-**Snapshot:** `9d6d0d82e`, 2026-11-15.
+**Snapshot:** `d424a1a27`, 2026-11-19.

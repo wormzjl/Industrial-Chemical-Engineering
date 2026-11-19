@@ -198,4 +198,4 @@ compile and the levels from the facts; `IntegrityTest` one restate per step afte
 - `Placement.edit` returns null for an unchanged registration: a recompile for a compile-only input goes through
   `FluidWorldAuthority.restate`, the flowmeter's way.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

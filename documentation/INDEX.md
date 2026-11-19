@@ -14,6 +14,7 @@ Status words:
 
 | Batch | Purpose | Status |
 |---|---|---|
+| [2026-11-19-release-0353/](2026-11-19-release-0353/README.md) | Equipment and unloaded-plant release preparation | In progress since 2026-11-19 (prepared for main) |
 | [2026-11-18-furnace-model/](2026-11-18-furnace-model/README.md) | Furnace leg faces and burner fuel pipe joints | In progress since 2026-11-18 |
 | [2026-11-18-junction-lag/](2026-11-18-junction-lag/README.md) | Junction thermal fronts, rollback and watch-world hold causes | Abandoned 2026-11-19, implementation reverted |
 | [2026-11-18-unloaded-chunks/](2026-11-18-unloaded-chunks/README.md) | Unloaded plant operation, remote controls and blast reconciliation | In progress since 2026-11-18 |

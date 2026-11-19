@@ -113,4 +113,4 @@ Each unit on the coordinator's hooks ([runtime-engine.md](runtime-engine.md)):
 - **The running column and the coupling date theirs as the still does**: `IslandCoordinator.through` materialises a certified island to the cycle's tick, `ExchangerCoupling.reads` to the slice start; the column's wakes and the coupling's (`ExchangerCoupling.dated`) act as of their ticks through `movedAt`; a refused column solve is held and asked again (`Run.heldJob`) ([column-run.md](column-run.md), [heat-units.md](heat-units.md)). A reader that needs no replay uses `reached`.
 - **`NO_DRIVER`**: `startColumn` refuses a column whose machines have no driver while `energy.machinesNeedPower` is on.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

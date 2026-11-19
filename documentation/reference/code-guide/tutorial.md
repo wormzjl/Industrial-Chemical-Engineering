@@ -138,4 +138,4 @@ All under `src/main/resources/assets/icheme/tutorial/` are client assets: no com
 - **Recording**: a JSON file of numbers written offline from the model and held to it by a gate.
 - **Photo**: a redistributable photograph of a chapter's subject, shown as a thumbnail row over its steps and whole in the viewer.
 
-**Snapshot:** `3063488da`, 2026-11-13 (the last commit this chapter was checked against). Earlier snapshots and batch notes: [HISTORY.md](HISTORY.md).
+**Snapshot:** `00a2a4da7`, 2026-11-19.

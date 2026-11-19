@@ -29,6 +29,8 @@ pair. `ExchangerCoupling` holds the fence, the reads, the booking, the wakes and
 lines are complete works a real control valve; a running column's water side in the COLUMN mode lets the column set its
 feed valve's flow.
 
+The radiant coil targets its outlet temperature at the receiving pressure. A restarted heater can relight when fuel, process flow and air supply permit it. The furnace display reads each coil’s booked heat over its own committed interval.
+
 ## Class map
 
 Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
@@ -203,4 +205,4 @@ studies: `tools/heat-exchanger-design/`.
 - Not built: the split-range pass valve, a LIMITED status for a saturated real valve, operating a valve outside the
   side's own island.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

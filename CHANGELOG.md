@@ -31,7 +31,7 @@ All notable changes to Industrial Chemical Engineering (IChemE, formerly CreateC
 
 ### Removed
 
-- Moved the map-backed pollution test environment out of the mod jar. Offline pollution digests use the test classpath (`2026-11-19-release-0353`).
+- Moved the map-backed pollution test environment out of the mod jar. Offline pollution digests use the test classpath (`508974da1`, `2026-11-19-release-0353`).
 - Tests that guard no behaviour (`2026-11-18-prune-tests`, on `claude/prune-tests-97440b`, `7b9ba01c4`): four tests and four assertions that read source text for helper, method or field names, or asserted that removed code stays removed. No game change.
 
 ## [0.35.2] - 2026-11-18

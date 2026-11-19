@@ -31,6 +31,8 @@ condenser's cooling water, the reboiler's heating and each pumparound cooler's c
 exchanger's heat in transit; the column sets a water valve's flow where the water side's flow station is complete; an
 air condenser's fans run at the least speed that holds the duty; the members' fans and pumps draw power.
 
+If the full pumparound duty fails, `ColumnSolve` also tries 50%, 25% and 10% of that duty. The pumparound cooler is limited to 90% of condenser duty.
+
 ## Class map
 
 Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
@@ -320,4 +322,4 @@ Off-line tools: `tools/column-operation/`, `tools/valve-hold-probes/`, `tools/co
   matching; the running column's solve and duty contract do not depend on them, and a layout or type mismatch is an
   assembly issue.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

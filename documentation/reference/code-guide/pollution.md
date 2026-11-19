@@ -169,4 +169,4 @@ Not sources: the blanketing vent, a still pot, a relief run, a device a player b
 - No class outside `compat/curios/` may name a Curios type (`RespiratorDataTest`). Curios is compile-only; no test loads it, and only a dev client with Curios proves the Curios slot and its look.
 - `LargeMapScreen` and `refreshIconsIfOpen` are FTB internals, not its API. A new FTB version that moves them turns the overlay off, not the game.
 
-**Snapshot:** the upward drift and the faster step, 2026-11-18.
+**Snapshot:** `508974da1`, 2026-11-19.

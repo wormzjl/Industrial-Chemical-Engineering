@@ -105,4 +105,4 @@ The reset itself has no test: no unit test opens a world. Tests edit images with
 - **The state format is not compatibility**: a mismatch drops the state and the engine rebuilds it; never write a migration for it.
 - **Do not test against player worlds**: the corpus images are the gates.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.

@@ -59,7 +59,7 @@ Paths under [`src/main/java/com/wormzjl/icheme/client/`](../../../src/main/java/
 2. A pipe's update tag carries its bore, faces, transition offsets and the line's paints; a late data packet re-requests the model data and rebuilds the section. A fitting is part of the pipe's block state, so fitting, toggling or removing one re-meshes the section.
 3. Each frame after solid blocks: `MachineAnimation` draws moving parts of units within range from their cached buffers; `EquipmentBodyRenderer` draws coarse bodies by region; `EquipmentReflectionRenderer` adds the reflections by region; `TankRenderer`, `SightGlassRenderer`, `InstrumentRenderer`, `NameplateRenderer`, `DataControlRenderer` draw what is in view, in detail tiers by `RenderLod`.
 4. Once a second each watching renderer asks the server to watch its nearest devices and release the rest; the replies (`accept`) come on the device's bucket. Logout clears the caches (`IChemEClient`).
-5. While a constructor is loaded, `EquipmentGhost` draws its design until the vessel stands, and marks the cells it cannot take.
+5. While a constructor is loaded, `EquipmentGhost` draws its design until the vessel stands and marks blocked cells. Visible previews share one sorted translucent buffer. Camera or design changes invalidate the upload, and removing the last visible preview releases its GPU storage.
 
 ## Contracts
 
@@ -113,4 +113,4 @@ Drawing itself (ghosts, animation, renderers, tints on racks) has no automated t
 - `EquipmentBodyRenderer` rebuilds its region map only when the hash of its structures (origin, shape, paint, light) or their count changes, or after `release`; it merges at most one changed square a frame, its last mesh standing meanwhile.
 - `DataControlRenderer` shows a port placed or removed up to `HOST_TICKS` late.
 
-**Snapshot:** `410c37fcb`, 2026-11-16; reflection pass rows 2026-11-18 (branch `claude/reflection-pass-20817f`).
+**Snapshot:** `d424a1a27`, 2026-11-19.

@@ -221,4 +221,4 @@ saves. The same run builds `HeatExchangerReviewWorld` (batch `review-heat`, [hea
   revision changes.
 - **A vacuum column does not start** in the world (`Refusal.VACUUM`), though its assembly checks.
 
-**Snapshot:** `c004a4c57`, 2026-11-16.
+**Snapshot:** `d424a1a27`, 2026-11-19.
