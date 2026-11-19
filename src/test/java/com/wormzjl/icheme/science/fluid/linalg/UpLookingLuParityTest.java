@@ -141,6 +141,16 @@ class UpLookingLuParityTest {
         assertParity(lu,patterns[0],"pattern 0 after the rejection");
         assertEquals(searches+n,lu.searches(),"after a rejection the pattern searches every column");
     }
+    @Test void growingBackWithinCapacityClearsEarlierDfsCursors() {
+        var lu = new UpLookingLu();
+        int[] largeColumns = {0, 1, 2, 3};
+        assertParity(lu, new Matrix(3, largeColumns, new int[]{0, 1, 2}, new double[]{2, 5, 1}),
+                "larger capacity");
+        assertParity(lu, new Matrix(2, new int[]{0, 2, 4}, new int[]{0, 1, 0, 1}, new double[]{4, 1, 1, 3}),
+                "smaller factor with a DFS cursor at index 2");
+        assertParity(lu, new Matrix(3, largeColumns, new int[]{2, 0, 1}, new double[]{2, 5, 1}),
+                "larger factor with row 2 in its first reach");
+    }
     @Test void singularColumnsAreRejectedByBothAtTheSameColumn() {
         // An empty column, a column on rows already pivoted, and an exact zero pivot.
         var empty=new Matrix(3,new int[]{0,1,1,2},new int[]{0,2},new double[]{2,3});

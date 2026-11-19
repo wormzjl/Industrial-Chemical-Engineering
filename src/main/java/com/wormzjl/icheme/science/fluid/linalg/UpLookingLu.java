@@ -209,6 +209,9 @@ public final class UpLookingLu {
             pinv=new int[n];dense=new double[n];xi=new int[n];marks=new int[2*n];
         }
         if(lColumns.length<n+1){lColumns=new int[n+1];uColumns=new int[n+1];}
+        // The DFS stores cursors after the first n entries. If a smaller matrix used this
+        // buffer, some of its cursors now occupy the larger matrix's visited flags.
+        if(size!=n)Arrays.fill(marks,0,n,0);
         size=n;
         Arrays.fill(pinv,0,n,-1);
         // The actual fill decides how much the factor arrays grow. A slightly denser input
