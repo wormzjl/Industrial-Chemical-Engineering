@@ -111,8 +111,8 @@ final class TopologyChange {
             var same=originals.stream().filter(old->old.lastResult.isPresent()&&PassiveNetwork.sameLines(old.graph,replacement.graph())).toList();
             // The carry moves to the replacement's compound list by id (V2): its list holds the original's, so nothing is cut.
             if(same.size()==1){var old=same.get(0);graph=PassiveNetwork.withJunctionStates(replacement.graph(),IslandSets.graph(old.graph,old.model,own),own);carried=old.lastResult.map(r->IslandSets.result(r,old.model,own));}
-            var island=new Island(new Snapshot(replacement.id(),revision,graph,new IslandClock.Snapshot(online,committed,0,cadence),carried,
-                    replacement.held()==null?"WAITING: full solve after topology change":"HELD: "+replacement.held(),fences),own,coordinator.epoch);
+            var island=coordinator.newIsland(new Snapshot(replacement.id(),revision,graph,new IslandClock.Snapshot(online,committed,0,cadence),carried,
+                    replacement.held()==null?"WAITING: full solve after topology change":"HELD: "+replacement.held(),fences),own);
             if(replacement.held()!=null){island.capability=replacement.held();island.held=true;}
             // A topology change starts the island cold: its first slice is one tick and each accepted full interval
             // doubles it back to the cadence (as after a budget hold). Whatever the player just built - a pump

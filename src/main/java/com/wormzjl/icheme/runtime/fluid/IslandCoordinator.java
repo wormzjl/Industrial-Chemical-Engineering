@@ -189,9 +189,11 @@ public final class IslandCoordinator {
         // The connection ids of its coupled exchanger sides (plan section 5.2): fixed for the island, whose connections a
         // commit never changes (validCandidate).
         final long[] sides;
+        private final LongSupplier replayThrough;
         /** An island registered from a snapshot that carries a payload generation (a loaded checkpoint's) keeps it, so
          * the checkpoint store's unit of that snapshot stays in place until something it records changes. */
-        Island(Snapshot saved,FluidThermodynamics model,LongSupplier epoch) {
+        private Island(Snapshot saved,FluidThermodynamics model,LongSupplier epoch,LongSupplier replayThrough) {
+            this.replayThrough=replayThrough;
             id=saved.id;revision=saved.revision;this.model=Objects.requireNonNull(model);graph=saved.graph;sides=ExchangerCoupling.coupledSides(graph);
             clock=new IslandClock(saved.clock,epoch);lastResult=saved.lastResult;status=saved.status;fences.putAll(saved.fences);fencesChanged();
             notice=releaseLine(saved.lastResult,model)+com.wormzjl.icheme.science.fluid.thermo.DataRangeNotices.suffix(saved.status);
@@ -200,8 +202,13 @@ public final class IslandCoordinator {
         Snapshot snapshot(){return new Snapshot(id,revision,graph,clock.snapshot(),lastResult,
                 !suspended&&!clock.busy()&&fence()==clock.committedTick()?"WAITING: event alignment":status,frozenFences(),
                 certificate==null?Optional.empty():Optional.of(new Certified(certificate.drift(),certifiedSince,certificate.baseTick(),certificate.horizonTick(),certificate.largestFlow(),
-                        suspended?Optional.empty():Optional.of(new IslandCertificate.Saved(certifiedSince,certificate.horizonTick(),certificate.interval(),signature)))),
+                        savesCertificate()?Optional.of(new IslandCertificate.Saved(certifiedSince,certificate.horizonTick(),certificate.interval(),signature)):Optional.empty())),
                 payloadGeneration);}
+        /** Dated wakes are memory only. Save the materialized state when replay has a pending dependency limit. */
+        boolean savesCertificate() {
+            long wake=replayThrough.getAsLong();
+            return !suspended&&(wake==Long.MAX_VALUE||wake>certificate.horizonTick());
+        }
         /** Something a checkpoint payload records changed: the next checkpoint encodes this island afresh. */
         void touch(){payloadGeneration=PAYLOAD_GENERATIONS.incrementAndGet();}
         // The nearest fence and an immutable copy of the fences, kept as they change (code base review R22): the scheduler
@@ -388,10 +395,14 @@ public final class IslandCoordinator {
     /** Process time against online time: the factor every island here integrates under, and the ports and shafts book by. */
     public SimulationTime time(){return settings.time;}
     void timed(FluidThermodynamics model){if(!model.time().equals(settings.time))throw new IllegalArgumentException("An island model on time factor "+model.time().factor()+" in a coordinator on "+settings.time.factor());}
+    Island newIsland(Snapshot snapshot,FluidThermodynamics model) {
+        long id=snapshot.id();
+        return new Island(snapshot,model,epoch,()->coupling.replayThrough(id));
+    }
     public void register(Snapshot saved,FluidThermodynamics model) {
         owned();timed(model);if(stopped||islands.containsKey(saved.id))throw new IllegalStateException("Stopped/duplicate island");
         if(saved.graph.reservoirs().stream().anyMatch(n->n.kind()==PassiveNetwork.NodeKind.PORT))throw new IllegalArgumentException("Internal ports cannot own world state");
-        var island=new Island(saved,model,epoch);
+        var island=newIsland(saved,model);
         // A loaded island past the compound cap holds as it held when it was formed (V2, a capability limit).
         if(model.compounds().size()>IslandSets.MAXIMUM_COMPOUNDS){island.capability="an island carries at most "+IslandSets.MAXIMUM_COMPOUNDS+" compounds and water; this one carries "+model.compounds().size()+": separate its parts to run it";island.held=true;island.status="HELD: "+island.capability;}
         var persisted=saved.certificate.flatMap(Certified::saved);
@@ -448,10 +459,11 @@ public final class IslandCoordinator {
      * The tick a certified island's preview shows: {@code min(online, nearest fence, hold tick, horizon)}, one tick short
      * of a horizon not acted on yet, so a view never shows a wake; its committed tick for an island with no certificate.
      */
-    private static long previewTarget(Island island) {
+    private long previewTarget(Island island) {
         var certificate=island.certificate;if(certificate==null)return island.clock.committedTick();
         long wake=certificate.horizonTick();
         long target=Math.min(Math.min(island.clock.onlineTick(),island.fence()),Math.min(island.holdTick,wake));
+        target=Math.min(target,coupling.replayThrough(island.id));
         return target==wake?wake-1:target;
     }
     /**
@@ -565,7 +577,8 @@ public final class IslandCoordinator {
         owned();var island=islands.get(id);if(island==null||island.clock.committedTick()>=tick)return true;
         if(island.held||island.phaseParked||island.suspended||suspension!=null)return true;
         var certificate=island.certificate;
-        return certificate!=null&&Math.min(Math.min(island.clock.onlineTick(),island.fence()),Math.min(island.holdTick,certificate.horizonTick()))>=tick;
+        return certificate!=null&&coupling.replayThrough(id)>=tick
+                &&Math.min(Math.min(island.clock.onlineTick(),island.fence()),Math.min(island.holdTick,certificate.horizonTick()))>=tick;
     }
     /**
      * What island {@code id} solves against changed at {@code tick}, a tick the world's ticks fix (a unit's dated value
@@ -585,8 +598,15 @@ public final class IslandCoordinator {
     public boolean movedAt(long id,long tick) {
         owned();var island=islands.get(id);if(island==null||stopped||suspension!=null)return true;
         var certificate=island.certificate;
-        if(certificate==null)return island.held||island.phaseParked||island.suspended||island.capability!=null||island.clock.committedTick()>=tick;
-        if(island.clock.committedTick()<=tick){certificates.materialise(island,tick);if(island.certificate!=null)certificates.end(island);}
+        if(certificate==null) {
+            if(island.clock.committedTick()>=tick){certificates.inputsChangedAt(island,tick);return true;}
+            return island.held||island.phaseParked||island.suspended||island.capability!=null;
+        }
+        if(island.clock.committedTick()<=tick) {
+            certificates.materialise(island,tick);
+            if(island.certificate!=null)certificates.end(island);
+            else certificates.inputsChangedAt(island,tick);
+        }
         else if(certificate.interval().startTick()<tick)certificates.end(island);
         return true;
     }
@@ -814,7 +834,11 @@ public final class IslandCoordinator {
             }
             entry.closed=true;
             if(entry.terminal){pending.remove(attempt.slice.requestId());island.pendingEntries--;}else dispatcher.cancel(attempt.slice.requestId());
-            certificates.qualify(island,accept?outcome:null,before,attempt,entry.dependencyRevision==island.dependencyRevision);
+            long heatWake=accept&&settings.certificates().enabled()&&!entry.reads.isEmpty()
+                    ?coupling.replayWake(island,attempt.slice.startTick(),entry.reads):Long.MAX_VALUE;
+            certificates.qualify(island,accept?outcome:null,before,attempt,
+                    entry.dependencyRevision==island.dependencyRevision&&heatWake>attempt.slice.endTick());
+            if(island.certificate!=null&&heatWake!=Long.MAX_VALUE)coupling.wake(island,heatWake);
             reconsider(island);island.touch();
             changed.add(island.snapshot());
         }
@@ -973,7 +997,7 @@ public final class IslandCoordinator {
             kind=IslandScheduler.Kind.CERTIFICATE_HORIZON;
             if(!stopped&&suspension==null) {
                 long wake=island.certificate.horizonTick();
-                if(wake!=Long.MAX_VALUE&&island.fence()>=wake)due=island.clock.epochTickAt(wake);
+                if(wake!=Long.MAX_VALUE&&island.fence()>=wake&&coupling.replayThrough(island.id)>=wake)due=island.clock.epochTickAt(wake);
             }
         }
         else if(!stopped&&suspension==null&&island.pendingEntries==0&&island.capability==null) {
@@ -1109,7 +1133,7 @@ public final class IslandCoordinator {
                 if(island.pendingEntries!=0||island.retained!=null)throw new IllegalStateException("Certified island "+island.id+" owns an attempt or solver caches");
                 if(!stopped&&suspension==null) {
                     long wake=island.certificate.horizonTick();
-                    if(wake!=Long.MAX_VALUE&&island.fence()>=wake)due=island.clock.epochTickAt(wake);
+                    if(wake!=Long.MAX_VALUE&&island.fence()>=wake&&coupling.replayThrough(island.id)>=wake)due=island.clock.epochTickAt(wake);
                 }
             }
             else if(!stopped&&suspension==null&&island.pendingEntries==0&&island.capability==null) {
