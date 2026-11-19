@@ -424,6 +424,42 @@ class IslandCertificateTest {
     }
 
     /** Plan section 5 item 6: a configuration event replaces the island; the new one solves and qualifies afresh. */
+    @Test void aNewDependencyNeedsFreshStationarityEvidenceEvenWithoutAnOutstandingWorker() {
+        var rig=rig(CertificatePolicy.defaults());
+        rig.register(1,deadHeadedLine());
+        rig.run(100);
+        assertTrue(rig.attempts.isEmpty());
+        assertTrue(rig.stored(1).certificate().isEmpty(),"only one interval has been solved");
+
+        rig.coordinator.shaftsMoved(List.of(1L));
+        rig.coordinator.pump();
+        rig.run(100);
+        assertEquals(200,rig.stored(1).clock().committedTick());
+        assertTrue(rig.stored(1).certificate().isEmpty(),"matching zero rates do not carry evidence across a plan change");
+
+        rig.run(100);
+        assertTrue(rig.stored(1).certificate().isPresent(),"two matching intervals under the new plan certify");
+    }
+
+    @Test void aDependencyWakeAtTheHorizonKeepsReplayAndInvalidatesRevalidation() {
+        var rig=rig(new CertificatePolicy(true,1e-7,1e-6,17_280,2,5));
+        rig.register(1,deadHeadedLine());
+        rig.runUntilCertified(List.of(1L),200);
+        long horizon=rig.stored(1).certificate().orElseThrow().horizonTick();
+
+        rig.epoch[0]=horizon;
+        rig.coordinator.shaftsMoved(List.of(1L));
+        rig.coordinator.pump();
+        assertEquals(horizon,rig.stored(1).clock().committedTick(),"the certificate still replays to its horizon");
+        assertEquals(horizon,rig.replayed.getLast().clock().committedTick());
+        assertTrue(rig.stored(1).certificate().isEmpty());
+
+        rig.run(100);
+        assertTrue(rig.stored(1).certificate().isEmpty(),"a matching result cannot renew the old plan");
+        rig.run(100);
+        assertTrue(rig.stored(1).certificate().isPresent(),"the new plan qualifies independently");
+    }
+
     @Test void changedControlsReplaceACertifiedIslandWithAnAwakeOne() {
         var rig=rig(CertificatePolicy.defaults());rig.register(1,generatorToVoid(150000));
         long at=rig.certifiedAt(1,2_000);assertTrue(at>0);double before=rig.stored(1).certificate().orElseThrow().largestFlow();

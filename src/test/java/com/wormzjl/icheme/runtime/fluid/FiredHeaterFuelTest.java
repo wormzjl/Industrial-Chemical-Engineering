@@ -126,8 +126,8 @@ class FiredHeaterFuelTest {
 
     /** The heater's runtime: its ledger (the coils and burners), electric stores and burners, and the islands' last graphs. */
     private final class Rig {
-        final long[] epoch = {0};
-        final IslandCoordinator coordinator = coordinator(epoch);
+        final long[] epoch;
+        final IslandCoordinator coordinator;
         final WorldTopologyLedger ledger;
         final ElectricStores stores;
         final FiredHeaters heaters;
@@ -139,6 +139,12 @@ class FiredHeaterFuelTest {
         boolean fresh;
 
         Rig(Islands islands) {
+            this(islands, null);
+        }
+
+        Rig(Islands islands, CertifyingRig runtime) {
+            epoch = runtime == null ? new long[]{0} : runtime.epoch;
+            coordinator = runtime == null ? coordinator(epoch) : runtime.coordinator;
             var n2 = FluidDeviceSpec.nitrogen(catalog).composition();
             var active = new TreeMap<Long, WorldTopologyLedger.Registration>();
             for (var d : devices())
@@ -162,12 +168,12 @@ class FiredHeaterFuelTest {
             assertTrue(stores.powered(BURNERS), "a filled store restarts the burners");
         }
 
-        private PassiveIntervalSolver.Result slice(PassiveIntervalSolver solver, PassiveNetwork graph, long island, long start) {
+        private PassiveIntervalSolver.Result slice(PassiveIntervalSolver solver, PassiveNetwork graph, long island, long start, long end) {
             var plans = new HashMap<Long, ShaftPlan>();
             heaters.plans(graph, plans);
-            var result = (fresh ? new PassiveIntervalSolver(model) : solver).solve(ShaftPlan.apply(graph, plans), 20, PassiveIntervalSolver.Settings.defaults(), () -> {
+            var result = (fresh ? new PassiveIntervalSolver(model) : solver).solve(ShaftPlan.apply(graph, plans), coordinator.time().seconds(end - start), PassiveIntervalSolver.Settings.defaults(), () -> {
             });
-            heaters.booked(island, start, start + 400, result);
+            heaters.booked(island, start, end, result);
             return result;
         }
 
@@ -175,10 +181,11 @@ class FiredHeaterFuelTest {
         void run(int rounds, boolean withFuel) {
             for (int i = 0; i < rounds; i++) {
                 long start = epoch[0];
-                radiantResult = slice(radiantSolver, radiant, 1, start);
+                long end = start + 400;
+                radiantResult = slice(radiantSolver, radiant, 1, start, end);
                 radiant = radiantResult.graph();
                 if (withFuel) {
-                    fuelResult = slice(fuelSolver, fuel, 2, start);
+                    fuelResult = slice(fuelSolver, fuel, 2, start, end);
                     fuel = fuelResult.graph();
                 }
                 epoch[0] += 400;
@@ -291,6 +298,57 @@ class FiredHeaterFuelTest {
         rig.run(2, true);
         assertTrue(rig.heaters.view(BURNERS).fired() > 0, "the woken fuel island fires");
         assertEquals(List.of(), asked, "a heater whose fuel island booked wakes that one, with no lookup");
+    }
+
+    @Test
+    void cooledFeedReopensTheFuelValveAfterAnOutstandingClosedSliceCommits() {
+        var methane = pure("Methane", 300, 500_000);
+        var cold = compile(methane);
+        var hot = compile(methane, 450, 900_000);
+        var runtime = new CertifyingRig(CertificatePolicy.defaults(), model, 0).recording();
+        var rig = new Rig(cold, runtime);
+        rig.power();
+        rig.run(2, true);
+        assertTrue(rig.heaters.view(BURNERS).fired() > 0, "the initial cold feed fires the burners");
+
+        long hotEnd = rig.epoch[0] + 400;
+        rig.slice(rig.radiantSolver, hot.radiant(), 1, rig.epoch[0], hotEnd);
+        rig.epoch[0] = hotEnd;
+        assertEquals(0, rig.heaters.view(BURNERS).demand(), "feed above the set point closes the fuel valve");
+        runtime.coordinator.shafts(new IslandCoordinator.Shafts() {
+            public Map<Long, ShaftPlan> plans(long island, PassiveNetwork graph) {
+                var plans = new HashMap<Long, ShaftPlan>();
+                rig.heaters.plans(graph, plans);
+                return plans;
+            }
+            public void booked(long island, PassiveNetwork graph, long start, long end, PassiveIntervalSolver.Result result) {
+                rig.heaters.booked(island, start, end, result);
+            }
+            public void decide() {}
+        });
+        runtime.register(2, rig.fuel);
+        runtime.run(100);
+        assertEquals(0, rig.heaters.view(BURNERS).fuelFlow());
+        assertTrue(runtime.stored(2).certificate().isEmpty(), "one closed slice is insufficient to certify");
+
+        rig.epoch[0] += 100;
+        runtime.coordinator.tick();
+        var pending = runtime.attempts.values().iterator().next();
+        assertEquals(2, pending.islandId());
+        rig.slice(rig.radiantSolver, cold.radiant(), 1, hotEnd, rig.epoch[0]);
+        assertTrue(rig.heaters.view(BURNERS).demand() > 0, "the next cold feed asks for heat again");
+        runtime.coordinator.pump();
+        runtime.drain();
+
+        var closed = runtime.stored(2);
+        assertEquals(pending.slice().endTick(), closed.clock().committedTick(), "the admitted zero-fuel slice still commits");
+        assertEquals(0, rig.heaters.view(BURNERS).fuelFlow(), "the closed slice uses its original zero target");
+        assertTrue(closed.certificate().isEmpty(), "the old target cannot certify the new demand");
+        assertTrue(runtime.replayed.isEmpty(), "no certified replay of the closed valve");
+
+        runtime.run(100);
+        assertTrue(rig.heaters.view(BURNERS).fuelFlow() > 0, "the next admission reads the new target");
+        assertTrue(rig.heaters.view(BURNERS).fired() > 0, "positive fuel delivery relights the burners");
     }
 
     @Test
