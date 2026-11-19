@@ -368,10 +368,15 @@ public final class PassiveStepSolver {
     }
     public record Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,
                          List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,
+                         List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers,Map<Long,InlineFilter> filters,List<PipeObservation> observations,Map<Long,TowerExchange.Rates> towers,Map<Long,Double> radiantDemands) {
+        public Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,
+                         List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,
                          List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers,Map<Long,InlineFilter> filters,List<PipeObservation> observations,Map<Long,TowerExchange.Rates> towers) {
+            this(states,massFlows,deltaTime,numerical,modes,devicePressureChanges,pumpWorkJoule,externalMoles,externalEnergyJoule,inventories,boundaries,pipeTransfers,filters,observations,towers,Map.of());
+        }
         public Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers,Map<Long,InlineFilter> filters){this(states,massFlows,deltaTime,numerical,modes,devicePressureChanges,pumpWorkJoule,externalMoles,externalEnergyJoule,inventories,boundaries,pipeTransfers,filters,List.of(),Map.of());}
         public Result(List<FluidThermodynamics.State> states,double[] massFlows,double deltaTime,SparseNewton.Result numerical,List<FlowControl.Mode> modes,double[] devicePressureChanges,double pumpWorkJoule,double[] externalMoles,double externalEnergyJoule,List<PassiveNetwork.Inventory> inventories,List<ConservativeTransport.BoundaryTransfer> boundaries,List<PipeTransfer> pipeTransfers){this(states,massFlows,deltaTime,numerical,modes,devicePressureChanges,pumpWorkJoule,externalMoles,externalEnergyJoule,inventories,boundaries,pipeTransfers,Map.of());}
-        public Result {towers=Map.copyOf(towers);observations=List.copyOf(observations);filters=Map.copyOf(filters);states=List.copyOf(states);massFlows=massFlows.clone();modes=List.copyOf(modes);devicePressureChanges=devicePressureChanges.clone();externalMoles=externalMoles.clone();inventories=List.copyOf(inventories);boundaries=List.copyOf(boundaries);pipeTransfers=List.copyOf(pipeTransfers);}
+        public Result {radiantDemands=Map.copyOf(radiantDemands);towers=Map.copyOf(towers);observations=List.copyOf(observations);filters=Map.copyOf(filters);states=List.copyOf(states);massFlows=massFlows.clone();modes=List.copyOf(modes);devicePressureChanges=devicePressureChanges.clone();externalMoles=externalMoles.clone();inventories=List.copyOf(inventories);boundaries=List.copyOf(boundaries);pipeTransfers=List.copyOf(pipeTransfers);}
         @Override public double[] massFlows(){return massFlows.clone();}
         @Override public double[] devicePressureChanges(){return devicePressureChanges.clone();}
         @Override public double[] externalMoles(){return externalMoles.clone();}
@@ -418,7 +423,7 @@ public final class PassiveStepSolver {
             }
             return new Result(result.states(),result.massFlows(),dt,result.numerical(),result.modes(),result.devicePressureChanges(),
                     result.pumpWorkJoule(),result.externalMoles(),result.externalEnergyJoule(),mixing.book(result.inventories(),rateOnly),
-                    result.boundaries(),result.pipeTransfers(),result.filters(),result.observations(),result.towers());
+                    result.boundaries(),result.pipeTransfers(),result.filters(),result.observations(),result.towers(),result.radiantDemands());
         }
         catch(RuntimeException failed){carry=entry;throw failed;}
     }
@@ -855,7 +860,7 @@ public final class PassiveStepSolver {
                 shown.set(i,ambient());
             }
             if(shown!=null)endStates=shown;
-            var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observations.observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,draws,model));
+            var accepted=new Result(endStates,flows,dt,numerical,acceptedModes,heads,projection.pumpWork(),projection.externalMoles(),projection.externalEnergy(),projection.inventories(),projection.boundaries(),PipeTransfer.sample(model,graph,projection.states(),flows,dt,draws),projection.filters(),observations.observe(equations,states,flows,lawFlows,heads,acceptedModes,checkpoint),TowerExchange.readings(original,states,flows,draws,model),observations.radiantDemands(equations,flows));
             // The retained last solve keeps its equations and point, not their per-node decode caches (states, transport
             // rows): a later reader re-decodes (review 8.7 (c) E2). The node bundles stay, retired, with their kernel
             // workspaces, for the next step (batch 2026-11-15-fluid-step-cost, S2).

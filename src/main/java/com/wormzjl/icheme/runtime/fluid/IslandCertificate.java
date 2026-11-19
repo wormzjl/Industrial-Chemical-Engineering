@@ -249,6 +249,15 @@ public final class IslandCertificate {
             double change=Math.abs(b.energy[n]-a.energy[n]);
             if(change!=0){double scale=energyScale(t);double ratio=scale>0?change/scale:Double.POSITIVE_INFINITY;if(ratio>energy){energy=ratio;energyAt="node "+t.id()+" energy";}}
         }
+        var earlierDemand=a.result.radiantDemands();
+        var laterDemand=b.result.radiantDemands();
+        if(!earlierDemand.keySet().equals(laterDemand.keySet()))
+            return new Stationarity("radiant demand readings changed",0,0,null,0,null,0,null,0,0,0);
+        for(var reading:laterDemand.entrySet()) {
+            double previous=earlierDemand.get(reading.getKey()),current=reading.getValue();
+            double difference=Math.abs(current-previous)/Math.max(1,Math.max(previous,current));
+            if(difference>energy){energy=difference;energyAt="radiant demand at pipe "+reading.getKey();}
+        }
         var q1=a.result.averageMassFlows();var q2=b.result.averageMassFlows();double reference=b.largestFlow(),seconds=b.seconds;
         var flows=new FlowComparison();
         for(int i=0;i<q2.length;i++) {
@@ -397,7 +406,7 @@ public final class IslandCertificate {
      * declared revision. A token of letters, digits, {@code _}, {@code .} and {@code -}, at most 32 characters (the
      * checkpoint's field, {@link FluidCheckpointCodec#replayField}).
      */
-    public static final String REPLAY_REVISION="replay-4";
+    public static final String REPLAY_REVISION="replay-5";
 
     /**
      * The validity signature of a certificate: the model's full property revision ({@link FluidThermodynamics#revision},
@@ -532,7 +541,7 @@ public final class IslandCertificate {
         var pipes=new ArrayList<PipeTransfer>(recorded.pipeTransfers().size());
         for(var p:recorded.pipeTransfers())pipes.add(new PipeTransfer(p.pipeId(),scale(p.forward(),g),scale(p.reverse(),g)));
         return new PassiveIntervalSolver.Result(graphAt(to),summary.time.seconds(to-from),recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
-                recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations(),recorded.towers());
+                recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations(),recorded.towers(),recorded.radiantDemands());
     }
     private static PipeTransfer.Stream scale(PipeTransfer.Stream stream,double g) {
         var phases=stream.phaseMoles();for(var phase:phases)for(int c=0;c<phase.length;c++)phase[c]*=g;

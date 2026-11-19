@@ -43,6 +43,18 @@ final class StepObservations {
             return state==null?Double.NaN:InletPhase.bulk(model,state).dropletMassShare();
         }catch(IllegalArgumentException unavailable){return Double.NaN;}
     }
+    /** Endpoint radiant demand before fuel or design limits, in watts. The burner uses this to plan its next fuel draw. */
+    Map<Long,Double> radiantDemands(StepEquations equations,double[] flows) {
+        Map<Long,Double> demands=null;
+        for(int e=0;e<flows.length;e++) {
+            var pipe=equations.graph.pipes().get(e);
+            if(!(pipe.heat() instanceof FiredCoil))continue;
+            if(demands==null)demands=new HashMap<>();
+            demands.put(pipe.id(),equations.radiantDemand(e,flows[e]));
+        }
+        return demands==null?Map.of():demands;
+    }
+
     List<PipeObservation> observe(StepEquations e,List<FluidThermodynamics.State> states,double[] flows,double[] lawFlows,double[] heads,List<FlowControl.Mode> modes,Runnable checkpoint) {
         var samples=new ArrayList<PipeObservation>();
         for(int edge=0;edge<e.graph.pipes().size();edge++) {

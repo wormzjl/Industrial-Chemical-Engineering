@@ -126,9 +126,9 @@ import java.util.function.Function;
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=56;
+    public static final int VERSION=57;
     // Format 53 stored a junction's flowing solids using its inventory's populations.
-    static boolean readableState(int version){return version==VERSION||version==55||version==53;}
+    static boolean readableState(int version){return version==VERSION||version==56||version==55||version==53;}
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -374,6 +374,8 @@ public final class FluidCheckpointCodec {
                 w.varint(count);stream(w,p.forward());stream(w,p.reverse());
             }
             w.varint(r.towers().size());for(var towerEntry:new TreeMap<>(r.towers()).entrySet()){w.i64(towerEntry.getKey());towerRates(w,towerEntry.getValue());}
+            w.varint(r.radiantDemands().size());
+            for(var demand:new TreeMap<>(r.radiantDemands()).entrySet()){w.i64(demand.getKey());w.f64(demand.getValue());}
         }
         if(persisted.isEmpty())w.u8(0);
         else {
@@ -654,7 +656,18 @@ public final class FluidCheckpointCodec {
                 throw new IllegalArgumentException("Invalid saved interval history: a closed connection with an end flow");
             var towers=new TreeMap<Long,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates>();
             int towerCount=r.varint(MAXIMUM_NODES);for(int k=0;k<towerCount;k++){long towerId=r.i64();if(towers.put(towerId,towerRates(r))!=null)throw r.invalid("Duplicate tower reading");}
-            result=Optional.of(new PassiveIntervalSolver.Result(graph,seconds,flows,accepted,rejected,pumpWork,boundaries,reasons,endpointModes,heads,endFlows,transfers,List.of(),towers));
+            Map<Long,Double> demands=new HashMap<>();
+            if(s.stateFormat()>=57) {
+                int count=r.varint(graph.pipes().size());
+                var radiant=new HashSet<Long>();
+                for(var pipe:graph.pipes())if(pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil)radiant.add(pipe.id());
+                for(int i=0;i<count;i++) {
+                    long pipe=r.i64();double watts=r.f64();
+                    if(watts<0||!radiant.remove(pipe))throw r.invalid("Invalid radiant demand reading");
+                    demands.put(pipe,watts);
+                }
+            }
+            result=Optional.of(new PassiveIntervalSolver.Result(graph,seconds,flows,accepted,rejected,pumpWork,boundaries,reasons,endpointModes,heads,endFlows,transfers,List.of(),towers,demands));
         }
         IslandCertificate.Signature signature=null;PassiveNetwork certifiedFrom=null;
         if(r.bool()) {
@@ -718,7 +731,7 @@ public final class FluidCheckpointCodec {
             var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);boolean rigid=r.bool();
             boolean junction=t.kinds[n]==PassiveNetwork.NodeKind.JUNCTION;
             var streamSolids = version>=55 && junction ? solids(r,model) : solids;
-            var reserve = version==VERSION && junction && r.bool()
+            var reserve = version>=56 && junction && r.bool()
                     ? new PassiveNetwork.JunctionReserve(r.sparse(MAXIMUM_ARRAY),r.f64()) : null;
             double temperature=r.f64(),pressure=r.f64();var vapor=r.sparse(MAXIMUM_ARRAY);var liquid=r.sparse(MAXIMUM_ARRAY);var aqueous=r.sparse(MAXIMUM_ARRAY);
             var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n],rigid).withBlanket(t.blankets[n]).withReserve(reserve);

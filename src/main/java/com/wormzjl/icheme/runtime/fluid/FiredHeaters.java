@@ -2,7 +2,6 @@ package com.wormzjl.icheme.runtime.fluid;
 
 import com.wormzjl.icheme.science.equipment.HeatSides;
 import com.wormzjl.icheme.science.fluid.network.Burners;
-import com.wormzjl.icheme.science.fluid.network.ConservativeTransport;
 import com.wormzjl.icheme.science.fluid.network.FiredCoil;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.PassiveIntervalSolver;
@@ -16,10 +15,8 @@ import java.util.*;
  * trains' and the electric stores' hooks are:
  * <ul>
  * <li>at each commit or replay of a radiant coil, its <em>demand</em>: the heat it would take to hold its set point at its
- * design duty, W, read from the slice it solved (its heat where it reached the set point, its available heat over its
- * firing share where it fell short, its design duty where it had no fuel or air to try, and its design duty for still tubes
- * whose contents stand below the set point, so the next stream finds the burners lit; 0 for an inlet or still contents at the
- * set point). It never reads the capped heat as the demand, so a short slice cannot ratchet the fuel down;</li>
+ * design duty, W. A flowing coil reports the enthalpy rise requested by its accepted inlet and flow before the fuel cap.
+ * Still cold tubes request design duty so the next stream finds the burners lit;</li>
  * <li>at each commit or replay of the fuel's island, the heat the burners fired, W: the mass flow into the firebox over the
  * span times the fuel's lower heating value per kilogram ({@link Burners#perKilogram}, the material records'
  * {@code combustion} sub-records), and the combustion-air fans' draw at that firing, booked on the burners' electric store;</li>
@@ -132,8 +129,8 @@ public final class FiredHeaters {
     /** A committed or replayed span of {@code island}: each radiant coil's demand and each burners' fired heat in it, the fans' draw. */
     void booked(long island,long start,long end,PassiveIntervalSolver.Result result) {
         if(end<=start)return;
-        double seconds=coordinator.time().seconds(end-start);var solved=result.graph();var average=result.averageMassFlows();
-        Map<Long,Double> heat=null;
+        var solved=result.graph();var average=result.averageMassFlows();
+        var endpoint=result.endpointFlows();
         var wake=new TreeSet<Long>();
         for(int e=0;e<solved.pipes().size();e++) {
             var pipe=solved.pipes().get(e);
@@ -149,19 +146,11 @@ public final class FiredHeaters {
                 if(moved(before,fired)&&h.radiantIsland!=null)wake.add(h.radiantIsland);
             } else if(pipe.heat() instanceof FiredCoil coil) {
                 long id=solved.reservoirs().get(pipe.first()).id();var h=ofRadiant(id);if(h==null)continue;
-                if(heat==null){heat=new HashMap<>();for(var b:result.boundaries())if(b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT)heat.merge(b.nodeId(),b.totalEnergyJoule(),Double::sum);}
-                double rate=heat.getOrDefault(pipe.id(),0.)/seconds,flow=Math.abs(average[e]);
-                var inlet=solved.reservoirs().get(average[e]>=0?pipe.first():pipe.second()).state();
-                double demand;
-                // Still tubes (owner, 2026-11-17: "if it is set to a temperature it should output at given temperature unless
-                // duty is not satisfied"): a lit coil whose contents stand below the set point keeps its design duty's fuel
-                // burning, so the stream that comes next, the first fill included, leaves at the set point.
-                if(flow<STILL){var stock=solved.reservoirs().get(pipe.first()).state();
-                    demand=coil.duty()>0&&!(stock.temperature()>=coil.setTemperature()-.05)?coil.duty():0;}
-                else if(coil.firing()>0&&coil.firing()<1)demand=coil.available()/coil.firing();
-                else if(coil.firing()==1)demand=Math.max(0,rate);
-                else demand=inlet.temperature()<coil.setTemperature()-.05&&coil.duty()>0?coil.duty():0;
-                demand=Math.min(coil.duty(),demand);
+                double flow=endpoint[e];
+                var inlet=solved.reservoirs().get(flow<0?pipe.second():pipe.first()).state();
+                // Still tubes stay ready for the next fill. Older checkpoints have no demand reading.
+                double demand=inlet.temperature()<coil.setTemperature()-.05?coil.duty():0;
+                if(Math.abs(flow)>=STILL)demand=Math.min(coil.duty(),result.radiantDemands().getOrDefault(pipe.id(),demand));
                 double before=h.demand;h.demand=demand;h.radiantIsland=island;h.demandSeen=true;
                 if(moved(Burners.fired(before),Burners.fired(demand)))wake.addAll(fuelIslands(h));
             }

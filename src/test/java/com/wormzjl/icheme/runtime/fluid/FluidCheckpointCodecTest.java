@@ -37,6 +37,27 @@ class FluidCheckpointCodecTest {
         assertEquals(control,after.islands().getFirst().snapshot().graph().pipes().getFirst().control());
     }
 
+    @Test void fuelDemandSurvivesACheckpointWithTheBurnersOut() {
+        var supply=model.initialNitrogenCharge(1,298.15,400000,()->{});
+        var drain=model.initialNitrogenCharge(1,298.15,100000,()->{});
+        var pipe=new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(5,.05,1e-5,0))
+                .withHeat(new FiredCoil(400,1e6,0,0,0));
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,supply,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,drain,PassiveNetwork.NodeKind.VOID)),List.of(pipe));
+        var full=new PassiveIntervalSolver(model).solve(graph,5,PassiveIntervalSolver.Settings.defaults(),()->{});
+        assertTrue(full.radiantDemands().get(pipe.id())>0);
+        assertTrue(full.boundaries().stream().noneMatch(b->b.kind()==ConservativeTransport.BoundaryTransfer.Kind.HEAT&&b.totalEnergyJoule()!=0));
+        var state=new IslandCoordinator.Snapshot(1,0,full.graph(),new IslandClock.Snapshot(100,100,100,100),Optional.of(full),"FULL");
+        var before=new FluidCheckpointCodec.Checkpoint(List.of(new FluidCheckpointCodec.IslandEntry("minecraft:overworld",PACKAGE,state)));
+        var image=FluidCheckpointCodec.encode(before,key->model);
+        var loaded=FluidCheckpointCodec.decode(image,key->model).islands().getFirst().snapshot().lastResult().orElseThrow();
+        assertEquals(full.radiantDemands(),loaded.radiantDemands());
+        var summary=new IslandCertificate.Summary(new IslandCertificate.Interval(0,100,graph,loaded),model.molecularWeights());
+        var certificate=IslandCertificate.issue(summary,CertificatePolicy.defaults()).certificate();
+        assertNotNull(certificate);
+        assertEquals(full.radiantDemands(),certificate.replay(100,200).radiantDemands());
+    }
+
     @Test void aJunctionReopensWithBothItsFlowingSlurryAndItsBufferedParticles() {
         var material = model.solids.require("icheme:demo_particle");
         var size = ParticleSize.micrometres("100");

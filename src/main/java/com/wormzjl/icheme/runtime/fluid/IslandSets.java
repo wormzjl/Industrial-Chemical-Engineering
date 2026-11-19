@@ -155,7 +155,7 @@ public final class IslandSets {
         var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(r.boundaries().size());for(var b:r.boundaries())boundaries.add(boundary(b,from,to));
         var transfers=new ArrayList<PipeTransfer>(r.pipeTransfers().size());for(var t:r.pipeTransfers())transfers.add(new PipeTransfer(t.pipeId(),stream(t.forward(),from,to),stream(t.reverse(),from,to)));
         return new PassiveIntervalSolver.Result(graph(r.graph(),from,to),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),boundaries,
-                r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),transfers,r.observations(),r.towers());
+                r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),transfers,r.observations(),r.towers(),r.radiantDemands());
     }
 
     // ---------------- presentation: the world list ----------------
@@ -246,7 +246,7 @@ public final class IslandSets {
             var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(r.boundaries().size());for(var b:r.boundaries())boundaries.add(boundary(b,map,width));
             var transfers=new ArrayList<PipeTransfer>(r.pipeTransfers().size());for(var t:r.pipeTransfers())transfers.add(new PipeTransfer(t.pipeId(),stream(t.forward(),map,width),stream(t.reverse(),map,width)));
             return new PassiveIntervalSolver.Result(paddedGraph(r.graph(),map,world),r.advancedSeconds(),r.averageMassFlows(),r.acceptedSubsteps(),r.rejectedSubsteps(),r.pumpWorkJoule(),boundaries,
-                    r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),transfers,r.observations(),r.towers());
+                    r.rejectionReasons(),r.endpointModes(),r.endpointHeads(),r.endpointFlows(),transfers,r.observations(),r.towers(),r.radiantDemands());
         });
         return new IslandCoordinator.Snapshot(s.id(),s.revision(),graph,s.clock(),result,s.status(),s.fences(),s.certificate(),s.payloadGeneration());
     }

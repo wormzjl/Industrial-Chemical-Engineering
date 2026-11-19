@@ -383,6 +383,9 @@ class FiredHeaterFuelTest {
         System.out.printf(Locale.ROOT, "weak supply: asked %.0f kW, fired %.0f kW, coil %.0f kW (stiff %.0f kW)%n", view.asked() / 1e3, view.fired() / 1e3, rig.heat() / 1e3, full / 1e3);
         assertTrue(view.fired() > 0 && view.fired() < Burners.SHORT * view.asked(), "short of what was asked");
         assertEquals(List.of(EquipmentAlarm.LOW_FUEL), view.alarms());
+        var coil = rig.radiant.pipes().stream().filter(p -> p.heat() instanceof FiredCoil).findFirst().orElseThrow();
+        assertEquals(Math.min(((FiredCoil) coil.heat()).duty(), rig.radiantResult.radiantDemands().get(coil.id())), view.demand());
+        assertTrue(view.demand() > rig.heat(), "fuel shortage must not lower the requested heat to the delivered heat");
         assertTrue(rig.heat() < .9 * full, "the coil works at a reduced duty: " + rig.heat());
         assertEquals(Burners.radiant(view.fired()), rig.heat(), .05 * rig.heat() + 1e3, "the radiant share of what was fired");
     }
