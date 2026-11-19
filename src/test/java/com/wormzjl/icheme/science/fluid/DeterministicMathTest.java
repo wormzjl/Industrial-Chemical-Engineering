@@ -8,7 +8,6 @@ import java.lang.management.ManagementFactory;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
-import java.util.SplittableRandom;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -186,49 +185,6 @@ class DeterministicMathTest {
     private static void assertSameBits(double expected, double actual, String where) {
         if (Double.doubleToRawLongBits(expected) != Double.doubleToRawLongBits(actual) && !(Double.isNaN(expected) && Double.isNaN(actual))) {
             fail(where + ": " + Double.toHexString(actual) + ", expected " + Double.toHexString(expected));
-        }
-    }
-
-    @Test void cosineIsBitwiseStrictMathAcrossItsReductionAndFallback() {
-        for (double x : SPECIAL) assertCosineBits(x);
-        assertCosineBits(Double.longBitsToDouble(0xfff8_0000_0042_1234L));
-        assertCosineBits(Double.longBitsToDouble(0x7ff0_0000_0000_0001L));
-        // The reduction and polynomial switches compare the high word, not the rounded angles.
-        for (int high : new int[] {0x3e40_0000, 0x3fd3_3333, 0x3fe9_0000, 0x3fe9_21fb,
-                0x3ff9_21fb, 0x4002_d97c, 0x4009_21fb, 0x4011_0000}) {
-            for (int boundary = high; boundary <= high + 1; boundary++) {
-                for (int step = -8; step <= 8; step++) {
-                    double x = Double.longBitsToDouble(((long) boundary << 32) + step);
-                    assertCosineBits(x);
-                    assertCosineBits(-x);
-                }
-            }
-        }
-        for (double boundary : new double[] {Math.PI / 4, Math.PI / 2, 3 * Math.PI / 4,
-                Math.PI, 5 * Math.PI / 4, 4 * Math.PI / 3, 4.25}) {
-            for (int step = -64; step <= 64; step++) {
-                double x = Double.longBitsToDouble(Double.doubleToRawLongBits(boundary) + step);
-                assertCosineBits(x);
-                assertCosineBits(-x);
-            }
-        }
-        var random = new SplittableRandom(3035);
-        for (int i = 0; i < 100_000; i++) {
-            assertCosineBits(random.nextDouble(-4.25, 4.25));
-            assertCosineBits(Double.longBitsToDouble(random.nextLong()));
-            double angle = StrictMath.acos(random.nextDouble(-1, 1)) / 3;
-            assertCosineBits(angle);
-            assertCosineBits(angle - 2 * Math.PI / 3);
-            assertCosineBits(angle - 4 * Math.PI / 3);
-        }
-    }
-
-    private static void assertCosineBits(double x) {
-        long expected = Double.doubleToRawLongBits(StrictMath.cos(x));
-        long actual = Double.doubleToRawLongBits(DeterministicMath.cos(x));
-        if (expected != actual) {
-            fail("cos(" + Double.toHexString(x) + "): 0x" + Long.toHexString(actual)
-                    + ", expected 0x" + Long.toHexString(expected));
         }
     }
 

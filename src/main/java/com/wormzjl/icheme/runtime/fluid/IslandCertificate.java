@@ -44,8 +44,6 @@ public final class IslandCertificate {
         final SimulationTime time;final double seconds;
         final PassiveNetwork before,after;final PassiveIntervalSolver.Result result;
         final double[][] moles;final double[] energy;final int[] phases;
-        private final double[] molecularWeights;
-        private final Map<Long,PipeTransfer> grossTransfers=new HashMap<>();
         /** The largest relative change of any finite node's (vessel's or junction's) temperature or pressure over the interval. */
         final double stateChange;
         /**
@@ -58,27 +56,22 @@ public final class IslandCertificate {
         /** The interval booked a transfer at a node the island owns (a vessel or a junction): a trace flush
          * ({@code PassiveIntervalSolver.flushTraces}), a one-time removal that linear replay must not repeat. */
         final boolean flushed;
-        /** Largest relative thermal increment while a junction's booked stock differs from its flowing state. */
-        final double mixingHeatDrift;
-        final boolean reserveChanged;
         /** {@code molecularWeights} (kg/mol, conserved-component order) weigh the finite inventories for {@link #referenceMass}. */
         Summary(Interval interval,double[] molecularWeights){this(interval,molecularWeights,SimulationTime.ONLINE);}
         /** {@code time} is the island's time factor ({@link FluidThermodynamics#time}). */
         Summary(Interval interval,double[] molecularWeights,SimulationTime time) {
             this.interval=interval;startTick=interval.startTick;endTick=interval.endTick;durationTicks=Math.toIntExact(endTick-startTick);
             this.time=java.util.Objects.requireNonNull(time);seconds=time.seconds(durationTicks);
-            this.molecularWeights=molecularWeights.clone();
             before=interval.before;result=interval.result;after=result.graph();
             if(before.reservoirs().size()!=after.reservoirs().size()||before.pipes().size()!=after.pipes().size())throw new IllegalArgumentException("Interval changed the island's structure");
             int nodes=after.reservoirs().size();moles=new double[nodes][];energy=new double[nodes];phases=new int[nodes];
             var nodeMass=new double[nodes];double smallest=Double.POSITIVE_INFINITY;
-            boolean zero=true,solids=true,phase=true,changedReserve=false;double state=0,thermal=0;
+            boolean zero=true,solids=true,phase=true;double state=0;
             for(int n=0;n<nodes;n++) {
                 var a=before.reservoirs().get(n);var b=after.reservoirs().get(n);
                 if(a.id()!=b.id()||a.kind()!=b.kind())throw new IllegalArgumentException("Interval changed the island's structure");
                 nodeMass[n]=Double.POSITIVE_INFINITY;
                 if(b.kind()!=PassiveNetwork.NodeKind.RESERVOIR&&!b.junction())continue;
-                changedReserve |= !Objects.equals(a.inventory().reserve(),b.inventory().reserve());
                 phases[n]=phases(b.state());if(phases(a.state())!=phases[n])phase=false;
                 // An empty vessel's state is a numerical guess, not a physical temperature or pressure.
                 if(!a.empty()&&!b.empty())state=Math.max(state,Math.max(Math.abs(b.state().temperature()-a.state().temperature())/b.state().temperature(),
@@ -89,18 +82,6 @@ public final class IslandCertificate {
                 for(int c=0;c<m1.length;c++){moles[n][c]=m1[c]-m0[c];if(moles[n][c]!=0)zero=false;mass+=m1[c]*molecularWeights[c];}
                 if(!b.junction()){nodeMass[n]=mass;smallest=Math.min(smallest,mass);}
                 energy[n]=b.inventory().internalEnergy()-a.inventory().internalEnergy();if(energy[n]!=0)zero=false;
-                if (b.junction() && energy[n] != 0) {
-                    // A moving heat front's energy increment depends on how much stock still differs from the stream.
-                    // Extrapolating it as a fixed rate can discharge the numerical stock beyond that stream.
-                    double movingMass=b.inventory().solids().massKg();
-                    var moving=b.inventory().movingMoles();
-                    for(int c=0;c<moving.length;c++)movingMass+=moving[c]*molecularWeights[c];
-                    double streamEnergy=movingMass*b.state().enthalpy()/b.state().mass();
-                    double stockEnergy=b.inventory().movingEnergy();
-                    double rounding=32*Math.ulp(Math.max(1,Math.max(Math.abs(streamEnergy),Math.abs(stockEnergy))));
-                    if (Math.abs(energy[n]) > rounding && Math.abs(streamEnergy-stockEnergy) > rounding)
-                        thermal = Math.max(thermal, Math.abs(energy[n])/energyScale(b));
-                }
                 if(!a.inventory().solids().equals(b.inventory().solids()))solids=false;
             }
             referenceMass=new double[after.pipes().size()];
@@ -125,16 +106,11 @@ public final class IslandCertificate {
             boolean transport=false,gross=false;
             for(var pipe:result.pipeTransfers()) {
                 if(!pipe.forward().solids().empty()||!pipe.reverse().solids().empty())transport=true;
-                if(pipe.forward().massKg()!=0||pipe.reverse().massKg()!=0) {
-                    gross=true;
-                    grossTransfers.put(pipe.pipeId(),pipe);
-                }
+                if(pipe.forward().massKg()!=0||pipe.reverse().massKg()!=0)gross=true;
             }
             transitionFree=transitionFree(result.rejectionReasons());
             closuresUnchanged=closures;solidsUnchanged=solids;phasesUnchanged=phase;solidsInTransport=transport;hasFilter=filter;stateChange=state;
             // Rest is the identity of the map: nothing may move, not even back and forth inside the interval.
-            mixingHeatDrift=thermal;
-            reserveChanged=changedReserve;
             exactZero=zero&&!gross;grossWithoutNet=zero&&gross;
         }
         /** Which of vapour, oil and aqueous liquid a node holds. */
@@ -164,7 +140,7 @@ public final class IslandCertificate {
         double drift() {
             double relative=stateChange;
             for(int n=0;n<moles.length;n++) {
-                if(moles[n]==null)continue;var node=after.reservoirs().get(n);var inventory=node.inventory().movingMoles();
+                if(moles[n]==null)continue;var node=after.reservoirs().get(n);var inventory=node.inventory().moles();
                 if(energy[n]!=0){double scale=energyScale(node);if(scale<=0)return Double.POSITIVE_INFINITY;relative=Math.max(relative,Math.abs(energy[n])/scale);}
                 for(int c=0;c<inventory.length;c++) {
                     double delta=moles[n][c];if(delta==0)continue;
@@ -181,8 +157,8 @@ public final class IslandCertificate {
      * relative test on it alone would demand an absurdly small change.
      */
     static double energyScale(PassiveNetwork.Reservoir node) {
-        double n=0;for(double v:node.inventory().movingMoles())n+=v;
-        return Math.max(Math.abs(node.inventory().movingEnergy()),n*8.314462618*node.state().temperature());
+        double n=0;for(double v:node.inventory().moles())n+=v;
+        return Math.max(Math.abs(node.inventory().internalEnergy()),n*8.314462618*node.state().temperature());
     }
 
     /** A solver rejection that records a solid transport transition inside the interval, as opposed to ordinary
@@ -209,11 +185,10 @@ public final class IslandCertificate {
      * inside it; unequal modes, phases, blocked masks, filter cakes or fixed-node states. {@code state}: the larger
      * interval's largest relative temperature or pressure drift of a finite node (a node drifting at a constant rate is
      * not stationary). {@code component} and {@code energy}: the largest change between the intervals of a finite node's
-     * component or internal-energy change, relative to that inventory or {@link #energyScale}. {@code flow}: the largest
-     * measure of the net flow and each direction's gross material transfer. Each uses the smaller of two ratios:
-     * the change of the net flow or gross mass (total or of any one component) relative to the larger of its flow and
-     * the island's largest net flow, and the mass it moves in one interval relative to the smaller finite inventory it
-     * draws on ({@link Summary#referenceMass}), so a direction that moves less than {@code eps} of that inventory is quiet
+     * component or internal-energy change, relative to that inventory or {@link #energyScale}. {@code flow}: per pipe
+     * the smaller of two ratios, the largest over the pipes: the change of its flow relative to the larger of that flow
+     * and the island's largest flow, and the mass it moves in one interval relative to the smaller finite inventory it
+     * draws on ({@link Summary#referenceMass}), so a pipe that moves less than {@code eps} of that inventory is quiet
      * (otherwise the relative test is ill-conditioned wherever the island's largest flow is solver noise, a settled
      * closed island at 1e-10 kg/s). {@code flowChange} and {@code flowMoves} are the two ratios of the pipe that sets
      * {@code flow}; {@code largestRelativeFlowChange} the largest first ratio over all pipes, for diagnostics. Nothing
@@ -240,7 +215,7 @@ public final class IslandCertificate {
         var y=b.after;double component=0,energy=0;String componentAt=null,energyAt=null;
         for(int n=0;n<y.reservoirs().size();n++) {
             if(b.moles[n]==null)continue;var t=y.reservoirs().get(n);
-            var inventory=t.inventory().movingMoles();
+            var inventory=t.inventory().moles();
             for(int c=0;c<inventory.length;c++) {
                 double change=Math.abs(b.moles[n][c]-a.moles[n][c]);if(change==0)continue;
                 double ratio=inventory[c]>0?change/inventory[c]:Double.POSITIVE_INFINITY;
@@ -249,76 +224,19 @@ public final class IslandCertificate {
             double change=Math.abs(b.energy[n]-a.energy[n]);
             if(change!=0){double scale=energyScale(t);double ratio=scale>0?change/scale:Double.POSITIVE_INFINITY;if(ratio>energy){energy=ratio;energyAt="node "+t.id()+" energy";}}
         }
-        var earlierDemand=a.result.radiantDemands();
-        var laterDemand=b.result.radiantDemands();
-        if(!earlierDemand.keySet().equals(laterDemand.keySet()))
-            return new Stationarity("radiant demand readings changed",0,0,null,0,null,0,null,0,0,0);
-        for(var reading:laterDemand.entrySet()) {
-            double previous=earlierDemand.get(reading.getKey()),current=reading.getValue();
-            double difference=Math.abs(current-previous)/Math.max(1,Math.max(previous,current));
-            if(difference>energy){energy=difference;energyAt="radiant demand at pipe "+reading.getKey();}
-        }
         var q1=a.result.averageMassFlows();var q2=b.result.averageMassFlows();double reference=b.largestFlow(),seconds=b.seconds;
-        var flows=new FlowComparison();
+        double flow=0,worstChange=0,moves=0,largest=0;String flowAt=null;
         for(int i=0;i<q2.length;i++) {
-            long id=y.pipes().get(i).id();
-            double stock=Math.min(a.referenceMass[i],b.referenceMass[i]);
-            flows.add(id,"",-1,Math.abs(q2[i]-q1[i]),Math.max(Math.abs(q2[i]),reference),
-                    Math.max(Math.abs(q1[i]),Math.abs(q2[i]))*seconds,stock);
-            var first=a.grossTransfers.get(id);
-            var last=b.grossTransfers.get(id);
-            if(first!=null||last!=null) {
-                double referenceMoved=reference*seconds;
-                flows.direction(id,"forward",first==null?null:first.forward(),last==null?null:last.forward(),
-                        referenceMoved,stock,b.molecularWeights);
-                flows.direction(id,"reverse",first==null?null:first.reverse(),last==null?null:last.reverse(),
-                        referenceMoved,stock,b.molecularWeights);
-            }
-        }
-        return new Stationarity(null,state,component,componentAt,energy,energyAt,flows.measure,flows.at,
-                flows.change,flows.moves,flows.largest);
-    }
-
-    private static final class FlowComparison {
-        double measure,change,moves,largest;
-        String at;
-
-        void add(long id,String direction,int component,double difference,double scale,double moved,double stock) {
-            if(difference==0)return;
-            double relative=scale>0?difference/scale:Double.POSITIVE_INFINITY;
+            double change=Math.abs(q2[i]-q1[i]);if(change==0)continue;
+            double scale=Math.max(Math.abs(q2[i]),reference);
+            double relative=scale>0?change/scale:Double.POSITIVE_INFINITY;
+            double moved=Math.max(Math.abs(q1[i]),Math.abs(q2[i]))*seconds,mass=Math.min(a.referenceMass[i],b.referenceMass[i]);
             // No finite inventory behind the pipe (both ends boundaries) or an empty one: never quiet.
-            double fraction=stock>0&&stock<Double.POSITIVE_INFINITY?moved/stock:Double.POSITIVE_INFINITY;
-            double value=Math.min(relative,fraction);
-            largest=Math.max(largest,relative);
-            if(value>measure) {
-                measure=value;
-                change=relative;
-                moves=fraction;
-                at="pipe "+id+(direction.isEmpty()?"":" "+direction+" gross transfer");
-                if(component>=0)at+=" component "+component;
-            }
+            double fraction=mass>0&&mass<Double.POSITIVE_INFINITY?moved/mass:Double.POSITIVE_INFINITY;
+            double pipe=Math.min(relative,fraction);largest=Math.max(largest,relative);
+            if(pipe>flow){flow=pipe;worstChange=relative;moves=fraction;flowAt="pipe "+y.pipes().get(i).id();}
         }
-
-        void direction(long id,String direction,PipeTransfer.Stream before,PipeTransfer.Stream after,
-                       double reference,double stock,double[] weights) {
-            double earlier=before==null?0:before.massKg();
-            double later=after==null?0:after.massKg();
-            if(earlier==0&&later==0)return;
-            double difference=Math.abs(later-earlier);
-            int changedComponent=-1;
-            if(earlier>0&&later>0) {
-                var oldMoles=before.componentMoles();
-                var newMoles=after.componentMoles();
-                for(int c=0;c<weights.length;c++) {
-                    double componentMass=Math.abs(newMoles[c]-oldMoles[c])*weights[c];
-                    if(componentMass>difference) {
-                        difference=componentMass;
-                        changedComponent=c;
-                    }
-                }
-            }
-            add(id,direction,changedComponent,difference,Math.max(later,reference),Math.max(earlier,later),stock);
-        }
+        return new Stationarity(null,state,component,componentAt,energy,energyAt,flow,flowAt,worstChange,moves,largest);
     }
     /** Everything that must repeat exactly between the two intervals, or null when it does. */
     private static String discreteDifference(Summary a,Summary b) {
@@ -361,7 +279,6 @@ public final class IslandCertificate {
     static Result issue(Summary last,CertificatePolicy policy) {
         if(!last.transitionFree||!last.closuresUnchanged||!last.solidsUnchanged||!last.phasesUnchanged)return Result.refused("the interval changed a closure, a cake, a phase or node solids");
         if(last.flushed)return Result.refused("the interval flushed a trace component");
-        if(last.reserveChanged)return Result.refused("the junction established its retained fluid");
         if(last.grossWithoutNet)return Result.refused("gross flow with a zero average is not rest");
         if(last.exactZero) {
             // The recheck period is play time, a schedule quantity: ticks, whatever the time factor.
@@ -373,16 +290,10 @@ public final class IslandCertificate {
         double relative=last.drift();long zeroLimit=Long.MAX_VALUE;
         if(relative==Double.POSITIVE_INFINITY)return Result.refused("material or energy appears in an empty node");
         for(int n=0;n<last.moles.length;n++) {
-            if(last.moles[n]==null)continue;var inventory=last.after.reservoirs().get(n).inventory().movingMoles();
+            if(last.moles[n]==null)continue;var inventory=last.after.reservoirs().get(n).inventory().moles();
             for(int c=0;c<inventory.length;c++){double delta=last.moles[n][c];if(delta<0)zeroLimit=Math.min(zeroLimit,(long)Math.ceil(inventory[c]/-delta)-1);}
         }
         long intervals=policy.maximumIntervals();
-        // A front can settle on the very next solve. Bound even the entire extrapolated heat increment by
-        // the policy's stationary tolerance, including the case where no further heat enters the stock.
-        if (last.mixingHeatDrift > 0) {
-            intervals = Math.min(intervals, (long)Math.floor(policy.stationaryTolerance()/last.mixingHeatDrift));
-            if (intervals < 1) return Result.refused("junction heat is still mixing");
-        }
         if(relative>0)intervals=Math.min(intervals,(long)Math.floor(policy.inventoryBudget()/relative));
         intervals=Math.min(intervals,zeroLimit);
         if(intervals<1)return Result.refused("drift of "+relative+" per interval exceeds the inventory budget");
@@ -406,7 +317,7 @@ public final class IslandCertificate {
      * declared revision. A token of letters, digits, {@code _}, {@code .} and {@code -}, at most 32 characters (the
      * checkpoint's field, {@link FluidCheckpointCodec#replayField}).
      */
-    public static final String REPLAY_REVISION="replay-5";
+    public static final String REPLAY_REVISION="replay-1";
 
     /**
      * The validity signature of a certificate: the model's full property revision ({@link FluidThermodynamics#revision},
@@ -541,7 +452,7 @@ public final class IslandCertificate {
         var pipes=new ArrayList<PipeTransfer>(recorded.pipeTransfers().size());
         for(var p:recorded.pipeTransfers())pipes.add(new PipeTransfer(p.pipeId(),scale(p.forward(),g),scale(p.reverse(),g)));
         return new PassiveIntervalSolver.Result(graphAt(to),summary.time.seconds(to-from),recorded.averageMassFlows(),0,0,g*recorded.pumpWorkJoule(),boundaries,Map.of(),
-                recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations(),recorded.towers(),recorded.radiantDemands());
+                recorded.endpointModes(),recorded.endpointHeads(),recorded.endpointFlows(),pipes,recorded.observations(),recorded.towers());
     }
     private static PipeTransfer.Stream scale(PipeTransfer.Stream stream,double g) {
         var phases=stream.phaseMoles();for(var phase:phases)for(int c=0;c<phase.length;c++)phase[c]*=g;

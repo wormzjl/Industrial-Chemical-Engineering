@@ -14,7 +14,6 @@ import static com.wormzjl.icheme.science.fluid.network.PassiveStepSolver.scaled;
 import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import com.wormzjl.icheme.science.math.DeterministicMath;
 import com.wormzjl.icheme.science.thermo.NumericalBox;
 import java.util.*;
@@ -39,10 +38,9 @@ final class BalanceStart {
      * 1e-6 of itself ends the rounds early.
      */
     static final int BALANCE_ROUNDS=2;
-    /** The balance's result for one solve: the graph with its junctions at the balanced states, the law flows and
-     * pump heads at those ends (null when the balance supplies none, NaN for individual unseeded edges), the passive connections the one-way law
-     * closes, the device modes it decided, and whether it converged. */
-    record Start(PassiveNetwork graph,double[] lawFlows,double[] pumpHeads,boolean[] closed,List<FlowControl.Mode> modes,boolean converged) {}
+    /** The balance's result for one solve: the graph with its junctions at the balanced states, the law flows of every
+     * open connection at the balanced ends, the passive connections the one-way law closes, the device modes it decided, and whether it converged. */
+    record Start(PassiveNetwork graph,double[] lawFlows,boolean[] closed,List<FlowControl.Mode> modes,boolean converged) {}
     /**
      * The mint's round 0 (owner decision of 2026-10-19 on t45's trace, {@code BRANCH_SELECTION_TRACE.md}): a minted
      * junction's first state is what reaches it, decision D55's supplier composition, not the placeholder (the island's
@@ -218,7 +216,7 @@ final class BalanceStart {
             current=next;
             if(!moved)break;
         }
-        double[] law=new double[edges],pumpHeads=null;boolean[] closed=new boolean[edges];
+        double[] law=new double[edges];boolean[] closed=new boolean[edges];
         for(int e=0;e<edges;e++) {
             var pipe=current.pipes().get(e);
             if(boundaryClosed[e]||modes.get(e)==FlowControl.Mode.CLOSED||modes.get(e)==FlowControl.Mode.INLET_WRONG_PHASE)continue;
@@ -226,22 +224,6 @@ final class BalanceStart {
             // A valve whose flow or opening the balance states starts at what the balance gave it, not at its pipe's unthrottled law.
             boolean stated=pipe.control() instanceof FlowControl.Valve&&(!Double.isNaN(net.prescribed[e])||!Double.isNaN(net.fixedOpenings[e]));
             law[e]=net.suctionLimited[e]?net.prescribed[e]:stated?net.flow(e,pa,pb):solver.lawFlow(current,pipe,pa,pb);
-            boolean centrifugal=pipe.control() instanceof FlowControl.Machine machine&&machine.law() instanceof CentrifugalPump;
-            if(net.onLaw[e]&&(centrifugal||converged&&pipe.control() instanceof FlowControl.Pump)) {
-                // Start on the pump's curve at the balanced head, even when a centrifugal drive is too slow to open its
-                // check valve. Its nominal speed-scaled flow is not the rate that reached the discharge junction.
-                var suction=current.reservoirs().get(pipe.first()).state();
-                double rho=PortStreams.endDensity(model,suction,pipe.firstPort(),pipe.volume());
-                law[e]=net.flow(e,pa,pb)>0?net.lastQ[e][0]:0;
-                if(centrifugal&&converged&&law[e]==0&&solver.devices.shutoffMargin(current,e)<=0) {
-                    // A balanced closed start remains an ordinary active-set mode: the end-of-step head can reopen it.
-                    modes.set(e,FlowControl.Mode.CLOSED);
-                    continue;
-                }
-                double flow=saturated(law[e],solver.massFlowLimit(pipe,suction,pipe.firstPort()));
-                if(pumpHeads==null){pumpHeads=new double[edges];Arrays.fill(pumpHeads,Double.NaN);}
-                pumpHeads[e]=solver.lawRise(current,e,flow/rho,solver.suctions.riseDensity(e,rho),suction.pressure());
-            }
             if(!(pipe.control() instanceof FlowControl.Passive)||keep!=null&&keep[e]||!converged)continue;
             // A passive connection the balanced ends can only drive the way its boundary forbids carries nothing this solve
             // (the closure the one-way estimate and the start closures stated by hand). Only ends that balance state it: an
@@ -252,7 +234,7 @@ final class BalanceStart {
             boolean fwd=boundaryAllowed(current,pipe,1),rev=boundaryAllowed(current,pipe,-1);
             if(forward>band&&!fwd&&!(reverse<-band&&rev)||reverse<-band&&!rev&&!(forward>band&&fwd)){closed[e]=true;law[e]=0;}
         }
-        return new Start(current,law,pumpHeads,closed,List.copyOf(modes),converged);
+        return new Start(current,law,closed,List.copyOf(modes),converged);
     }
     /** The balance of one island on its start states (decision D12's one-way estimate promoted, with every connection's mode): the junction pressures
      * at which every junction's net inflow vanishes, and the junctions' upwind mixtures at those pressures. */

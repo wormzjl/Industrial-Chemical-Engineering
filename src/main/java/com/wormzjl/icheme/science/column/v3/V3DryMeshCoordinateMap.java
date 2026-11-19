@@ -93,9 +93,8 @@ final class V3DryMeshCoordinateMap {
      * fail — only the checks that entry can fail have to be repeated, which is why this throws where
      * {@link #decode} would and a probe still reads the failure as an inadmissible perturbation.</p>
      *
-     * <p>Start with {@code decode(baseCoordinates)}. A grouped probe can chain replacements on distinct
-     * coordinates because decoding one entry is independent of the others. A base that does not decode
-     * still requires the full-vector {@link #decode} path.</p>
+     * <p>{@code decodedBase} must be {@code decode(baseCoordinates)}; a caller whose base vector does not
+     * decode has no such state and has to keep using {@link #decode}.</p>
      */
     V3DryMeshState decodePerturbed(
             V3DryMeshState decodedBase, double[] baseCoordinates, int column, double signedStep) {

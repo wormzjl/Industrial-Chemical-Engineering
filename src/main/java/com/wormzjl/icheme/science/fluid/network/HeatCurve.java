@@ -5,7 +5,6 @@ import com.wormzjl.icheme.science.math.DeterministicMath;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.TreeMap;
 
@@ -371,56 +370,6 @@ public final class HeatCurve {
         double floor=0;
         for(int i=0;i<kept.size();i++){var point=kept.get(i);hs[i]=point.h;ts[i]=floor=Math.max(floor,point.t);xs[i]=point.vapour;ws[i]=point.w;rs[i]=point.resistance;}
         return new HeatCurve(hs,ts,filmed(films,xs,ws,rs),xs,ws,rs);
-    }
-
-    /**
-     * Completed samples owned by one island job. The thermodynamic knots and liquid resistance
-     * depend on the exact model, amounts, pressure and span. The requesting side's films are
-     * applied to those knots even when another side or substep sampled them first.
-     */
-    static final class Samples {
-        private static final int CAPACITY = 64;
-        private final LinkedHashMap<Input, Sample> kept = new LinkedHashMap<>(16, .75f, true);
-
-        HeatCurve sample(FluidThermodynamics model,double[] amounts,double pressure,double low,double high,
-                         Films films,Runnable checkpoint,Runnable sampled) {
-            long p = Double.doubleToRawLongBits(pressure);
-            long lower = Double.doubleToRawLongBits(low);
-            long upper = Double.doubleToRawLongBits(high);
-            var input = new Input(model, amounts, p, lower, upper);
-            var old = kept.get(input);
-            if (old != null) {
-                checkpoint.run();
-                return old.films.equals(films) ? old.curve : old.curve.withFilms(films);
-            }
-            double[] sampledAmounts = amounts.clone();
-            if (sampled != null) sampled.run();
-            var curve = HeatCurve.sample(model, sampledAmounts, pressure, low, high, films, checkpoint);
-            kept.put(new Input(model, sampledAmounts, p, lower, upper), new Sample(films, curve));
-            if (kept.size() > CAPACITY) kept.pollFirstEntry();
-            return curve;
-        }
-
-        private record Sample(Films films, HeatCurve curve) {}
-
-        private record Input(FluidThermodynamics model, double[] amounts, long pressure, long low, long high) {
-            @Override public int hashCode() {
-                int hash = System.identityHashCode(model);
-                hash = 31 * hash + Long.hashCode(pressure);
-                hash = 31 * hash + Long.hashCode(low);
-                hash = 31 * hash + Long.hashCode(high);
-                for (double amount : amounts) hash = 31 * hash + Long.hashCode(Double.doubleToRawLongBits(amount));
-                return hash;
-            }
-
-            @Override public boolean equals(Object other) {
-                if (!(other instanceof Input input) || model != input.model || pressure != input.pressure
-                        || low != input.low || high != input.high || amounts.length != input.amounts.length) return false;
-                for (int i = 0; i < amounts.length; i++)
-                    if (Double.doubleToRawLongBits(amounts[i]) != Double.doubleToRawLongBits(input.amounts[i])) return false;
-                return true;
-            }
-        }
     }
     /**
      * The sampled points, in temperature order, with their liquid film resistances (D15). A point whose liquid film has weight

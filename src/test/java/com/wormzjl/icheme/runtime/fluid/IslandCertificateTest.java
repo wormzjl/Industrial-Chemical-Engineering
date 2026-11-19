@@ -310,16 +310,7 @@ class IslandCertificateTest {
      */
     @Test void aCertifiedIslandReplaysItsJunctionHoldupsExactly() {
         var rig=rig(new CertificatePolicy(true,1e-6,1e-3,5,2,0));rig.register(1,flushThroughJunction(mix(.6),mix(.4)));
-        // Early windows may legitimately be shorter than the multi-interval replay exercised here.
-        // Wait for that qualifying window while the real island continues solving and certifying.
-        while (rig.epoch[0] < 40_000) {
-            var window=rig.stored(1).certificate();
-            if(window.isPresent() && window.get().baseTick()==rig.epoch[0]
-                    && window.get().horizonTick()-window.get().baseTick()>=300)break;
-            rig.run(1);
-        }
-        long at=rig.epoch[0];
-        assertTrue(at < 40_000,rig.coordinator.certificationRefusal(1));
+        long at=rig.certifiedAt(1,40_000);assertTrue(at>0,rig.coordinator.certificationRefusal(1));
         var certified=rig.stored(1).certificate().orElseThrow();var saved=certified.saved().orElseThrow();
         var before=saved.interval().before();var base=saved.interval().result().graph();
         long baseTick=saved.baseTick(),duration=saved.interval().endTick()-saved.interval().startTick();
@@ -333,9 +324,7 @@ class IslandCertificateTest {
         assertTrue(junctions>0,"the line compiles junctions");
         assertTrue(largest>0,"the certified interval moves a junction's composition, so dropping it would show");
         var initial=stock(base);int from=rig.replayed.size();
-        // The thermal budget can shorten this certificate. Exercise a fractional interval after a full replay.
-        long target = Math.min(baseTick+duration*5/2, certified.horizonTick()-duration/2);
-        assertTrue(target > baseTick+duration && target < certified.horizonTick());
+        long target=baseTick+duration*5/2;assertTrue(target<certified.horizonTick());
         rig.run((int)(target-rig.epoch[0]));
         var now=rig.read(1).graph();assertEquals(target,rig.read(1).clock().committedTick(),"materialised to the target");
         double f=(target-baseTick)/(double)duration;
@@ -345,7 +334,6 @@ class IslandCertificateTest {
             var expected=b.moles();var m0=a.moles();var m1=b.moles();
             for(int c=0;c<expected.length;c++)expected[c]+=f*(m1[c]-m0[c]);
             var replayed=now.reservoirs().get(n).inventory();
-            assertEquals(b.reserve(),replayed.reserve(),"replay preserves the retained part of the stock");
             assertArrayEquals(expected,replayed.moles(),0,"junction "+node.id()+" moles: base + f * delta, bit for bit");
             assertEquals(b.internalEnergy()+f*(b.internalEnergy()-a.internalEnergy()),replayed.internalEnergy(),0,"junction "+node.id()+" energy field");
         }
@@ -424,42 +412,6 @@ class IslandCertificateTest {
     }
 
     /** Plan section 5 item 6: a configuration event replaces the island; the new one solves and qualifies afresh. */
-    @Test void aNewDependencyNeedsFreshStationarityEvidenceEvenWithoutAnOutstandingWorker() {
-        var rig=rig(CertificatePolicy.defaults());
-        rig.register(1,deadHeadedLine());
-        rig.run(100);
-        assertTrue(rig.attempts.isEmpty());
-        assertTrue(rig.stored(1).certificate().isEmpty(),"only one interval has been solved");
-
-        rig.coordinator.shaftsMoved(List.of(1L));
-        rig.coordinator.pump();
-        rig.run(100);
-        assertEquals(200,rig.stored(1).clock().committedTick());
-        assertTrue(rig.stored(1).certificate().isEmpty(),"matching zero rates do not carry evidence across a plan change");
-
-        rig.run(100);
-        assertTrue(rig.stored(1).certificate().isPresent(),"two matching intervals under the new plan certify");
-    }
-
-    @Test void aDependencyWakeAtTheHorizonKeepsReplayAndInvalidatesRevalidation() {
-        var rig=rig(new CertificatePolicy(true,1e-7,1e-6,17_280,2,5));
-        rig.register(1,deadHeadedLine());
-        rig.runUntilCertified(List.of(1L),200);
-        long horizon=rig.stored(1).certificate().orElseThrow().horizonTick();
-
-        rig.epoch[0]=horizon;
-        rig.coordinator.shaftsMoved(List.of(1L));
-        rig.coordinator.pump();
-        assertEquals(horizon,rig.stored(1).clock().committedTick(),"the certificate still replays to its horizon");
-        assertEquals(horizon,rig.replayed.getLast().clock().committedTick());
-        assertTrue(rig.stored(1).certificate().isEmpty());
-
-        rig.run(100);
-        assertTrue(rig.stored(1).certificate().isEmpty(),"a matching result cannot renew the old plan");
-        rig.run(100);
-        assertTrue(rig.stored(1).certificate().isPresent(),"the new plan qualifies independently");
-    }
-
     @Test void changedControlsReplaceACertifiedIslandWithAnAwakeOne() {
         var rig=rig(CertificatePolicy.defaults());rig.register(1,generatorToVoid(150000));
         long at=rig.certifiedAt(1,2_000);assertTrue(at>0);double before=rig.stored(1).certificate().orElseThrow().largestFlow();
@@ -491,37 +443,6 @@ class IslandCertificateTest {
                 List.of(new PipeTransfer(9,stream(forward),stream(reverse))));
         return new IslandCertificate.Summary(new IslandCertificate.Interval(start,start+100,before,result),model.molecularWeights());
     }
-    @Test void aJunctionThatIsStillExchangingBufferedHeatCannotReplayThatIncrement() {
-        var reservoir=new PassiveNetwork.Reservoir(1,0,gas,PassiveNetwork.NodeKind.JUNCTION);
-        var sink=new PassiveNetwork.Reservoir(2,0,gas,PassiveNetwork.NodeKind.VOID);
-        var pipe=new PassiveNetwork.Pipe(9,0,1,BLOCK);
-        var before=PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(List.of(reservoir,sink),List.of(pipe)),model);
-        var original=before.reservoirs().getFirst();
-        var inventory=original.inventory();
-        var changed=inventory.with(inventory.moles(),inventory.internalEnergy()+100,inventory.solids());
-        var after=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,gas,original.kind(),changed),sink),List.of(pipe));
-        var issued=IslandCertificate.issue(interval(0,before,after,1,5,0,Map.of()),CertificatePolicy.defaults());
-        assertNull(issued.certificate());
-        assertEquals("junction heat is still mixing",issued.refusal());
-    }
-
-    @Test void theReplayWindowBoundsTheEntireRemainingThermalIncrement() {
-        var junction = new PassiveNetwork.Reservoir(1, 0, gas, PassiveNetwork.NodeKind.JUNCTION);
-        var sink = new PassiveNetwork.Reservoir(2, 0, gas, PassiveNetwork.NodeKind.VOID);
-        var pipe = new PassiveNetwork.Pipe(9, 0, 1, BLOCK);
-        var before = PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(List.of(junction, sink), List.of(pipe)), model);
-        var original = before.reservoirs().getFirst();
-        var inventory = original.inventory();
-        var policy = CertificatePolicy.defaults();
-        double increment = IslandCertificate.energyScale(original)*policy.stationaryTolerance()/3.5;
-        var changed = inventory.with(inventory.moles(), inventory.internalEnergy()+increment, inventory.solids());
-        var after = new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1, 0, gas, original.kind(), changed), sink), List.of(pipe));
-        var summary = interval(0, before, after, 1, 5, 0, Map.of());
-        var certificate = IslandCertificate.issue(summary, policy).certificate();
-        assertNotNull(certificate);
-        assertEquals(3*summary.durationTicks, certificate.horizonTick()-certificate.baseTick());
-    }
-
     /** Two consecutive intervals of a tank draining component amounts {@code delta1} then {@code delta2} from {@code moles}. */
     private IslandCertificate.Summary[] draining(double[] moles,double[] delta1,double[] delta2,double flow1,double flow2) {
         var a=tank(moles,-1e5,0);var m1=moles.clone();for(int c=0;c<m1.length;c++)m1[c]+=delta1[c];var b=tank(m1,-1e5,0);
@@ -554,60 +475,6 @@ class IslandCertificateTest {
         var still=interval(0,at,at,0,0,0,Map.of());
         assertTrue(still.exactZero);var rest=IslandCertificate.issue(still,CertificatePolicy.defaults()).certificate();
         assertEquals(0.0,rest.drift());assertEquals(Long.MAX_VALUE,rest.horizonTick());
-    }
-
-    /** A circulation conserves each node's inventory even if its forward and reverse deliveries change together. */
-    @Test void directionalDeliveryMustRepeatEvenWhenNetFlowRepeats() {
-        var mixture = model.flashTP(298.15, 101325, amounts(800, 200), () -> {});
-        var ring = new PassiveNetwork(List.of(
-                new PassiveNetwork.Reservoir(1, 0, mixture, PassiveNetwork.NodeKind.RESERVOIR),
-                new PassiveNetwork.Reservoir(2, 0, mixture, PassiveNetwork.NodeKind.RESERVOIR),
-                new PassiveNetwork.Reservoir(3, 0, mixture, PassiveNetwork.NodeKind.RESERVOIR)), List.of(
-                new PassiveNetwork.Pipe(9, 0, 1, BLOCK),
-                new PassiveNetwork.Pipe(10, 1, 2, BLOCK),
-                new PassiveNetwork.Pipe(11, 2, 0, BLOCK)));
-        var first = circulating(0, ring, stream(2, 0), stream(1, 0));
-        var moreShuttling = circulating(100, ring, stream(4, 0), stream(3, 0));
-        var changedFluid = circulating(100, ring, stream(1.5, .5), stream(.5, .5));
-        var repeat = circulating(100, ring, stream(2, 0), stream(1, 0));
-        double tolerance = CertificatePolicy.defaults().stationaryTolerance();
-
-        assertArrayEquals(first.result.averageMassFlows(), moreShuttling.result.averageMassFlows());
-        assertArrayEquals(first.result.averageMassFlows(), changedFluid.result.averageMassFlows());
-        var gross = IslandCertificate.stationaryRefusal(first, moreShuttling, tolerance);
-        assertNotNull(gross);
-        assertTrue(gross.contains("gross transfer"), gross);
-        var composition = IslandCertificate.stationaryRefusal(first, changedFluid, tolerance);
-        assertNotNull(composition);
-        assertTrue(composition.contains("gross transfer component"), composition);
-        assertNull(IslandCertificate.stationaryRefusal(first, repeat, tolerance));
-        var certificate = IslandCertificate.issue(repeat, CertificatePolicy.defaults()).certificate();
-        assertNotNull(certificate);
-        var moved = certificate.replay(200, 300).pipeTransfers().getFirst();
-        assertEquals(2, moved.forward().massKg());
-        assertEquals(1, moved.reverse().massKg());
-
-        // A tiny reversal is quiet even while the net circulation on the same pipes is large.
-        var steady = circulating(0, ring, stream(2, 0), stream(0, 0));
-        var noise = circulating(100, ring, stream(2 + 1e-12, 0), stream(1e-12, 0));
-        assertNull(IslandCertificate.stationaryRefusal(steady, noise, tolerance));
-        assertNotNull(IslandCertificate.stationaryRefusal(steady, noise, 0));
-    }
-
-    private PipeTransfer.Stream stream(double nitrogenKg,double methaneKg) {
-        double[][] phaseMoles = new double[3][components];
-        phaseMoles[2] = amounts(nitrogenKg/model.molecularWeight(nitrogen), methaneKg/model.molecularWeight(methane));
-        return new PipeTransfer.Stream(nitrogenKg + methaneKg, phaseMoles, new double[3]);
-    }
-
-    private IslandCertificate.Summary circulating(long start,PassiveNetwork graph,PipeTransfer.Stream forward,PipeTransfer.Stream reverse) {
-        var pipes = graph.pipes();
-        double[] flow = new double[pipes.size()];
-        Arrays.fill(flow, (forward.massKg() - reverse.massKg()) / 5);
-        var history = pipes.stream().map(pipe -> new PipeTransfer(pipe.id(), forward, reverse)).toList();
-        var result = new PassiveIntervalSolver.Result(graph, 5, flow, 1, 0, 0, List.of(), Map.of(),
-                Collections.nCopies(pipes.size(), FlowControl.Mode.PASSIVE), new double[pipes.size()], flow, history);
-        return new IslandCertificate.Summary(new IslandCertificate.Interval(start, start + 100, graph, result), model.molecularWeights());
     }
 
     /** Plan section 5 item 5: a rate that keeps changing, however slowly, is not stationary. */

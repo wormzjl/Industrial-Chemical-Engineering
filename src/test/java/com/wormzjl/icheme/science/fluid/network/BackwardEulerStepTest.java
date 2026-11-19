@@ -180,26 +180,4 @@ class BackwardEulerStepTest {
         assertArrayEquals(result.externalMoles(),difference(PhaseLayout.totalAmounts(state),PhaseLayout.totalAmounts(initial)),1e-8);
     }
     private static double[] difference(double[] a,double[] b){for(int i=0;i<a.length;i++)a[i]-=b[i];return a;}
-
-    @Test void refusedGrowthIsRetriedAfterTheStateHasAdvancedWhenAttemptsAllow() {
-        var growth=new PassiveIntervalSolver.StepGrowth();
-        growth.refused(2,true);
-        assertEquals(2,growth.afterAccepted(1,2,40,100),"enough attempts to try growing again");
-        growth.refused(2,true);
-        assertEquals(1,growth.afterAccepted(1,2,39,100),"the same refused size now waits even with attempts in reserve");
-        assertEquals(1.5,growth.afterAccepted(1,1.5,38,99),"a different proposal is still available");
-        assertEquals(1,growth.afterAccepted(1,2,37,98),"the repeated refusal doubles the wait");
-        assertEquals(2,growth.afterAccepted(1,2,36,97),"the larger step can be tried again");
-        assertEquals(4,growth.afterAccepted(2,4,40,45),"a larger successful step clears the refusal");
-
-        growth.refused(2,true);
-        assertEquals(2,growth.afterAccepted(1,2,101,100),"the current step cannot cover the interval");
-
-        growth=new PassiveIntervalSolver.StepGrowth();
-        growth.refused(2,true);
-        assertEquals(1,growth.afterAccepted(1,2,70,100),"one attempt per remaining step fits, two do not");
-        assertEquals(1,growth.afterAccepted(1,2,4,10),"finishing retains the successful step");
-        growth.refused(1,false);
-        assertEquals(2,growth.afterAccepted(.5,2,35,100),"the state-change controller keeps its own growth estimate");
-    }
 }

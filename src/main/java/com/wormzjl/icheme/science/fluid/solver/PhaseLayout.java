@@ -34,8 +34,6 @@ public final class PhaseLayout {
     private final int[][] slotIndex;
     /** Where each present component's total amount lives; -1 for an absent one. */
     private final int[] amountIndex;
-    /** Conserved component of each amount or phase-ratio column, before the temperature and pressure columns. */
-    private final int[] columnComponent;
     /** Per component, its reference storage slot; -1 for an absent one. */
     private final int[] referenceSlot;
     private final byte[] support;
@@ -119,8 +117,6 @@ public final class PhaseLayout {
             int slot=ORDER_SLOT[k];slotIndex[i][slot]=offset++;
             if(referenceSlot[i]<0){referenceSlot[i]=slot;amountIndex[i]=slotIndex[i][slot];}
         }
-        columnComponent=new int[offset];
-        for(int i:components)for(int column:slotIndex[i])if(column>=0)columnComponent[column]=i;
         temperatureIndex=offset++;pressureIndex=offset++;
         solidIndex=solidSupport?offset:-1;if(solidSupport)offset+=3;size=offset;
         solidBasis=seed.solids();solidReference=seed.solidMoments().values();
@@ -165,7 +161,6 @@ public final class PhaseLayout {
         return traceDifferenceScale(Math.max(Math.abs(value),Math.min(Math.abs(differenceScales[local]),Math.max(seed,LOG_READ_SPAN*seed))));
     }
     /** The local column of the pressure unknown, {@code ln(P / 1e5)}; every layout has one. */
-    public int temperatureVariable(){return temperatureIndex;}
     public int pressureVariable(){return pressureIndex;}
     /** The number of component balance rows: one per present component, water among them. */
     public int componentBalanceCount(){return components.length;}
@@ -174,29 +169,6 @@ public final class PhaseLayout {
     public int balanceRow(int component) {
         for(int index=0;index<components.length;index++)if(components[index]==component)return index;
         return -1;
-    }
-    /** Names a diagnostic row in the order of {@link #balanceRows}, {@link #junctionRows} and {@link #equilibriumResidual}. */
-    public String residualRow(int row,boolean junction,boolean retainsPressure) {
-        if(junction) {
-            if(row<junctionBasis.length-1)return "mixing "+model.components().get(junctionBasis[row]);
-            if(row==junctionBasis.length-1)return retainsPressure?"retained pressure":"continuity";
-            if(row==junctionBasis.length)return "mixed enthalpy";
-            if(row==junctionBasis.length+1)return "amount normalization";
-        } else {
-            if(row<components.length)return "amount balance "+model.components().get(components[row]);
-            if(row==components.length)return "energy balance";
-            if(row==components.length+1)return "wall closure";
-        }
-        int extra=row-components.length-2;
-        if(solidIndex>=0) {
-            if(extra<3)return switch(extra){case 0->"solid mass";case 1->"solid volume";default->"solid heat capacity";};
-            extra-=3;
-        }
-        for(int component:components)for(int slot=0;slot<3;slot++) {
-            if(slotIndex[component][slot]>=0&&slot!=referenceSlot[component]&&extra--==0)
-                return "phase equilibrium "+model.components().get(component)+" (slot "+referenceSlot[component]+" to "+slot+")";
-        }
-        return "local row "+row;
     }
     /** The amount a component's balance row is stated over ({@link #balanceRows}), mol. */
     public double componentScale(int component){return componentScales[component];}
@@ -328,48 +300,24 @@ public final class PhaseLayout {
      */
     public FluidThermodynamics.State decode(double[] variables,int offset,FluidThermodynamics.Prepared prepared,
                                             com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangents) {
-        double[][] out=new double[3][amountIndex.length];
-        for(int component:components)split(variables,offset,component,out);
-        return decodedState(variables,offset,prepared,tangents,out,temperature(variables,offset),
-                1e5*DeterministicMath.exp(variables[offset+pressureIndex]));
-    }
-
-    /** A finite-difference trial relative to the exact decode of the same vector before column {@code local} changed.
-     * Each component's split depends only on its own amount and ratios. Unchanged phase arrays are immutable
-     * in both states, like the arrays shared by State.withSolidState. */
-    public FluidThermodynamics.State decodeProbe(double[] variables,int offset,int local,FluidThermodynamics.State base,
-                                                 FluidThermodynamics.Prepared prepared,com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangents) {
-        double[][] out={base.vaporAmountsView(),base.liquidAmountsView(),base.aqueousAmountsView()};
-        if(local<columnComponent.length) {
-            int component=columnComponent[local];
-            for(int slot=0;slot<out.length;slot++)if(slotIndex[component][slot]>=0)out[slot]=out[slot].clone();
-            split(variables,offset,component,out);
+        int n=amountIndex.length;double[][] out=new double[3][n];
+        for(int i:components) {
+            double amount=amountScale*variables[offset+amountIndex[i]];
+            int ref=referenceSlot[i],last=ref;double largest=0;
+            for(int slot=0;slot<3;slot++){int at=slotIndex[i][slot];if(at<0||slot==ref)continue;double r=variables[offset+at];if(r>=largest){largest=r;last=slot;}}
+            if(last==ref&&!hasOther(i)){out[ref][i]=amount;continue;}
+            // Each slot but the largest is amount / sum_j exp(r_j - r_k), the largest takes the remainder: two slots give
+            // the split l = n/(1 + e^r), v = n - l (r >= 0) and v = n/(1 + e^-r), l = n - v of the layout before W3b, to the bit.
+            double rest=amount;
+            for(int slot=0;slot<3;slot++) {
+                if(slotIndex[i][slot]<0||slot==last)continue;
+                double rk=ratio(variables,offset,i,slot),denominator=0;
+                for(int j=0;j<3;j++)if(slotIndex[i][j]>=0)denominator+=j==slot?1:DeterministicMath.exp(ratio(variables,offset,i,j)-rk);
+                out[slot][i]=amount/denominator;rest-=out[slot][i];
+            }
+            out[last][i]=rest;
         }
-        double t=local==temperatureIndex?temperature(variables,offset):base.temperature();
-        double p=local==pressureIndex?1e5*DeterministicMath.exp(variables[offset+pressureIndex]):base.pressure();
-        return decodedState(variables,offset,prepared,tangents,out,t,p);
-    }
-
-    private void split(double[] variables,int offset,int i,double[][] out) {
-        double amount=amountScale*variables[offset+amountIndex[i]];
-        int ref=referenceSlot[i],last=ref;double largest=0;
-        for(int slot=0;slot<3;slot++){int at=slotIndex[i][slot];if(at<0||slot==ref)continue;double r=variables[offset+at];if(r>=largest){largest=r;last=slot;}}
-        if(last==ref&&!hasOther(i)){out[ref][i]=amount;return;}
-        // Each slot but the largest is amount / sum_j exp(r_j - r_k), the largest takes the remainder: two slots give
-        // the split l = n/(1 + e^r), v = n - l (r >= 0) and v = n/(1 + e^-r), l = n - v of the layout before W3b, to the bit.
-        double rest=amount;
-        for(int slot=0;slot<3;slot++) {
-            if(slotIndex[i][slot]<0||slot==last)continue;
-            double rk=ratio(variables,offset,i,slot),denominator=0;
-            for(int j=0;j<3;j++)if(slotIndex[i][j]>=0)denominator+=j==slot?1:DeterministicMath.exp(ratio(variables,offset,i,j)-rk);
-            out[slot][i]=amount/denominator;rest-=out[slot][i];
-        }
-        out[last][i]=rest;
-    }
-
-    private FluidThermodynamics.State decodedState(double[] variables,int offset,FluidThermodynamics.Prepared prepared,
-                                                   com.wormzjl.icheme.science.fluid.thermo.HydrocarbonModel.Tangent[] tangents,
-                                                   double[][] out,double t,double p) {
+        double t=350*DeterministicMath.exp(variables[offset+temperatureIndex]),p=1e5*DeterministicMath.exp(variables[offset+pressureIndex]);
         if(prepared!=null)prepared.carry(carried);
         var state=tangents==null?model.adoptingState(t,p,out[0],out[1],out[2],prepared):model.adoptingState(t,p,out[0],out[1],out[2],prepared,tangents);
         if(solidIndex<0)return state;
@@ -543,39 +491,6 @@ public final class PhaseLayout {
         if(solidIndex>=0){var target=junctionSolidTarget;System.arraycopy(solidReference,0,target,0,3);for(int i=0;i<3;i++)target[i]/=state.mass();solidRows(state,variables,offset,target,true,result);row+=3;}
         return row;
     }
-    /**
-     * Marks failed mixing rows whose state and target differ by at most four representable values. Returns the
-     * largest unweighted ulp of those rows, in dimensionless residual units. Other equations keep their own tests.
-     */
-    public double identifyMixingRoundoff(FluidThermodynamics.State state,double[] incomingMassFractions,
-                                         double incomingSpecificEnthalpy,double weight,double[] residual,
-                                         int offset,double tolerance,boolean[] rounded) {
-        var amounts=totals(state);
-        double quantum=0;
-        for(int index=0;index<junctionBasis.length-1;index++) {
-            int component=junctionBasis[index];
-            double actual=amounts[component]*model.molecularWeight(component)/state.mass();
-            double ulp=Math.max(Math.ulp(actual),Math.ulp(incomingMassFractions[component]));
-            if(mixingRoundoff(residual[offset+index],weight,ulp,tolerance)) {
-                rounded[offset+index]=true;
-                quantum=Math.max(quantum,ulp);
-            }
-        }
-        int energy=offset+junctionBasis.length;
-        double actual=state.enthalpy()/state.mass();
-        double ulp=Math.max(Math.ulp(actual),Math.ulp(incomingSpecificEnthalpy))/Math.max(1,energyScale/state.mass());
-        if(mixingRoundoff(residual[energy],weight,ulp,tolerance)) {
-            rounded[energy]=true;
-            quantum=Math.max(quantum,ulp);
-        }
-        return quantum;
-    }
-
-    private static boolean mixingRoundoff(double residual,double weight,double ulp,double tolerance) {
-        double error=Math.abs(residual);
-        return error>tolerance&&error/weight<=4*ulp;
-    }
-
     /** {@link FluidThermodynamics.State#totals} written into this layout's scratch (P-07): the same sums in the same order,
      * every element written; read by {@link #junctionRows} within the call. */
     private double[] totals(FluidThermodynamics.State state) {

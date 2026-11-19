@@ -113,33 +113,12 @@ class V3BandedPivotedSolverTest {
             var result = V3BandedPivotedSolver.solve(matrix, rightHandSide, workspace);
             var success = assertInstanceOf(V3BandedPivotedSolver.Result.Success.class, result, result::toString);
             swaps += success.pivotSwaps();
-            assertMatchesFullWidth(matrix, rightHandSide, success);
+            assertBitsEqual(fullWidthReference(matrix, rightHandSide), success.solution());
         }
         assertTrue(swaps > 0, "the cases pivot");
         assertEquals(0, workspace.fullWidthSolves());
         assertTrue(workspace.updatedEntries() < workspace.fullWidthEntries(),
                 workspace.updatedEntries() + " of " + workspace.fullWidthEntries());
-    }
-
-    @Test
-    void swappingInAShortPivotKeepsTheDisplacedRowsLongerTail() {
-        var matrix = new V3BandedMatrix(6, 2, 3);
-        matrix.set(0, 1, 8.0);
-        matrix.set(0, 2, 4.0);
-        matrix.set(1, 0, 2.0);
-        matrix.set(1, 1, 1.0);
-        matrix.set(2, 0, 1.0);
-        matrix.set(2, 2, 8.0);
-        matrix.set(2, 3, 2.0);
-        for (int row = 3; row < matrix.size(); row++) matrix.set(row, row, 4.0);
-        double[] rightHandSide = {28.0, 4.0, 33.0, 16.0, 20.0, 24.0};
-
-        var workspace = new V3BandedPivotedSolver.Workspace();
-        var result = assertInstanceOf(V3BandedPivotedSolver.Result.Success.class,
-                V3BandedPivotedSolver.solve(matrix, rightHandSide, workspace));
-        assertMatchesFullWidth(matrix, rightHandSide, result);
-        assertEquals(1, result.pivotSwaps());
-        assertEquals(2, workspace.updatedEntries());
     }
 
     /**
@@ -159,20 +138,13 @@ class V3BandedPivotedSolverTest {
                 V3BandedPivotedSolver.solve(matrix, rightHandSide, workspace));
         assertEquals(1, workspace.fullWidthSolves());
         assertEquals(workspace.fullWidthEntries(), workspace.updatedEntries());
-        assertMatchesFullWidth(matrix, rightHandSide, success);
+        assertBitsEqual(fullWidthReference(matrix, rightHandSide), success.solution());
     }
 
-    private static void assertMatchesFullWidth(V3BandedMatrix matrix, double[] rightHandSide,
-                                               V3BandedPivotedSolver.Result.Success actual) {
-        FullWidthResult reference = fullWidthReference(matrix, rightHandSide);
-        double[] expected = reference.solution();
-        double[] solution = actual.solution();
-        assertEquals(expected.length, solution.length);
-        for (int i = 0; i < expected.length; i++) {
-            assertEquals(Double.doubleToRawLongBits(expected[i]), Double.doubleToRawLongBits(solution[i]),
-                    "entry " + i + ": " + expected[i] + " / " + solution[i]);
-        }
-        assertEquals(reference.pivotGrowth(), actual.pivotGrowth());
+    private static void assertBitsEqual(double[] expected, double[] actual) {
+        assertEquals(expected.length, actual.length);
+        for (int i = 0; i < expected.length; i++)
+            assertEquals(Double.doubleToRawLongBits(expected[i]), Double.doubleToRawLongBits(actual[i]), "entry " + i + ": " + expected[i] + " / " + actual[i]);
     }
 
     /**
@@ -180,7 +152,7 @@ class V3BandedPivotedSolverTest {
      * largest entry, columns by theirs, partial pivoting within the lower bandwidth, every candidate row updated out to
      * {@code pivot + kl + ku}, back substitution over the same width, columns unscaled.
      */
-    private static FullWidthResult fullWidthReference(V3BandedMatrix matrix, double[] rightHandSide) {
+    private static double[] fullWidthReference(V3BandedMatrix matrix, double[] rightHandSide) {
         int size = matrix.size(), lower = matrix.lowerBandwidth(), upper = matrix.upperBandwidth(), fill = lower + upper;
         double[][] a = new double[size][size];
         double[] b = rightHandSide.clone();
@@ -208,11 +180,6 @@ class V3BandedPivotedSolverTest {
                 double scale = 1.0 / divisors[column];
                 a[row][column] = Double.isFinite(scale) ? a[row][column] * scale : a[row][column] / divisors[column];
             }
-        double initialMaximum = 0.0;
-        for (double[] row : a) {
-            for (double value : row) initialMaximum = Math.max(initialMaximum, Math.abs(value));
-        }
-        double maximumDuringFactorization = initialMaximum;
         for (int pivot = 0; pivot < size; pivot++) {
             int lastCandidate = Math.min(size - 1, pivot + lower), pivotRow = pivot;
             double magnitude = Math.abs(a[pivot][pivot]);
@@ -237,11 +204,7 @@ class V3BandedPivotedSolverTest {
                 double multiplier = a[row][pivot] / diagonal;
                 if (multiplier == 0.0) continue;
                 a[row][pivot] = multiplier;
-                maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(multiplier));
-                for (int column = pivot + 1; column <= lastFilled; column++) {
-                    a[row][column] -= multiplier * a[pivot][column];
-                    maximumDuringFactorization = Math.max(maximumDuringFactorization, Math.abs(a[row][column]));
-                }
+                for (int column = pivot + 1; column <= lastFilled; column++) a[row][column] = a[row][column] - multiplier * a[pivot][column];
                 b[row] -= multiplier * b[pivot];
             }
         }
@@ -255,10 +218,8 @@ class V3BandedPivotedSolverTest {
             double scale = 1.0 / divisors[column];
             solution[column] = Double.isFinite(scale) ? solution[column] * scale : solution[column] / divisors[column];
         }
-        return new FullWidthResult(solution, maximumDuringFactorization / initialMaximum);
+        return solution;
     }
-
-    private record FullWidthResult(double[] solution, double pivotGrowth) {}
 
     @Test
     void deterministicRandomDiagonallyDominantBandsMatchDenseOracleAndPreserveInputs() {

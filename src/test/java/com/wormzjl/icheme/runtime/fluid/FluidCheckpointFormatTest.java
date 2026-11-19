@@ -189,9 +189,8 @@ class FluidCheckpointFormatTest extends CertifyingRig.Islands {
         record Case(String reason,FluidThermodynamics model,CertificatePolicy policy,FluidCheckpointCodec.Image image) {}
         // Another replay revision: an older save's graph digest (64 hexadecimal digits, read back as such), and an older declared one.
         var digest=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withReplayRevision(entry,"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"));
-        var older=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withReplayRevision(entry,"replay-1"));
-        var preceding=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withReplayRevision(entry,"replay-3"));
-        assertNotEquals("replay-3",IslandCertificate.REPLAY_REVISION);
+        var older=CheckpointImages.withIsland(image,2,key->key.on(model),entry->withReplayRevision(entry,"replay-0"));
+        assertNotEquals("replay-0",IslandCertificate.REPLAY_REVISION);
         var cases=List.of(
                 new Case("property revision",FluidThermodynamics.forNetwork(MaterialCatalog.bundled(),com.wormzjl.icheme.science.fluid.thermo.FluidMaterialCatalog.NETWORK_PACKAGE,10, FluidThermodynamics.DEFAULT_TRACE_CUTOFF_MOLE_FRACTION),defaults,image),
                 new Case("certificate policy",model,new CertificatePolicy(true,1e-8,1e-6,17_280,2,0),image),
@@ -200,7 +199,7 @@ class FluidCheckpointFormatTest extends CertifyingRig.Islands {
                 new Case("certificate policy",model,new CertificatePolicy(true,1e-7,1e-6,17_280,3,0),image),
                 new Case("certificate policy",model,new CertificatePolicy(true,1e-7,1e-6,17_280,2,60),image),
                 new Case("replay revision",model,defaults,digest),
-                new Case("replay revision",model,defaults,older),new Case("replay revision",model,defaults,preceding));
+                new Case("replay revision",model,defaults,older));
         assertNotEquals(model.revision(),cases.getFirst().model().revision());
         assertEquals(model.thermodynamicRevision(),cases.getFirst().model().thermodynamicRevision(),"a velocity limit leaves the saved inventory readable");
         for(var c:cases) {

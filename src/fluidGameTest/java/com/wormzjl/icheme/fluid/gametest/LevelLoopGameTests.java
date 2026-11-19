@@ -271,7 +271,6 @@ public final class LevelLoopGameTests {
                 }))
                 // Both loops CONTROLLING on their menus and a cadence more.
                 .thenWaitUntil(until(helper, world, state, 2400, "waiting for both loops to control", () -> {
-                    pace(world, state);
                     if (!state.shown(state.watcher, state.licBox, state.levelSensor).startsWith("CONTROLLING")
                             || !state.shown(state.ficWatcher, state.ficBox, state.flowSensor).startsWith("CONTROLLING")) return false;
                     if (state.controlling < 0) state.controlling = committed(world, state);

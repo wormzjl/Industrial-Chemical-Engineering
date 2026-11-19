@@ -83,7 +83,7 @@ public final class SparseLuSolver {
         private int generation;
         private boolean verified;
         private SparseMatrix matrix;
-        private int[] permutation=new int[0],inverse=new int[0],originalEntryAtRow=new int[0];
+        private int[] permutation=new int[0],inverse=new int[0];
         private double[] rowScale=NO_VALUES,scaledValues=NO_VALUES,rowNorm=NO_VALUES;
         private double[] rhsWorkspace=NO_VALUES,residualWorkspace=NO_VALUES,magnitudeWorkspace=NO_VALUES;
         /** The LU (finding P-17: EJML's up-looking LU, bit for bit, with each column's reach kept) and the columns handed to
@@ -114,37 +114,33 @@ public final class SparseLuSolver {
             // Everything below overwrites the previous factorization, including on failure.
             generation++;verified=false;this.matrix=matrix;permutation=ordering.permutation;
             if(rowScale.length<size) {
-                rowScale=new double[size];rowNorm=new double[size];inverse=new int[size];originalEntryAtRow=new int[size];
+                rowScale=new double[size];rowNorm=new double[size];inverse=new int[size];
                 rhsWorkspace=new double[size];residualWorkspace=new double[size];magnitudeWorkspace=new double[size];
             }
-            if(scaledValues.length<nonzeros) {
-                // Numerical zeros can change on each Jacobian even when the declared sparsity is fixed.
-                int capacity=Math.max(nonzeros,scaledValues.length+scaledValues.length/2);
-                scaledValues=new double[capacity];aRows=new int[capacity];aValues=new double[capacity];
-            }
+            if(scaledValues.length<nonzeros)scaledValues=new double[nonzeros];
             Arrays.fill(rowScale,0,size,0);Arrays.fill(rowNorm,0,size,0);
             if(size==0)return new Factorization(this);
             for(int entry=0;entry<nonzeros;entry++){int row=matrix.rowAt(entry);rowScale[row]=Math.max(rowScale[row],Math.abs(matrix.valueAt(entry)));}
             for(int row=0;row<size;row++)if(rowScale[row]==0)throw new SolveFailure("Singular matrix: empty or zero row "+row);
             for(int e=0;e<nonzeros;e++){int row=matrix.rowAt(e);scaledValues[e]=matrix.valueAt(e)/rowScale[row];rowNorm[row]+=Math.abs(scaledValues[e]);}
             if(aColumns.length<size+1)aColumns=new int[size+1];
+            if(aRows.length<nonzeros){aRows=new int[nonzeros];aValues=new double[nonzeros];}
             if(permutedRhs.length<size){permutedRhs=new double[size];permutedSolution=new double[size];}
             for(int old=0;old<size;old++)inverse[permutation[old]]=old;
             int stored=0;
             for(int column=0;column<size;column++) {
                 int original=inverse[column];aColumns[column]=stored;
-                for(int entry=matrix.columnStart(original);entry<matrix.columnEnd(original);entry++) {
-                    if(matrix.valueAt(entry)==0)continue;
-                    int row=permutation[matrix.rowAt(entry)];
-                    aRows[stored++]=row;
-                    originalEntryAtRow[row]=entry;
+                for(int entry=matrix.columnStart(original);entry<matrix.columnEnd(original);entry++)if(matrix.valueAt(entry)!=0) {
+                    int row=matrix.rowAt(entry);aRows[stored]=permutation[row];aValues[stored++]=scaledValues[entry];
                 }
-                // Rows are unique, so their ascending order is exactly EJML's sortIndices order.
-                int start=aColumns[column];
-                Arrays.sort(aRows,start,stored);
-                for(int entry=start;entry<stored;entry++)aValues[entry]=scaledValues[originalEntryAtRow[aRows[entry]]];
             }
             aColumns[size]=stored;
+            // Each column's rows ascending, as EJML's sortIndices left them (rows are unique, so the order is the only one).
+            for(int column=0;column<size;column++)for(int p=aColumns[column]+1;p<aColumns[column+1];p++) {
+                int row=aRows[p];double value=aValues[p];int q=p-1;
+                while(q>=aColumns[column]&&aRows[q]>row){aRows[q+1]=aRows[q];aValues[q+1]=aValues[q];q--;}
+                aRows[q+1]=row;aValues[q+1]=value;
+            }
             var seen=observer;if(seen!=null)seen.factored(size,Arrays.copyOf(aColumns,size+1),Arrays.copyOf(aRows,stored),Arrays.copyOf(aValues,stored));
             if(!lu.factor(size,aColumns,aRows,aValues))throw new SolveFailure("Sparse LU rejected a singular matrix");
             return new Factorization(this);

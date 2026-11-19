@@ -15,7 +15,7 @@ Status words:
 | Batch | Purpose | Status |
 |---|---|---|
 | [2026-11-18-furnace-model/](2026-11-18-furnace-model/README.md) | Furnace leg faces and burner fuel pipe joints | In progress since 2026-11-18 |
-| [2026-11-18-junction-lag/](2026-11-18-junction-lag/README.md) | Same-slice heat and composition, D46, replay and solver cost | In progress since 2026-11-18 |
+| [2026-11-18-junction-lag/](2026-11-18-junction-lag/README.md) | Junction thermal fronts and same-slice feed enthalpy | In progress since 2026-11-18 |
 | [2026-11-18-unloaded-chunks/](2026-11-18-unloaded-chunks/README.md) | Unloaded plant operation, remote controls and blast reconciliation | In progress since 2026-11-18 |
 | [2026-11-18-default-equipment-names/](2026-11-18-default-equipment-names/README.md) | Constructor-built equipment takes a default plant tag (P-101) as its name | In progress since 2026-11-18 (built and tested; GameTest not run, not seen in a client) |
 | [2026-11-18-co2-column-input/](2026-11-18-co2-column-input/README.md) | CO2 in the gas intake's air; a column with CO2 in its feed solves, dry ice decided by the crystal equilibrium of its products and coldest tray | In progress since 2026-11-18 (built and tested; owner items O1, O2) |

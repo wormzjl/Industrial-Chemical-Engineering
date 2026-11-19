@@ -126,9 +126,7 @@ import java.util.function.Function;
  */
 public final class FluidCheckpointCodec {
     /** The state format: the core record's {@code StateFormat} and every unit's state section. */
-    public static final int VERSION=57;
-    // Format 53 stored a junction's flowing solids using its inventory's populations.
-    static boolean readableState(int version){return version==VERSION||version==56||version==55||version==53;}
+    public static final int VERSION=53;
     /** The most wall cells a saved heat side holds (crossflow 64, Standard 8, an air cooler's flat wall 1). */
     private static final int MAXIMUM_WALL_CELLS=64;
     /** The envelope: the core record's frame, the unit header and the section layout. Frozen. */
@@ -241,7 +239,7 @@ public final class FluidCheckpointCodec {
         var world=worldFacts(data,s);
         // The islands compiled the removed one-block movers: their state cannot be used, and the load rebuilds them from the facts.
         if(!world.removedMovers().isEmpty())throw new IllegalArgumentException("its one-block movers "+world.removedMovers()+" were removed");
-        if(!readableState(s.stateFormat()))throw new IllegalArgumentException("The topology's state is of format "+s.stateFormat()+"; this build reads "+VERSION);
+        if(s.stateFormat()!=VERSION)throw new IllegalArgumentException("The topology's state is of format "+s.stateFormat()+"; this build reads "+VERSION);
         var state=FluidFacts.topologyState(data,s.stateOffset(),s.stateLength());
         var model=new FluidThermodynamics[1];
         var snapshot=world.snapshot(onlineTick,state.events(),saved->{
@@ -374,8 +372,6 @@ public final class FluidCheckpointCodec {
                 w.varint(count);stream(w,p.forward());stream(w,p.reverse());
             }
             w.varint(r.towers().size());for(var towerEntry:new TreeMap<>(r.towers()).entrySet()){w.i64(towerEntry.getKey());towerRates(w,towerEntry.getValue());}
-            w.varint(r.radiantDemands().size());
-            for(var demand:new TreeMap<>(r.radiantDemands()).entrySet()){w.i64(demand.getKey());w.f64(demand.getValue());}
         }
         if(persisted.isEmpty())w.u8(0);
         else {
@@ -523,12 +519,6 @@ public final class FluidCheckpointCodec {
         for(var n:graph.reservoirs()) {
             var inventory=n.inventory();var s=n.state();
             w.sparse(inventory.moles());w.f64(inventory.internalEnergy());solids(w,inventory.solids());w.bool(inventory.rigid());
-            if(n.junction()) {
-                solids(w,s.solids());
-                var reserve=inventory.reserve();
-                w.bool(reserve!=null);
-                if(reserve!=null){w.sparse(reserve.moles());w.f64(reserve.enthalpy());}
-            }
             w.f64(s.temperature());w.f64(s.pressure());w.sparse(s.vaporAmountsView());w.sparse(s.liquidAmountsView());w.sparse(s.aqueousAmountsView());
         }
         for(var p:graph.pipes()) {
@@ -613,7 +603,7 @@ public final class FluidCheckpointCodec {
     }
     /** {@link #island} with the unit's sections and facts already read. */
     static IslandEntry island(byte[] data,IndexRow row,Sections s,FluidFacts.Island facts,long epoch,Strings strings,Map<PackageKey,FluidThermodynamics> models) {
-        if(!readableState(s.stateFormat()))throw new IllegalArgumentException("The state of island "+row.id+" is of format "+s.stateFormat()+"; this build reads "+VERSION);
+        if(s.stateFormat()!=VERSION)throw new IllegalArgumentException("The state of island "+row.id+" is of format "+s.stateFormat()+"; this build reads "+VERSION);
         var entry=islandState(data,s,row,epoch,strings,models);
         String difference=!facts.dimension().equals(entry.dimension)||!facts.packageId().equals(entry.packageId)?"its dimension or package"
                 :!facts.components().equals(models.get(entry.key()).components())?"its component axis":FluidFacts.disagreement(facts,entry.snapshot.graph(),row.committed);
@@ -638,7 +628,7 @@ public final class FluidCheckpointCodec {
             if(fences.put(event,tick)!=null)throw r.invalid("duplicate fence "+event);
             if(tick<row.committed)throw new IllegalArgumentException("Island "+id+": fence "+event+" at tick "+tick+" precedes the committed tick "+row.committed);
         }
-        var topology=topology(r);var graph=state(r,topology,model,s.stateFormat());
+        var topology=topology(r);var graph=state(r,topology,model);
         Optional<PassiveIntervalSolver.Result> result=Optional.empty();
         if(r.bool()) {
             int pipes=graph.pipes().size();
@@ -656,25 +646,14 @@ public final class FluidCheckpointCodec {
                 throw new IllegalArgumentException("Invalid saved interval history: a closed connection with an end flow");
             var towers=new TreeMap<Long,com.wormzjl.icheme.science.fluid.network.TowerExchange.Rates>();
             int towerCount=r.varint(MAXIMUM_NODES);for(int k=0;k<towerCount;k++){long towerId=r.i64();if(towers.put(towerId,towerRates(r))!=null)throw r.invalid("Duplicate tower reading");}
-            Map<Long,Double> demands=new HashMap<>();
-            if(s.stateFormat()>=57) {
-                int count=r.varint(graph.pipes().size());
-                var radiant=new HashSet<Long>();
-                for(var pipe:graph.pipes())if(pipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil)radiant.add(pipe.id());
-                for(int i=0;i<count;i++) {
-                    long pipe=r.i64();double watts=r.f64();
-                    if(watts<0||!radiant.remove(pipe))throw r.invalid("Invalid radiant demand reading");
-                    demands.put(pipe,watts);
-                }
-            }
-            result=Optional.of(new PassiveIntervalSolver.Result(graph,seconds,flows,accepted,rejected,pumpWork,boundaries,reasons,endpointModes,heads,endFlows,transfers,List.of(),towers,demands));
+            result=Optional.of(new PassiveIntervalSolver.Result(graph,seconds,flows,accepted,rejected,pumpWork,boundaries,reasons,endpointModes,heads,endFlows,transfers,List.of(),towers));
         }
         IslandCertificate.Signature signature=null;PassiveNetwork certifiedFrom=null;
         if(r.bool()) {
             String revision=strings.get(r.varint(Integer.MAX_VALUE),"certificate of island "+id),policy=strings.get(r.varint(Integer.MAX_VALUE),"certificate of island "+id);
             String replay=replayRevision(r.raw(REPLAY_FIELD));
             try{signature=new IslandCertificate.Signature(revision,policy,replay);}catch(IllegalArgumentException invalid){throw new IllegalArgumentException("Island "+id+": "+invalid.getMessage());}
-            certifiedFrom=related(r,r.u8(),graph,topology,model,s.stateFormat());
+            certifiedFrom=related(r,r.u8(),graph,topology,model);
         }
         r.end();
         if(row.online>epoch)throw new IllegalArgumentException("Island "+id+" at online tick "+row.online+" is ahead of the checkpoint's world epoch "+epoch);
@@ -695,11 +674,11 @@ public final class FluidCheckpointCodec {
         var certified=new IslandCoordinator.Certified(rebuilt.drift(),row.since,row.base,row.horizon,rebuilt.largestFlow(),Optional.of(persisted));
         return new IslandEntry(dimension,packageId,compounds,wet,new IslandCoordinator.Snapshot(id,row.revision,rebuilt.graphAt(row.committed),clock,result,status,fences,Optional.of(certified),generation));
     }
-    private static PassiveNetwork related(Reader r,int flag,PassiveNetwork main,Topology topology,FluidThermodynamics model,int version) {
+    private static PassiveNetwork related(Reader r,int flag,PassiveNetwork main,Topology topology,FluidThermodynamics model) {
         return switch(flag) {
             case 1->main;
-            case 2->state(r,topology,model,version);
-            case 3->state(r,topology(r),model,version);
+            case 2->state(r,topology,model);
+            case 3->state(r,topology(r),model);
             default->throw r.invalid("unknown graph reference "+flag);
         };
     }
@@ -725,19 +704,13 @@ public final class FluidCheckpointCodec {
         }
         return new Topology(ids,elevations,kinds,volumes,heights,opens,geometries,pools,towers,blankets,pipeIds,first,second,sections,controls,firstPorts,secondPorts,forbiddenDirections,actuatorAreas,heats);
     }
-    private static PassiveNetwork state(Reader r,Topology t,FluidThermodynamics model,int version) {
+    private static PassiveNetwork state(Reader r,Topology t,FluidThermodynamics model) {
         var nodes=new ArrayList<PassiveNetwork.Reservoir>(t.ids.length);
         for(int n=0;n<t.ids.length;n++) {
             var moles=r.sparse(MAXIMUM_ARRAY);double energy=r.f64();var solids=solids(r,model);boolean rigid=r.bool();
-            boolean junction=t.kinds[n]==PassiveNetwork.NodeKind.JUNCTION;
-            var streamSolids = version>=55 && junction ? solids(r,model) : solids;
-            var reserve = version>=56 && junction && r.bool()
-                    ? new PassiveNetwork.JunctionReserve(r.sparse(MAXIMUM_ARRAY),r.f64()) : null;
             double temperature=r.f64(),pressure=r.f64();var vapor=r.sparse(MAXIMUM_ARRAY);var liquid=r.sparse(MAXIMUM_ARRAY);var aqueous=r.sparse(MAXIMUM_ARRAY);
-            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n],rigid).withBlanket(t.blankets[n]).withReserve(reserve);
-            boolean solidOnly = !streamSolids.empty() && Arrays.stream(vapor).sum()==0
-                    && Arrays.stream(liquid).sum()==0 && Arrays.stream(aqueous).sum()==0;
-            var state=solidOnly?model.solidState(temperature,pressure,streamSolids):model.state(temperature,pressure,vapor,liquid,aqueous).withSolids(streamSolids);
+            var inventory=new PassiveNetwork.Inventory(t.volumes[n],moles,energy,solids,t.heights[n],t.opens[n],t.geometries[n],t.pools[n],t.towers[n],rigid).withBlanket(t.blankets[n]);
+            var state=Arrays.stream(moles).sum()==0&&!solids.empty()?model.solidState(temperature,pressure,solids):model.state(temperature,pressure,vapor,liquid,aqueous).withSolids(solids);
             nodes.add(new PassiveNetwork.Reservoir(t.ids[n],t.elevations[n],state,t.kinds[n],inventory));
         }
         var pipes=new ArrayList<PassiveNetwork.Pipe>(t.pipeIds.length);

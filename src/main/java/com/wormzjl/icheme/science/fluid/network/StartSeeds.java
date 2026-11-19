@@ -16,7 +16,6 @@ import com.wormzjl.icheme.science.fluid.solver.PhaseLayout;
 import com.wormzjl.icheme.science.fluid.solver.StepPhaseRules;
 import com.wormzjl.icheme.science.fluid.state.SolidInventory;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
-import com.wormzjl.icheme.science.machine.CentrifugalPump;
 import java.util.*;
 
 /**
@@ -24,12 +23,12 @@ import java.util.*;
  * the node seeds of the first pass ({@link #initialPhaseSeeds}: each vessel's committed layout with what is about to
  * arrive, each junction laid out for its step's mixture, {@link #arrivingPhases}), and the junctions a vapour first
  * appears in seeded where their connections settle them ({@link #flashSeeds}). One per solver
- * ({@code PassiveStepSolver.seeding}), built with it; it reads the solver's carried point, balance start, solve
+ * ({@code PassiveStepSolver.seeding}), built with it; it reads the solver's carried point, balance law flows, solve
  * constants and laws through {@code solver} and holds no state of its own (S-01, batch 2026-11-13-codebase-review, D-S5:
  * moved out of the solver with every body unchanged but its qualifiers).
  */
 final class StartSeeds {
-    /** The solver whose passes this starts: its carried point, its balance start, its solve constants and its laws. */
+    /** The solver whose passes this starts: its carried point, its balance law flows, its solve constants and its laws. */
     private final PassiveStepSolver solver;
     /** The solver's thermodynamics, the same object. */
     private final FluidThermodynamics model;
@@ -87,7 +86,7 @@ final class StartSeeds {
             var stream=PortStreams.endStream(model,graph.reservoirs().get(flow>=0?pipe.first():pipe.second()).state(),pipe.drawPort(flow),pipe.volume());
             if(stream==null)continue;
             // The stream is per kilogram of fluid; the start flows are the law's, delivered at their saturation ({@link #transported}).
-            double mass=Math.min(seed.mass()*.25,dt*Math.abs(transported(graph,pipe,flow,true)));
+            double mass=Math.min(seed.mass()*.25,dt*Math.abs(transported(graph,pipe,flow)));
             for(int label:new int[]{FluidThermodynamics.GAS,FluidThermodynamics.OIL,FluidThermodynamics.AQUEOUS}) {
                 int from=stream.slot(label);if(from<0||FluidThermodynamics.holdsPhase(seed,label))continue;
                 int to=label==FluidThermodynamics.GAS?FluidThermodynamics.State.VAPOR:freeLiquidSlot(slots);
@@ -155,34 +154,21 @@ final class StartSeeds {
      * with it ({@link Seeded}). */
     Seeded arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,double[] flows,double[][] draws,boolean vesselsOnly,List<FlowControl.Mode> modes,
                                   boolean[] boundaryClosed,double dt,Runnable checkpoint) {
-        return arrivingPhases(graph,seeds,flows,draws,vesselsOnly,modes,boundaryClosed,dt,checkpoint,null);
-    }
-    /** As above, with the transported flows that the pass's own phase rates were evaluated at, when available. */
-    Seeded arrivingPhases(PassiveNetwork graph,List<FluidThermodynamics.State> seeds,double[] flows,double[][] draws,boolean vesselsOnly,
-                         List<FlowControl.Mode> modes,boolean[] boundaryClosed,double dt,Runnable checkpoint,double[] deliveredFlows) {
         int nodes=graph.reservoirs().size();
         List<FluidThermodynamics.State> result=null;
-        // Flows and phase draws stay fixed for this propagation. After a sweep, only a changed seed
-        // or one of its downstream neighbours can produce a different mixture on the next visit.
-        boolean[] revisit=new boolean[nodes];
-        Arrays.fill(revisit,true);
         for(int round=0;round<=nodes;round++) {
             boolean changed=false;
             for(int j=0;j<nodes;j++) {
-                if(!revisit[j])continue;
-                revisit[j]=false;
                 var node=graph.reservoirs().get(j);boolean empty=holdsNoFluidVessel(node);if(!(node.junction()&&!node.fixed()&&!vesselsOnly||empty))continue;
                 var current=result==null?seeds:result;var seed=current.get(j);
                 if(empty&&!dry(node,seed))continue;
-                var stockMoles=node.inventory().moles();
-                double[] n=empty?stockMoles.clone():new double[stockMoles.length];
-                double heldMass=solver.molarMass(stockMoles),mass=empty?heldMass:0,weighted=mass*node.state().temperature(),heat=0;boolean arrives=false;
+                double[] n=node.inventory().moles().clone();double heldMass=solver.molarMass(n),mass=heldMass,weighted=heldMass*node.state().temperature(),heat=0;boolean arrives=false;
                 for(int edge=0;edge<flows.length;edge++) {
                     var pipe=graph.pipes().get(edge);double flow=flows[edge];
                     if(!(Math.abs(flow)>0)||(flow>=0?pipe.second():pipe.first())!=j||!boundaryAllowed(graph,pipe,flow))continue;
                     int donor=flow>=0?pipe.first():pipe.second();var stream=current.get(donor);var port=pipe.drawPort(flow);
                     var rates=draws==null?null:draws[edge];var drawn=rates==null?null:PortStreams.drawnStream(model,rates,stream,graph.reservoirs().get(donor).state());
-                    double rate=Math.abs(deliveredFlows==null?transported(graph,pipe,flow,true):deliveredFlows[edge]),delivered=dt*rate,streamMass=drawn!=null?1:PortStreams.endMass(model,stream,port,pipe.volume());double[] moles=drawn!=null?drawn:PortStreams.endMoles(model,stream,port,pipe.volume());
+                    double rate=Math.abs(transported(graph,pipe,flow)),delivered=dt*rate,streamMass=drawn!=null?1:PortStreams.endMass(model,stream,port,pipe.volume());double[] moles=drawn!=null?drawn:PortStreams.endMoles(model,stream,port,pipe.volume());
                     for(int c=0;c<n.length;c++)n[c]+=delivered*moles[c]/streamMass;
                     var through=solver.delivered(graph,pipe,drawn!=null?drawn[n.length]:PortStreams.endSpecificEnthalpy(model,stream,port,pipe.volume()),stream.temperature(),Math.copySign(rate,flow),checkpoint);
                     mass+=delivered;weighted+=delivered*through[1];arrives=true;
@@ -198,22 +184,14 @@ final class StartSeeds {
                     var own=emptyBagSplit(node,weighted/mass,n,heat,checkpoint);
                     if(result==null)result=new ArrayList<>(seeds);
                     var arrived=own==null?delivered:own;var held=node.inventory().solids();
-                    result.set(j,held.empty()?arrived:arrived.withSolids(held));
-                    revisitDownstream(graph,flows,j,revisit);changed=true;continue;
+                    result.set(j,held.empty()?arrived:arrived.withSolids(held));changed=true;continue;
                 }
                 // Where nothing arrives the mixture is the stock alone, which the seed must hold as well.
                 if(!(heldMass>0))continue;
                 // The stock as the junction's rows mix it (D46): the buffer's amounts and its energy field (enthalpy form), fluid only.
                 var buffer=node.inventory();var at=node.state();
-                double share=JunctionMixing.share(buffer,heldMass+buffer.solids().massKg(),mass/dt,dt,model.time());
-                for(int c=0;c<n.length;c++)n[c]+=share*stockMoles[c];
-                heldMass*=share;
-                mass+=heldMass;
-                weighted+=heldMass*at.temperature();
-                double stock=share*(buffer.internalEnergy()-buffer.solids().moments().enthalpy(at.temperature(),at.pressure()));
-                // This flash carries only the fluid. The seed's solid moments are attached after the split.
-                double seedFluidMass=seed.mass()-seed.solidMoments().mass();
-                double scale=seedFluidMass>0?seedFluidMass/mass:1,enthalpy=(stock+heat)*scale;
+                double stock=buffer.internalEnergy()-buffer.solids().moments().enthalpy(at.temperature(),at.pressure());
+                double scale=seed.mass()/mass,enthalpy=(stock+heat)*scale;
                 for(int c=0;c<n.length;c++)n[c]*=scale;
                 FluidThermodynamics.State engine;
                 try{var split=model.equilibriumPH(weighted/mass,seed.pressure(),enthalpy,n,checkpoint);engine=split!=null?split:model.flashTP(weighted/mass,seed.pressure(),n,checkpoint);}
@@ -222,40 +200,19 @@ final class StartSeeds {
                 // that keeps at least half its stock over the step is stated by that stock: its seed is the stock's mixture
                 // whatever it is laid out for (stocked).
                 boolean stocked=stocked(j,seed,seeds,heldMass,mass);
-                // The phase mask alone also fits an isothermal change of mixture. Start the amounts
-                // on the same incoming composition as the implicit rows when that change is resolved.
-                boolean front = false;
-                var currentAmounts = PhaseLayout.totalAmounts(seed);
-                for (int c = 0; c < n.length; c++) {
-                    if (Math.abs(n[c]-currentAmounts[c])*model.molecularWeight(c) > 1e-6*seedFluidMass) {
-                        front = true;
-                        break;
-                    }
-                }
-                if(!stocked && !front && Math.abs(engine.temperature()-seed.temperature()) <= .5 && laidOutFor(phaseCode(model.folded(engine,true)),phaseCode(seed)))continue;
+                if(!stocked&&laidOutFor(phaseCode(model.folded(engine,true)),phaseCode(seed)))continue;
                 // The engine's answer is the start of the junction's own split, not its verdict (D26): its rows decide the phase.
                 var own=StepPhaseRules.junctionSplit(model,n,enthalpy,solver.molarMass(n),seed.pressure(),engine,checkpoint);
                 if(own==null)continue;
                 var mixture=model.folded(own,true);
-                if(!stocked && !front && Math.abs(mixture.temperature()-seed.temperature()) <= .5 && laidOutFor(phaseCode(mixture),phaseCode(seed)))continue;
+                if(!stocked&&laidOutFor(phaseCode(mixture),phaseCode(seed)))continue;
                 if(result==null)result=new ArrayList<>(seeds);
-                result.set(j,mixture.withSolidState(seed.solids(),seed.solidMoments()));
-                revisitDownstream(graph,flows,j,revisit);changed=true;
+                result.set(j,mixture.withSolidState(seed.solids(),seed.solidMoments()));changed=true;
             }
             if(!changed)break;
         }
         return result==null?new Seeded(seeds,null):flashSeeds(graph,modes,boundaryClosed,seeds,result,checkpoint);
     }
-
-    private static void revisitDownstream(PassiveNetwork graph,double[] flows,int changed,boolean[] revisit) {
-        revisit[changed]=true;
-        for(int edge=0;edge<flows.length;edge++) {
-            var pipe=graph.pipes().get(edge);
-            if(flows[edge]>0&&pipe.first()==changed)revisit[pipe.second()]=true;
-            else if(flows[edge]<0&&pipe.second()==changed)revisit[pipe.first()]=true;
-        }
-    }
-
     /**
      * Whether junction {@code j} of a cold solve is seeded by its stock: its {@code seed} is the balance's restatement
      * ({@link BalanceStart#balanceStart}), not its own state, and the step's start flows bring it no more than it holds
@@ -268,7 +225,7 @@ final class StartSeeds {
      */
     private boolean stocked(int j,FluidThermodynamics.State seed,List<FluidThermodynamics.State> seeds,double heldMass,double mass) {
         var supplyGraph=solver.constants.supplyGraph;
-        return solver.balancedStart!=null&&supplyGraph!=null&&j<supplyGraph.reservoirs().size()&&seed==seeds.get(j)
+        return solver.balanceLawFlows!=null&&supplyGraph!=null&&j<supplyGraph.reservoirs().size()&&seed==seeds.get(j)
                 &&seed!=supplyGraph.reservoirs().get(j).state()&&heldMass>=mass-heldMass;
     }
     /**
@@ -303,11 +260,9 @@ final class StartSeeds {
                 ||graph.pipes().stream().anyMatch(pipe->phaseCode(graph.reservoirs().get(pipe.first()).state())!=phaseCode(graph.reservoirs().get(pipe.second()).state()));
         // At a job start the previous point is the committed interval's endpoint; see {@link PassiveStepSolver#replayStart}.
         boolean previousAvailable=!passStart.lawFlowsFromBalance()&&solver.carriedPoint(graph,pipeIdentities);
-        // With no carried point, use the balance's flows and any corresponding pump heads. On an island left alone by
-        // the balance, estimate each flow from its connection's law on the end states.
-        var balanced=solver.balancedStart;
-        if(balanced!=null&&balanced.lawFlows().length!=graph.pipes().size())balanced=null;
-        double[] estimate=warmFlow&&!previousAvailable?(balanced==null?solver.lawFlows(graph):balanced.lawFlows()):null;
+        // The balance's law flows ({@link BalanceStart#balanceStart}) where this point has no history to start from (a solve without a
+        // carried point balances first); each connection's own law on its ends' states on an island the balance leaves alone.
+        double[] estimate=warmFlow&&!previousAvailable?(solver.balanceLawFlows!=null&&solver.balanceLawFlows.length==graph.pipes().size()?solver.balanceLawFlows:solver.lawFlows(graph)):null;
         for(int i=0;i<graph.pipes().size();i++) {
             var pipe=graph.pipes().get(i);var a=graph.reservoirs().get(pipe.first());var b=graph.reservoirs().get(pipe.second());
             if(boundaryClosed[i]||modes.get(i)==FlowControl.Mode.CLOSED)continue;
@@ -316,9 +271,6 @@ final class StartSeeds {
                 // start from, however small: the pass loop tolerates one below 1e-10 kg/s at a converged point, and carried
                 // into the next step a Newton that converges without an iteration kept it there for good. It starts at rest.
                 flows[i]=boundaryAllowed(graph,pipe,solver.carry.lawFlows()[i])?solver.carry.lawFlows()[i]:0;heads[i]=solver.carry.heads()[i]/1e5;headSet[i]=true;
-                if(modes.get(i)==FlowControl.Mode.VALVE_OPEN&&solver.carry.modes().get(i)==FlowControl.Mode.CLOSED
-                        &&pipe.control() instanceof FlowControl.ControlValve valve&&PortPlan.COLUMN_SENSOR.equals(valve.sensor()))
-                    heads[i]=0;
                 if(modes.get(i)==FlowControl.Mode.VALVE_REGULATING&&pipe.control() instanceof FlowControl.Valve valve&&valve.pressureControl()) {
                     double predictedDrop=a.state().pressure()-(seeds==null?a.state():seeds.get(pipe.first())).pressure();
                     if(predictedDrop>0)flows[i]*=Math.clamp((a.state().pressure()-valve.targetPressure())/predictedDrop,0,1);
@@ -333,10 +285,6 @@ final class StartSeeds {
             if(!warmFlow)continue;
             // Decision D54: a dry end gives nothing, so an estimate out of one starts at rest (A190's rule for a carried flow).
             flows[i]=outOfDryEnd(graph,pipe,estimate[i])?0:estimate[i];
-            if(balanced!=null&&balanced.pumpHeads()!=null&&modes.get(i)==FlowControl.Mode.MOVER_LAW&&Double.isFinite(balanced.pumpHeads()[i])) {
-                heads[i]=balanced.pumpHeads()[i]/1e5;
-                headSet[i]=true;
-            }
         }
         if(passStart.flashRestated()!=null&&seeds!=null)restateFlashFlows(graph,modes,boundaryClosed,seeds,flows,passStart.flashRestated());
         if(!hasSolids(graph)&&graph.pipes().stream().noneMatch(pipe->pipe.filter()!=null))return;
@@ -363,11 +311,8 @@ final class StartSeeds {
     }
     /** The transported flow of connection {@code pipe} for the law's flow {@code lawFlow}: its saturation at the velocity
      * cap of the end it leaves, on that end's stream ({@link PassiveStepSolver#massFlowLimit}). */
-    private double transported(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double lawFlow,boolean fromStartPoint) {
-        // The balanced centrifugal start supplies the raw flow. A nominal estimate already carries the capped value.
-        boolean balancedCentrifugal=fromStartPoint&&solver.balancedStart!=null
-                &&pipe.control() instanceof FlowControl.Machine machine&&machine.law() instanceof CentrifugalPump;
-        if(pipe.control() instanceof FlowControl.Mover&&!(pipe.control() instanceof FlowControl.Pump)&&!balancedCentrifugal)return lawFlow;
+    private double transported(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double lawFlow) {
+        if(pipe.control() instanceof FlowControl.Mover)return lawFlow;
         var donor=graph.reservoirs().get(lawFlow>=0?pipe.first():pipe.second()).state();
         return saturated(lawFlow,solver.massFlowLimit(pipe,donor,pipe.drawPort(lawFlow)));
     }
@@ -487,7 +432,7 @@ final class StartSeeds {
             if(boundaryClosed[e]||mode==FlowControl.Mode.CLOSED||mode==FlowControl.Mode.INLET_WRONG_PHASE)continue;
             double law=solver.lawFlow(g,pipe,PortStreams.endPressure(model,g,pipe,pipe.first()),PortStreams.endPressure(model,g,pipe,pipe.second()));
             if(!boundaryAllowed(g,pipe,law))continue;
-            double q=transported(g,pipe,law,false);
+            double q=transported(g,pipe,law);
             net+=pipe.second()==j?q:-q;
         }
         return net;

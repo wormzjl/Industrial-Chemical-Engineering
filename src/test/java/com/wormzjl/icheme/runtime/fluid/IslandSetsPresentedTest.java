@@ -24,36 +24,18 @@ class IslandSetsPresentedTest {
         long island=w.registry.owner(sink);var from=w.coordinator.model(island);
         assertNotEquals(w.model.compounds(),from.compounds(),"the island carries its own compound list");
         var stored=w.coordinator.observe(island);var last=stored.lastResult().orElseThrow();
-        var presentation=new IslandSets.Presentation(w.model);
-        var shown=presentation.snapshot(stored,from);
-        var statusChange=new IslandCoordinator.Snapshot(island,stored.revision(),stored.graph(),stored.clock(),stored.lastResult(),"WAITING");
-        var updated=presentation.snapshot(statusChange,from);
-        assertEquals("WAITING",updated.status());
-        assertSame(shown.graph(),updated.graph());
-        assertSame(shown.lastResult().orElseThrow(),updated.lastResult().orElseThrow());
-        presentation.clear();
-        assertNotSame(shown.graph(),presentation.snapshot(stored,from).graph());
+        var shown=IslandSets.presented(stored,from,w.model);
         for(int i=0;i<stored.graph().reservoirs().size();i++)
             assertEquals(bits(IslandSets.paddedNode(stored.graph().reservoirs().get(i),from,w.model)),bits(shown.graph().reservoirs().get(i)),"node "+i);
         var result=shown.lastResult().orElseThrow();
-        assertEquals(stored.graph()==last.graph(),shown.graph()==result.graph(),"a preview can have a different graph from its last solve");
-        if(stored.graph()!=last.graph()) {
-            var atLastSolve=new IslandCoordinator.Snapshot(island,stored.revision(),last.graph(),stored.clock(),stored.lastResult(),stored.status());
-            var projected=IslandSets.presented(atLastSolve,from,w.model);
-            assertSame(projected.graph(),projected.lastResult().orElseThrow().graph(),"one projection for a shared source graph");
-        }
         // A generator to a void books no boundary transfer (its ends are reservoirs); any there is checked.
         for(int i=0;i<last.boundaries().size();i++)
             assertArrayEquals(IslandSets.boundary(last.boundaries().get(i),from,w.model).moles(),result.boundaries().get(i).moles(),"boundary "+i);
         assertFalse(last.pipeTransfers().isEmpty());
         for(int i=0;i<last.pipeTransfers().size();i++) {
             var t=last.pipeTransfers().get(i);var u=result.pipeTransfers().get(i);
-            var forward=t.forward().phaseMoles();var shownForward=u.forward().phaseMoles();
-            var reverse=t.reverse().phaseMoles();var shownReverse=u.reverse().phaseMoles();
-            for(int phase=0;phase<forward.length;phase++) {
-                assertArrayEquals(IslandSets.amounts(forward[phase],from,w.model),shownForward[phase],"forward "+i+" phase "+phase);
-                assertArrayEquals(IslandSets.amounts(reverse[phase],from,w.model),shownReverse[phase],"reverse "+i+" phase "+phase);
-            }
+            assertTrue(Arrays.deepEquals(IslandSets.stream(t.forward(),from,w.model).phaseMoles(),u.forward().phaseMoles()),"forward "+i);
+            assertTrue(Arrays.deepEquals(IslandSets.stream(t.reverse(),from,w.model).phaseMoles(),u.reverse().phaseMoles()),"reverse "+i);
         }
         assertSame(last.observations(),result.observations(),"the presentation carries the observations as stored");
         assertSame(last.observations(),w.coordinator.lastResult(island).orElseThrow().observations());

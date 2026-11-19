@@ -12,10 +12,13 @@ anything's drifting abnormally"). Not a gate; never committed under `src/`.
   half) and lists those beyond the bands: temperature 0.5 K/min, pressure 1 kPa/min and 1 %/min, mass, flow and heat
   1 %/min, level 1 cm/min, scatter 5 %. Per island: statuses, held samples, commit lag, rejected substeps.
 
-Use the review source set and an empty, disposable game directory. The fresh feed batch and saved-world soak write `junction-lag.csv` alongside its existing measurements. Each row covers consecutive commits on the same charge island and topology. Feed energy comes from the column port's booked exchange. Adding the change in downstream junction stock reconstructs the energy discharged by the radiant coils. Component amounts follow the same balance. Both temperatures are pressure–enthalpy flashes at the feed pressure. The firing flag describes the endpoint. The feed ID distinguishes columns in a saved world. A missing window, including the first observation, supplies no measurement.
+Run (no dev client open; one Gradle lane):
 
-```powershell
-.\gradlew.bat runReviewWorldServer -I tools/column-soak/unloaded-save.gradle -PunloadedSaveDir=tmp/column-soak/charge-review -PreviewBatch=review-column-soak-feed --max-workers=4
+```
+cp tools/column-soak/ColumnSoakReviewWorld.java src/fluidGameTest/java/com/wormzjl/icheme/fluid/gametest/
+./gradlew runReviewWorldServer -PreviewBatch=review-column-soak --max-workers=4
+python -I tools/column-soak/drift.py run/review-world
+rm src/fluidGameTest/java/com/wormzjl/icheme/fluid/gametest/ColumnSoakReviewWorld.java
 ```
 
 ## Unloaded plant review

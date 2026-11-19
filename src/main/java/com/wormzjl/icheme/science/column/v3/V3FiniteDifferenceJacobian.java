@@ -1,7 +1,6 @@
 package com.wormzjl.icheme.science.column.v3;
 
 import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoException;
-import com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -118,72 +117,44 @@ final class V3FiniteDifferenceJacobian {
             groups.computeIfAbsent(new ColorSlot(Math.floorMod(id.node(), STAGE_COLOR_COUNT), id.family(), id.component()),
                     ignored -> new ArrayList<>()).add(column);
         }
-        V3DryMeshState decoded = null;
-        V3MeshResidualEvaluator.ColoredProbes probes = null;
-        try {
-            // Encode/decode can round a flow. These properties must belong to the exact base the probes use.
-            decoded = coordinates.decode(base);
-            probes = evaluator.new ColoredProbes(decoded, workspaceFactory);
-        } catch (IllegalArgumentException | V3ThermoException outsideBase) {
-            // A moved coordinate may still be admissible even when the base cannot be restated.
-        }
-        double[] higher = new double[base.length], lower = new double[base.length];
-        int[][] rowsByNode = evaluator.rowsByNode(baseResidual);
-        for (var entry : groups.entrySet()) {
+        for (List<Integer> group : groups.values()) {
             control.checkpoint();
-            List<Integer> group = entry.getValue();
-            int[] nodes = new int[group.size()];
-            for (int i = 0; i < nodes.length; i++) nodes[i] = coordinates.unknowns().get(group.get(i)).id().node();
-            boolean high = coloredResidual(evaluator, coordinates, base, decoded, probes, group, nodes, entry.getKey().family(),
-                    differenceScale, 1, higher, workspaceFactory, control);
-            boolean low = coloredResidual(evaluator, coordinates, base, decoded, probes, group, nodes, entry.getKey().family(),
-                    differenceScale, -1, lower, workspaceFactory, control);
-            if (!high && !low) {
+            double[] higher = base.clone();
+            double[] lower = base.clone();
+            for (int column : group) {
+                double step = step(base[column], coordinates.unknowns().get(column).id().family(), differenceScale);
+                higher[column] += step;
+                lower[column] -= step;
+            }
+            V3MeshResidual higherResidual = feasibleResidual(evaluator, coordinates, higher, workspaceFactory, control);
+            V3MeshResidual lowerResidual = feasibleResidual(evaluator, coordinates, lower, workspaceFactory, control);
+            if (higherResidual == null && lowerResidual == null) {
                 for (int column : group) {
                     populateCentralColumn(evaluator, coordinates, base, baseResidual, frozenScales, workspaceFactory,
                             differenceScale, control, values, column);
                 }
                 continue;
             }
+            requireSameOrdering(baseResidual, higherResidual, lowerResidual);
             for (int column : group) {
                 int columnNode = coordinates.unknowns().get(column).id().node();
-                double step = step(base[column], entry.getKey().family(), differenceScale);
-                for (int node = Math.max(0, columnNode - 1); node <= Math.min(rowsByNode.length - 1, columnNode + 1); node++) {
-                    for (int row : rowsByNode[node]) {
-                        double upper = high ? higher[row] : baseResidual.physicalValue(row);
-                        double bottom = low ? lower[row] : baseResidual.physicalValue(row);
-                        double value = (upper / frozenScales[row] - bottom / frozenScales[row]) / (high && low ? 2.0 * step : step);
-                        requireFinite(value);
-                        values.set(row, column, value);
-                    }
+                double step = step(base[column], coordinates.unknowns().get(column).id().family(), differenceScale);
+                for (int row = 0; row < base.length; row++) {
+                    if (Math.abs(baseResidual.equation(row).node() - columnNode) > 1) continue;
+                    double value = higherResidual != null && lowerResidual != null
+                            ? (frozen(higherResidual, row, frozenScales) - frozen(lowerResidual, row, frozenScales))
+                                    / (2.0 * step)
+                            : higherResidual != null
+                                    ? (frozen(higherResidual, row, frozenScales)
+                                    - frozen(baseResidual, row, frozenScales)) / step
+                                    : (frozen(baseResidual, row, frozenScales)
+                                    - frozen(lowerResidual, row, frozenScales)) / step;
+                    requireFinite(value);
+                    values.set(row, column, value);
                 }
             }
         }
         return jacobian(baseResidual, coordinates, values);
-    }
-
-    private static boolean coloredResidual(V3MeshResidualEvaluator evaluator, V3DryMeshCoordinateMap coordinates,
-            double[] base, V3DryMeshState decoded, V3MeshResidualEvaluator.ColoredProbes probes,
-            List<Integer> group, int[] nodes, V3DegreeOfFreedomLedger.UnknownFamily family,
-            DifferenceScale differenceScale, int sign, double[] physical, V3ThermoWorkspaceFactory factory, V3SolveControl control) {
-        control.checkpoint();
-        try {
-            if (probes == null) {
-                double[] point = base.clone();
-                for (int column : group) point[column] += sign * step(base[column], family, differenceScale);
-                var result = evaluator.evaluate(coordinates.decode(point), factory.newWorkspace());
-                for (int row = 0; row < physical.length; row++) physical[row] = result.physicalValue(row);
-            } else {
-                var trial = decoded;
-                for (int column : group) {
-                    trial = coordinates.decodePerturbed(trial, base, column, sign * step(base[column], family, differenceScale));
-                }
-                probes.evaluate(trial, family, nodes, physical);
-            }
-            return true;
-        } catch (IllegalArgumentException | V3ThermoException outsideDomain) {
-            return false;
-        }
     }
 
     private static void populateCentralColumn(
@@ -293,12 +264,7 @@ final class V3FiniteDifferenceJacobian {
     }
 
     interface V3ThermoWorkspaceFactory {
-        V3ThermoWorkspace newWorkspace();
-
-        /** Temperature-dependent work for a stage that will be revisited by a series of probes. */
-        default V3ThermoWorkspace workspaceForNode(int node) {
-            return newWorkspace();
-        }
+        com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace newWorkspace();
     }
 
     static final class Jacobian {

@@ -20,13 +20,11 @@ class ProcessOutletTest extends PortFixture {
     }
     private PassiveStepSolver.Result run(PassiveNetwork.PhasePort port,double oil,double waterFraction,VesselGeometry geometry,double dt){return run(port,oil,waterFraction,geometry,dt,.01);}
     private PassiveStepSolver.Result run(PassiveNetwork.PhasePort port,double oil,double waterFraction,VesselGeometry geometry,double dt,double bore){
-        return new PassiveStepSolver(model).solve(outlet(port,oil,waterFraction,geometry,bore),dt,NOOP);
-    }
-    private PassiveNetwork outlet(PassiveNetwork.PhasePort port,double oil,double waterFraction,VesselGeometry geometry,double bore){
         var state=mixture(oil,waterFraction,geometry.capacity());
         var inventory=new PassiveNetwork.Inventory(geometry.capacity(),PhaseLayout.totalAmounts(state),state.internalEnergy(),state.solids(),geometry.height(),false,geometry);
-        return new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory),new PassiveNetwork.Reservoir(2,0,nitrogenAt(101325),PassiveNetwork.NodeKind.VOID)),
+        var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,state,PassiveNetwork.NodeKind.RESERVOIR,inventory),new PassiveNetwork.Reservoir(2,0,nitrogenAt(101325),PassiveNetwork.NodeKind.VOID)),
             List.of(new PassiveNetwork.Pipe(10,0,1,new PipeResistance.Geometry(10,bore,PipeResistance.DEFAULT_ROUGHNESS_METRES,0)).withPorts(port,PassiveNetwork.PhasePort.BULK)));
+        return new PassiveStepSolver(model).solve(graph,dt,NOOP);
     }
     @Test void ordinaryBottomDrawsEqualLiquidVolumes(){
         var result=run(PassiveNetwork.PhasePort.LIQUID,.4,.4,VesselGeometry.prism(1,1),.1);
@@ -47,19 +45,6 @@ class ProcessOutletTest extends PortFixture {
         var high=run(PassiveNetwork.PhasePort.BOOT_HC,0,.8,g,.1).pipeTransfers().getFirst().forward();
         assertEquals(0,low.phaseVolumes()[1],1e-14);assertTrue(low.phaseVolumes()[2]>0);
         assertTrue(high.phaseVolumes()[1]>0);assertEquals(0,high.phaseVolumes()[2],1e-14);
-    }
-    @Test void aRetainedSolverChangesTheWeirLayoutBetweenARateSolveAndATimeStep(){
-        var geometry=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);
-        var graph=outlet(PassiveNetwork.PhasePort.BOOT_HC,.4,.4,geometry,.01);
-        var solver=new PassiveStepSolver(model);
-
-        var rate=solver.solveRate(graph,NOOP);
-        assertTrue(rate.massFlows()[0]>0);
-        var step=solver.solve(graph,1,NOOP);
-        var fresh=new PassiveStepSolver(model).solve(graph,1,NOOP);
-        assertArrayEquals(fresh.massFlows(),step.massFlows(),1e-9);
-        assertTrue(step.pipeTransfers().getFirst().forward().phaseVolumes()[0]>0);
-        assertArrayEquals(rate.massFlows(),solver.solveRate(graph,NOOP).massFlows(),1e-9);
     }
     @Test void bootFallsBackToHydrocarbonAndThenGas(){
         var g=VesselGeometry.round(VesselGeometry.Form.HORIZONTAL_DRUM,2,6,2.0/3,.7);

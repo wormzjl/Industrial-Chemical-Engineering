@@ -47,36 +47,28 @@ class HeatSideNetworkTest {
         double cp=(curve.enthalpy(curve.knots()-1)-curve.enthalpy(0))/(curve.temperature(curve.knots()-1)-curve.temperature(0));
         assertEquals(300+50*Math.exp(-5000*2/(flow*cp)),out,.05);
     }
-    /** Water at 420 K enters the heated passage from 10 bar. Test both boiling and superheated delivery:
-     * the old 22 m² wall left a saturated junction while warming the numerical stock. */
+    /** Liquid water at 10 bar and 420 K, 33 K below its saturation, heated on 22 m2 of wall at 540 K: the junction it reaches
+     * boils. Over a 2 s step the junction's seed is laid out from the heated stream, and the step converges onto a two-phase
+     * junction at saturation (452.9 K at 9.97 bar; the steam leaving through the plain run cuts the flow from 13.4 to 2.47
+     * kg/s). Seeded from the unheated stream, the step ended on a liquid junction at 470.8 K, 22 K above its saturation.
+     * Unheated, the junction (about 9 bar, saturation 449 K) stays liquid. The step's Newton starts from the liquid's
+     * 13.4 kg/s whatever the seed, and near this point it stalls on the vapour's bound at some walls and areas (20 m2 at
+     * 520 K with the virial steam since 2026-10-28, 16 to 18 m2 at 520 K with the ideal one): this point converges under
+     * both, and with the virial so do 20 and 24 m2 at 540 K and 22 m2 at 520 K (WATER_STEAM_VIRIAL_REVIEW.md). */
     @Test void aJunctionTheHeatBoilsIsSeededWithItsVapour() {
         var source=water(420,1_000_000);
         var plain=new PassiveStepSolver(model).solve(line(source,water(300,800_000),new HeatSide(22,HeatCurve.Films.DEFAULT,new double[]{540},1,0)),.1,()->{});
         assertEquals(0,model.vaporMass(plain.states().get(1)),1e-12,"bypassed: the junction stays liquid");
-        var result=new PassiveStepSolver(model).solve(line(source,water(300,800_000),new HeatSide(1_000,HeatCurve.Films.DEFAULT,new double[]{540},.5,0)),2,()->{});
+        var result=new PassiveStepSolver(model).solve(line(source,water(300,800_000),new HeatSide(22,HeatCurve.Films.DEFAULT,new double[]{540},0,0)),2,()->{});
         assertTrue(heat(result)>0);
         var junction=result.states().get(1);
         assertTrue(model.vaporMass(junction)>0,"the junction boils");
-        assertTrue(model.liquidMass(junction)>0,"the bypassed water keeps the outlet in the two-phase region");
         double[] water=new double[model.componentCount()];water[water.length-1]=1;
         var saturation=HeatCurve.sample(model,water,junction.pressure(),junction.temperature()-5,junction.temperature()+5,HeatCurve.Films.DEFAULT,()->{});
         double middle=Double.NaN;
         for(int k=0;k<saturation.knots()-1;k++)if(saturation.film(k)==5000&&saturation.film(k+1)==5000)middle=(saturation.enthalpy(k)+saturation.enthalpy(k+1))/2;
         assertEquals(saturation.temperatureAt(middle),junction.temperature(),.05);
     }
-    @Test void aLargerBoilingSideDeliversSuperheatedSteamThroughTheJunction() {
-        var source = water(420, 1_000_000);
-        var side = new HeatSide(22, HeatCurve.Films.DEFAULT, new double[]{540}, 0, 0);
-        var result = new PassiveStepSolver(model).solve(line(source, water(300, 800_000), side), 2, () -> {});
-        var junction = result.states().get(1);
-        var supplied = result.boundaries().stream().filter(b -> b.nodeId() == 1).findFirst().orElseThrow();
-        var steam = model.fluidPH(junction.temperature(), junction.pressure(),
-                supplied.totalEnergyJoule() + heat(result), supplied.moles(), () -> {});
-        assertNotNull(steam);
-        assertEquals(steam.mass(), model.vaporMass(steam), 1e-9 * steam.mass());
-        assertEquals(steam.temperature(), junction.temperature(), .5);
-    }
-
     /** A connection laid the other way round carries the same stream backwards: its side passes the cells from the last to
      * the first, so a rising wall profile reversed is the falling one passed forwards. */
     @Test void aReversedSidePassesItsCellsInTheOtherOrder() {

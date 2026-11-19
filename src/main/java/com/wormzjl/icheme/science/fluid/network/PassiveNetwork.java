@@ -179,20 +179,6 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
          * empty/nonempty ownership. */
         public boolean empty(){if(kind!=NodeKind.RESERVOIR||!inventory.solids.empty())return false;for(double n:inventory.moles)if(n!=0)return false;return true;}
     }
-    /** Fluid already present before the first resolved front that is outside the circulating stock. */
-    public record JunctionReserve(double[] moles,double enthalpy) {
-        public JunctionReserve {
-            moles=moles.clone();
-            if (!Double.isFinite(enthalpy)) throw new IllegalArgumentException("Nonfinite junction reserve energy");
-            for(double amount:moles) if(!(amount>=0 && Double.isFinite(amount))) throw new IllegalArgumentException("Invalid junction reserve");
-        }
-        @Override public boolean equals(Object other) {
-            return this==other || other instanceof JunctionReserve r && Double.compare(enthalpy,r.enthalpy)==0 && Arrays.equals(moles,r.moles);
-        }
-        @Override public int hashCode(){return 31*Arrays.hashCode(moles)+Double.hashCode(enthalpy);}
-        @Override public double[] moles(){return moles.clone();}
-    }
-
     /**
      * Conserved kernel values. The enclosing world snapshot supplies the component basis and energy-reference identity.
      * {@code volume} and {@code levelHeight} are the vessel's geometry, not its contents: the height its level head stands
@@ -213,28 +199,25 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
      * <p>{@code blanket} (batch 2026-11-11-gas-blanketing): the set pressure of the vessel's gas blanketing valve, Pa
      * absolute; 0 for a vessel without one. It is the valve's, so {@link #with} keeps it ({@link GasBlanket}).</p>
      */
-    public record Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool, @org.jetbrains.annotations.Nullable CoolingTower tower,boolean rigid,double ambient,double blanket,Separation.Carried carried,@org.jetbrains.annotations.Nullable JunctionReserve reserve) {
-    public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool, @org.jetbrains.annotations.Nullable CoolingTower tower,boolean rigid,double ambient,double blanket,Separation.Carried carried) {
-            this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,carried,null);
-        }
+    public record Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool, @org.jetbrains.annotations.Nullable CoolingTower tower,boolean rigid,double ambient,double blanket,Separation.Carried carried) {
         /** A vessel that keeps its phases apart ({@code carried} {@link Separation.Carried#NONE}): what its outlets carry
          * beside their own phase is a slice input, set at dispatch ({@link Separation#plan}) and never saved. */
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool,@org.jetbrains.annotations.Nullable CoolingTower tower,boolean rigid,double ambient,double blanket){this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,Separation.Carried.NONE);}
         /** The same vessel and contents carrying {@code value} for a slice ({@link Separation}). */
-        public Inventory withCarried(Separation.Carried value){return value.equals(carried)?this:new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,value,reserve);}
+        public Inventory withCarried(Separation.Carried value){return value.equals(carried)?this:new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,value);}
         /** A vessel without a gas blanketing valve ({@code blanket} 0). */
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool,@org.jetbrains.annotations.Nullable CoolingTower tower,boolean rigid,double ambient){this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,0);}
         /** A vessel whose wall the game's ambient works on ({@code ambient} {@link PhaseLayout#AMBIENT_PRESSURE}); its node restates an open vessel's ({@link Reservoir}). */
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool,@org.jetbrains.annotations.Nullable CoolingTower tower,boolean rigid){this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,com.wormzjl.icheme.science.fluid.solver.PhaseLayout.AMBIENT_PRESSURE);}
         /** A bag (decision D54): {@code rigid} false. */
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry,@org.jetbrains.annotations.Nullable Pool pool,@org.jetbrains.annotations.Nullable CoolingTower tower){this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,false);}
-        public Inventory withTower(CoolingTower value) {return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,value,rigid,ambient,blanket,carried,reserve);}
+        public Inventory withTower(CoolingTower value) {return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,value,rigid,ambient,blanket,carried);}
         /**
          * The same vessel, rigid from now on when {@code value} (batch 2026-11-10-rigid-reservoir, owner: "Resevoir should be
          * rigid when it's filled once (except the floating roof tank)"): a closed vessel whose wall has once carried its
          * contents keeps its volume. Never cleared; an open vessel never becomes rigid.
          */
-        public Inventory withRigid(boolean value){return value==rigid||open&&value?this:new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,value,ambient,blanket,carried,reserve);}
+        public Inventory withRigid(boolean value){return value==rigid||open&&value?this:new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,value,ambient,blanket,carried);}
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open,VesselGeometry geometry){this(volume,moles,internalEnergy,solids,levelHeight,open,geometry,null,null);}
         public Inventory(double volume,double[] moles,double internalEnergy,SolidInventory solids,double levelHeight,boolean open){this(volume,moles,internalEnergy,solids,levelHeight,open,VesselGeometry.prism(volume,levelHeight));}
         public Inventory(double volume,double[] moles,double internalEnergy){this(volume,moles,internalEnergy,SolidInventory.EMPTY);}
@@ -247,35 +230,17 @@ public record PassiveNetwork(List<Reservoir> reservoirs,List<Pipe> pipes,List<Sc
             if(!(blanket>=0)||!Double.isFinite(blanket)||open&&blanket>0)throw new IllegalArgumentException("Invalid gas blanket pressure");
             Objects.requireNonNull(solids);Objects.requireNonNull(geometry);Objects.requireNonNull(carried);
             moles=moles.clone();if(!Double.isFinite(volume)||volume<=0||!Double.isFinite(internalEnergy)||!Double.isFinite(levelHeight)||levelHeight<=0)throw new IllegalArgumentException("Invalid inventory volume/energy/level height");
-            if(reserve!=null) {
-                if(reserve.moles.length!=moles.length)throw new IllegalArgumentException("Junction reserve basis mismatch");
-                for(int c=0;c<moles.length;c++)if(reserve.moles[c]>moles[c])throw new IllegalArgumentException("Junction reserve exceeds stock");
-            }
             double total=0;for(double n:moles){if(!Double.isFinite(n)||n<0)throw new IllegalArgumentException("Negative/nonfinite inventory");total+=n;}
             if(moles.length==0||!Double.isFinite(total)||(total==0&&solids.empty()&&internalEnergy!=0))throw new IllegalArgumentException("Invalid empty/overflowed inventory");
         }
         /** The same vessel (volume, level height, opening and pool) holding these contents. */
-        public Inventory with(double[] moles,double internalEnergy,SolidInventory solids){return with(moles,internalEnergy,solids,reserve);}
-        /** Replace the contents and their reserve as one validated inventory. */
-        Inventory with(double[] moles,double internalEnergy,SolidInventory solids,JunctionReserve reserve) {
-            return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,carried,reserve);
-        }
+        public Inventory with(double[] moles,double internalEnergy,SolidInventory solids){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,blanket,carried);}
         /** The same vessel and contents with {@code value} as its pool (W7: a kettle's, planned or compiled). */
-        public Inventory withPool(@org.jetbrains.annotations.Nullable Pool value){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,value,tower,rigid,ambient,blanket,carried,reserve);}
+        public Inventory withPool(@org.jetbrains.annotations.Nullable Pool value){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,value,tower,rigid,ambient,blanket,carried);}
         /** The same vessel and contents under {@code value}, the pressure outside its wall (batch 2026-11-10-chimney, C1 B). */
-        public Inventory withAmbient(double value){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,value,blanket,carried,reserve);}
+        public Inventory withAmbient(double value){return new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,value,blanket,carried);}
         /** The same vessel and contents with a gas blanketing valve set to {@code value} Pa absolute, or without one (0): {@link GasBlanket}. */
-        public Inventory withBlanket(double value){return value==blanket?this:new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,value,carried,reserve);}
-        /** Amounts available to a solve or replay once the retained fluid is set aside. */
-        public double[] movingMoles() {
-            var amounts=moles.clone();
-            if(reserve!=null)for(int c=0;c<amounts.length;c++)amounts[c]-=reserve.moles[c];
-            return amounts;
-        }
-        public double movingEnergy(){return reserve==null?internalEnergy:internalEnergy-reserve.enthalpy();}
-        public Inventory withReserve(JunctionReserve value) {
-            return reserve==value?this:with(moles,internalEnergy,solids,value);
-        }
+        public Inventory withBlanket(double value){return value==blanket?this:new Inventory(volume,moles,internalEnergy,solids,levelHeight,open,geometry,pool,tower,rigid,ambient,value,carried);}
         /** Whether {@code other} holds the same contents, bit for bit: its moles, energy and solids, whatever the vessel's
          * geometry. A topology event conserves these; a layout refresh may rebuild the vessel around them (batch
          * 2026-10-26-backward-compat). */

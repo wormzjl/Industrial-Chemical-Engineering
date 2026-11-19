@@ -22,17 +22,6 @@ final class DeviceModes {
     /** The solver's thermodynamics, the same object. */
     private final FluidThermodynamics model;
     DeviceModes(PassiveStepSolver solver,FluidThermodynamics model){this.solver=solver;this.model=model;}
-
-    /** A set-flow pump starting to prime needs a balance on its reopened path, including the flow to its suction. */
-    static boolean resumesPriming(PassiveNetwork graph,List<FlowControl.Mode> modes,List<FlowControl.Mode> previous,
-                                   boolean[] boundaryClosed) {
-        for(int edge=0;edge<modes.size();edge++) {
-            if(!boundaryClosed[edge]&&graph.pipes().get(edge).control() instanceof FlowControl.Pump
-                    && previous.get(edge)==FlowControl.Mode.INLET_WRONG_PHASE
-                    && modes.get(edge)==FlowControl.Mode.MOVER_LAW) return true;
-        }
-        return false;
-    }
     /**
      * The device mode the pass loop moves connection {@code i} to from {@code mode} at a converged point ({@code flow},
      * {@code head}, the node {@code states}, the first node's state {@code up} and what its first end draws, {@code suction});

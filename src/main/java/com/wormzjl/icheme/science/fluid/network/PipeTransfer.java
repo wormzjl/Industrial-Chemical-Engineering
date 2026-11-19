@@ -23,16 +23,8 @@ public record PipeTransfer(long pipeId, Stream forward, Stream reverse) {
         }
         @Override public double[][] phaseMoles(){return copy(phaseMoles);}
         @Override public double[] phaseVolumes(){return phaseVolumes.clone();}
-        /** Number of components in each booked phase. */
-        public int componentCount(){return phaseMoles[0].length;}
-        /** One element of the immutable phase history in mol. */
-        public double phaseMoles(int phase,int component){return phaseMoles[phase][component];}
         public double[] componentMoles(){double[] n=new double[phaseMoles[0].length];for(var phase:phaseMoles)for(int c=0;c<n.length;c++)n[c]+=phase[c];return n;}
-        private static double[][] copy(double[][] source) {
-            var result=new double[source.length][];
-            for(int phase=0;phase<source.length;phase++)result[phase]=source[phase].clone();
-            return result;
-        }
+        private static double[][] copy(double[][] source){return Arrays.stream(source).map(double[]::clone).toArray(double[][]::new);}
     }
 
     /** One immutable empty stream per basis size instead of one per pipe and step; a Stream's arrays are copied in and
@@ -57,11 +49,6 @@ public record PipeTransfer(long pipeId, Stream forward, Stream reverse) {
         var result=new ArrayList<PipeTransfer>();
         for(int i=0;i<rates.length;i++) {
             var pipe=graph.pipes().get(i);var state=states.get(rates[i]>=0?pipe.first():pipe.second());
-            if (rates[i]==0) {
-                var none=zero(state.componentCount());
-                result.add(new PipeTransfer(pipe.id(),none,none));
-                continue;
-            }
             double[] drawn=draws==null?null:draws[i];var start=graph.reservoirs().get(rates[i]>=0?pipe.first():pipe.second()).state();
             // Entries 0-2 are drawn at the step's end state (these states), 3-5 at its start state (the graph's): a phase
             // pinned at its capacity (PhaseDraw).

@@ -86,39 +86,6 @@ class HeatCurveTest {
         double u=1/(1/curve.filmAt(middle)+1/HeatCurve.Films.DEFAULT.liquid());
         assertEquals(2500,u,1e-9);
     }
-    @Test void repeatedSamplingOwnsTheExactInputsAndAppliesTheRequestingSideFilms() {
-        var model = FluidTestSupport.networkModel();
-        double[] water = new double[model.componentCount()];
-        water[water.length - 1] = 1;
-        double[] same = water.clone();
-        var defaultFilms = HeatCurve.Films.DEFAULT;
-        var otherFilms = new HeatCurve.Films(1100, 2100, 80);
-        var samples = new HeatCurve.Samples();
-        Runnable check = () -> {};
-        var original = samples.sample(model, water, 101_325, 355, 390, defaultFilms, check, null);
-        water[water.length - 1] = Math.nextUp(1.0);
-        assertSame(original, samples.sample(model, same, 101_325, 355, 390, defaultFilms, check, null));
-        assertNotSame(original, samples.sample(model, water, 101_325, 355, 390, defaultFilms, check, null));
-
-        var refilmed = samples.sample(model, same, 101_325, 355, 390, otherFilms, check, null);
-        var fresh = HeatCurve.sample(model, same, 101_325, 355, 390, otherFilms, check);
-        assertEquals(fresh.knots(), refilmed.knots());
-        for (int i = 0; i < fresh.knots(); i++) {
-            assertEquals(fresh.enthalpy(i), refilmed.enthalpy(i));
-            assertEquals(fresh.temperature(i), refilmed.temperature(i));
-            assertEquals(fresh.film(i), refilmed.film(i));
-        }
-
-        var cancelled = new IllegalStateException("Cancelled sample");
-        Runnable cancel = () -> { throw cancelled; };
-        assertSame(cancelled, assertThrows(IllegalStateException.class,
-                () -> samples.sample(model, same, 101_325, 355, 390, defaultFilms, cancel, null)));
-        assertSame(cancelled, assertThrows(IllegalStateException.class,
-                () -> samples.sample(model, same, 101_325, 354, 390, defaultFilms, cancel, null)));
-        int[] misses = {0};
-        samples.sample(model, same, 101_325, 354, 390, defaultFilms, check, () -> misses[0]++);
-        assertEquals(1, misses[0], "a cancelled sample did not fill the cache");
-    }
     @Test void aSideMarchesItsCellsInFlowOrderWithItsBypassAndGiveBack() {
         var curve=sensible();
         var uniform=new HeatSide(8000,HeatCurve.Films.DEFAULT,new double[]{300,300,300,300,300,300,300,300},0,0);

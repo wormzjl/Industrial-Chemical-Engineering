@@ -33,27 +33,6 @@ class SolidConservationTest {
         assertEquals(received.massKg()*800,received.moments().heatCapacity(),1e-8);
         assertTrue(graph.reservoirs().get(1).inventory().solids().empty());
     }
-    @Test void aRetainedSolverAddsRowsWhenAFeedFirstInjectsSolids() {
-        var gas=model.initialNitrogenCharge(1,298.15,150000,()->{});
-        var tank=new PassiveNetwork.Reservoir(1,0,gas);
-        int nitrogen=model.components().indexOf("Nitrogen");
-        var molesPerSecond=new double[model.componentCount()];
-        molesPerSecond[nitrogen]=.01;
-        double gasEnergyRate=gas.enthalpy()/tank.inventory().moles()[nitrogen]*molesPerSecond[nitrogen];
-        var solidsPerSecond=particles(.001);
-        double slurryEnergyRate=gasEnergyRate+gas.withSolids(solidsPerSecond).enthalpy()-gas.enthalpy();
-        var gasFeed=new PassiveNetwork(List.of(tank),List.of(),List.of(new ScheduledTransfer.Injection(9,0,molesPerSecond,gasEnergyRate)));
-        var slurryFeed=new PassiveNetwork(List.of(tank),List.of(),List.of(new ScheduledTransfer.Injection(9,0,molesPerSecond,slurryEnergyRate,solidsPerSecond)));
-        var solver=new PassiveStepSolver(model);
-
-        var first=solver.solve(gasFeed,1,()->{}).inventories().getFirst();
-        assertTrue(first.solids().empty());
-        var delivered=solver.solve(slurryFeed,1,()->{}).inventories().getFirst();
-        assertEquals(solidsPerSecond,delivered.solids());
-        assertArrayEquals(first.moles(),delivered.moles(),1e-12);
-        assertEquals(tank.inventory().internalEnergy()+slurryEnergyRate,delivered.internalEnergy(),1e-9);
-        assertEquals(first,solver.solve(gasFeed,1,()->{}).inventories().getFirst());
-    }
     @Test void adaptiveStagesAndPipeHistoryPreserveExactPopulations() {
         var source=water(160000).withSolids(particles(100));
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),
@@ -65,78 +44,6 @@ class SolidConservationTest {
         assertEquals(external,received,1e-9);
         assertEquals(result.pipeTransfers().getFirst().forward().solids().massKg(),received,1e-9);
     }
-    @Test void alternatingHotSlurryAndColdWaterCloseTheJunctionLedgerAcrossFlowChanges() {
-        var initial = water(150_000);
-        var run = new PipeResistance.Geometry(1, .05, .000045, 0);
-        var graph = PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(List.of(
-                new PassiveNetwork.Reservoir(1, 0, initial, PassiveNetwork.NodeKind.GENERATOR),
-                new PassiveNetwork.Reservoir(2, 0, initial, PassiveNetwork.NodeKind.JUNCTION),
-                new PassiveNetwork.Reservoir(3, 0, initial, PassiveNetwork.NodeKind.VOID)),
-                List.of(new PassiveNetwork.Pipe(4, 0, 1, run), new PassiveNetwork.Pipe(5, 1, 2, run))), model);
-        var original = graph.reservoirs().get(1).inventory();
-        double energy = 0, solids = 0;
-        double[] external = new double[model.componentCount()];
-        var solver = new PassiveIntervalSolver(model);
-        PassiveIntervalSolver.Result previous = null;
-        for (int step = 0; step < 4; step++) {
-            boolean slurry = step % 2 == 0;
-            var source = model.flashTP(slurry ? 350 : 320, slurry ? 162_000 : 154_000,
-                    com.wormzjl.icheme.science.fluid.solver.PhaseLayout.totalAmounts(initial), () -> {});
-            if (slurry) source = source.withSolids(particles(.5));
-            var nodes = new ArrayList<>(graph.reservoirs());
-            nodes.set(0, new PassiveNetwork.Reservoir(1, 0, source, PassiveNetwork.NodeKind.GENERATOR));
-            graph = new PassiveNetwork(nodes, graph.pipes());
-            solver.replayStart(graph, previous);
-            previous = solver.solve(graph, .5, PassiveIntervalSolver.Settings.defaults(), () -> {});
-            graph = previous.graph();
-            assertTrue(previous.averageMassFlows()[0] > 0);
-            for (var boundary : previous.boundaries()) {
-                energy += boundary.totalEnergyJoule();
-                solids += boundary.solidDirection()*boundary.solids().massKg();
-                var moles = boundary.moles();
-                for (int c = 0; c < moles.length; c++) external[c] += moles[c];
-            }
-            var stock = graph.reservoirs().get(1).inventory();
-            assertTrue(stock.solids().massKg() > 0);
-            if (step == 0) checkFrozenSlurryStock(graph);
-            assertEquals(solids, stock.solids().massKg()-original.solids().massKg(), 1e-10);
-            assertEquals(energy, stock.internalEnergy()-original.internalEnergy(), 1e-7*Math.max(1, Math.abs(energy)));
-            var before = original.moles();
-            var now = stock.moles();
-            for (int c = 0; c < now.length; c++)
-                assertEquals(external[c], now[c]-before[c], 1e-9*Math.max(1, before[c]));
-        }
-    }
-
-    private void checkFrozenSlurryStock(PassiveNetwork graph) {
-        var nodes = new ArrayList<>(graph.reservoirs());
-        var junction = nodes.get(1);
-        var stock = junction.inventory();
-        // The circulating slurry has particles, while an older partition left almost all the carrier in reserve.
-        double retainedShare = .999999;
-        var originalAmounts = stock.moles();
-        var retained = originalAmounts.clone();
-        for (int c = 0; c < retained.length; c++) retained[c] *= retainedShare;
-        var state = junction.state();
-        double fluidEnergy = stock.internalEnergy()-stock.solids().moments().enthalpy(state.temperature(),state.pressure());
-        stock = stock.withReserve(new PassiveNetwork.JunctionReserve(retained,fluidEnergy*retainedShare));
-        nodes.set(1,new PassiveNetwork.Reservoir(junction.id(),junction.elevation(),state,junction.kind(),stock));
-        var frozen = new PassiveNetwork(nodes,graph.pipes());
-        var solver = new PassiveStepSolver(model);
-
-        int[] checkpoints = {0};
-        var interrupted = new IllegalStateException("reject the trial");
-        assertSame(interrupted,assertThrows(IllegalStateException.class,() -> solver.solve(frozen,.01,() -> {
-            if (++checkpoints[0] == 20) throw interrupted;
-        })));
-        var afterRejection = frozen.reservoirs().get(1).inventory();
-        assertArrayEquals(originalAmounts,afterRejection.moles(),0,"a rejected trial leaves the whole stock unchanged");
-        assertArrayEquals(retained,afterRejection.reserve().moles(),0,"a rejected trial leaves the reserve unchanged");
-        var rate = solver.solveRate(frozen,() -> {});
-        assertTrue(rate.massFlows()[0] > 0,"the rate solve uses the slurry's circulating carrier");
-        assertEquals(stock,rate.inventories().get(1),"a frozen result keeps the original reserve, particles and energy exactly");
-    }
-
     @Test void filterCapturesEveryPopulationAndPassesOnlyFluid() {
         var source=water(160000).withSolids(particles(100));
         var pipe=new PassiveNetwork.Pipe(3,0,1,new PipeResistance.Geometry(1,.05,.000045,0)).withFilter(InlineFilter.empty());

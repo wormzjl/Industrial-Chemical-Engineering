@@ -137,26 +137,10 @@ class V3FiniteDifferenceJacobianTest {
 
         V3FiniteDifferenceJacobian.Jacobian central = V3JacobianOracle.evaluate(
                 evaluator, coordinates, state, thermo::newWorkspace, V3FiniteDifferenceJacobian.DifferenceScale.FINE);
-        thermo.fugacityCalls = 0;
         V3FiniteDifferenceJacobian.Jacobian colored = V3JacobianOracle.evaluateStageColored(
                 evaluator, coordinates, state, thermo::newWorkspace, V3FiniteDifferenceJacobian.DifferenceScale.FINE);
 
         double[][] expected = central.values();
-        // Two complete base passes, then only the phase(s) of each changed coordinate for both signs.
-        int phases = 0, changedPhases = 0;
-        for (int node = 0; node < state.nodeCount(); node++) {
-            if (problem.topology().hasLiquidPhase(node)) phases++;
-            if (problem.topology().hasVaporPhase(node)) phases++;
-        }
-        for (var unknown : coordinates.unknowns()) {
-            changedPhases += switch (unknown.id().family()) {
-                case TEMPERATURE -> (problem.topology().hasVaporPhase(unknown.id().node()) ? 1 : 0)
-                        + (problem.topology().hasLiquidPhase(unknown.id().node()) ? 1 : 0);
-                case VAPOR_COMPONENT_FLOW, LIQUID_COMPONENT_FLOW -> 1;
-                case FREE_WATER_FLOW -> 0;
-            };
-        }
-        assertTrue(thermo.fugacityCalls <= 2 * (phases + changedPhases));
         double[][] actual = colored.values();
         for (int row = 0; row < expected.length; row++) {
             for (int column = 0; column < expected[row].length; column++) {
@@ -213,7 +197,6 @@ class V3FiniteDifferenceJacobianTest {
     }
 
     private static final class LinearThermo implements V3ThermoModel {
-        private int fugacityCalls;
         private static final V3ComponentBasis BASIS = new V3ComponentBasis(List.of("component-a", "component-b"));
 
         @Override public V3ComponentBasis componentBasis() { return BASIS; }
@@ -223,7 +206,6 @@ class V3FiniteDifferenceJacobianTest {
         public V3FugacityResult fugacity(
                 double temperatureKelvin, double pressurePascal, double[] composition, Root phase,
                 V3ThermoWorkspace workspace) {
-            fugacityCalls++;
             return new V3FugacityResult(phase, new double[] {0.0, 0.0}, 1.0,
                     temperatureKelvin * (phase == Root.LIQUID ? 100.0 : 120.0), 1, 0.1);
         }

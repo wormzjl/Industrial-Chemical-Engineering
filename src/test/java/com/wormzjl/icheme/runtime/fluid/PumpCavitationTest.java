@@ -1,7 +1,5 @@
 package com.wormzjl.icheme.runtime.fluid;
 
-import com.wormzjl.icheme.fluid.support.FluidTestSupport;
-import com.wormzjl.icheme.science.fluid.SimulationTime;
 import com.wormzjl.icheme.science.fluid.network.FlowControl;
 import com.wormzjl.icheme.science.fluid.network.InletPhase;
 import com.wormzjl.icheme.science.fluid.network.PassiveNetwork;
@@ -46,43 +44,6 @@ class PumpCavitationTest {
         var mover=(FlowControl.Mover)graph.pipes().get(pump).control();var suction=graph.reservoirs().get(graph.pipes().get(pump).first()).state();
         return mover.npsh().breakdownPressure(massFlow/(suction.mass()/suction.volume()),InletPhase.liquidDensity(model,graph,pump,mover.targetVolumeFlow(),5));
     }
-
-    /** The discharge loss uses up the pump's rise at a flow the suction line can still supply above its cavitation floor. */
-    @Test void aNarrowDischargeKeepsAStartingPumpOnItsHeadLimit() {
-        var w=new EventPathWorld(EventPathWorld.CATALOG,FluidTestSupport.networkModel().withTime(SimulationTime.of(4)));
-        var pump=new FlowControl.Pump(.008,450_000);
-        var water=EventPathWorld.pure(MaterialTestBasis.NETWORK,301.15,305_000);
-        w.runTo(10);
-        w.place(0,0,0,Kind.GENERATOR,EAST,new FlowControl.Passive(),water,.04);
-        w.place(2,0,0,Kind.PUMP,EAST,pump,null,.08);
-        w.place(3,0,0,Kind.PIPE,EAST,.08);
-        w.place(4,0,0,Kind.PIPE,EAST,.011);
-        w.place(5,0,0,Kind.PIPE,EAST,.011);
-        w.place(6,1,0,Kind.RESERVOIR,EAST,.08);
-        w.place(5,1,0,Kind.PIPE,EAST,.055);
-        w.place(1,0,0,Kind.PIPE,EAST,.011);
-        w.tick();
-        w.assertKeptUp("a pump starting with a narrow suction and discharge into an empty raised tank");
-
-        var island=w.coordinator.snapshots().getFirst();
-        var result=island.lastResult().orElseThrow();
-        var graph=result.graph();
-        int edge=0;
-        while(!(graph.pipes().get(edge).control() instanceof FlowControl.Pump))edge++;
-        var pipe=graph.pipes().get(edge);
-        var suction=graph.reservoirs().get(pipe.first()).state();
-        var model=w.coordinator.model(island.id());
-        double flow=result.endpointFlows()[edge];
-        double floor=vapourPressure(model,suction)+breakdown(model,graph,edge,flow);
-        assertEquals(FlowControl.Mode.MOVER_LAW,result.endpointModes().get(edge));
-        assertTrue(flow>1&&flow<1.4,"the filled series line delivers about 1.19 kg/s");
-        assertTrue(suction.pressure()>floor,"suction stays above the cavitation floor");
-        double head=result.endpointHeads()[edge];
-        assertTrue(head>430_000&&head<450_000,"the pump operates near its relief rise");
-        assertTrue(graph.reservoirs().get(pipe.second()).inventory().moles()[model.components().indexOf("Water")]>0,
-                "the first interval books water into the previously empty tank");
-    }
-
     /**
      * The smallest world of world-defaults fuzz seed 696 (11 blocks, all placed at tick 143; minimized in
      * tools/phase-ports-probes/hold-classes logs cc04). A 1 atm water generator 2 m above the pump's suction feeds it through

@@ -65,10 +65,7 @@ final class StepEquations implements SparseNewton.Equations {
      * A423): {@code sweepWall} is read by the rows while a build is bracketed ({@link #linearising}), null otherwise;
      * {@code builtWall} by the chord test ({@link #linearisationHolds}). Null for a junction and for a dry vessel. */
     PhaseLayout.Wall[] sweepWall,builtWall;
-    private final FurnacePairs furnacePairs;
     final int edgeOffset,size;final double[][] oldAmounts;int[][] sparsity;final List<FlowControl.Mode> modes;final int[] controlOffsets;final boolean[] boundaryClosed;final List<FluidThermodynamics.State> seeds;
-    /** The junction's owned mass at step start is constant over every trial of the pass. */
-    private final double[] junctionStockMass;
     final double[][] cachedVariables;final FluidThermodynamics.State[] cachedStates;final Transport[] cachedTransport;
     /** Which nodes an end draws phases of ({@link PassiveNetwork.PhasePort} VAPOR or LIQUID) through a connection this
      * pass leaves open: only those nodes build their phase streams at each decode, and only their non-amount columns
@@ -138,8 +135,6 @@ final class StepEquations implements SparseNewton.Equations {
     final boolean solidSupport;
     final boolean[] amountVariables,solidVariables;
     final double[] differenceFloors;
-    /** Difference scale of a normalized junction amount whose own size would give a rounded-away column. */
-    private static final double JUNCTION_AMOUNT_DIFFERENCE_SCALE=1e-4;
     /** Each amount column's seed difference scale ({@link PhaseLayout#seedDifferenceScale}), -1 for every other column:
      * what {@link #differenceScale} differences a trace below {@link PhaseLayout#TRACE_DIFFERENCE_GUARD} against. */
     final double[] seedDifferenceScales;
@@ -262,7 +257,7 @@ final class StepEquations implements SparseNewton.Equations {
         this.modes=List.copyOf(modes);this.pipeIdentities=pipeIdentities;
         this.seeds=List.copyOf(seeds);this.supports=supports;
         this.boundaryClosed=boundaryClosed.clone();
-        this.graph=graph;furnacePairs=FurnacePairs.in(graph);this.dt=dt;solidSupport=hasSolids(graph);int count=graph.reservoirs().size();layout=new PhaseLayout[count];offsets=new int[count];oldAmounts=new double[count][];
+        this.graph=graph;this.dt=dt;solidSupport=hasSolids(graph);int count=graph.reservoirs().size();layout=new PhaseLayout[count];offsets=new int[count];oldAmounts=new double[count][];
         this.checkpoint=checkpoint;passCurves=new HeatCurve[graph.pipes().size()][];passKnown=new boolean[graph.pipes().size()][];heldCurves();
         cachedVariables=new double[count][];cachedStates=new FluidThermodynamics.State[count];cachedTransport=new Transport[count];
         cachedPrepared=new FluidThermodynamics.Prepared[count];probePrepared=new FluidThermodynamics.Prepared[count];
@@ -292,13 +287,10 @@ final class StepEquations implements SparseNewton.Equations {
             // The bag volume the step starts from, whose wall work each vessel's energy row books (decision D54).
             if(node.kind()==PassiveNetwork.NodeKind.RESERVOIR)bagStart[i]=node.empty()?node.inventory().emptyBag():PhaseLayout.bagVolume(node.state(),node.inventory().wallCapacity());
         }
-        junctionStockMass=new double[count];
         for(int i=0;i<count;i++) {
-            var node=graph.reservoirs().get(i);var inventory=node.inventory();
-            offsets[i]=cursor;oldAmounts[i]=inventory.moles();
-            if(!node.fixed()&&!dry[i]) {
-                if(node.junction())junctionStockMass[i]=solver.molarMass(oldAmounts[i])+inventory.solids().massKg();
-                layout[i]=new PhaseLayout(model,seeds.get(i),reachable[i],kept(i),supports[i],solidSupport).atAmbient(inventory.ambient());cursor+=layout[i].size();
+            var state=graph.reservoirs().get(i).state();offsets[i]=cursor;oldAmounts[i]=graph.reservoirs().get(i).inventory().moles();
+            if(!graph.reservoirs().get(i).fixed()&&!dry[i]) {
+                layout[i]=new PhaseLayout(model,seeds.get(i),reachable[i],kept(i),supports[i],solidSupport).atAmbient(graph.reservoirs().get(i).inventory().ambient());cursor+=layout[i].size();
                 if(SolverDiagnostics.ENABLED) {
                     int omitted=layout[i].singlePhaseComponentCount();
                     if(omitted>0){SolverDiagnostics.traceOmittedUnknowns.add(omitted);SolverDiagnostics.truncatedNodePasses.increment();}
@@ -323,10 +315,6 @@ final class StepEquations implements SparseNewton.Equations {
             amountVariables[column]=layout[node].totalAmountVariable(local);differenceFloors[column]=layout[node].differenceScale(local,0);
             if(amountVariables[column])seedDifferenceScales[column]=layout[node].seedDifferenceScale(local);
             solidVariables[column]=layout[node].solidVariable(local);
-            // These rows are scaled by the junction's mixture, so a trace-relative perturbation can round to zero
-            // in every row. Use the same bulk scale as PhaseLayout's gas-bearing amount columns, only for the stencil.
-            if(graph.reservoirs().get(node).junction()&&amountVariables[column]&&!solidVariables[column])
-                seedDifferenceScales[column]=Math.max(JUNCTION_AMOUNT_DIFFERENCE_SCALE,seedDifferenceScales[column]);
             if(solidVariables[column])clampFloors[column]=SOLID_CLAMP_FRACTION*differenceFloors[column];
             else if(amountVariables[column])clampFloors[column]=TRACE_CLAMP_FRACTION*differenceFloors[column];
         }
@@ -412,7 +400,6 @@ final class StepEquations implements SparseNewton.Equations {
             columnEnds[edge]=only>=0?only:columnFromFirst(first,second,difference,dz,initialPoint[edgeOffset+edge]>=0)?0:1;
         }
         segments=startSegments();
-        solver.watchJunctionPrecision(this);
     }
     /**
      * The segments of this pass, decided from the flows its start point carries: the start point's edge unknowns are
@@ -517,72 +504,6 @@ final class StepEquations implements SparseNewton.Equations {
         double total=0;for(double c:overflowCapacities[node])total+=c;
         return total;
     }
-    record PinnedStartDraw(double[] transported,double[][] phaseRates) {}
-    /** The transported rates and phase draws at a pass's start when a junction receives water, oil or gas at its supply limit. */
-    PinnedStartDraw pinnedStartDraws() {
-        for(int edge=0;edge<segments.length;edge++) {
-            double law=initialPoint[edgeOffset+edge];
-            var segment=segments[edge][law<0?1:0];
-            var pipe=graph.pipes().get(edge);
-            int receiver=law<0?pipe.first():pipe.second();
-            if(law==0 || segment==null || segment.pinned().length==0 || !graph.reservoirs().get(receiver).junction())continue;
-            var flows=new double[segments.length];
-            for(int e=0;e<flows.length;e++) {
-                double y=initialPoint[edgeOffset+e];
-                var line=graph.pipes().get(e);
-                int end=y<0?1:0;
-                int donor=end==0?line.first():line.second();
-                flows[e]=saturates(e)?saturated(y,cap(segments[e][end],e,end,transportAt(donor,seeds.get(donor)),y)):y;
-            }
-            return new PinnedStartDraw(flows,draws(flows,seeds));
-        }
-        return null;
-    }
-    /**
-     * A finite draw can change the donor's inventory markedly before the end of this step, even when its marginal phase
-     * remains. Seed it from the first pass's material and energy rows at the start point, including all other arrivals.
-     * This is a trial inventory. The next pass retains the original start inventory and phase capacities.
-     */
-    List<FluidThermodynamics.State> projectedPhaseDonors(PinnedStartDraw start,Runnable checkpoint) {
-        if(start.phaseRates()==null||PassiveStepSolver.hasSolids(graph))return seeds;
-        boolean[] selected=new boolean[layout.length];
-        int[] required=new int[layout.length];
-        for(int edge=0;edge<start.transported().length;edge++) {
-            double flow=start.transported()[edge];
-            if(flow==0)continue;
-            var pipe=graph.pipes().get(edge);int end=flow<0?1:0;
-            int donor=end==0?pipe.first():pipe.second(),receiver=end==0?pipe.second():pipe.first();
-            var segment=segments[edge][end];
-            if(segment!=null&&segment.pinned().length>0&&graph.reservoirs().get(receiver).junction())selected[donor]=true;
-            var rates=start.phaseRates()[edge];
-            if(rates!=null)for(int phase=0;phase<3;phase++)if(rates[phase]>0)required[donor]|=1<<phase;
-        }
-        try{residual(initialPoint);}catch(IllegalArgumentException outside){return seeds;}
-        List<FluidThermodynamics.State> projected=null;
-        for(int i=0;i<selected.length;i++) {
-            if(!selected[i]||layout[i]==null||dry[i])continue;
-            var node=graph.reservoirs().get(i);
-            if(node.junction()||node.fixed()||Arrays.stream(targets[i]).anyMatch(n->n<0))continue;
-            try {
-                var inventory=node.inventory().with(targets[i].clone(),energy[i],node.inventory().solids());
-                var seed=seeds.get(i);
-                var guess=model.folded(model.flashTP(seed.temperature(),seed.pressure(),targets[i],checkpoint),false,inventory.rigid());
-                var candidate=InventoryEquilibrium.split(model,guess,inventory,bagStart[i],checkpoint);
-                if(candidate==null||!FluidThermodynamics.holdsFluid(candidate))continue;
-                // The receiver's seed still reads the start estimate's phase rates. Every phase it draws from the
-                // donor's end state must exist on this projected donor.
-                boolean fits=true;
-                for(int phase=0;phase<3;phase++)if((required[i]&(1<<phase))!=0&&!FluidThermodynamics.holdsPhase(candidate,phase))fits=false;
-                if(!fits)continue;
-                if(projected==null)projected=new ArrayList<>(seeds);
-                projected.set(i,candidate);
-            }catch(IllegalArgumentException outside) {
-                // An inadmissible forecast leaves the original donor seed in place.
-            }
-        }
-        return projected==null?seeds:projected;
-    }
-
     /** The segment of every open phase-port end at the connection flows {@code flows} and this pass's seeds; each end's
      * priority order is read off the node's state on the accepted state the step starts from, like its capacities. */
     private PhaseDraw.Segment[][] decideSegments(double[] flows) {
@@ -975,61 +896,6 @@ final class StepEquations implements SparseNewton.Equations {
     /** This node's transport rows at {@code state} with no prepared temperature bundle (for a point other than the
      * pass's decoded one: the reconstruction's, the error probe's). */
     Transport transportAt(int node,FluidThermodynamics.State state){return transport(node,state,null);}
-    /** An in-island furnace pair uses both trial streams. An external convection coil keeps its causal relay input. */
-    private record FurnacePairs(int[] radiantAtConvection,int[] convectionAtRadiant) {
-        static FurnacePairs in(PassiveNetwork graph) {
-            Map<Long,Integer> radiantById=null;
-            var pipes=graph.pipes();
-            for(int edge=0;edge<pipes.size();edge++) {
-                var pipe=pipes.get(edge);
-                if(pipe.heat() instanceof FiredCoil coil&&coil.partner()!=0) {
-                    if(radiantById==null)radiantById=new HashMap<>();
-                    radiantById.put(pipe.id(),edge);
-                }
-            }
-            if(radiantById==null)return null;
-            int[] radiantAtConvection=new int[pipes.size()],convectionAtRadiant=new int[pipes.size()];
-            Arrays.fill(radiantAtConvection,-1);Arrays.fill(convectionAtRadiant,-1);
-            boolean linked=false;
-            for(int edge=0;edge<pipes.size();edge++) {
-                var pipe=pipes.get(edge);
-                if(!(pipe.heat() instanceof ConvectionCoil coil))continue;
-                var radiant=radiantById.get(coil.radiant());
-                if(radiant==null||((FiredCoil)pipes.get(radiant).heat()).partner()!=pipe.id())continue;
-                radiantAtConvection[edge]=radiant;convectionAtRadiant[radiant]=edge;linked=true;
-            }
-            return linked?new FurnacePairs(radiantAtConvection,convectionAtRadiant):null;
-        }
-    }
-    /** The paired convection receiver's energy also reads the radiant rate, its donor state and its phase-port cap. */
-    private void pairedColumns(BitSet[] columns) {
-        for(int radiant=0;radiant<graph.pipes().size();radiant++) {
-            int convection=furnacePairs.convectionAtRadiant()[radiant];
-            if(convection<0)continue;
-            var hot=graph.pipes().get(radiant);var warm=graph.pipes().get(convection);
-            for(int recipient:new int[]{warm.first(),warm.second()})if(layout[recipient]!=null) {
-                int from=offsets[recipient],to=from+nodeSize(recipient);
-                columns[edgeOffset+radiant].set(from,to);
-                for(int donor:new int[]{hot.first(),hot.second()})
-                    for(int column=offsets[donor];column<offsets[donor]+nodeSize(donor);column++)
-                        columns[column].set(from,to);
-                for(int end=0;end<2;end++) {
-                    int weir=weirOffsets[radiant][end];
-                    if(weir>=0)columns[weir].set(from,to);
-                }
-            }
-        }
-    }
-    /** Recompute the paired receiver for a radiant donor or flow column, including where both edges meet at that node. */
-    private void pairedRows(int radiant,int perturbedNode,double[] base,double[] x,FluidThermodynamics.State[] st,Transport[] tr,double[] f) {
-        int convection=furnacePairs.convectionAtRadiant()[radiant];
-        if(convection<0)return;
-        var pipe=graph.pipes().get(convection);
-        for(int recipient:new int[]{pipe.first(),pipe.second()})if(layout[recipient]!=null&&recipient!=perturbedNode) {
-            seed(recipient,f,base);nodeAccumulate(recipient,x,st,tr);nodeTargetRows(recipient,x,st,f);
-        }
-    }
-
     private void buildSparsity() {
         int count=layout.length;
         BitSet[] columns=new BitSet[size];for(int i=0;i<size;i++)columns[i]=new BitSet(size);
@@ -1065,7 +931,6 @@ final class StepEquations implements SparseNewton.Equations {
             if(control>=0){columns[row].set(control);columns[control].set(row);}
             if(filter>=0){columns[row].set(filter);columns[filter].set(row);}
         }
-        if(furnacePairs!=null)pairedColumns(columns);
         // Exact structural zeros: phase allocation, T and P cannot change bulk component flow at fixed total amounts and
         // kg/s, so cancellation-noise derivatives are suppressed, not small physics. Only for a BULK end: what a phase
         // port carries is the phase split itself, so a node any end of which draws a phase keeps every entry.
@@ -1087,16 +952,6 @@ final class StepEquations implements SparseNewton.Equations {
         double seed=seedDifferenceScales[column];
         if(seed>=0)return PhaseLayout.traceDifferenceScale(Math.max(seed,Math.abs(value)));
         return Math.max(differenceFloors[column],Math.abs(value));
-    }
-    /** Keep a reversible junction edge on its current donor branch in either Jacobian sweep. */
-    @Override public double differenceIncrement(int column,double value,double differenceStep) {
-        double step=differenceStep*differenceScale(column,value);
-        int edge=column-edgeOffset;
-        if(value>=0||value+step<0||edge<0||edge>=graph.pipes().size())return step;
-        var pipe=graph.pipes().get(edge);
-        boolean junction=graph.reservoirs().get(pipe.first()).junction()||graph.reservoirs().get(pipe.second()).junction();
-        // One-way boundaries already choose their physical donor in the closure stage. Keep the existing stencil there.
-        return junction&&boundaryAllowed(graph,pipe,-1)&&boundaryAllowed(graph,pipe,1)?-step:step;
     }
     /**
      * Whether a chord step on the Jacobian built at {@code built} still closes at least half of every row's gap at
@@ -1223,9 +1078,10 @@ final class StepEquations implements SparseNewton.Equations {
             // A trial a typed thermodynamic hold refused names the node it was refused at; see ThermoHold.
             try{state=layout[i]==null?graph.reservoirs().get(i).state():layout[i].decode(x,offsets[i],cachedPrepared[i]);}
             catch(com.wormzjl.icheme.science.fluid.thermo.ThermoHold hold){throw hold.at(graph.reservoirs().get(i).id());}
-            // Only a laid-out node prepared this slot for its current temperature. A fixed node can
-            // inherit a live bundle from another active-set pass at a different temperature.
-            var transport=transport(i,state,layout[i]==null?null:cachedPrepared[i]);
+            // A node this pass does not lay out keeps any bundle its slot was handed, unrefilled; one a past step retired is
+            // not handed on (S2): its transport reads no bundle, as when the accepted pass dropped them.
+            var bundle=cachedPrepared[i];
+            var transport=transport(i,state,layout[i]==null&&bundle!=null&&bundle.retired()?null:bundle);
             cachedStates[i]=state;cachedTransport[i]=transport;
             if(layout[i]!=null)System.arraycopy(x,offsets[i],cachedVariables[i],0,layout[i].size());
         }
@@ -1278,49 +1134,6 @@ final class StepEquations implements SparseNewton.Equations {
         if(rowWeights==null)return SparseNewton.Equations.super.residualNorm(residual);
         double maximum=0;for(int row=0;row<residual.length;row++)maximum=Math.max(maximum,rowWeights[row]*Math.abs(residual[row]));
         return maximum;
-    }
-    /** The dominant row of the last valid iterate, using the same weights as the convergence test. */
-    @Override public String failureDetail(double[] residual) {
-        int dominant=0;
-        double maximum=0;
-        for(int row=0;row<residual.length;row++) {
-            double weighted=Math.abs(residual[row])*(rowWeights==null?1:rowWeights[row]);
-            if(weighted>maximum){dominant=row;maximum=weighted;}
-        }
-        return "dominant "+residualRow(dominant)+" row="+dominant+" residual="+residual[dominant]+" weighted="+maximum;
-    }
-    private String residualRow(int row) {
-        if(row<edgeOffset)for(int node=0;node<layout.length;node++) {
-            if(layout[node]==null||row<offsets[node]||row>=offsets[node]+layout[node].size())continue;
-            var reservoir=graph.reservoirs().get(node);
-            return "node "+reservoir.id()+" "+reservoir.kind()+" "+layout[node].residualRow(row-offsets[node],reservoir.junction(),retainedPressures[node]>0);
-        }
-        for(int edge=0;edge<graph.pipes().size();edge++) {
-            var pipe=graph.pipes().get(edge);
-            String equation;
-            if(row==edgeOffset+edge)equation="hydraulics";
-            else if(row==controlOffsets[edge])equation="actuator";
-            else if(row==filterOffsets[edge])equation="filter loading";
-            else if(row==weirOffsets[edge][0])equation="first-end weir";
-            else if(row==weirOffsets[edge][1])equation="second-end weir";
-            else continue;
-            return "pipe "+pipe.id()+" "+equation+" ("+modes.get(edge)+")";
-        }
-        return "equation";
-    }
-    /** The repeated layout's phases (phaseCode bits) by node and its open or closed control modes by pipe. */
-    String cycleDetail(int pass,int[] phases,String earlierFailure) {
-        var nodes=new StringJoiner(", ","[","]");
-        for(int i=0;i<phases.length;i++) {
-            if(!graph.reservoirs().get(i).fixed())nodes.add(graph.reservoirs().get(i).id()+"="+phases[i]);
-        }
-        var devices=new StringJoiner(", ","[","]");
-        for(int edge=0;edge<modes.size();edge++) {
-            if(modes.get(edge)==FlowControl.Mode.PASSIVE&&!boundaryClosed[edge])continue;
-            devices.add(graph.pipes().get(edge).id()+"="+(boundaryClosed[edge]?"boundary closed":modes.get(edge).name()));
-        }
-        String layout="repeated layout at pass "+pass+" phase masks "+nodes+" modes "+devices;
-        return earlierFailure==null?layout:layout+", earlier "+earlierFailure;
     }
     /** {@link #rowWeights} from this pass's seeds and layouts. The amount {@code s} each balance row is stated over is read
      * off the row itself: its change when every target moves by one mole is {@code -1/s}. */
@@ -1417,100 +1230,12 @@ final class StepEquations implements SparseNewton.Equations {
      * are never read.
      */
     private void nodeAccumulate(int node,double[] x,FluidThermodynamics.State[] st,Transport[] tr) {
-        var reservoir=graph.reservoirs().get(node);
-        boolean junction=reservoir.junction();
         double[] target=targets[node],in=incoming[node];
-        double stored=0,mass=0,heat=0,net=0;
-        if(junction) {
-            Arrays.fill(in,0);
-            Arrays.fill(solidIncoming[node],0);
-        } else stored=vesselStartBalance(node,st[node]);
-        // A kettle's pool (W7): the bundle's heat into the vessel over the step, on its start state.
-        double pooled=poolHeat(reservoir);
-        if(junction)heat+=pooled;else stored+=dt*pooled;
-        if(reservoir.inventory().tower()!=null) {
-            double[] flows;if(edgesRead)flows=edgeFlow;else{flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);}
-            // The stream each spray edge delivers, as this point's transport draws it (COOLING_TOWER_PLAN.md 3.1).
-            double[][] drawn=null;
-            for(int edge:nodeEdges[node]){var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
-                if(pipe.portAt(node)!=PassiveNetwork.PhasePort.SPRAY||!((first?-flows[edge]:flows[edge])>0))continue;
-                int donor=first?pipe.second():pipe.first();var rates=drawRates(edge,flows[edge],st[donor],tr[donor]);
-                if(rates!=null){if(drawn==null)drawn=new double[flows.length][];drawn[edge]=rates;}}
-            var exchange=TowerExchange.at(graph,node,Arrays.asList(st),flows,drawn,model);
-            if(junction) {
-                heat-=exchange.energyWatt();
-                net-=exchange.massLoss();
-            } else {
-                for(int c=0;c<target.length;c++)target[c]-=dt*exchange.loss(c)/model.molecularWeight(c);
-                stored-=dt*exchange.energyWatt();
-            }
-        }
-        for(int edge:nodeEdges[node]) {
-            var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flowAt(edge,x,tr);
-            // Read the transported stream from its actual upwind end, including a phase port's draw.
-            boolean first=node==a;int donor=flow>=0?a:b;var upstream=st[donor];var transport=donorAt(edge,tr,flow);
-            boolean receiver=node==(flow>=0?b:a);
-            double rate=Math.abs(flow);
-            var amounts=transport.moles;
-            boolean filtered=pipe.filter()!=null;
-            if(junction) {
-                double capture=filtered?transport.solids.mass()/transport.mass:0;
-                double delivered=rate*(1-capture);
-                net+=receiver?delivered:-rate;
-                if(receiver) {
-                    mass+=delivered;
-                    for(int c=0;c<amounts.length;c++)in[c]+=rate*amounts[c]/transport.mass;
-                    heat+=rate*transport.specificEnthalpy;
-                    var moments=momentsOf(transport.solids,mixedMoments);
-                    if(!filtered&&melting!=null&&melting.any(node)&&transport.solids.mass()>0) {
-                        // Owner decision D61: the crystal this junction melts arrives as its component and energy offset.
-                        var split=melting.split(node,upstream.solids(),amounts.length);double solidRate=rate*transport.solids.mass()/transport.mass;
-                        for(int c=0;c<amounts.length;c++)if(split.mass()[c]>0)in[c]+=solidRate*split.mass()[c]/model.molecularWeight(c);
-                        heat+=solidRate*split.energy();
-                        if(!split.all()){double[] removed={split.share(),split.volume(),split.capacity()};
-                            for(int c=0;c<3;c++)solidIncoming[node][c]+=Math.max(0,rate*moments[c]/transport.mass-solidRate*removed[c]);}
-                    }
-                    else if(!filtered)for(int c=0;c<3;c++)solidIncoming[node][c]+=rate*moments[c]/transport.mass;
-                    else heat-=rate*(transport.solids.enthalpy(upstream.temperature(),upstream.pressure())/transport.mass);
-                }
-            } else {
-                double moving=dt*flow;
-                for(int c=0;c<amounts.length;c++){double moved=moving*amounts[c]/transport.mass;target[c]+=first?-moved:moved;}
-                var moments=momentsOf(transport.solids,carriedMoments);
-                for(int c=0;c<3;c++)if(!receiver||!filtered)solidTargets[node][c]+=(first?-1:1)*moving*moments[c]/transport.mass;
-                stored+=(first?-1:1)*moving*transport.specificEnthalpy;
-                if(receiver&&filtered) {
-                    double capturedRate=rate*(transport.solids.enthalpy(upstream.temperature(),upstream.pressure())/transport.mass);
-                    stored-=dt*capturedRate;
-                }
-            }
-            if(!first&&(pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine)) {
-                int control=controlOffsets[edge];double head=control<0?0:x[control]*1e5;
-                // Metered on the suction stream's density and on the trial endpoint pressures (decision D8).
-                double power=moverPower(edge,flow,head,suctionAt(edge,tr,flow).density,st[a].pressure(),st[b].pressure());
-                if(junction)heat+=power;else stored+=dt*power;
-            }
-            // Heat picked up crossing the wall enters the receiving balance, like mover work.
-            if(receiver&&pipe.heat()!=null) {
-                double taken=trialCoilHeat(edge,transport.specificEnthalpy,flow,x,tr);
-                if(junction)heat+=taken;else stored+=dt*taken;
-            }
-        }
-        if(junction) {
-            incomingMass[node]=mass;incomingEnergy[node]=heat;
-            // An emptying vessel standing as a junction (D54) passes its stock as well as what arrives.
-            netMass[node]=solver.emptyings!=null&&solver.emptyings[node]!=null?net+solver.emptyings[node].drain():net;
-        } else energy[node]=stored;
-    }
-
-    /** Owned stock and scheduled transfers at the start of a finite vessel's balance. */
-    private double vesselStartBalance(int node,FluidThermodynamics.State state) {
-        double[] target=targets[node];
-        System.arraycopy(oldAmounts[node],0,target,0,target.length);
-        System.arraycopy(startMoments(node),0,solidTargets[node],0,3);
-        double stored=graph.reservoirs().get(node).inventory().internalEnergy();
+        System.arraycopy(startMoments(node),0,solidTargets[node],0,3);Arrays.fill(solidIncoming[node],0);
+        System.arraycopy(oldAmounts[node],0,target,0,target.length);Arrays.fill(in,0);
+        double stored=graph.reservoirs().get(node).inventory().internalEnergy(),mass=0,heat=0,net=0;
         for(int t:transfersAt[node]) {
-            var transfer=graph.scheduledTransfers().get(t);
+            var transfer=graph.scheduledTransfers().get(t);var state=st[node];
             if(transfer instanceof ScheduledTransfer.Withdrawal withdrawal) {
                 // A module's withdrawal takes the vessel's bulk, its solids at their share of the mass (D23 (6)), on the
                 // state's own amounts: the node's transport is what a connection's bulk end draws (the gas, under D33).
@@ -1531,7 +1256,76 @@ final class StepEquations implements SparseNewton.Equations {
             var moments=released.moments().values();for(int c=0;c<3;c++)solidTargets[node][c]-=moments[c];
             stored-=released.energyJoule();
         }
-        return stored;
+        // A kettle's pool (W7): the bundle's heat into the vessel over the step, on its start state.
+        double pooled=poolHeat(graph.reservoirs().get(node));stored+=dt*pooled;heat+=pooled;
+        if(graph.reservoirs().get(node).inventory().tower()!=null) {
+            double[] flows;if(edgesRead)flows=edgeFlow;else{flows=new double[graph.pipes().size()];for(int e=0;e<flows.length;e++)flows[e]=flow(e,x[edgeOffset+e],tr);}
+            // The stream each spray edge delivers, as this point's transport draws it (COOLING_TOWER_PLAN.md 3.1).
+            double[][] drawn=null;
+            for(int edge:nodeEdges[node]){var pipe=graph.pipes().get(edge);boolean first=pipe.first()==node;
+                if(pipe.portAt(node)!=PassiveNetwork.PhasePort.SPRAY||!((first?-flows[edge]:flows[edge])>0))continue;
+                int donor=first?pipe.second():pipe.first();var rates=drawRates(edge,flows[edge],st[donor],tr[donor]);
+                if(rates!=null){if(drawn==null)drawn=new double[flows.length][];drawn[edge]=rates;}}
+            var exchange=TowerExchange.at(graph,node,Arrays.asList(st),flows,drawn,model);
+            for(int c=0;c<target.length;c++)target[c]-=dt*exchange.loss(c)/model.molecularWeight(c);
+            stored-=dt*exchange.energyWatt();heat-=exchange.energyWatt();net-=exchange.massLoss();
+        }
+        for(int edge:nodeEdges[node]) {
+            var pipe=graph.pipes().get(edge);int a=pipe.first(),b=pipe.second();double flow=flowAt(edge,x,tr);
+            // The donor terms read the stream of the end the flow leaves: the donor's bulk at a BULK end (the same
+            // doubles as its whole state), its drawn phase at a phase port.
+            boolean first=node==a;int donor=flow>=0?a:b;var upstream=st[donor];var transport=donorAt(edge,tr,flow);
+            boolean receiver=node==(flow>=0?b:a);
+            double captureFraction=pipe.filter()==null?0:transport.solids.mass()/transport.mass;
+            double deliveredFlow=Math.abs(flow)*(1-captureFraction);
+            net+=receiver?deliveredFlow:-Math.abs(flow);
+            var amounts=transport.moles;double moving=dt*flow;
+            for(int c=0;c<amounts.length;c++){double moved=moving*amounts[c]/transport.mass;target[c]+=first?-moved:moved;}
+            var moments=momentsOf(transport.solids,carriedMoments);
+            for(int c=0;c<3;c++)if(!receiver||pipe.filter()==null)solidTargets[node][c]+=(first?-1:1)*moving*moments[c]/transport.mass;
+            stored+=(first?-1:1)*moving*transport.specificEnthalpy;
+            // What arrives at this node, on the live upwind: read only by a junction's rows, which mix it into the
+            // junction's owned stock like a vessel's inflow.
+            int mixed=donor;
+            if(receiver) {
+                var source=st[mixed];var carried=transport;var sourceAmounts=carried.moles;
+                double sourceCapture=pipe.filter()==null?0:carried.solids.mass()/carried.mass;
+                double sourceEnthalpy=carried.specificEnthalpy;
+                mass+=Math.abs(flow)*(1-sourceCapture);
+                for(int c=0;c<sourceAmounts.length;c++)in[c]+=Math.abs(flow)*sourceAmounts[c]/carried.mass;
+                heat+=Math.abs(flow)*sourceEnthalpy;
+                var sourceMoments=momentsOf(carried.solids,mixedMoments);
+                if(pipe.filter()==null&&melting!=null&&melting.any(node)&&carried.solids.mass()>0) {
+                    // Owner decision D61: the crystal this junction is above the melting point of arrives as its
+                    // component, with its offset (the crystal's enthalpy), and only the solids it keeps mix as solids.
+                    var split=melting.split(node,source.solids(),sourceAmounts.length);double solidRate=Math.abs(flow)*carried.solids.mass()/carried.mass;
+                    for(int c=0;c<sourceAmounts.length;c++)if(split.mass()[c]>0)in[c]+=solidRate*split.mass()[c]/model.molecularWeight(c);
+                    heat+=solidRate*split.energy();
+                    if(!split.all()){double[] removed={split.share(),split.volume(),split.capacity()};
+                        for(int c=0;c<3;c++)solidIncoming[node][c]+=Math.max(0,Math.abs(flow)*sourceMoments[c]/carried.mass-solidRate*removed[c]);}
+                }
+                else if(pipe.filter()==null)for(int c=0;c<3;c++)solidIncoming[node][c]+=Math.abs(flow)*sourceMoments[c]/carried.mass;
+                else heat-=Math.abs(flow)*(carried.solids.enthalpy(source.temperature(),source.pressure())/carried.mass);
+            }
+            if(receiver&&pipe.filter()!=null) {
+                double capturedRate=Math.abs(flow)*(transport.solids.enthalpy(upstream.temperature(),upstream.pressure())/transport.mass);
+                stored-=dt*capturedRate;
+            }
+            if(!first&&(pipe.control() instanceof FlowControl.Mover||pipe.control() instanceof FlowControl.Turbine)) {
+                int control=controlOffsets[edge];double head=control<0?0:x[control]*1e5;
+                // Metered on the suction stream's density (its bulk at a BULK end) and, for a compressor, the suction
+                // node's pressure at this trial (decision D8: suction properties only). A turbine's work leaves the
+                // stream (negative), its drop read from the trial inlet to the trial exhaust node's pressure; the
+                // sparsity declares this row on both ends' columns and the flow's (buildSparsity).
+                double power=moverPower(edge,flow,head,suctionAt(edge,tr,flow).density,st[a].pressure(),st[b].pressure());
+                stored+=dt*power;heat+=power;
+            }
+            // A heat-exchanging side delivers its donor's stream with the heat it took up crossing the wall, booked like
+            // a mover's work into the receiver's energy and its inflow (batch 2026-10-27-heat-exchanger-design).
+            if(receiver&&pipe.heat()!=null){double taken=sideHeat(edge,transport.specificEnthalpy,flow);stored+=dt*taken;heat+=taken;}
+        }
+        // An emptying vessel standing as a junction (decision D54, emptyingGraph) passes its stock as well as what arrives.
+        energy[node]=stored;incomingMass[node]=mass;incomingEnergy[node]=heat;netMass[node]=solver.emptyings!=null&&solver.emptyings[node]!=null?net+solver.emptyings[node].drain():net;
     }
     /** {@code moments.values()} written into {@code into} (P-07): the same three doubles in the same order (mass, volume,
      * heat capacity), every element written. */
@@ -1554,60 +1348,15 @@ final class StepEquations implements SparseNewton.Equations {
      * read this one function (batch 2026-10-27-heat-exchanger-design). It never samples: an end whose curve the pass does
      * not hold yet is noted and reads zero, and its evaluation is discarded ({@link #evaluated}).
      */
-    /** Read the other passage's radiant duty from this same Newton point. This closes the thermal loop through the
-     * actual flow and fluid states, including a condenser or a junction held between the two passages. */
-    private double trialCoilHeat(int edge,double inlet,double flow,double[] x,Transport[] tr) {
-        int radiant=furnacePairs==null?-1:furnacePairs.radiantAtConvection()[edge];
-        if(radiant<0)return sideHeat(edge,inlet,flow);
-        double radiantFlow=flowAt(radiant,x,tr);
-        if(radiantFlow==0)return 0;
-        var radiantDonor=donorAt(radiant,tr,radiantFlow);
-        double flue=ConvectionCoil.flueOf(sideHeat(radiant,radiantDonor.specificEnthalpy,radiantFlow));
-        return sideHeat(edge,inlet,flow,flue);
-    }
-
     double sideHeat(int edge,double specificEnthalpy,double flow) {
-        return sideHeat(edge,specificEnthalpy,flow,Double.NaN);
-    }
-    private double sideHeat(int edge,double specificEnthalpy,double flow,double localFlue) {
         var pipe=graph.pipes().get(edge);
         if(pipe.heat()==null||flow==0)return 0;
         int end=flow>0?0:1;
         if(passRefusals!=null&&passRefusals[edge]!=null&&passRefusals[edge][end]!=null)throw passRefusals[edge][end];
         if(!passKnown[edge][end]){if(missingEdge<0){missingEdge=edge;missingEnd=end;}return 0;}
         var curve=passCurves[edge][end];
-        if(curve==null)return 0;
-        return Double.isNaN(localFlue)?pipe.heat().heat(curve,specificEnthalpy,flow)
-                :((ConvectionCoil)pipe.heat()).heatAtFlue(curve,specificEnthalpy,flow,localFlue);
+        return curve==null?0:pipe.heat().heat(curve,specificEnthalpy,flow);
     }
-    /** Pair the heat on the reconstructed donors and signed flows that the conserved booking actually uses. */
-    ConservativeTransport.EdgeHeat thermalBooking() {
-        if(furnacePairs==null)return this::bookedHeat;
-        return new ConservativeTransport.PairedEdgeHeat() {
-            private final double[] flues=new double[graph.pipes().size()];
-            @Override public void prepare(double[] donor,double[] flows) {
-                for(int convection=0;convection<flows.length;convection++) {
-                    int radiant=furnacePairs.radiantAtConvection()[convection];
-                    if(radiant>=0)flues[convection]=ConvectionCoil.flueOf(bookedHeat(radiant,donor[radiant],flows[radiant]));
-                }
-            }
-            @Override public double heat(int edge,double enthalpy,double flow) {
-                if(furnacePairs.radiantAtConvection()[edge]<0)return bookedHeat(edge,enthalpy,flow);
-                if(flow!=0&&!passKnown[edge][flow>0?0:1])sample(edge,flow>0?0:1);
-                return sideHeat(edge,enthalpy,flow,flues[edge]);
-            }
-        };
-    }
-
-    /** Uncapped radiant duty requested by the donor and signed flow of the decoded accepted point. */
-    double radiantDemand(int edge,double flow) {
-        if(flow==0||!(graph.pipes().get(edge).heat() instanceof FiredCoil coil))return 0;
-        int end=flow>0?0:1;
-        if(!passKnown[edge][end])sample(edge,end);
-        var curve=passCurves[edge][end];
-        return curve==null?0:coil.requested(curve,donorAt(edge,cachedTransport,flow).specificEnthalpy,flow);
-    }
-
     /** {@link #sideHeat} for the reconstruction, outside every evaluation: an end not held yet is sampled first. */
     double bookedHeat(int edge,double specificEnthalpy,double flow) {
         var pipe=graph.pipes().get(edge);
@@ -1818,11 +1567,11 @@ final class StepEquations implements SparseNewton.Equations {
                     int column=offsets[node]+local;
                     double step=differenceStep*differenceScale(column,x[column]);
                     trial[column]+=step;
-                    double temperature=local==layout[node].temperatureVariable()?layout[node].temperature(trial,offsets[node]):baseStates[node].temperature();
+                    double temperature=layout[node].temperature(trial,offsets[node]);
                     var prepared=basePrepared[node]!=null&&basePrepared[node].temperature()==temperature?basePrepared[node]
                             :probe(node,temperature);
                     long exactBefore=SolverDiagnostics.ENABLED&&tangents?SolverDiagnostics.jacobianExactPhases.sum():0;
-                    var state=layout[node].decodeProbe(trial,offsets[node],local,baseStates[node],prepared,nodeTangents);
+                    var state=layout[node].decode(trial,offsets[node],prepared,nodeTangents);
                     if(SolverDiagnostics.ENABLED&&tangents&&SolverDiagnostics.jacobianExactPhases.sum()>exactBefore)SolverDiagnostics.jacobianExactColumns.increment();
                     st[node]=state;pr[node]=prepared;
                     tr[node]=transport(node,state,prepared);
@@ -1837,7 +1586,6 @@ final class StepEquations implements SparseNewton.Equations {
                             nodeAccumulate(other,trial,st,tr);nodeTargetRows(other,trial,st,perturbed);
                         }
                     }
-                    if(furnacePairs!=null)for(int edge:nodeEdges[node])pairedRows(edge,node,f,trial,st,tr,perturbed);
                     write(entryOffsets,entryRows,entries,column,perturbed,f,step);
                     st[node]=baseStates[node];tr[node]=baseTransport[node];pr[node]=basePrepared[node];
                     trial[column]=x[column];
@@ -1854,14 +1602,13 @@ final class StepEquations implements SparseNewton.Equations {
                     int column=which==0?edgeOffset+edge:which==1?controlOffsets[edge]:filterOffsets[edge];
                     if(column<0)continue;
                     columns++;
-                    double step=differenceIncrement(column,x[column],differenceStep);
+                    double step=differenceStep*differenceScale(column,x[column]);
                     trial[column]+=step;
                     edgeRows(edge,trial,st,tr,perturbed);
                     // No node is decoded again, so only the two endpoints' inflow rows move.
                     if(which<2)for(int node:new int[]{pipe.first(),pipe.second()})if(layout[node]!=null) {
                         seed(node,perturbed,f);nodeAccumulate(node,trial,st,tr);nodeTargetRows(node,trial,st,perturbed);
                     }
-                    if(furnacePairs!=null&&which==0)pairedRows(edge,-1,f,trial,st,tr,perturbed);
                     write(entryOffsets,entryRows,entries,column,perturbed,f,step);
                     trial[column]=x[column];
                 }
@@ -1919,10 +1666,10 @@ final class StepEquations implements SparseNewton.Equations {
         }
         // A junction's solid moments are its owned stock's, mixed with what arrives like its fluid; a rate-only solve
         // holds them at the stock's own (see junctionInflow).
-        double stock = junctionStockMass[node];
-        double share = mixingShare(node, stock), retained = share * stock / dt, total = incomingMass[node] + retained;
+        var inventory=graph.reservoirs().get(node).inventory();
+        double retained=(solver.molarMass(oldAmounts[node])+inventory.solids().massKg())/dt,total=incomingMass[node]+retained;
         var solids=solidMix;System.arraycopy(solidIncoming[node],0,solids,0,3);var held=heldKept[node]!=null?heldKept[node]:startMoments(node);
-        for(int c=0;c<3;c++)solids[c]=solver.rateOnly?held[c]/stock:(solids[c]+held[c]*share/dt)/total;
+        for(int c=0;c<3;c++)solids[c]=solver.rateOnly?held[c]/(retained*dt):(solids[c]+held[c]/dt)/total;
         layout[node].solidRows(st[node],x,offsets[node],solids,true,f);
     }
     /**
@@ -1936,74 +1683,20 @@ final class StepEquations implements SparseNewton.Equations {
      * at its owned inventory's, its pressure algebraic, and the reconstruction books its accumulation as a
      * pseudo-boundary (frozen junctions).
      */
-    private double mixingShare(int node, double stock) {
-        if (solver.rateOnly || solver.emptyings != null && solver.emptyings[node] != null) return 1;
-        return JunctionMixing.share(graph.reservoirs().get(node).inventory(),stock, incomingMass[node], dt, model.time());
-    }
-
-    /**
-     * Finds the smallest supported active parcels for an otherwise converged point whose weighted mixing rows reach
-     * their floating-point resolution. The step keeps its equations and acceptance tolerances on a retry.
-     */
-    List<JunctionMixing.Precision> precisionLoss(double[] point,double tolerance) {
-        if(point==null||point.length!=size||!mightResolveJunctionRoundoff(tolerance))return List.of();
-        double[] residual=residual(point);
-        boolean[] rounded=new boolean[residual.length];
-        var requests=new ArrayList<JunctionMixing.Precision>();
-        for(int node=0;node<layout.length;node++) {
-            if(!backedFluidJunction(node))continue;
-            double delivery=dt*incomingMass[node];
-            if(!(delivery>0))continue;
-            double target=junctionInflow(node);
-            if(!Double.isFinite(junctionWeight))continue;
-            double ulp=layout[node].identifyMixingRoundoff(cachedStates[node],fractions,target,junctionWeight,
-                    residual,offsets[node],tolerance,rounded);
-            if(!(ulp>0))continue;
-            // Allow 16 ulps for the residual of the new mixture, including its thermodynamic reconstruction.
-            double turnover=tolerance/(16*ulp)-1;
-            if(!(turnover>0)||!Double.isFinite(turnover))return List.of();
-            requests.add(new JunctionMixing.Precision(node,delivery,delivery/turnover,cachedStates[node]));
-        }
-        for(int row=0;row<residual.length;row++) {
-            double weight=rowWeights==null?1:rowWeights[row];
-            if(!rounded[row]&&!(weight*Math.abs(residual[row])<=tolerance))return List.of();
-        }
-        return requests;
-    }
-
-    /** Most failed solves have ample resolution. Check the last assembled streams before re-evaluating a failed point. */
-    private boolean mightResolveJunctionRoundoff(double tolerance) {
-        for(int node=0;node<layout.length;node++) {
-            if(!backedFluidJunction(node)||!(incomingMass[node]>0))continue;
-            var state=cachedStates[node];
-            double weight=1+dt*incomingMass[node]/junctionStockMass[node];
-            double ulp=Math.ulp(state.enthalpy()/state.mass())/Math.max(1,layout[node].energyScale()/state.mass());
-            if(8*weight*Math.max(Math.ulp(1.0),ulp)>=tolerance)return true;
-        }
-        return false;
-    }
-
-    private boolean backedFluidJunction(int node) {
-        var reservoir=graph.reservoirs().get(node);
-        return layout[node]!=null&&cachedStates[node]!=null&&reservoir.junction()&&reservoir.inventory().reserve()!=null
-                &&reservoir.inventory().solids().empty()&&cachedStates[node].solidMoments().mass()==0;
-    }
-
     private double junctionInflow(int node) {
         var inventory=graph.reservoirs().get(node).inventory();var held=oldAmounts[node];
-        double heldMass=junctionStockMass[node];
+        double heldMass=solver.molarMass(held)+inventory.solids().massKg(),total=incomingMass[node]+heldMass/dt;
         if(solver.rateOnly) {
             junctionWeight=1;
             for(int c=0;c<fractions.length;c++)fractions[c]=held[c]*model.molecularWeight(c)/heldMass;
             return inventory.internalEnergy()/heldMass;
         }
-        double share=mixingShare(node,heldMass),total=incomingMass[node]+share*heldMass/dt;
-        junctionWeight=share+incomingMass[node]*dt/heldMass;
+        junctionWeight=total*dt/Math.max(heldMass,1e-300);
         // Owner decision D61: what the junction's own stock melts joins its fluid, with the crystal's offset.
         var melt=heldMelt[node];
         for(int c=0;c<fractions.length;c++)
-            fractions[c]=(incoming[node][c]+(melt==null?held[c]:held[c]+melt[c])*share/dt)*model.molecularWeight(c)/total;
-        return (incomingEnergy[node]+(melt==null?inventory.internalEnergy():inventory.internalEnergy()+heldMeltEnergy[node])*share/dt)/total;
+            fractions[c]=(incoming[node][c]+(melt==null?held[c]:held[c]+melt[c])/dt)*model.molecularWeight(c)/total;
+        return (incomingEnergy[node]+(melt==null?inventory.internalEnergy():inventory.internalEnergy()+heldMeltEnergy[node])/dt)/total;
     }
     /** Whether this edge can carry a change of {@code node}'s decoded state into the other
      * endpoint's rows: the transported amounts and enthalpy are the donor's, a junction's

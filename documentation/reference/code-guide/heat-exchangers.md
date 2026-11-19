@@ -21,10 +21,10 @@ finned tubes; a fired heater burns fuel, gives most of its heat to a radiant coi
 convection coil; a kettle boils a pool around a tube bundle; a gas turbine's exhaust raises steam in one coil. Each
 passage of a unit compiles as one pipe that carries a **heat law** (`HeatLaw`: `HeatSide`, `AirCooled`, `FiredCoil`,
 `ConvectionCoil`, `ExhaustCoil`). Inside a step's Newton the heat is a pure function of the connection's flow and the
-donor's specific enthalpy on its enthalpy-temperature-film curve (`HeatCurve`). Flowing heat laws add neither unknowns
-nor modes. A radiant coil caps each trial's heat at its available duty. Its paired convection coil in the same island
-reads that trial's radiant heat. A convection coil in another island reads a committed radiant rate through
-`ExchangerRelay`, which also sets the exchanger walls, bypass and give-back at the start of the slice. The wall holds no heat. What the two
+donor's specific enthalpy, on the donor stream's enthalpy-temperature-film curve (`HeatCurve`): no unknown, no mode,
+exactly zero at no flow. Everything else is a slice input fixed before the Newton: an air cooler's louvers and fans, a
+radiant coil's firing and a convection coil's flue are planned at each step's start; an exchanger's wall, its bypass and
+its give-back at each slice's start from the other side as read (`ExchangerRelay`). The wall holds no heat. What the two
 sides of an exchanger booked differently waits as the exchanger's heat in transit, returned by the give-back. Each
 controllable side has a built-in controller (`HeatControl`), dead-beat on its own law.
 
@@ -63,19 +63,17 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
    `Read.heatRate`; each complete side its valve's target. Both curves (`HeatCurve.sample`) span both inlets, 10 K
    beyond, each at its own stream's pressure. A side without a read gets a flat wall at its own temperature and moves no
    heat.
-3. **Step plan** uses `PassiveStepSolver.plan` with the last accepted flows. It plans air-cooler draught and seeds
-   radiant firing and local flue.
+3. **Step plan** (worker, every step, `PassiveStepSolver.plan`): `FiredCoil.planned` (firing), `AirCooled.planned`
+   (draught), `ConvectionCoil.flueOf` of the radiant coil's planned heat in the same island; from the last accepted
+   step's flows.
 4. **Newton**: the connection delivers its donor's stream with the heat it took up into the receiver's energy row
-   (`StepEquations.sideHeat`, on the donor end's curve `sideCurve`). A local convection receiver's energy also
-   depends on the radiant edge's rate and donor enthalpy. The sparse and block Jacobians carry this dependence for either
-   direction of flow. A curve is never sampled inside a residual or a
+   (`StepEquations.sideHeat`, on the donor end's curve `sideCurve`). A curve is never sampled inside a residual or a
    Jacobian: an evaluation that reaches an end without a kept curve (`heldCurves`, `curveKept`) reads zero there, is
    discarded, the end is sampled between evaluations, and the evaluation is done again from the same point
    (`evaluating`, `evaluated`). A pool's heat enters its vessel's energy row on the step's start state
    (`poolHeat`), and its boil-up (`boilUp`) counts as gas the vessel's ports may draw within the step.
 5. **Booking**: `ConservativeTransport` books each side's heat (`EdgeHeat`) into the receiver and as a `HEAT` boundary at
-   the connection id and a pool's at its key. A local pair evaluates both laws on the same reconstructed donor streams
-   and signed rates, so the convection ledger reads the radiant heat the step booked.
+   the connection id, a pool's at its key (`bookedHeat` samples a missing end first).
 
 ## Contracts
 
@@ -97,8 +95,8 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
   |---|---|---|
   | `HeatSide` | (1 − bypass) \|ṁ\| marched through the cells against the wall on the donor's curve, times `active`, plus \|ṁ\| · giveBack | wall, bypass, give-back, active, limit: per slice (`ExchangerRelay.plan`) |
   | `AirCooled` | one march against air at `AIR_TEMPERATURE` over the bare surface with `Air.films(draught)`; 0 with the louvers shut | draught and limit: per step (`AirCooled.planned`); `fanLimit` 0 when its store is empty, so an unpowered bank falls to natural draught |
-  | `FiredCoil` | min(available duty, \|ṁ\| · max(0, h_set − h_in)), where h_set = `curve.enthalpyAt(T_set)` | dispatched fuel limit; planned β supplies a starting reading |
-  | `ConvectionCoil` | counterflow ε C_min (T_bw − T_in) over UA = `CONVECTION_U` × bare tube; the stream's mean capacity rate from its inlet to the bridgewall | flue C_g = Q_r/(T_flame − T_bw) reads the same-island radiant trial, or the external partner's committed `Read.heatRate` |
+  | `FiredCoil` | β · \|ṁ\| · (h_set − h_in), h_set = `curve.enthalpyAt(T_set)`, at most its duty at its limit | β per step: 1 within the duty, duty/demand beyond it, 0 at or above the set point or with the burners out |
+  | `ConvectionCoil` | counterflow ε C_min (T_bw − T_in) over UA = `CONVECTION_U` × bare tube; the stream's mean capacity rate from its inlet to the bridgewall | flue C_g = Q_r/(T_flame − T_bw): per step from the radiant coil in the same island, else per slice from `Read.heatRate` |
   | `ExhaustCoil` | the outlet enthalpy the least of the enthalpy `APPROACH` under the gas inlet and, at every knot of the stream's curve, the enthalpy that leaves the gas `PINCH` over the stream (a boiling stream's bubble point decides) | gas inlet (K) and capacity rate (W/K) from the turbine's last fired slice; `COLD` while stopped |
 
 - **The curve** is the stream the donor end's port draws (a drum's liquid draw has its own bubble point), at the donor's
@@ -139,7 +137,7 @@ One coupled exchanger side in one slice (the engine side is in [heat-units.md](h
   lowest effort's heat, the lowest (`LOWEST`); on a cooled side the low limit then holds the effort back (`LOW_LIMIT`),
   in every mode, manual included. A set point on a plateau names its liquid end on a cooled side and its vapour end on a
   heated side. An exchanger side's bypass is planned per slice with the wall, in turn until it moves less than 1e-6 (at
-  most 8 rounds). The air cooler plans its draught per step.
+  most 8 rounds); an air cooler's draught per step, as a fired coil's firing.
 - **The unit's UA**, a reading for the heat page: over the wall's
   cells `Σ A_k / (1/h_a,k + 1/h_b,k)`, each film the one that stream's march meets in cell k (`cellFilms`: the curve's film
   at the cell's mean specific enthalpy; a stream all through the bypass meets every cell at its inlet's film), so the
@@ -218,8 +216,8 @@ The laws' facts are a heat unit's registration facts; their slice inputs and the
 
 - **A slice input is not a fact.** Wall, bypass, give-back, draught, firing and flue are planned; changing them never
   edits a registration.
-- **The coupling follows the island boundary.** An external radiant and convection pair uses the committed relay read
-  for the slice. A local pair evaluates both trial streams in the same Newton within the dispatched fuel limit.
+- **Plan the heat where its inputs are known.** A law that needs its partner plans per slice (`couple`); one that needs
+  only its own stream plans per step (`plan`). Nothing switches inside a Newton.
 - **A kettle's tubes take no give-back**; the pool takes all of it.
 - The air is a constant 25 °C (no weather, biome or altitude).
 - The curve's extension past its end knots raises no notice: the property models' own data-range notices do.

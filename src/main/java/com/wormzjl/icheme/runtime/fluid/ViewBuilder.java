@@ -212,12 +212,9 @@ final class ViewBuilder {
         if(ownPipe!=null)devicePressureChange=snapshot.graph().reservoirs().get(ownPipe.first()).state().pressure()-snapshot.graph().reservoirs().get(ownPipe.second()).state().pressure();
         // A fired heater's radiant coil firing at its maximum short of what it should do (batch 2026-10-27-heat-exchanger-design,
         // owner Q11): it names its outlet's shortfall from the set point. The convection coil takes the flue gas as it comes (F1).
-        var accepted=snapshot.lastResult().orElse(null);
-        if(ownPipe!=null&&ownPipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil coil
-                &&accepted!=null&&coil.available()>0&&accepted.radiantDemands().getOrDefault(own,0.)>coil.available()) {
-            int outlet=accepted.endpointFlows()[ownAt]<0?ownPipe.first():ownPipe.second();
-            double shortfall=coil.setTemperature()-snapshot.graph().reservoirs().get(outlet).state().temperature();
-            if(shortfall>0)status=String.format(java.util.Locale.ROOT,"DUTY INSUFFICIENT: outlet %.1f K below the set point / ",shortfall)+status;
+        if(ownPipe!=null&&ownPipe.heat() instanceof com.wormzjl.icheme.science.fluid.network.FiredCoil coil&&coil.firing()>0&&coil.firing()<1) {
+            double shortfall=coil.setTemperature()-snapshot.graph().reservoirs().get(ownPipe.second()).state().temperature();
+            status=(shortfall>0?String.format(java.util.Locale.ROOT,"DUTY INSUFFICIENT: outlet %.1f K below the set point / ",shortfall):"")+status;
         }
         // A side's controller short of its target (W4, plan section 6): its actuator at an end, or held back by its low limit.
         if(ownPipe!=null)status=FluidWorldAuthority.controlStatus(ownPipe.heat(),registration.device().heat())+status;

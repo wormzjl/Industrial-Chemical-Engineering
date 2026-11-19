@@ -32,41 +32,6 @@ public final class PassiveIntervalSolver {
     private static final class StateChangeRejection extends RuntimeException {
         private StateChangeRejection(String message){super(message);}
     }
-    /**
-     * Delay a repeatedly refused increase until accepted advancement has moved the state on. Each repeat at that same
-     * size doubles the wait. With too few attempts to afford further repeated refusals, finish on the proven step while
-     * it can cover the interval. Every substep is solved and audited normally.
-     */
-    static final class StepGrowth {
-        private double refusedSize=Double.NaN;
-        private double advancedSinceRefusal;
-        private double retryAfterAdvance;
-        private boolean finishing;
-
-        void refused(double size,boolean numerical) {
-            boolean repeated=numerical&&size==refusedSize;
-            if(!repeated)finishing=false;
-            retryAfterAdvance=repeated?2*retryAfterAdvance:size;
-            refusedSize=numerical?size:Double.NaN;
-            advancedSinceRefusal=0;
-        }
-
-        double afterAccepted(double step,double proposed,double remaining,int attemptsLeft) {
-            if(step>=refusedSize) {
-                refusedSize=Double.NaN;
-                finishing=false;
-            }
-            advancedSinceRefusal+=step;
-            if(proposed!=refusedSize)return proposed;
-            double stepsNeeded=remaining/step;
-            if(stepsNeeded>attemptsLeft)return proposed;
-            // Each advance at the smaller size can cost two attempts if the larger one keeps failing.
-            if(2*stepsNeeded>attemptsLeft)finishing=true;
-            if(finishing||retryAfterAdvance>refusedSize&&advancedSinceRefusal<retryAfterAdvance)return step;
-            return proposed;
-        }
-    }
-
     public PassiveIntervalSolver(FluidThermodynamics model){this(model,SolverOwnership.confinedToCurrentThread());}
     /** Retained across island jobs: every nested workspace answers to the supplied latch. */
     public PassiveIntervalSolver(FluidThermodynamics model,SolverOwnership ownership) {
@@ -93,14 +58,9 @@ public final class PassiveIntervalSolver {
     }
     public record Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,
                          double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,
-                         List<FlowControl.Mode> endpointModes,double[] endpointHeads,double[] endpointFlows,List<PipeTransfer> pipeTransfers,List<PassiveStepSolver.PipeObservation> observations,Map<Long,TowerExchange.Rates> towers,Map<Long,Double> radiantDemands) {
-        public Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,
-                         double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,
                          List<FlowControl.Mode> endpointModes,double[] endpointHeads,double[] endpointFlows,List<PipeTransfer> pipeTransfers,List<PassiveStepSolver.PipeObservation> observations,Map<Long,TowerExchange.Rates> towers) {
-            this(graph,advancedSeconds,averageMassFlows,acceptedSubsteps,rejectedSubsteps,pumpWorkJoule,boundaries,rejectionReasons,endpointModes,endpointHeads,endpointFlows,pipeTransfers,observations,towers,Map.of());
-        }
         public Result(PassiveNetwork graph,double advancedSeconds,double[] averageMassFlows,int acceptedSubsteps,int rejectedSubsteps,double pumpWorkJoule,List<ConservativeTransport.BoundaryTransfer> boundaries,Map<String,Integer> rejectionReasons,List<FlowControl.Mode> endpointModes,double[] endpointHeads,double[] endpointFlows,List<PipeTransfer> pipeTransfers){this(graph,advancedSeconds,averageMassFlows,acceptedSubsteps,rejectedSubsteps,pumpWorkJoule,boundaries,rejectionReasons,endpointModes,endpointHeads,endpointFlows,pipeTransfers,List.of(),Map.of());}
-        public Result {radiantDemands=Map.copyOf(radiantDemands);towers=Map.copyOf(towers);observations=List.copyOf(observations);averageMassFlows=averageMassFlows.clone();boundaries=List.copyOf(boundaries);rejectionReasons=Collections.unmodifiableMap(new LinkedHashMap<>(rejectionReasons));endpointModes=List.copyOf(endpointModes);endpointHeads=endpointHeads.clone();endpointFlows=endpointFlows.clone();pipeTransfers=List.copyOf(pipeTransfers);}
+        public Result {towers=Map.copyOf(towers);observations=List.copyOf(observations);averageMassFlows=averageMassFlows.clone();boundaries=List.copyOf(boundaries);rejectionReasons=Collections.unmodifiableMap(new LinkedHashMap<>(rejectionReasons));endpointModes=List.copyOf(endpointModes);endpointHeads=endpointHeads.clone();endpointFlows=endpointFlows.clone();pipeTransfers=List.copyOf(pipeTransfers);}
         @Override public double[] averageMassFlows(){return averageMassFlows.clone();}
         @Override public double[] endpointHeads(){return endpointHeads.clone();}
         /** The mass flows (kg/s) of the interval's last accepted step: the flows at its end state, which the next job's first
@@ -131,12 +91,7 @@ public final class PassiveIntervalSolver {
     }
     /** That solve with each running column's port planned for the interval first ({@link PassiveStepSolver#ports}, batch 2026-10-28-column-operation). */
     public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads,Map<Long,PortPlan> ports) {
-        return kept.around(()->{
-            implicit.startDeliveryWindow(duration);
-            // Solid events keep every accepted prefix. If a segment fails, the entire interval is discarded.
-            try{return solveKept(initial,duration,settings,checkpoint,startingStep,reads,ports);}
-            finally{implicit.clearDeliveryWindow();}
-        });
+        return kept.around(()->solveKept(initial,duration,settings,checkpoint,startingStep,reads,ports));
     }
     private Result solveKept(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads,Map<Long,PortPlan> ports) {
         var committed=PassiveNetwork.sizeJunctionHoldups(initial,model);
@@ -264,14 +219,12 @@ public final class PassiveIntervalSolver {
         if(!Double.isFinite(startingStep)||startingStep<=0)throw new IllegalArgumentException("Positive finite starting step required");
         PassiveNetwork accepted=refreshed.graph();
         // h is the controller's estimate; each attempt uses it truncated to the rest of the interval.
-        var growth=new StepGrowth();
         double elapsed=0,h=Math.min(startingStep,settings.maximumStep),lastStep=0;int acceptedCount=0,rejectedCount=0,consecutiveRejects=0;PassiveStepSolver.Result last=null;
         double[] transferred=new double[accepted.pipes().size()];
         double work=0;var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(refreshed.boundaries());
         var pipeTransfers=new PipeTransfer.Accumulator();
         var rejectionReasons=new LinkedHashMap<String,Integer>();
         String lastRejection="";
-        String lastDiagnostic="";
         // A transition is declared rather than refined once the step that would contain it is this
         // short, so it is located to within one such step of where it physically is.
         double transitionFloor=Math.max(1e-6,1e-9*duration);
@@ -307,9 +260,10 @@ public final class PassiveIntervalSolver {
                 }
                 // The cold rate seed (owner decision of 2026-10-19, the plan's fallback): a structure no step has been accepted on
                 // starts from one rate solve's converged point, itself started from the balance; see {@link #coldRateSeed}.
-                // Start guesses for radiant firing and local convection flue, and the air cooler's fans for this step.
-                // Read the previous accepted rates or the endpoint carried from the last interval, else one rate solve.
-                // The fired heater's local heat laws read the actual trial streams under the dispatched fuel limit.
+                // Each fired coil's firing share and controlled air cooler's fans for this step, planned from its start (batch
+                // 2026-10-27-heat-exchanger-design, W6 and W4): the previous accepted step's flows, else the endpoint carried
+                // from the last interval, else one rate solve's (batch 2026-11-09-furnace-fuel-power, open item O2): planned at
+                // no flow, a fired coil fires fully and overshoots its duty and the fuel its burners fired for the whole step.
                 double[] startFlows=last!=null?last.massFlows():carriedFlows(accepted);
                 if(startFlows==null&&PassiveStepSolver.plansHeat(accepted)) {
                     if(rateFlows==null){var rate=implicit.portRate(accepted,checkpoint);if(rate!=null)rateFlows=rate.massFlows();}
@@ -357,8 +311,7 @@ public final class PassiveIntervalSolver {
                 if(flush!=null)boundaries.addAll(flush.boundaries());
                 var flows=result.massFlows();for(int i=0;i<transferred.length;i++)transferred[i]+=step*flows[i];
                 double factor=change>0?Math.clamp(.9*Math.sqrt(STATE_CAP/change),.5,2):2;
-                double proposed=Math.min(settings.maximumStep,Math.max(h,step)*factor);
-                h=growth.afterAccepted(step,proposed,duration-elapsed,settings.maximumAttempts-attempt-1);
+                h=Math.min(settings.maximumStep,Math.max(h,step)*factor);
                 // Owner decision D42: an island the gauge reads at rest at this accepted step (NetworkReduction step 6 on its
                 // end state and its flows) is no longer stepped. The rest of the interval is the identity: nothing moves, so
                 // the step's transfers stand as booked and the interval's averages are what the steps moved.
@@ -381,7 +334,6 @@ public final class PassiveIntervalSolver {
                 h=step*.5;
             }catch(SparseNewton.Nonconvergence|IllegalArgumentException|StateChangeRejection rejected) {
                 lastRejection=String.valueOf(rejected.getMessage());
-                lastDiagnostic=rejected instanceof SparseNewton.Nonconvergence failure&&failure.detail()!=null?"; diagnostic="+failure.detail():"";
                 if(!(rejected instanceof StateChangeRejection))SolverDiagnostics.attempt(attempt,step,false,diagnosticReason(rejected),Double.NaN);
                 // A trial a phase hold refused - directly, or a Newton pass whose failing line search it stopped - is
                 // counted under its own key (one per phase set; never folded into "Other"), so a checkpoint, a view and the
@@ -390,12 +342,11 @@ public final class PassiveIntervalSolver {
                 if(hold!=null){rejectionReasons.merge(hold.reasonKey(),1,Integer::sum);lastHold=hold;holdRejections++;}
                 else count(rejectionReasons,String.valueOf(rejected.getMessage()).replaceAll("[-+]?[0-9]+(?:\\.[0-9]+)?(?:[Ee][-+]?[0-9]+)?","#"));
                 lastWasHold=hold!=null;
-                growth.refused(step,rejected instanceof SparseNewton.Nonconvergence);
                 rejectedCount++;consecutiveRejects++;h=step*.5;
-                if(consecutiveRejects>=20||elapsed+h==elapsed)throw new SparseNewton.Nonconvergence("Substep refinement exhausted: "+lastRejection+"; reasons="+rejectionReasons+lastDiagnostic,null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
+                if(consecutiveRejects>=20||elapsed+h==elapsed)throw new SparseNewton.Nonconvergence("Substep refinement exhausted: "+rejected.getMessage()+"; reasons="+rejectionReasons,null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
             }
         }
-        if(declared==null&&elapsed<duration)throw new SparseNewton.Nonconvergence("Interval substep limit; no partial interval may commit: advanced="+elapsed+" of "+duration+" s, accepted="+acceptedCount+", rejected="+rejectedCount+", reasons="+rejectionReasons+", last="+lastRejection+lastDiagnostic,
+        if(declared==null&&elapsed<duration)throw new SparseNewton.Nonconvergence("Interval substep limit; no partial interval may commit: advanced="+elapsed+" of "+duration+" s, accepted="+acceptedCount+", rejected="+rejectedCount+", reasons="+rejectionReasons+", last="+lastRejection,
                 null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
         // A segment that ended on a declared transition hands the next one the estimate it held
         // before the search, not the micro-step the search finished on.
@@ -406,7 +357,7 @@ public final class PassiveIntervalSolver {
         // transported mass.
         double normalizer=declared==null?duration:elapsed;
         for(int i=0;i<transferred.length;i++)transferred[i]/=normalizer;
-        return new Prefix(new Result(accepted,elapsed,transferred,acceptedCount,rejectedCount,work,boundaries,rejectionReasons,last.modes(),last.devicePressureChanges(),last.massFlows(),pipeTransfers.snapshot(),last.observations(),last.towers(),last.radiantDemands()),declared);
+        return new Prefix(new Result(accepted,elapsed,transferred,acceptedCount,rejectedCount,work,boundaries,rejectionReasons,last.modes(),last.devicePressureChanges(),last.massFlows(),pipeTransfers.snapshot(),last.observations(),last.towers()),declared);
     }
     /**
      * Whether {@code found}, seen at the end of a step of {@code step} seconds, closes at that end without a search (owner
@@ -443,25 +394,15 @@ public final class PassiveIntervalSolver {
         List<PassiveNetwork.Reservoir> nodes=null;List<ConservativeTransport.BoundaryTransfer> booked=null;
         for(int i=0;i<graph.reservoirs().size();i++) {
             var node=graph.reservoirs().get(i);if(node.fixed())continue;
-            var held=node.inventory().movingMoles();
-            double total=0;for(double amount:held)total+=amount;
+            var held=node.inventory().moles();double total=0;for(double amount:held)total+=amount;
             double[] kept=null;
             for(int c=0;c<held.length;c++)if(held[c]>0&&held[c]<TRACE_FLUSH_FRACTION*total){if(kept==null)kept=held.clone();kept[c]=0;}
             if(kept==null)continue;
             checkpoint.run();
             var removed=new double[held.length];
             for(int c=0;c<held.length;c++)removed[c]=kept[c]-held[c];
-            var old=node.state();
-            var stream=kept;
-            if(node.junction()) {
-                stream=PhaseLayout.totalAmounts(old);
-                double streamTotal=PhaseLayout.sum(stream);
-                for(int c=0;c<stream.length;c++)if(removed[c]!=0 && stream[c]<TRACE_FLUSH_FRACTION*streamTotal)stream[c]=0;
-            }
-            var state=model.flashTP(old.temperature(),old.pressure(),stream,checkpoint);
+            var old=node.state();var state=model.flashTP(old.temperature(),old.pressure(),kept,checkpoint);
             if(!old.solids().empty())state=state.withSolids(old.solids());
-            var reserve=node.inventory().reserve();
-            if(reserve!=null){var retained=reserve.moles();for(int c=0;c<kept.length;c++)kept[c]+=retained[c];}
             if(nodes==null){nodes=new ArrayList<>(graph.reservoirs());booked=new ArrayList<>();}
             nodes.set(i,new PassiveNetwork.Reservoir(node.id(),node.elevation(),state,node.kind(),
                     node.inventory().with(kept,node.inventory().internalEnergy(),node.inventory().solids())));

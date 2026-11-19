@@ -424,10 +424,8 @@ public final class PengRobinsonKernel {
             throw new ThermoRefusal("Temperature is outside package range");
         }
         long bits = Double.doubleToLongBits(temperatureKelvin);
-        workspace.requireKernel(this);
         if (workspace.preparedTemperature == bits) return;
-        // A refused pair or cell can leave a partially prepared workspace. Revalidate it on the very next call.
-        workspace.preparedTemperature = Long.MIN_VALUE;
+        workspace.requireKernel(this);
         // Only the support's compounds, pairs and cells, each stamped with the temperature it was prepared at: a support
         // that grows at the same temperature prepares only what is new. Each value is the same arithmetic as before.
         boolean roots = excess || (interactions != null && interactions.temperatureDependent());
@@ -524,7 +522,6 @@ public final class PengRobinsonKernel {
             }
             if (!Double.isFinite(workspace.pairK[pair]) || !Double.isFinite(workspace.pairKDt[pair])
                     || !Double.isFinite(workspace.pairKDt2[pair])) {
-                workspace.pairStamp[pair] = Long.MIN_VALUE;
                 throw new ThermoRefusal("Pair interaction of components ", pairFirst[pair], " and ", pairSecond[pair],
                         " is not finite at ", temperatureKelvin, " K");
             }
@@ -736,32 +733,11 @@ public final class PengRobinsonKernel {
         double reducedB = bMix * pressurePascal / (GAS_CONSTANT * temperatureKelvin);
         // Writes the root count and separation into the output; no record per evaluation.
         double z = selectRoot(reducedA, reducedB, root, output);
-        evaluateRoot(temperatureKelvin, workspace, output, aMix, bMix, daMixDt, reducedA, reducedB, z);
-    }
-
-    /** Evaluates the other root of the preceding evaluation while its mixture is still in this workspace. */
-    void evaluateOtherRoot(double temperatureKelvin, double pressurePascal, Root root, Workspace workspace, Evaluation previous, Evaluation output) {
-        double aMix = previous.aMix;
-        double bMix = previous.bMix;
-        double reducedA = aMix * pressurePascal / (GAS_CONSTANT * GAS_CONSTANT * temperatureKelvin * temperatureKelvin);
-        double reducedB = bMix * pressurePascal / (GAS_CONSTANT * temperatureKelvin);
-        double z = previous.otherCompressibility;
-        if (!Double.isFinite(z) || z <= reducedB) throw new NoPhysicalRoot(root);
-        output.physicalRootCount = previous.physicalRootCount;
-        output.rootSeparation = previous.rootSeparation;
-        output.otherCompressibility = previous.compressibility;
-        evaluateRoot(temperatureKelvin, workspace, output, aMix, bMix, previous.daMixDt, reducedA, reducedB, z);
-    }
-
-    private void evaluateRoot(double temperatureKelvin, Workspace workspace, Evaluation output,
-                              double aMix, double bMix, double daMixDt, double reducedA, double reducedB, double z) {
         double logRatio = DeterministicMath.log((z + (1.0 + SQRT_TWO) * reducedB) / (z + (1.0 - SQRT_TWO) * reducedB));
         double attraction = reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300));
         // Hoisted, not changed: the argument does not depend on i, so this is the same double the loop
         // used to recompute n times, and one logarithm instead of one per component.
         double freeVolumeLog = DeterministicMath.log(z - reducedB);
-        int[] support = workspace.support;
-        int n = workspace.supportCount;
         for (int s = 0; s < n; s++) {
             int i = support[s];
             double bRatio = coVolumes[i] / bMix;
@@ -816,41 +792,19 @@ public final class PengRobinsonKernel {
      */
     public void differentiatePrepared(
             double temperatureKelvin, double pressurePascal, Root root, Workspace workspace, Derivatives output) {
-        differentiatePrepared(temperatureKelvin, pressurePascal, root, workspace, output.evaluation, output, true);
-    }
-
-    /** Fills only the composition derivatives of the preceding evaluation, for a stability Hessian at fixed T and P. */
-    void differentiateComposition(double temperatureKelvin, double pressurePascal, Root root, Workspace workspace,
-                                  Evaluation evaluation, Derivatives output) {
-        differentiatePrepared(temperatureKelvin, pressurePascal, root, workspace, evaluation, output, false);
-    }
-
-    /** Whether the cubic root admits the same implicit derivatives as the full value-and-derivative evaluation. */
-    boolean hasRootDerivative(double temperatureKelvin, double pressurePascal, Evaluation evaluation) {
-        double reducedA = evaluation.aMix * pressurePascal / (GAS_CONSTANT * GAS_CONSTANT * temperatureKelvin * temperatureKelvin);
-        double reducedB = evaluation.bMix * pressurePascal / (GAS_CONSTANT * temperatureKelvin);
-        return Double.isFinite(rootSlope(reducedA, reducedB, evaluation.compressibility));
-    }
-
-    private static double rootSlope(double reducedA, double reducedB, double z) {
+        double a = output.evaluation.aMix;
+        double b = output.evaluation.bMix;
+        double daDt = output.evaluation.daMixDt;
+        double z = output.evaluation.compressibility;
+        double reducedA = a * pressurePascal / (GAS_CONSTANT * GAS_CONSTANT * temperatureKelvin * temperatureKelvin);
+        double reducedB = b * pressurePascal / (GAS_CONSTANT * temperatureKelvin);
         double c2 = -(1.0 - reducedB);
         double c1 = reducedA - 3.0 * reducedB * reducedB - 2.0 * reducedB;
         double slope = Math.fma(Math.fma(3.0, z, 2.0 * c2), z, c1);
-        double scale = 3.0 * z * z + 2.0 * Math.abs(c2) * Math.abs(z) + Math.abs(c1);
-        return !Double.isFinite(slope) || Math.abs(slope) <= COALESCENCE_SLOPE_TOLERANCE * Math.max(1.0, scale)
-                ? Double.NaN : slope;
-    }
-
-    private void differentiatePrepared(double temperatureKelvin, double pressurePascal, Root root, Workspace workspace,
-                                       Evaluation evaluation, Derivatives output, boolean temperatureDerivatives) {
-        double a = evaluation.aMix;
-        double b = evaluation.bMix;
-        double daDt = evaluation.daMixDt;
-        double z = evaluation.compressibility;
-        double reducedA = a * pressurePascal / (GAS_CONSTANT * GAS_CONSTANT * temperatureKelvin * temperatureKelvin);
-        double reducedB = b * pressurePascal / (GAS_CONSTANT * temperatureKelvin);
-        double slope = rootSlope(reducedA, reducedB, z);
-        if (!Double.isFinite(slope)) throw new RootCoalescence(root);
+        double slopeScale = 3.0 * z * z + 2.0 * Math.abs(c2) * Math.abs(z) + Math.abs(c1);
+        if (!Double.isFinite(slope) || Math.abs(slope) <= COALESCENCE_SLOPE_TOLERANCE * Math.max(1.0, slopeScale)) {
+            throw new RootCoalescence(root);
+        }
         double zByReducedA = -(z - reducedB) / slope;
         double zByReducedB = -(z * z - (6.0 * reducedB + 2.0) * z - reducedA + 2.0 * reducedB
                 + 3.0 * reducedB * reducedB) / slope;
@@ -859,42 +813,31 @@ public final class PengRobinsonKernel {
         double logRatio = DeterministicMath.log(lower / upper);
         double attraction = reducedA / (2.0 * SQRT_TWO * Math.max(reducedB, 1.0e-300));
         boolean exponential = excess;
+        // d^2a/dT^2 is read only by dh^R/dT; the root and cross vectors it fills only by the quadratic rows' dS_i/dT.
+        double secondDaDt = output.heatCapacity || !exponential
+                ? secondTemperatureDerivative(temperatureKelvin, workspace, output.rootDt, output.rootDt2, output.crossDt)
+                : Double.NaN;
+        if (exponential) differentiateExcess(temperatureKelvin, workspace);
+        double reducedADt = reducedA * (daDt / a - 2.0 / temperatureKelvin);
+        double reducedBDt = -reducedB / temperatureKelvin;
+        double zDt = zByReducedA * reducedADt + zByReducedB * reducedBDt;
+        double logRatioDt = (zDt + (1.0 + SQRT_TWO) * reducedBDt) / lower - (zDt + (1.0 - SQRT_TWO) * reducedBDt) / upper;
+        double attractionDt = attraction * (reducedADt / reducedA - reducedBDt / reducedB);
         int[] support = workspace.support;
         int n = workspace.supportCount;
         for (int s = 0; s < n; s++) {
             int i = support[s];
             output.coVolumeRatio[i] = coVolumes[i] / b;
             output.attractionRatio[i] = 2.0 * workspace.sumA[i] / a - output.coVolumeRatio[i];
+            double sumADt = exponential ? workspace.excessRowDt[i]
+                    : output.rootDt[i] * (workspace.sumA[i] / workspace.sqrtA[i])
+                    + workspace.sqrtA[i] * output.crossDt[i];
+            double attractionRatioDt = 2.0 * (sumADt * a - workspace.sumA[i] * daDt) / (a * a);
+            output.dLogPhiDt[i] = output.coVolumeRatio[i] * zDt - (zDt - reducedBDt) / (z - reducedB)
+                    - (attractionDt * output.attractionRatio[i] * logRatio
+                    + attraction * attractionRatioDt * logRatio
+                    + attraction * output.attractionRatio[i] * logRatioDt);
         }
-        if (temperatureDerivatives) {
-            // d^2a/dT^2 is read only by dh^R/dT; the vectors it fills only by the quadratic rows' dS_i/dT.
-            double secondDaDt = output.heatCapacity || !exponential
-                    ? secondTemperatureDerivative(temperatureKelvin, workspace, output.rootDt, output.rootDt2, output.crossDt)
-                    : Double.NaN;
-            // NRTL's temperature derivatives use the value evaluation's rowY before the composition derivatives reuse it.
-            if (exponential) differentiateExcessTemperature(temperatureKelvin, workspace);
-            double reducedADt = reducedA * (daDt / a - 2.0 / temperatureKelvin);
-            double reducedBDt = -reducedB / temperatureKelvin;
-            double zDt = zByReducedA * reducedADt + zByReducedB * reducedBDt;
-            double logRatioDt = (zDt + (1.0 + SQRT_TWO) * reducedBDt) / lower - (zDt + (1.0 - SQRT_TWO) * reducedBDt) / upper;
-            double attractionDt = attraction * (reducedADt / reducedA - reducedBDt / reducedB);
-            for (int s = 0; s < n; s++) {
-                int i = support[s];
-                double sumADt = exponential ? workspace.excessRowDt[i]
-                        : output.rootDt[i] * (workspace.sumA[i] / workspace.sqrtA[i]) + workspace.sqrtA[i] * output.crossDt[i];
-                double attractionRatioDt = 2.0 * (sumADt * a - workspace.sumA[i] * daDt) / (a * a);
-                output.dLogPhiDt[i] = output.coVolumeRatio[i] * zDt - (zDt - reducedBDt) / (z - reducedB)
-                        - (attractionDt * output.attractionRatio[i] * logRatio
-                        + attraction * attractionRatioDt * logRatio
-                        + attraction * output.attractionRatio[i] * logRatioDt);
-                output.partialMolarResidualEnthalpy[i] = -GAS_CONSTANT * temperatureKelvin * temperatureKelvin * output.dLogPhiDt[i];
-            }
-            output.dResidualEnthalpyDt = !output.heatCapacity ? Double.NaN
-                    : GAS_CONSTANT * (z - 1.0) + GAS_CONSTANT * temperatureKelvin * zDt
-                    + temperatureKelvin * secondDaDt / (2.0 * SQRT_TWO * b) * logRatio
-                    + (temperatureKelvin * daDt - a) / (2.0 * SQRT_TWO * b) * logRatioDt;
-        }
-        if (exponential) differentiateExcessComposition(temperatureKelvin, workspace);
         for (int sj = 0; sj < n; sj++) {
             int j = support[sj];
             double reducedAdn = 2.0 * reducedA * (workspace.sumA[j] - a) / a;
@@ -921,6 +864,15 @@ public final class PengRobinsonKernel {
                         + attraction * attractionRatioDn * logRatio
                         + attraction * output.attractionRatio[i] * logRatioDn);
             }
+        }
+        output.dResidualEnthalpyDt = !output.heatCapacity ? Double.NaN
+                : GAS_CONSTANT * (z - 1.0) + GAS_CONSTANT * temperatureKelvin * zDt
+                + temperatureKelvin * secondDaDt / (2.0 * SQRT_TWO * b) * logRatio
+                + (temperatureKelvin * daDt - a) / (2.0 * SQRT_TWO * b) * logRatioDt;
+        for (int s = 0; s < n; s++) {
+            int i = support[s];
+            output.partialMolarResidualEnthalpy[i] =
+                    -GAS_CONSTANT * temperatureKelvin * temperatureKelvin * output.dLogPhiDt[i];
         }
         if (output.outsideStale(workspace)) fillOutside(output, workspace);
     }
@@ -1308,7 +1260,7 @@ public final class PengRobinsonKernel {
      *   terms ({@code O(n)} per cell of a present centre).</li>
      * </ul>
      */
-    private void differentiateExcessTemperature(double temperatureKelvin, Workspace workspace) {
+    private void differentiateExcess(double temperatureKelvin, Workspace workspace) {
         double[] x = workspace.composition;
         double[] s = workspace.sqrtA;
         double[] sDt = workspace.interactionRootDt;
@@ -1391,24 +1343,6 @@ public final class PengRobinsonKernel {
             workspace.excessRowDt[k] = sDt[k] * g[k] + s[k] * gDt[k]
                     - halfR * (coVolumes[k] * energyTerm + bMix * (logGamma[k] + temperatureKelvin * logGammaDt[k]));
         }
-    }
-
-    /** Composition cross terms of the NRTL correction at fixed temperature. */
-    private void differentiateExcessComposition(double temperatureKelvin, Workspace workspace) {
-        double[] x = workspace.composition;
-        double[] s = workspace.sqrtA;
-        double bMix = workspace.excessCoVolume;
-        double lambda = HuronVidalExcess.LAMBDA;
-        double share = lambda * (1.0 / (GAS_CONSTANT * temperatureKelvin));
-        double[] logGamma = workspace.deltaLogGamma;
-        boolean activePresent = workspace.activePresent;
-        int[] support = workspace.support;
-        int n = workspace.supportCount;
-        int[] pairs = workspace.supportPairs;
-        int pairCount = workspace.supportPairCount;
-        int[] cells = workspace.supportCells;
-        int[] cellFrom = workspace.cellFrom;
-        int[] cellTo = workspace.cellTo;
         // dS_kl: the classical part where a present centre has a present NRTL partner, then the cells' terms.
         double[] curvature = workspace.excessCurvature;
         double[] v = workspace.rowV;
@@ -1718,7 +1652,6 @@ public final class PengRobinsonKernel {
         if (counts != null) {
             counts.physicalRootCount = physicalRootCount;
             counts.rootSeparation = Math.max(0.0, largest - smallestPhysical);
-            counts.otherCompressibility = root == Root.VAPOR ? smallestPhysical : largest;
         }
         return selected;
     }
@@ -2186,7 +2119,6 @@ public final class PengRobinsonKernel {
     public static final class Evaluation extends SupportFill {
         private final double[] logFugacityCoefficients;
         private double compressibility;
-        private double otherCompressibility;
         private double residualEnthalpyJoulesPerMol;
         private double aMix;
         private double bMix;

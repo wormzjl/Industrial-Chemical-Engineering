@@ -177,8 +177,6 @@ public final class IslandCoordinator {
         long certifiedSince=-1,holdTick=Long.MAX_VALUE;
         IslandCertificate.Summary lastInterval;
         int streak;
-        // Stationarity evidence belongs to the dependency inputs the worker read at admission.
-        long dependencyRevision;
         // Why the last closed interval did not certify the island (null once it did), and what the last comparison
         // of two consecutive solved intervals measured: diagnostics only, never read by a decision.
         String refusal;
@@ -228,12 +226,12 @@ public final class IslandCoordinator {
         /** Why a terminal completion brought no result (the worker's failure, a cancellation), or null where it did not say. */
         private String failure;
         boolean terminal,closed,lateResult;
-        private final long dispatchedAtTick,admittedNanos,dependencyRevision;
+        private final long dispatchedAtTick,admittedNanos;
         private final String priorStatus;
         // What the slice read of each coupled side's other side at its dispatch (plan section 5.2).
         private Map<Long,ExchangerRelay.Read> reads=Map.of();
-        private Pending(Attempt attempt,long dispatchedAtTick,long admittedNanos,long dependencyRevision,String priorStatus){
-            this.attempt=attempt;this.dispatchedAtTick=dispatchedAtTick;this.admittedNanos=admittedNanos;this.dependencyRevision=dependencyRevision;
+        private Pending(Attempt attempt,long dispatchedAtTick,long admittedNanos,String priorStatus){
+            this.attempt=attempt;this.dispatchedAtTick=dispatchedAtTick;this.admittedNanos=admittedNanos;
             this.priorStatus=priorStatus;
         }
     }
@@ -337,24 +335,16 @@ public final class IslandCoordinator {
     Shafts shafts=Shafts.NONE;
     private java.util.function.UnaryOperator<PassiveNetwork> controls=java.util.function.UnaryOperator.identity();
     public void controls(java.util.function.UnaryOperator<PassiveNetwork> value){owned();controls=Objects.requireNonNull(value);}
-    public void controlsMoved(Collection<Long> changed){owned();for(long id:changed)dependencyMoved(id);}
+    public void controlsMoved(Collection<Long> changed){owned();for(long id:changed)if(islands.containsKey(id))toWake.add(id);}
     /** Installs the shaft trains. */
     public void shafts(Shafts value){owned();shafts=Objects.requireNonNull(value);}
     /** A shaft train's speed, trip or start changed (a dependency change, plan 5.2): the islands it drives end their
      * certificates at the next decision point and read the new speed at their next dispatch. */
-    public void shaftsMoved(Collection<Long> moved){owned();for(long id:moved)dependencyMoved(id);}
+    public void shaftsMoved(Collection<Long> moved){owned();for(long id:moved)if(islands.containsKey(id))toWake.add(id);}
     /** Installs the running columns' ports. */
     public void ports(Ports value){owned();ports=Objects.requireNonNull(value);}
     /** A running column's plan for {@code island} moved: a certified island ends its certificate at the next decision point. */
-    public void portsMoved(long island){owned();dependencyMoved(island);}
-    /** An admitted slice still commits what its inputs let it solve. A new plan needs its own evidence before replay. */
-    void dependencyMoved(long id) {
-        var island=islands.get(id);
-        if(island==null)return;
-        island.dependencyRevision++;
-        if(island.certificate!=null)toWake.add(id);
-        else certificates.inputsChanged(island);
-    }
+    public void portsMoved(long island){owned();if(islands.containsKey(island))toWake.add(island);}
     private boolean reconsideringPartners;
     private record Round(long id,List<Pending> entries,long startedNanos) {}
     private final List<Round> rounds=new ArrayList<>();
@@ -549,12 +539,6 @@ public final class IslandCoordinator {
     public int pendingCount(){owned();return pending.size();}
     /** The shared online epoch this coordinator's clocks read. */
     public long now(){owned();return epoch.getAsLong();}
-    /** The start of an island's next uncommitted slice without materialising a certificate. */
-    OptionalLong committedTick(long id) {
-        owned();
-        var island = islands.get(id);
-        return island == null ? OptionalLong.empty() : OptionalLong.of(island.clock.committedTick());
-    }
     /**
      * Whether {@code id} has booked what it delivers through {@code tick} (batch 2026-10-28-column-operation, plan section 9):
      * committed through it, certified that far (materialised here, to that tick and not to the moment this runs, so the
@@ -751,7 +735,6 @@ public final class IslandCoordinator {
                 var island=require(next.getAsLong());long request=dispatcher.nextRequestId();
                 var slice=island.clock.nextSlice(request,island.fence(),island.maximumSliceTicks).orElseThrow();
                 var attempt=new Attempt(island.id,island.revision,slice);
-                long dependencyRevision=island.dependencyRevision;
                 // The job starts from the committed interval, not from the solver's history; see RetainedSolver.
                 island.retained.committed(island.lastResult.orElse(null));
                 var reads=coupling.reads(island,slice);
@@ -762,7 +745,7 @@ public final class IslandCoordinator {
                 if(!dispatcher.submit(attempt,command)) {island.status="WAITING: shared worker capacity";island.touch();break;}
                 String priorStatus=island.status;
                 island.clock.admitted(slice);island.status="SOLVING";island.touch();FluidRuntimeDiagnostics.count(FluidRuntimeDiagnostics.solvesDispatched);
-                var entry=new Pending(attempt,island.clock.onlineTick(),nanoClock.getAsLong(),dependencyRevision,priorStatus);
+                var entry=new Pending(attempt,island.clock.onlineTick(),nanoClock.getAsLong(),priorStatus);
                 entry.dispatched=dispatched;entry.reads=reads;pending.put(request,entry);island.pendingEntries++;admitted.add(entry);dispatchedThisTick++;
                 reconsider(island);
             }
@@ -841,7 +824,7 @@ public final class IslandCoordinator {
             long heatWake=accept&&settings.certificates().enabled()&&!entry.reads.isEmpty()
                     ?coupling.replayWake(island,attempt.slice.startTick(),entry.reads):Long.MAX_VALUE;
             certificates.qualify(island,accept?outcome:null,before,attempt,
-                    entry.dependencyRevision==island.dependencyRevision&&heatWake>attempt.slice.endTick());
+                    heatWake>attempt.slice.endTick());
             if(island.certificate!=null&&heatWake!=Long.MAX_VALUE)coupling.wake(island,heatWake);
             reconsider(island);island.touch();
             changed.add(island.snapshot());

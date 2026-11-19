@@ -297,12 +297,10 @@ final class ExchangerCoupling {
             flushDated();
             while(!coordinator.toWake.isEmpty()) {
                 var it=coordinator.toWake.iterator();long id=it.next();it.remove();
-                var island=coordinator.islands.get(id);if(island==null||coordinator.stopped||coordinator.suspension!=null)continue;
-                // Keep the replay up to now. At the horizon the old certificate becomes a revalidation baseline,
-                // which a changed dependency also invalidates.
-                coordinator.certificates.materialise(island);
-                if(island.certificate!=null)coordinator.certificates.end(island);
-                else coordinator.certificates.inputsChanged(island);
+                var island=coordinator.islands.get(id);if(island==null||island.certificate==null||coordinator.stopped||coordinator.suspension!=null)continue;
+                // Its replay up to now first (which books its heat); that may reach its horizon, which ends it anyway.
+                coordinator.certificates.materialise(island);if(island.certificate==null)continue;
+                coordinator.certificates.end(island);
             }
         } finally{waking=false;}
     }
@@ -343,7 +341,7 @@ final class ExchangerCoupling {
         var changed=new HashSet<Long>(operations.keySet());changed.addAll(next.keySet());
         changed.removeIf(id->java.util.Objects.equals(operations.get(id),next.get(id)));
         operations=Map.copyOf(next);
-        for(long id:changed){Long owner=coordinator.sideOwners.get(id);if(owner!=null)coordinator.dependencyMoved(owner);}
+        for(long id:changed){Long owner=coordinator.sideOwners.get(id);if(owner!=null)coordinator.toWake.add(owner);}
     }
     @org.jetbrains.annotations.Nullable ExchangerRelay.Operation operation(long side){coordinator.owned();return operations.get(side);}
     double sideTemperature(long side,long tick){coordinator.owned();var c=coordinator.coupled.get(side);var stream=c==null?null:c.asOf(tick);return stream==null?Double.NaN:stream.donor().temperature();}

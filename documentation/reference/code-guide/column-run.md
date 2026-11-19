@@ -106,8 +106,7 @@ Paths under `src/main/java/com/wormzjl/icheme/`. Lines at the snapshot.
   is dated by the cycle's tick however late the other ports' jobs complete). It sees an arrival only up to t: `available` is the account less later arrivals, and a
   span across t is shared by time.
 - A slice starting at s reads a port's level as of s − fence (`Level` logs) and waits (`ready`) until the run has
-  cycled past s − fence. The saved inlet log keeps the level at the owner's oldest uncommitted fence and each later
-  change. Identical successive levels share one entry. An outlet's temperature is the table in force at the fence (`Run.tableAt`).
+  cycled past s − fence. An outlet's temperature is the table in force at the fence (`Run.tableAt`).
 - A cycle already due runs from a booking; `schedule` also looks a cycle later, because an island that holds books
   nothing. A cycle's first tick is the next multiple of `CYCLE_TICKS`, staggered by the unit's id; it is scheduled on
   `IslandScheduler.Kind.COLUMN_CYCLE`. `booked` only records that a port's island booked while a cycle was due; a cycle

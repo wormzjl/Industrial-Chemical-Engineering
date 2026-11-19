@@ -7,7 +7,6 @@ import com.wormzjl.icheme.science.material.MaterialCatalog;
 import com.wormzjl.icheme.science.material.ViscosityCorrelation;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.function.DoubleUnaryOperator;
 
 /** Reference-pressure transport approximation: logarithmic liquid mixing and Wilke vapor mixing. */
 public final class MixtureViscosity {
@@ -17,7 +16,6 @@ public final class MixtureViscosity {
     private final MaterialCatalog.Package propertyPackage;
     private final ViscosityCorrelation[] liquidCorrelations,vaporCorrelations;
     private final ViscosityCorrelation waterLiquidCorrelation;
-    private final DoubleUnaryOperator[] liquidValues,vaporValues;
     /** The compounds (water not among them) in package order, their package indices, and the correction's participants on the conserved basis. */
     private final java.util.List<String> compounds;
     private final int[] packageIndex,correctionParticipants;
@@ -36,14 +34,11 @@ public final class MixtureViscosity {
         revision=catalog.fluidRevision(packageId)+":log-liquid-pair-groups-wilke-v2:catalog-conditional-solute-v1:supercritical-liquid-slot-dilute-v1:range-continuation-v1:water-in-liquid-log-v1:dense-residual-jst-v1:dense-laws-v1";
         var list=new java.util.ArrayList<>(propertyPackage.components());list.remove("Water");compounds=java.util.List.copyOf(list);
         int count=compounds.size();liquidCorrelations=new ViscosityCorrelation[count];vaporCorrelations=new ViscosityCorrelation[count];packageIndex=new int[count];
-        liquidValues=new DoubleUnaryOperator[count];vaporValues=new DoubleUnaryOperator[count];
         double[] mw=new double[count+1];
         for(int i=0;i<count;i++) {
             String component=compounds.get(i);packageIndex[i]=propertyPackage.components().indexOf(component);
             liquidCorrelations[i]=catalog.viscosity(packageId,component,ViscosityCorrelation.Phase.LIQUID).orElse(null);
             vaporCorrelations[i]=catalog.viscosity(packageId,component,ViscosityCorrelation.Phase.VAPOR).orElse(null);
-            if(liquidCorrelations[i]!=null)liquidValues[i]=liquidCorrelations[i].evaluator(ViscosityCorrelation.Phase.LIQUID);
-            if(vaporCorrelations[i]!=null)vaporValues[i]=vaporCorrelations[i].evaluator(ViscosityCorrelation.Phase.VAPOR);
             mw[i]=propertyPackage.properties().get(packageIndex[i]).molecularWeight();
         }
         var participants=new java.util.ArrayList<Integer>();
@@ -190,7 +185,7 @@ public final class MixtureViscosity {
     public static final class Prepared {
         private static final byte UNFILLED=0,CARRIER=1,CONDITIONAL_SOLUTE=2;
         private final MixtureViscosity owner;
-        private double temperature;
+        private final double temperature;
         private final double[] liquidLog,vaporMu,vaporSqrt;
         private final byte[] liquidKind;
         private double water=Double.NaN;
@@ -200,12 +195,6 @@ public final class MixtureViscosity {
             liquidLog=new double[count];liquidKind=new byte[count];
             vaporMu=new double[count+1];vaporSqrt=new double[count+1];
             Arrays.fill(vaporMu,Double.NaN);
-        }
-        private void refill(double temperature) {
-            this.temperature=temperature;
-            Arrays.fill(liquidKind,UNFILLED);
-            Arrays.fill(vaporMu,Double.NaN);
-            water=Double.NaN;
         }
         private byte liquid(int component) {
             if(liquidKind[component]==UNFILLED) {
@@ -222,16 +211,6 @@ public final class MixtureViscosity {
     }
     /** The bundle for one exact temperature; a caller holds one per node and reuses it across trials. */
     public Prepared prepare(double temperature) { return new Prepared(this,temperature); }
-    /**
-     * Reuses this model's caller-owned bundle, keeping its storage and invalidating its lazy values when the
-     * temperature changes. The caller must stop using the previous contents before passing the bundle back.
-     */
-    public Prepared prepare(double temperature,Prepared reuse) {
-        if(reuse==null)return prepare(temperature);
-        if(reuse.owner!=this)throw new IllegalArgumentException("Prepared viscosities belong to another model");
-        if(reuse.temperature!=temperature)reuse.refill(temperature);
-        return reuse;
-    }
     private Prepared own(Prepared prepared,double temperature) {
         if(prepared!=null&&(prepared.owner!=this||prepared.temperature!=temperature)) {
             throw new IllegalArgumentException("Prepared viscosities belong to another model/temperature");
@@ -280,14 +259,14 @@ public final class MixtureViscosity {
                 mu=conditional.get(compounds.get(component)).dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.LIQUID);
                 prepared.liquidKind[component]=Prepared.CONDITIONAL_SOLUTE;
             }
-            default->{mu=liquidValues[component].applyAsDouble(temperature);prepared.liquidKind[component]=Prepared.CARRIER;}
+            default->{mu=liquidCorrelations[component].dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.LIQUID);prepared.liquidKind[component]=Prepared.CARRIER;}
         }
         prepared.liquidLog[component]=DeterministicMath.log(mu);
     }
     private double pureVapor(double temperature,int component) {
         if(component==liquidCorrelations.length)return WaterRegion1.diluteVaporViscosity(temperature);
-        var c=vaporValues[component];if(c==null)throw new IllegalArgumentException("PROPERTY_UNAVAILABLE: vapor viscosity");
-        return c.applyAsDouble(temperature);
+        var c=vaporCorrelations[component];if(c==null)throw new IllegalArgumentException("PROPERTY_UNAVAILABLE: vapor viscosity");
+        return c.dynamicViscosityPascalSeconds(temperature,ViscosityCorrelation.Phase.VAPOR);
     }
 
     /** Conditional solute factors are only used in a mixture with a supported liquid carrier. */

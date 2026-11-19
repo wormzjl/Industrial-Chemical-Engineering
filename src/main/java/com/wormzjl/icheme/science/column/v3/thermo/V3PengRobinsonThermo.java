@@ -119,7 +119,7 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
         phase = Objects.requireNonNull(phase, "phase");
         normalizeInto(composition, workspace.normalizedOverall, workspace);
         evaluateInto(temperatureKelvin, pressurePascal, workspace.normalizedOverall, phase, workspace);
-        return new V3FugacityResult(phase, workspace.prSession.logFugacityCoefficientsView(phase),
+        return new V3FugacityResult(phase, workspace.prSession.logFugacityCoefficients(phase),
                 workspace.prSession.compressibilityFactor(phase), phaseMolarEnthalpy(temperatureKelvin,
                 workspace.normalizedOverall, phase, workspace), workspace.prSession.physicalRootCount(phase),
                 workspace.prSession.rootSeparation(phase));
@@ -146,13 +146,12 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
                 workspace.prSession);
         PengRobinsonKernel.Derivatives derivatives = workspace.prSession.derivativesOf(phase);
         double[] partialMolar = derivatives.partialMolarResidualEnthalpy();
-        double[] pureEnthalpies = workspace.prSession.idealGasEnthalpiesView(temperatureKelvin);
         for (int component = 0; component < partialMolar.length; component++) {
-            partialMolar[component] += pureEnthalpies[component];
+            partialMolar[component] += session.componentIdealGasEnthalpy(component, temperatureKelvin);
         }
-        return new V3FugacityDerivatives(phase, derivatives.evaluation().logFugacityCoefficientsView(),
-                derivatives.dLogPhiDtView(), derivatives.dLogPhiDn(),
-                session.idealGasMolarEnthalpy(temperatureKelvin, workspace.normalizedOverall, workspace.prSession)
+        return new V3FugacityDerivatives(phase, derivatives.evaluation().logFugacityCoefficients(),
+                derivatives.dLogPhiDt(), derivatives.dLogPhiDn(),
+                session.idealGasMolarEnthalpy(temperatureKelvin, workspace.normalizedOverall)
                         + derivatives.evaluation().residualEnthalpyJoulesPerMol(),
                 session.idealGasMolarHeatCapacity(temperatureKelvin, workspace.normalizedOverall)
                         + derivatives.dResidualEnthalpyDt(),
@@ -281,7 +280,7 @@ public final class V3PengRobinsonThermo implements V3ThermoModel, V3ThermoDeriva
     double phaseMolarEnthalpy(
             double temperatureKelvin, double[] normalizedComposition, Root phase, V3ThermoWorkspace workspace) {
         requireWorkspace(workspace);
-        return session.idealGasMolarEnthalpy(temperatureKelvin, normalizedComposition, workspace.prSession)
+        return session.idealGasMolarEnthalpy(temperatureKelvin, normalizedComposition)
                 + workspace.prSession.residualEnthalpyJoulesPerMol(phase);
     }
 

@@ -640,8 +640,7 @@ public final class FluidThermodynamics {
         if(prepared==null||prepared.carried==null)return null;
         boolean[] named=prepared.carried;
         if(named.length!=vapor.length)throw new IllegalArgumentException("Carried compounds basis mismatch");
-        double[] support=prepared.support;
-        if(support==null||support.length!=vapor.length)support=prepared.support=new double[vapor.length];
+        double[] support=new double[vapor.length];
         for(int i=0;i<support.length;i++)support[i]=named[i]||vapor[i]!=0||liquid[i]!=0||aqueous[i]!=0?1:0;
         return support;
     }
@@ -1226,33 +1225,32 @@ public final class FluidThermodynamics {
         private static final java.util.concurrent.atomic.LongAdder BUILT=new java.util.concurrent.atomic.LongAdder();
         public static long workspacesBuilt(){return BUILT.sum();}
         private MixtureViscosity.Prepared transport;
-        /** The kernel copies its support before this bundle uses the same buffer for another state. */
-        private double[] support;
         private Prepared(FluidThermodynamics owner,double temperature) {
             if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid prepared temperature");
             this.owner=owner;this.temperature=temperature;
         }
         /**
-         * This bundle at {@code temperature}, with the carried compounds unnamed and the workspaces kept to be
-         * prepared on first use. Pure-component viscosity values are valid at their recorded exact temperature.
+         * This bundle at {@code temperature}, as a new one is: every member unformed, the carried compounds unnamed, and the
+         * Peng-Robinson workspace kept to be prepared again on its first use (P-18).
          */
         private void refill(double temperature) {
             if(!Double.isFinite(temperature)||temperature<=0)throw new IllegalArgumentException("Invalid prepared temperature");
             if(terms!=null)kept=terms;
-            terms=null;carried=null;this.temperature=temperature;retired=false;
+            terms=null;transport=null;carried=null;this.temperature=temperature;retired=false;
         }
         /** Set by {@link #retire}: the next {@link FluidThermodynamics#prepare(double, Prepared)} refills this bundle even at
          * its own temperature. */
         private boolean retired;
         /**
-         * Keeps this bundle's workspaces for a later use of the same model (batch 2026-11-15-fluid-step-cost, S2). The next
+         * Keeps this bundle's Peng-Robinson workspace for a later owner and nothing it derived (batch
+         * 2026-11-15-fluid-step-cost, S2): its members are dropped as a refill drops them, and the next
          * {@link FluidThermodynamics#prepare(double, Prepared)} on it refills it whatever the temperature, so that use reads
          * a new bundle's bits and makes a new bundle's preparations ({@code temperatureTermsCalls}), with no new workspace.
          * Nothing may read the bundle between this call and that refill.
          */
         public void retire() {
             if(terms!=null)kept=terms;
-            terms=null;carried=null;retired=true;
+            terms=null;transport=null;carried=null;retired=true;
         }
         /** Whether this bundle is {@link #retire retired} and not refilled since. */
         public boolean retired(){return retired;}
@@ -1282,7 +1280,7 @@ public final class FluidThermodynamics {
         }
         /** The pure-component transport terms of this temperature, for the decode's Transport row. */
         public MixtureViscosity.Prepared viscosities() {
-            return transport=owner.viscosity.prepare(temperature,transport);
+            return transport==null?transport=owner.viscosity.prepare(temperature):transport;
         }
     }
     public record WaterLiquid(double molarVolume,double molarEnthalpy) {}

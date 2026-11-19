@@ -31,8 +31,6 @@ plain doubles. `science/math` gives the elementary functions that are not correc
 every JVM, and the small dense solves. None of these classes imports `science/material`, `science/thermo/phase`, the
 column or the network (`ThermoLayeringTest`).
 
-Tangent-plane stability evaluates root Gibbs values on the same mixture and cubic, then forms the fixed-temperature, fixed-pressure composition derivative block on the selected root.
-
 ## Class map
 
 Paths under [`src/main/java/com/wormzjl/icheme/science/`](../../../src/main/java/com/wormzjl/icheme/science/). Lines at
@@ -75,7 +73,7 @@ maps from the catalog's water record; no cache, hot callers hold the constants)
 
 | Class | Role | Lines |
 |---|---|---|
-| [`DeterministicMath`](../../../src/main/java/com/wormzjl/icheme/science/math/DeterministicMath.java) | The only entry of science and runtime code for log, log10, log1p, exp, expm1, cbrt, cos, sin, acos, asin, atan, atan2, tanh, hypot and pow; `StrictMath` bits except `pow` | 96 |
+| [`DeterministicMath`](../../../src/main/java/com/wormzjl/icheme/science/math/DeterministicMath.java) | The only entry of science and runtime code for log, log10, log1p, exp, expm1, cbrt, cos, sin, acos, asin, atan, atan2, tanh and pow; `StrictMath` bits except `pow` | 96 |
 | [`DeterministicPow`](../../../src/main/java/com/wormzjl/icheme/science/math/DeterministicPow.java) | Table-driven `pow` in plain IEEE arithmetic, no FMA, within 1 ulp of fdlibm, no allocation | 259 |
 | [`FdlibmPow`](../../../src/main/java/com/wormzjl/icheme/science/math/FdlibmPow.java) | fdlibm `e_pow.c` transliterated with its tables hoisted: bitwise `StrictMath.pow` (`DeterministicMath.strictPow`) | 322 |
 | [`SmallDenseSolve`](../../../src/main/java/com/wormzjl/icheme/science/math/SmallDenseSolve.java) | Small dense solves on row-major blocks: `cholesky`, `solveCholesky`, `factorShifted`, `solve3`, `solvePivoted`; read by the stability test and the engine's flashes and balance steps | 94 |

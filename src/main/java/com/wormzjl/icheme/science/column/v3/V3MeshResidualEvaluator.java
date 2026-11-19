@@ -40,24 +40,6 @@ final class V3MeshResidualEvaluator {
         this.totalFeedFlow = activeComponentBasis.totalFeedFlowMolPerSecond();
     }
 
-    int[][] rowsByNode(V3MeshResidual base) {
-        var ids = problem.degreeOfFreedomLedger().equationIds();
-        int[] sizes = new int[problem.topology().nodeCount()];
-        for (int row = 0; row < ids.length; row++) {
-            if (!ids[row].equals(base.equation(row))) {
-                throw new IllegalStateException("V3 MESH residual ordering changed during finite differentiation");
-            }
-            sizes[ids[row].node()]++;
-        }
-        int[][] rows = new int[sizes.length][];
-        for (int node = 0; node < sizes.length; node++) rows[node] = new int[sizes[node]];
-        for (int row = ids.length - 1; row >= 0; row--) {
-            int node = ids[row].node();
-            rows[node][--sizes[node]] = row;
-        }
-        return rows;
-    }
-
     V3MeshResidual evaluate(V3DryMeshState state, V3ThermoWorkspace workspace) {
         state = Objects.requireNonNull(state, "state");
         workspace = Objects.requireNonNull(workspace, "workspace");
@@ -69,12 +51,6 @@ final class V3MeshResidualEvaluator {
         V3DegreeOfFreedomLedger.EquationId[] ids = problem.degreeOfFreedomLedger().equationIds();
         double[] physical = new double[ids.length];
         double[] scales = new double[ids.length];
-        assemble(state, properties, physical, scales);
-        return new V3MeshResidual(ids, physical, scales);
-    }
-
-    private void assemble(V3DryMeshState state, NodeProperties[] properties, double[] physical, double[] scales) {
-        V3DegreeOfFreedomLedger.EquationId[] ids = problem.degreeOfFreedomLedger().equationIds();
         double[] balance = new double[2];
         for (int row = 0; row < ids.length; row++) {
             V3DegreeOfFreedomLedger.EquationId id = ids[row];
@@ -103,8 +79,9 @@ final class V3MeshResidualEvaluator {
             }
             V3MeshResidual.check(physicalValue, scale);
             physical[row] = physicalValue;
-            if (scales != null) scales[row] = scale;
+            scales[row] = scale;
         }
+        return new V3MeshResidual(ids, physical, scales);
     }
 
     /**
@@ -372,9 +349,9 @@ final class V3MeshResidualEvaluator {
 
     private double equilibriumResidual(V3DryMeshState state, int node, int component, NodeProperties properties) {
         int publicComponent = activeComponentBasis.publicIndex(component);
-        double residual = properties.vaporLogComposition()[publicComponent]
+        double residual = DeterministicMath.log(properties.vaporComposition()[publicComponent])
                 + properties.vaporResult().logFugacityCoefficient(publicComponent)
-                - properties.liquidLogComposition()[publicComponent]
+                - DeterministicMath.log(properties.liquidComposition()[publicComponent])
                 - properties.liquidResult().logFugacityCoefficient(publicComponent);
         if (!problem.hasSteamFeeds()) return residual;
         double[] dilution = properties.waterDilution();
@@ -471,40 +448,6 @@ final class V3MeshResidualEvaluator {
         return energy;
     }
 
-    /**
-     * Thermodynamic snapshots of the decoded base of one colored finite-difference Jacobian. Each probe
-     * moves one coordinate per selected stage. Extensive balances and steam dilution are still evaluated
-     * from the entire perturbed state, including incoming water from adjacent stages.
-     */
-    final class ColoredProbes {
-        private final NodeProperties[] base, trial;
-        private final V3ThermoWorkspace[] workspaces;
-
-        ColoredProbes(V3DryMeshState decodedBase, V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory factory) {
-            base = new NodeProperties[decodedBase.nodeCount()];
-            workspaces = new V3ThermoWorkspace[base.length];
-            for (int node = 0; node < base.length; node++) {
-                workspaces[node] = factory.workspaceForNode(node);
-                base[node] = nodeProperties(decodedBase, node, workspaces[node]);
-            }
-            trial = base.clone();
-        }
-
-        void evaluate(V3DryMeshState state, V3DegreeOfFreedomLedger.UnknownFamily family, int[] nodes, double[] physical) {
-            System.arraycopy(base, 0, trial, 0, base.length);
-            // A hydrocarbon-unchanged stage may see a different water flow.
-            if (problem.hasSteamFeeds()) for (var props : base) props.waterDilution()[0] = 0.0;
-            boolean liquid = family == V3DegreeOfFreedomLedger.UnknownFamily.LIQUID_COMPONENT_FLOW
-                    || family == V3DegreeOfFreedomLedger.UnknownFamily.TEMPERATURE;
-            boolean vapor = family == V3DegreeOfFreedomLedger.UnknownFamily.VAPOR_COMPONENT_FLOW
-                    || family == V3DegreeOfFreedomLedger.UnknownFamily.TEMPERATURE;
-            if (liquid || vapor) for (int node : nodes) {
-                trial[node] = nodeProperties(state, node, workspaces[node], base[node], liquid, vapor);
-            }
-            assemble(state, trial, physical, null);
-        }
-    }
-
     /** Builds immutable per-node property snapshots once per residual evaluation. */
     private NodeProperties[] nodeProperties(V3DryMeshState state, V3ThermoWorkspace workspace) {
         NodeProperties[] properties = new NodeProperties[state.nodeCount()];
@@ -515,38 +458,22 @@ final class V3MeshResidualEvaluator {
     }
 
     private NodeProperties nodeProperties(V3DryMeshState state, int node, V3ThermoWorkspace workspace) {
-        return nodeProperties(state, node, workspace, null, true, true);
-    }
-
-    private NodeProperties nodeProperties(V3DryMeshState state, int node, V3ThermoWorkspace workspace,
-                                          NodeProperties base, boolean liquidChanged, boolean vaporChanged) {
         double temperature = state.temperatureKelvin(node);
         double pressure = problem.nodePressurePascal(node);
-        boolean hasVapor = problem.topology().hasVaporPhase(node);
-        boolean hasLiquid = problem.topology().hasLiquidPhase(node);
-        double[] vaporLogComposition = base == null ? null : base.vaporLogComposition();
-        V3FugacityResult vaporResult = base == null ? null : base.vaporResult();
-        if (vaporChanged && hasVapor) {
-            vaporLogComposition = normalizedPublicPhaseComposition(state, node, false);
-            vaporResult = thermo.fugacity(temperature, pressure, vaporLogComposition, Root.VAPOR, workspace);
-            if (hasLiquid) logCompositionInPlace(vaporLogComposition);
+        double[] vaporComposition = null;
+        V3FugacityResult vaporResult = null;
+        if (problem.topology().hasVaporPhase(node)) {
+            vaporComposition = normalizedPublicPhaseComposition(state, node, false);
+            vaporResult = thermo.fugacity(temperature, pressure, vaporComposition, Root.VAPOR, workspace);
         }
-        double[] liquidLogComposition = base == null ? null : base.liquidLogComposition();
-        V3FugacityResult liquidResult = base == null ? null : base.liquidResult();
-        if (liquidChanged && hasLiquid) {
-            liquidLogComposition = normalizedPublicPhaseComposition(state, node, true);
-            liquidResult = thermo.fugacity(temperature, pressure, liquidLogComposition, Root.LIQUID, workspace);
-            if (hasVapor) logCompositionInPlace(liquidLogComposition);
+        double[] liquidComposition = null;
+        V3FugacityResult liquidResult = null;
+        if (problem.topology().hasLiquidPhase(node)) {
+            liquidComposition = normalizedPublicPhaseComposition(state, node, true);
+            liquidResult = thermo.fugacity(temperature, pressure, liquidComposition, Root.LIQUID, workspace);
         }
-        return new NodeProperties(liquidLogComposition, vaporLogComposition, liquidResult, vaporResult,
-                hasVapor ? phaseTotal(state, node, false) : 0.0, new double[2]);
-    }
-
-    /** Keep the values read by VLE rows in the caller-owned input array after its fugacity evaluation. */
-    private static void logCompositionInPlace(double[] composition) {
-        for (int component = 0; component < composition.length; component++) {
-            composition[component] = DeterministicMath.log(composition[component]);
-        }
+        return new NodeProperties(liquidComposition, vaporComposition, liquidResult, vaporResult,
+                problem.topology().hasVaporPhase(node) ? phaseTotal(state, node, false) : 0.0, new double[2]);
     }
 
     private double[] normalizedPublicPhaseComposition(V3DryMeshState state, int node, boolean liquid) {
@@ -636,8 +563,8 @@ final class V3MeshResidualEvaluator {
     }
 
     private record NodeProperties(
-            double[] liquidLogComposition,
-            double[] vaporLogComposition,
+            double[] liquidComposition,
+            double[] vaporComposition,
             V3FugacityResult liquidResult,
             V3FugacityResult vaporResult,
             double vaporTotal,

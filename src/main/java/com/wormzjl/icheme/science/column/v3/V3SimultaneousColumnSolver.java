@@ -99,6 +99,11 @@ final class V3SimultaneousColumnSolver {
         coordinates = Objects.requireNonNull(coordinates, "coordinates");
         initialState = Objects.requireNonNull(initialState, "initialState");
         workspaceFactory = Objects.requireNonNull(workspaceFactory, "workspaceFactory");
+        // A Newton attempt evaluates residuals serially.  Reusing one caller-owned thermo
+        // workspace keeps the PR temperature cache and scratch arrays alive across probes and
+        // line-search trials; no residual retains or mutates the workspace after it returns.
+        V3ThermoWorkspace sharedWorkspace = workspaceFactory.newWorkspace();
+        workspaceFactory = () -> sharedWorkspace;
         initialConvergenceEvidence = Objects.requireNonNull(initialConvergenceEvidence, "initialConvergenceEvidence");
         return solve(problem, evaluator, coordinates, initialState, workspaceFactory, initialConvergenceEvidence,
                 maximumIterations, scaledTolerance, V3FiniteDifferenceJacobian.DifferenceScale.FINE, V3SolveControl.UNBOUNDED);
@@ -264,7 +269,13 @@ final class V3SimultaneousColumnSolver {
                 || maximumLocalBlockAttempts < 0) {
             throw new IllegalArgumentException("V3 Newton solve limits are invalid");
         }
-        workspaceFactory = attemptWorkspaces(workspaceFactory, problem.topology().nodeCount());
+        // A solve is serial: all residual probes complete before the next probe starts. Reuse one mutable PR
+        // workspace for the whole attempt instead of allocating a fresh kernel workspace for every residual,
+        // Jacobian colour and line-search trial. Fugacity result objects copy the values they expose, so the
+        // workspace can safely be overwritten after each evaluation while preserving numerical behaviour.
+        final V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory reusableWorkspace =
+                newWorkspaceFactory(workspaceFactory.newWorkspace());
+        workspaceFactory = reusableWorkspace;
         V3StageBlockLayout layout = new V3StageBlockLayout(problem);
         V3BandedPivotedSolver.Workspace linearWorkspace = scratch.linear;
         int maximumLineSearchSteps = differenceScale == V3FiniteDifferenceJacobian.DifferenceScale.COARSE
@@ -524,22 +535,10 @@ final class V3SimultaneousColumnSolver {
         throw new IllegalStateException("V3 Newton solve escaped its bounded iteration loop");
     }
 
-    private static V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory attemptWorkspaces(
-            V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory factory, int nodeCount) {
-        // Whole-column passes are serial and share one workspace. The colored probes revisit each stage
-        // at its own base temperature across many flow perturbations, so keep those preparations per stage.
-        V3ThermoWorkspace shared = Objects.requireNonNull(factory.newWorkspace(), "workspace");
-        V3ThermoWorkspace[] byNode = new V3ThermoWorkspace[nodeCount];
-        return new V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory() {
-            @Override public V3ThermoWorkspace newWorkspace() {
-                return shared;
-            }
-
-            @Override public V3ThermoWorkspace workspaceForNode(int node) {
-                if (byNode[node] == null) byNode[node] = factory.workspaceForNode(node);
-                return byNode[node];
-            }
-        };
+    private static V3FiniteDifferenceJacobian.V3ThermoWorkspaceFactory newWorkspaceFactory(
+            com.wormzjl.icheme.science.column.v3.thermo.V3ThermoWorkspace workspace) {
+        Objects.requireNonNull(workspace, "workspace");
+        return () -> workspace;
     }
 
     /**
@@ -567,7 +566,7 @@ final class V3SimultaneousColumnSolver {
         try {
             control.checkpoint();
             V3FiniteDifferenceJacobian.Jacobian jacobian = V3FiniteDifferenceJacobian.evaluateCompact(
-                    evaluator, coordinates, state, residual, workspaceFactory, V3FiniteDifferenceJacobian.DifferenceScale.FINE, control);
+                    evaluator, coordinates, state, workspaceFactory, V3FiniteDifferenceJacobian.DifferenceScale.FINE, control);
             V3SolveScratch.factorized(V3SolveScratch.Factorization.VERIFY_DIRECT);
             V3BandedPivotedSolver.Result linear = V3BandedPivotedSolver.solve(
                     toBandedMatrix(jacobian, layout, linearWorkspace), negativeScaledResidual(residual), linearWorkspace);

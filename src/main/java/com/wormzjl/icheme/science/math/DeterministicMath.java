@@ -56,9 +56,8 @@ public final class DeterministicMath {
         return StrictMath.hypot(x, y);
     }
 
-    /** fdlibm cosine, with allocation-free argument reduction over the range of the cubic roots. */
     public static double cos(double x) {
-        return Math.abs(x) <= FdlibmCos.MAX_ARGUMENT ? FdlibmCos.cos(x) : StrictMath.cos(x);
+        return StrictMath.cos(x);
     }
 
     public static double sin(double x) {

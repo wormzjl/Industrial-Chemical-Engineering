@@ -15,8 +15,6 @@ Up: [code guide](README.md). The step that drives it: [fluid-step.md](fluid-step
 
 `PhaseLayout` lays out one node for a frozen phase set: its unknowns, its rows and the decode from unknowns to a property state. `SparseNewton` solves the island's whole system (the rows `StepEquations` assembles, [fluid-step.md](fluid-step.md)) with a damped Newton on a coloured finite-difference or block Jacobian. Each linear solve is `SparseLuSolver`, an up-looking sparse LU (`UpLookingLu`) with reverse Cuthill-McKee ordering, equilibration and a backward-error check. `StepPhaseRules` holds the step's phase rules that run a Newton solve of their own: the outer phase check and a pipe junction's own split. `SolverOwnership` latches a retained workspace to one worker at a time, and `SolverDiagnostics` holds the opt-in process-wide counters.
 
-The Jacobian perturbs one coordinate at a time. Its phase decode reuses the base amounts of unchanged components, while the sparse solver takes storage from an evicted workspace only after its last live numerical preconditioner releases it.
-
 ## Class map
 
 Under `src/main/java/com/wormzjl/icheme/science/fluid/`. Lines at `d6f721b94`.

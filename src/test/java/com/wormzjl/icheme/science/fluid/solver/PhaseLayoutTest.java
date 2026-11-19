@@ -18,31 +18,6 @@ class PhaseLayoutTest {
         assertArrayEquals(expected,layout.encode(state),0);
         assertTrue(Arrays.stream(expected).allMatch(Double::isFinite));
     }
-    @Test void singleCoordinateProbeMatchesAFullDecodeWithoutChangingTheBase() {
-        var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.model(MaterialCatalog.bundled(),"icheme:tjl20_methane");
-        int components=com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE;
-        double[] liquid=new double[components],vapor=new double[components];
-        liquid[6]=1; liquid[0]=0.001; vapor[0]=1; vapor[6]=0.001;
-        var seed=TestPhases.state(model,350,101325,liquid,vapor,0,0);
-        var layout=new PhaseLayout(model,seed);
-        var original=layout.encode(seed);
-        var base=layout.decode(original,0);
-        var originalMoles=new double[][]{base.vaporAmounts(),base.liquidAmounts(),base.aqueousAmounts()};
-        for(int column=0;column<original.length;column++) {
-            var trial=original.clone();
-            trial[column]+=1e-7;
-            var expected=layout.decode(trial,0);
-            var actual=layout.decodeProbe(trial,0,column,base,null,null);
-            for(int slot=0;slot<3;slot++) {
-                assertArrayEquals(expected.amountsView(slot),actual.amountsView(slot));
-                assertArrayEquals(originalMoles[slot],base.amountsView(slot));
-            }
-            assertEquals(expected.temperature(),actual.temperature());
-            assertEquals(expected.pressure(),actual.pressure());
-            assertEquals(expected.internalEnergy(),actual.internalEnergy());
-        }
-    }
-
     @Test void coupledVolumeEnergyAndPhaseEquationsRecoverIndependentTpTargets() {
         // W3b: on the network model, whose cubic holds the water (a crude package without it holds none).
         String id="icheme:tjl20_methane";var model=com.wormzjl.icheme.fluid.support.FluidTestSupport.networkModel();

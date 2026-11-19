@@ -242,8 +242,7 @@ public final class NetworkReduction {
     }
     /** Whether an accepted step would flush a trace of this node (decision D16): its state is then not the rest state. */
     private static boolean flushable(PassiveNetwork.Reservoir node) {
-        var held=node.inventory().movingMoles();
-        double total=0;for(double amount:held)total+=amount;
+        var held=node.inventory().moles();double total=0;for(double amount:held)total+=amount;
         for(double amount:held)if(amount>0&&amount<PassiveIntervalSolver.TRACE_FLUSH_FRACTION*total)return true;
         return false;
     }

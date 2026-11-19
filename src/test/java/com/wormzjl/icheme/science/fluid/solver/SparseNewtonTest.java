@@ -3,7 +3,6 @@ package com.wormzjl.icheme.science.fluid.solver;
 import static org.junit.jupiter.api.Assertions.*;
 import java.util.concurrent.CancellationException;
 import org.junit.jupiter.api.Test;
-import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import com.wormzjl.icheme.science.fluid.linalg.*;
 import java.util.*;
 
@@ -48,26 +47,6 @@ class SparseNewtonTest {
             public double[] residual(double[] x){return new double[]{x[0]*x[0]+1};}
         };
         assertThrows(SparseNewton.Nonconvergence.class,()->SparseNewton.solve(equations,new double[]{1},SparseNewton.Settings.defaults(),()->{}));
-    }
-    @Test void failedNewtonKeepsTheDiagnosticSeparateFromItsReason() {
-        var equations=new SparseNewton.Equations(){
-            public int size(){return 1;}
-            public int[][] columnRows(){return new int[][]{{0}};}
-            public double[] residual(double[] x){return new double[]{2};}
-            public String failureDetail(double[] residual){return "dominant closure "+residual[0];}
-        };
-        boolean enabled=SolverDiagnostics.ENABLED;
-        try {
-            SolverDiagnostics.ENABLED=true;
-            var failure=assertThrows(SparseNewton.Nonconvergence.class,
-                    ()->SparseNewton.solve(equations,new double[]{0},SparseNewton.Settings.defaults(),()->{}));
-            assertTrue(failure.getMessage().startsWith("Singular Newton Jacobian"));
-            assertFalse(failure.getMessage().contains("dominant closure"));
-            assertEquals("dominant closure 2.0",failure.detail());
-            assertArrayEquals(new double[]{0},failure.lastVariables());
-        } finally {
-            SolverDiagnostics.ENABLED=enabled;
-        }
     }
 
     // ---------------- from StructuralReuseTest ----------------
