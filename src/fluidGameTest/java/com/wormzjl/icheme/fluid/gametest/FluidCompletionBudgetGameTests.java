@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.MinecraftServer;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -52,18 +53,13 @@ public final class FluidCompletionBudgetGameTests {
             if(previousPump[0]!=null){ProcessSolveServices.setReadinessPump(server,previousPump[0]);previousPump[0]=null;}
         };
 
-        helper.startSequence().thenWaitUntil(()->{
-            var diagnostics=ProcessSolveServices.diagnostics(server);
-            helper.assertTrue(diagnostics.outstandingJobs()==0&&diagnostics.pendingCompletions()==0,
-                    "Waiting for a quiescent shared service");
-        }).thenIdle(1).thenExecute(()->{
+        helper.startSequence().thenWaitUntil(() -> waitForUnusedBudget(helper, server)).thenExecute(()->{
             try {
-                helper.assertTrue(ProcessSolveServices.drainCompletions(server,64).isEmpty(),
-                        "Quiescent setup unexpectedly consumed a completion");
                 saturatedTick[0]=server.getTickCount();started[0]=System.nanoTime();
                 previousPump[0]=ProcessSolveServices.setReadinessPump(server,pump);pump.run();
                 server.managedBlock(()->completed[0]>=64||System.nanoTime()-started[0]>=5_000_000_000L);
-                helper.assertTrue(completed[0]==64,"Did not exhaust the exact same-tick completion budget");
+                helper.assertTrue(completed[0]==64,"Did not exhaust the exact same-tick completion budget: issued="
+                        +issued[0]+", completed="+completed[0]+", remaining="+ProcessSolveServices.remainingCompletionBudget(server));
                 helper.assertTrue(server.getTickCount()==saturatedTick[0],"Managed block crossed a server tick");
                 server.managedBlock(()->ProcessSolveServices.diagnostics(server).pendingCompletions()>=1
                         ||System.nanoTime()-started[0]>=5_000_000_000L);
@@ -129,10 +125,7 @@ public final class FluidCompletionBudgetGameTests {
             if(previousPump[0]!=null){ProcessSolveServices.setReadinessPump(server,previousPump[0]);previousPump[0]=null;}
         };
         java.util.function.IntFunction<Long> counter=index->com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.sample().get(index==0?"drainContinuations":"drainContinuationsDeferred");
-        helper.startSequence().thenWaitUntil(()->{
-            var diagnostics=ProcessSolveServices.diagnostics(server);
-            helper.assertTrue(diagnostics.outstandingJobs()==0&&diagnostics.pendingCompletions()==0,"Waiting for a quiescent shared service");
-        }).thenIdle(1).thenExecute(()->{
+        helper.startSequence().thenWaitUntil(() -> waitForUnusedBudget(helper, server)).thenExecute(()->{
             try {
                 com.wormzjl.icheme.runtime.fluid.FluidRuntimeDiagnostics.ENABLED=true;counted[0]=counter.apply(0);counted[1]=counter.apply(1);
                 saturatedTick[0]=server.getTickCount();started[0]=System.nanoTime();
@@ -161,5 +154,13 @@ public final class FluidCompletionBudgetGameTests {
                 helper.assertTrue(counter.apply(0)-counted[0]==1,"No further continuation without further exhaustion");
             } finally {restore.run();}
         }).thenSucceed();
+    }
+
+    /** The queue can be empty after other jobs have already used part of this tick's routing budget. */
+    private static void waitForUnusedBudget(GameTestHelper helper, MinecraftServer server) {
+        var diagnostics = ProcessSolveServices.diagnostics(server);
+        helper.assertTrue(diagnostics.outstandingJobs() == 0 && diagnostics.pendingCompletions() == 0
+                        && ProcessSolveServices.remainingCompletionBudget(server) == ProcessSolveServices.MAXIMUM_COMPLETIONS_PER_TICK,
+                "Waiting for a quiescent shared service with its full completion budget");
     }
 }
