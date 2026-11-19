@@ -38,10 +38,6 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class HoldFuzzTest {
     static final String DIM="minecraft:overworld";
-    static final BoundedCpuSolveService.CancellationToken NEVER=new BoundedCpuSolveService.CancellationToken() {
-        public long deadlineNanos(){return Long.MAX_VALUE;}public boolean isDeadlineExceeded(){return false;}
-        public boolean isCancellationRequested(){return false;}public void throwIfCancellationRequested(){}
-    };
     /**
      * {@code holdFuzz.cold} (milestone M3 of the unified thermo port, 2026-10-16): the cold package option. The world runs
      * on the pilot package {@code icheme:pilot_cryogenic} (N2, CH4, C2H6, CO2 and water, with the CO2-I crystal),
@@ -192,6 +188,10 @@ class HoldFuzzTest {
         final FluidThermodynamics model;
         final WorldTopologyLedger ledger=new WorldTopologyLedger(WorldTopologyLedger.Snapshot.empty(CATALOG));
         final Map<Long,IslandCoordinator.Attempt> attempts=new LinkedHashMap<>();
+        // Each world runs its workers synchronously. Keep a refused worker's count through round publication.
+        long checkpoints;
+        final BoundedCpuSolveService.CancellationToken countCheckpoint=()->checkpoints++;
+        final Map<Long,String> failedWork=new HashMap<>();
         final Map<Long,ProcessSolveJobs.FluidIslandCommand> commands=new HashMap<>();
         long requests;
         final List<Held> held=new ArrayList<>();
@@ -206,7 +206,7 @@ class HoldFuzzTest {
                 public void cancel(long request){}
             },changed->{
                 for(var snapshot:changed)if(held.isEmpty()&&snapshot.status().startsWith("HELD")) {
-                    held.add(new Held(ledger.onlineTick(),snapshot.id(),snapshot.clock().committedTick(),snapshot.status(),describe(snapshot)));
+                    held.add(new Held(ledger.onlineTick(),snapshot.id(),snapshot.clock().committedTick(),snapshot.status(),describe(snapshot)+failedWork.getOrDefault(snapshot.id(),"")));
                     break;
                 }
             },
@@ -246,7 +246,14 @@ class HoldFuzzTest {
             if(ledger.hasPendingEvents()){registry.applyPending();coordinator.pumpIfUseful();}
             for(long request:List.copyOf(attempts.keySet())) {
                 var attempt=attempts.remove(request);var command=commands.remove(request);
-                var result=(ProcessSolveJobs.FluidIslandSolveResult)command.solve(NEVER);
+                checkpoints=0;
+                var result=(ProcessSolveJobs.FluidIslandSolveResult)command.solve(countCheckpoint);
+                if(result.candidate().isEmpty()) {
+                    String cpuShare=result.workerCpuNanos()<0||result.workerNanos()==0?"unavailable":
+                            Long.toString(Math.round(100.0*result.workerCpuNanos()/result.workerNanos()));
+                    failedWork.put(attempt.islandId(),"    worker ticks="+attempt.slice().startTick()+".."+attempt.slice().endTick()
+                            +" checkpoints="+checkpoints+" cpuPct="+cpuShare+"\n");
+                } else failedWork.remove(attempt.islandId());
                 coordinator.completed(attempt,Optional.of(result));
             }
             coordinator.pump();
