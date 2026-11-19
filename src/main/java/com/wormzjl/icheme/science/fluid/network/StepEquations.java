@@ -135,6 +135,8 @@ final class StepEquations implements SparseNewton.Equations {
     final boolean solidSupport;
     final boolean[] amountVariables,solidVariables;
     final double[] differenceFloors;
+    /** Difference scale of a normalized junction amount whose own size would give a rounded-away column. */
+    private static final double JUNCTION_AMOUNT_DIFFERENCE_SCALE=1e-4;
     /** Each amount column's seed difference scale ({@link PhaseLayout#seedDifferenceScale}), -1 for every other column:
      * what {@link #differenceScale} differences a trace below {@link PhaseLayout#TRACE_DIFFERENCE_GUARD} against. */
     final double[] seedDifferenceScales;
@@ -315,6 +317,10 @@ final class StepEquations implements SparseNewton.Equations {
             amountVariables[column]=layout[node].totalAmountVariable(local);differenceFloors[column]=layout[node].differenceScale(local,0);
             if(amountVariables[column])seedDifferenceScales[column]=layout[node].seedDifferenceScale(local);
             solidVariables[column]=layout[node].solidVariable(local);
+            // These rows are scaled by the junction's mixture, so a trace-relative perturbation can round to zero
+            // in every row. Use the same bulk scale as PhaseLayout's gas-bearing amount columns, only for the stencil.
+            if(graph.reservoirs().get(node).junction()&&amountVariables[column]&&!solidVariables[column])
+                seedDifferenceScales[column]=Math.max(JUNCTION_AMOUNT_DIFFERENCE_SCALE,seedDifferenceScales[column]);
             if(solidVariables[column])clampFloors[column]=SOLID_CLAMP_FRACTION*differenceFloors[column];
             else if(amountVariables[column])clampFloors[column]=TRACE_CLAMP_FRACTION*differenceFloors[column];
         }
