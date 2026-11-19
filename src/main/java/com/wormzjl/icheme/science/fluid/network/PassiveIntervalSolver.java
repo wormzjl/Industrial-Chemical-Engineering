@@ -32,6 +32,41 @@ public final class PassiveIntervalSolver {
     private static final class StateChangeRejection extends RuntimeException {
         private StateChangeRejection(String message){super(message);}
     }
+    /**
+     * Delay a repeatedly refused increase until accepted advancement has moved the state on. Each repeat at that same
+     * size doubles the wait. With too few attempts to afford further repeated refusals, finish on the proven step while
+     * it can cover the interval. Every substep is solved and audited normally.
+     */
+    static final class StepGrowth {
+        private double refusedSize=Double.NaN;
+        private double advancedSinceRefusal;
+        private double retryAfterAdvance;
+        private boolean finishing;
+
+        void refused(double size,boolean numerical) {
+            boolean repeated=numerical&&size==refusedSize;
+            if(!repeated)finishing=false;
+            retryAfterAdvance=repeated?2*retryAfterAdvance:size;
+            refusedSize=numerical?size:Double.NaN;
+            advancedSinceRefusal=0;
+        }
+
+        double afterAccepted(double step,double proposed,double remaining,int attemptsLeft) {
+            if(step>=refusedSize) {
+                refusedSize=Double.NaN;
+                finishing=false;
+            }
+            advancedSinceRefusal+=step;
+            if(proposed!=refusedSize)return proposed;
+            double stepsNeeded=remaining/step;
+            if(stepsNeeded>attemptsLeft)return proposed;
+            // Each advance at the smaller size can cost two attempts if the larger one keeps failing.
+            if(2*stepsNeeded>attemptsLeft)finishing=true;
+            if(finishing||retryAfterAdvance>refusedSize&&advancedSinceRefusal<retryAfterAdvance)return step;
+            return proposed;
+        }
+    }
+
     public PassiveIntervalSolver(FluidThermodynamics model){this(model,SolverOwnership.confinedToCurrentThread());}
     /** Retained across island jobs: every nested workspace answers to the supplied latch. */
     public PassiveIntervalSolver(FluidThermodynamics model,SolverOwnership ownership) {
@@ -229,6 +264,7 @@ public final class PassiveIntervalSolver {
         if(!Double.isFinite(startingStep)||startingStep<=0)throw new IllegalArgumentException("Positive finite starting step required");
         PassiveNetwork accepted=refreshed.graph();
         // h is the controller's estimate; each attempt uses it truncated to the rest of the interval.
+        var growth=new StepGrowth();
         double elapsed=0,h=Math.min(startingStep,settings.maximumStep),lastStep=0;int acceptedCount=0,rejectedCount=0,consecutiveRejects=0;PassiveStepSolver.Result last=null;
         double[] transferred=new double[accepted.pipes().size()];
         double work=0;var boundaries=new ArrayList<ConservativeTransport.BoundaryTransfer>(refreshed.boundaries());
@@ -321,7 +357,8 @@ public final class PassiveIntervalSolver {
                 if(flush!=null)boundaries.addAll(flush.boundaries());
                 var flows=result.massFlows();for(int i=0;i<transferred.length;i++)transferred[i]+=step*flows[i];
                 double factor=change>0?Math.clamp(.9*Math.sqrt(STATE_CAP/change),.5,2):2;
-                h=Math.min(settings.maximumStep,Math.max(h,step)*factor);
+                double proposed=Math.min(settings.maximumStep,Math.max(h,step)*factor);
+                h=growth.afterAccepted(step,proposed,duration-elapsed,settings.maximumAttempts-attempt-1);
                 // Owner decision D42: an island the gauge reads at rest at this accepted step (NetworkReduction step 6 on its
                 // end state and its flows) is no longer stepped. The rest of the interval is the identity: nothing moves, so
                 // the step's transfers stand as booked and the interval's averages are what the steps moved.
@@ -353,6 +390,7 @@ public final class PassiveIntervalSolver {
                 if(hold!=null){rejectionReasons.merge(hold.reasonKey(),1,Integer::sum);lastHold=hold;holdRejections++;}
                 else count(rejectionReasons,String.valueOf(rejected.getMessage()).replaceAll("[-+]?[0-9]+(?:\\.[0-9]+)?(?:[Ee][-+]?[0-9]+)?","#"));
                 lastWasHold=hold!=null;
+                growth.refused(step,rejected instanceof SparseNewton.Nonconvergence);
                 rejectedCount++;consecutiveRejects++;h=step*.5;
                 if(consecutiveRejects>=20||elapsed+h==elapsed)throw new SparseNewton.Nonconvergence("Substep refinement exhausted: "+lastRejection+"; reasons="+rejectionReasons+lastDiagnostic,null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
             }
