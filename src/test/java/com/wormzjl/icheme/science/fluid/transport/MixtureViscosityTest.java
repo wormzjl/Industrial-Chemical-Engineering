@@ -120,6 +120,27 @@ class MixtureViscosityTest {
         assertTrue(model.vapor(300,n)>0);
         double[] humid=n.clone();humid[humid.length-1]=.1;assertTrue(model.vapor(300,humid)>0);
     }
+
+    @Test void reusedPureTermsMatchFreshValuesAtEachTemperature() {
+        String id="icheme:tjl20_methane";
+        var catalog=MaterialCatalog.bundled();
+        var model=new MixtureViscosity(catalog,id);
+        var basis=catalog.conservedComponents(id);
+        double[] vapor=new double[basis.size()],liquid=new double[basis.size()];
+        vapor[basis.indexOf("Methane")]=.8;
+        vapor[basis.indexOf("Water")]=.2;
+        liquid[basis.indexOf("N-pentane")]=.9;
+        liquid[basis.indexOf("Water")]=.1;
+        var reuse=model.prepare(300);
+        for(double temperature:new double[]{300,325,300}) {
+            assertSame(reuse,model.prepare(temperature,reuse));
+            assertEquals(model.vapor(temperature,vapor),model.vapor(temperature,vapor,null,reuse));
+            assertEquals(model.liquid(temperature,liquid),model.liquid(temperature,liquid,reuse));
+            assertEquals(model.waterLiquid(temperature),model.waterLiquid(temperature,reuse));
+        }
+        assertThrows(IllegalArgumentException.class,()->new MixtureViscosity(catalog,id).prepare(300,reuse));
+    }
+
     @Test void crudeCompositionsHaveDifferentMaterialDependentViscosities() {
         var catalog=MaterialCatalog.bundled();var model=new MixtureViscosity(catalog,"icheme:tjl20_methane");
         double[] light=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1],heavy=new double[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE+1];light[6]=.99;light[1]=.01;heavy[com.wormzjl.icheme.science.material.MaterialTestBasis.CRUDE-1]=.99;heavy[1]=.01;

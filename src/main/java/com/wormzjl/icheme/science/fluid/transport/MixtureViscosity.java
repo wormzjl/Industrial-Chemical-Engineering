@@ -185,7 +185,7 @@ public final class MixtureViscosity {
     public static final class Prepared {
         private static final byte UNFILLED=0,CARRIER=1,CONDITIONAL_SOLUTE=2;
         private final MixtureViscosity owner;
-        private final double temperature;
+        private double temperature;
         private final double[] liquidLog,vaporMu,vaporSqrt;
         private final byte[] liquidKind;
         private double water=Double.NaN;
@@ -195,6 +195,12 @@ public final class MixtureViscosity {
             liquidLog=new double[count];liquidKind=new byte[count];
             vaporMu=new double[count+1];vaporSqrt=new double[count+1];
             Arrays.fill(vaporMu,Double.NaN);
+        }
+        private void refill(double temperature) {
+            this.temperature=temperature;
+            Arrays.fill(liquidKind,UNFILLED);
+            Arrays.fill(vaporMu,Double.NaN);
+            water=Double.NaN;
         }
         private byte liquid(int component) {
             if(liquidKind[component]==UNFILLED) {
@@ -211,6 +217,16 @@ public final class MixtureViscosity {
     }
     /** The bundle for one exact temperature; a caller holds one per node and reuses it across trials. */
     public Prepared prepare(double temperature) { return new Prepared(this,temperature); }
+    /**
+     * Reuses this model's caller-owned bundle, keeping its storage and invalidating its lazy values when the
+     * temperature changes. The caller must stop using the previous contents before passing the bundle back.
+     */
+    public Prepared prepare(double temperature,Prepared reuse) {
+        if(reuse==null)return prepare(temperature);
+        if(reuse.owner!=this)throw new IllegalArgumentException("Prepared viscosities belong to another model");
+        if(reuse.temperature!=temperature)reuse.refill(temperature);
+        return reuse;
+    }
     private Prepared own(Prepared prepared,double temperature) {
         if(prepared!=null&&(prepared.owner!=this||prepared.temperature!=temperature)) {
             throw new IllegalArgumentException("Prepared viscosities belong to another model/temperature");

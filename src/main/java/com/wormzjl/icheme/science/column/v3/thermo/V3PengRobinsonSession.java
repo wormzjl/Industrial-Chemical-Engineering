@@ -137,7 +137,7 @@ final class V3PengRobinsonSession {
         return propertyPackage.component(publicComponent);
     }
 
-    Session newSession() { return new Session(kernel); }
+    Session newSession() { return new Session(this); }
 
     V3CrudeFeed crudeFeed(String assayId) {
         return propertyPackage.crudeFeed(assayId);
@@ -182,11 +182,16 @@ final class V3PengRobinsonSession {
     }
 
     double idealGasMolarEnthalpy(double temperatureKelvin, double[] normalizedComposition) {
+        return idealGasMolarEnthalpy(temperatureKelvin, normalizedComposition, null);
+    }
+
+    double idealGasMolarEnthalpy(double temperatureKelvin, double[] normalizedComposition, Session session) {
         if (normalizedComposition.length != componentCount()) throw new IllegalArgumentException("V3 composition dimension differs");
+        double[] pureEnthalpies = session == null ? null : session.idealGasEnthalpiesView(temperatureKelvin);
         double enthalpy = 0.0;
         for (int component = 0; component < componentCount(); component++) {
-            enthalpy += normalizedComposition[component]
-                    * componentIdealGasEnthalpy(component, temperatureKelvin);
+            double pure = pureEnthalpies == null ? componentIdealGasEnthalpy(component, temperatureKelvin) : pureEnthalpies[component];
+            enthalpy += normalizedComposition[component] * pure;
         }
         return enthalpy;
     }
@@ -215,18 +220,22 @@ final class V3PengRobinsonSession {
     }
 
     static final class Session {
+        private final V3PengRobinsonSession owner;
         private final PengRobinsonKernel.Workspace workspace;
         private final PengRobinsonKernel.Evaluation liquid;
         private final PengRobinsonKernel.Evaluation vapor;
         private PengRobinsonKernel.Derivatives liquidDerivatives;
         private PengRobinsonKernel.Derivatives vaporDerivatives;
         private final PengRobinsonKernel kernel;
+        private double enthalpyTemperature = Double.NaN;
+        private double[] pureEnthalpies;
         /** Allocated on first use, as the derivatives are: most flashes run no stability test. */
         private TangentPlaneStability.Workspace stabilityWorkspace;
         private FluidTpEquilibrium.Workspace engineWorkspace;
 
-        private Session(PengRobinsonKernel kernel) {
-            this.kernel = kernel;
+        private Session(V3PengRobinsonSession owner) {
+            this.owner = owner;
+            this.kernel = owner.kernel;
             workspace = kernel.newWorkspace();
             liquid = kernel.newEvaluation();
             vapor = kernel.newEvaluation();
@@ -265,8 +274,22 @@ final class V3PengRobinsonSession {
             return evaluation(phase).logFugacityCoefficient(component);
         }
 
-        double[] logFugacityCoefficients(Root phase) {
-            return evaluation(phase).logFugacityCoefficients();
+        /** Borrowed until this phase is evaluated again. The result constructor copies it. */
+        double[] logFugacityCoefficientsView(Root phase) {
+            return evaluation(phase).logFugacityCoefficientsView();
+        }
+
+        /** The same pure enthalpies serve both phases and the partial-molar derivatives at an exact temperature. */
+        double[] idealGasEnthalpiesView(double temperatureKelvin) {
+            if (enthalpyTemperature != temperatureKelvin) {
+                if (pureEnthalpies == null) pureEnthalpies = new double[kernel.componentCount()];
+                enthalpyTemperature = Double.NaN;
+                for (int component = 0; component < pureEnthalpies.length; component++) {
+                    pureEnthalpies[component] = owner.componentIdealGasEnthalpy(component, temperatureKelvin);
+                }
+                enthalpyTemperature = temperatureKelvin;
+            }
+            return pureEnthalpies;
         }
 
         double compressibilityFactor(Root phase) { return evaluation(phase).compressibility(); }
@@ -277,6 +300,9 @@ final class V3PengRobinsonSession {
             return com.wormzjl.icheme.science.thermo.PhaseTraits.of(evaluation(phase), temperatureKelvin, pressurePascal);
         }
         double rootSeparation(Root phase) { return evaluation(phase).rootSeparation(); }
-        void clear() { workspace.clear(); }
+        void clear() {
+            workspace.clear();
+            enthalpyTemperature = Double.NaN;
+        }
     }
 }
