@@ -1711,7 +1711,7 @@ final class StepEquations implements SparseNewton.Equations {
      */
     private double mixingShare(int node, double stock) {
         if (solver.rateOnly || solver.emptyings != null && solver.emptyings[node] != null) return 1;
-        return JunctionMixing.share(stock, incomingMass[node], dt, model.time());
+        return JunctionMixing.share(graph.reservoirs().get(node).inventory(),stock, incomingMass[node], dt, model.time());
     }
 
     private double junctionInflow(int node) {

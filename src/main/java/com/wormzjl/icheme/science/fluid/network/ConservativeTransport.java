@@ -366,7 +366,7 @@ public final class ConservativeTransport {
             if(emptying!=null&&emptying[node]!=null)endMass[node]=0;
             else if(!(endMass[node]>0)||!Double.isFinite(endMass[node]))throw new SparseNewton.Nonconvergence("Candidate overdraws a reservoir");
             double share=participating[node]=reservoir.junction() && (emptying==null || emptying[node]==null)
-                    ? JunctionMixing.share(endMass[node],incoming[node],dt,model.time()) : 1;
+                    ? JunctionMixing.share(reservoir.inventory(),endMass[node],incoming[node],dt,model.time()) : 1;
             add(columns,row,row,endMass[node]*share+dt*outgoing[node]);
             for(int c=0;c<components;c++)rhs[c][row]=old[node][c]*molecularWeight[c]*share;
             for(int c=0;c<populationKeys.size();c++)rhs[components+c][row]=reservoir.inventory().solids().mass(populationKeys.get(c))*share;
@@ -708,11 +708,12 @@ public final class ConservativeTransport {
                         && (!Arrays.equals(old[node],ownedMoles[node]) || energy[node]!=stock.internalEnergy())) {
                     // This accepted step has mixed a backed parcel of fluid. Keep the untouched fluid separate
                     // so later steps do not repeatedly introduce its old composition into the flowing stream.
-                    double retainedShare=1-Math.max(JunctionMixing.MINIMUM_CIRCULATING_SHARE,share);
+                    double retainedShare=1-share;
                     var unmixed=old[node].clone();
                     for(int c=0;c<unmixed.length;c++)unmixed[c]*=retainedShare;
                     double solidHeat=stock.solids().moments().enthalpy(oldNode.state().temperature(),oldNode.state().pressure());
-                    booked=booked.withReserve(new PassiveNetwork.JunctionReserve(unmixed,retainedShare*(stock.internalEnergy()-solidHeat)));
+                    var reserve=new PassiveNetwork.JunctionReserve(unmixed,retainedShare*(stock.internalEnergy()-solidHeat));
+                    booked=JunctionMixing.withCarrier(booked.withReserve(reserve),state,model);
                 }
                 inventories.add(booked);
                 continue;

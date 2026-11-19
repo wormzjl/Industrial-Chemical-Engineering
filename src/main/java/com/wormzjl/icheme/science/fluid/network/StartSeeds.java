@@ -192,13 +192,15 @@ final class StartSeeds {
                 if(!(heldMass>0))continue;
                 // The stock as the junction's rows mix it (D46): the buffer's amounts and its energy field (enthalpy form), fluid only.
                 var buffer=node.inventory();var at=node.state();
-                double share=JunctionMixing.share(heldMass+buffer.solids().massKg(),mass/dt,dt,model.time());
+                double share=JunctionMixing.share(buffer,heldMass+buffer.solids().massKg(),mass/dt,dt,model.time());
                 for(int c=0;c<n.length;c++)n[c]+=share*stockMoles[c];
                 heldMass*=share;
                 mass+=heldMass;
                 weighted+=heldMass*at.temperature();
                 double stock=share*(buffer.internalEnergy()-buffer.solids().moments().enthalpy(at.temperature(),at.pressure()));
-                double scale=seed.mass()/mass,enthalpy=(stock+heat)*scale;
+                // This flash carries only the fluid. The seed's solid moments are attached after the split.
+                double seedFluidMass=seed.mass()-seed.solidMoments().mass();
+                double scale=seedFluidMass>0?seedFluidMass/mass:1,enthalpy=(stock+heat)*scale;
                 for(int c=0;c<n.length;c++)n[c]*=scale;
                 FluidThermodynamics.State engine;
                 try{var split=model.equilibriumPH(weighted/mass,seed.pressure(),enthalpy,n,checkpoint);engine=split!=null?split:model.flashTP(weighted/mass,seed.pressure(),n,checkpoint);}
@@ -212,7 +214,7 @@ final class StartSeeds {
                 boolean front = false;
                 var currentAmounts = PhaseLayout.totalAmounts(seed);
                 for (int c = 0; c < n.length; c++) {
-                    if (Math.abs(n[c]-currentAmounts[c])*model.molecularWeight(c) > 1e-6*seed.mass()) {
+                    if (Math.abs(n[c]-currentAmounts[c])*model.molecularWeight(c) > 1e-6*seedFluidMass) {
                         front = true;
                         break;
                     }

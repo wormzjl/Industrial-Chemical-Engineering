@@ -91,7 +91,12 @@ public final class PassiveIntervalSolver {
     }
     /** That solve with each running column's port planned for the interval first ({@link PassiveStepSolver#ports}, batch 2026-10-28-column-operation). */
     public Result solve(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads,Map<Long,PortPlan> ports) {
-        return kept.around(()->solveKept(initial,duration,settings,checkpoint,startingStep,reads,ports));
+        return kept.around(()->{
+            implicit.startDeliveryWindow(duration);
+            // Solid events keep every accepted prefix. If a segment fails, the entire interval is discarded.
+            try{return solveKept(initial,duration,settings,checkpoint,startingStep,reads,ports);}
+            finally{implicit.clearDeliveryWindow();}
+        });
     }
     private Result solveKept(PassiveNetwork initial,double duration,Settings settings,Runnable checkpoint,double startingStep,Map<Long,ExchangerRelay.Read> reads,Map<Long,PortPlan> ports) {
         var committed=PassiveNetwork.sizeJunctionHoldups(initial,model);

@@ -9,6 +9,44 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JunctionLagTest {
+    @Test void windowDeliveryProjectsALateInletOnlyOverTheTimeLeft() {
+        double windowSeconds=20,elapsedSeconds=19;
+        assertEquals(1,JunctionMixing.windowDelivery(0,1,1,windowSeconds-elapsedSeconds),
+                "a flow that starts in the final second only delivers one kilogram");
+        assertEquals(11,JunctionMixing.windowDelivery(10,.5,.5,windowSeconds-elapsedSeconds),
+                "the forecast includes actual earlier delivery as well as the remaining flow");
+    }
+
+    @Test void aFullyRetainedJunctionRepartitionsItsOwnedFluidBeforeFlowing() {
+        var model = FluidTestSupport.networkModel();
+        var stored = model.initialNitrogenCharge(1,300,170_000,() -> {});
+        var source = model.initialNitrogenCharge(1,310,250_000,() -> {});
+        var sink = model.initialNitrogenCharge(1,300,100_000,() -> {});
+        var run = new PipeResistance.Geometry(1,.05,.000045,0);
+        var graph = PassiveNetwork.sizeJunctionHoldups(new PassiveNetwork(List.of(
+                new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2,0,stored,PassiveNetwork.NodeKind.JUNCTION),
+                new PassiveNetwork.Reservoir(3,0,sink,PassiveNetwork.NodeKind.VOID)),
+                List.of(new PassiveNetwork.Pipe(4,0,1,run),new PassiveNetwork.Pipe(5,1,2,run))),model);
+        var junction = graph.reservoirs().get(1);
+        var original = junction.inventory();
+        var owned = original.moles();
+        var saved = original.withReserve(new PassiveNetwork.JunctionReserve(owned,original.internalEnergy()));
+        var nodes = new java.util.ArrayList<>(graph.reservoirs());
+        nodes.set(1,new PassiveNetwork.Reservoir(junction.id(),junction.elevation(),junction.state(),junction.kind(),saved));
+        graph = new PassiveNetwork(nodes,graph.pipes());
+
+        var solver = new PassiveStepSolver(model);
+        assertEquals(saved,solver.solveRate(graph,() -> {}).inventories().get(1),"the rate probe holds the saved partition");
+        var step = solver.solve(graph,.1,() -> {});
+        assertTrue(step.massFlows()[0]>0&&step.massFlows()[1]>0,"the recovered junction carries flow");
+        var after = step.inventories().get(1);
+        var added = step.externalMoles();
+        for(int c=0;c<owned.length;c++)owned[c]+=added[c];
+        assertArrayEquals(owned,after.moles(),1e-10,"the step books no second junction inventory");
+        assertEquals(original.internalEnergy()+step.externalEnergyJoule(),after.internalEnergy(),1e-8);
+    }
+
     @Test void passiveHotAndColdFrontsReachTheReceivingPortAndKeepTheLifetimeLedger() {
         var model = FluidTestSupport.networkModel().withTime(new SimulationTime(4));
         var oil = TiaJuanaTestCatalog.worldCrude();
@@ -36,7 +74,8 @@ class JunctionLagTest {
         for (int i = 0; i < 6; i++) {
             boolean enriched = i % 2 == 0;
             boolean hot = enriched && i < 4;
-            double rate = enriched ? 83 : 10;
+            // The last switch changes composition at the same temperature while cutting the flow from 83 to 1 kg/s.
+            double rate = enriched ? 83 : i == 5 ? 1 : 10;
             var source = model.flashTP(hot ? 638.15 : 465, 302_000, enriched ? richer : oil, () -> {});
             var nodes = new java.util.ArrayList<>(graph.reservoirs());
             nodes.set(0, new PassiveNetwork.Reservoir(1, 0, source, PassiveNetwork.NodeKind.GENERATOR));

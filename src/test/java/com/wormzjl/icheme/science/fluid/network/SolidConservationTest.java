@@ -77,6 +77,7 @@ class SolidConservationTest {
             }
             var stock = graph.reservoirs().get(1).inventory();
             assertTrue(stock.solids().massKg() > 0);
+            if (step == 0) checkFrozenSlurryStock(graph);
             assertEquals(solids, stock.solids().massKg()-original.solids().massKg(), 1e-10);
             assertEquals(energy, stock.internalEnergy()-original.internalEnergy(), 1e-7*Math.max(1, Math.abs(energy)));
             var before = original.moles();
@@ -84,6 +85,35 @@ class SolidConservationTest {
             for (int c = 0; c < now.length; c++)
                 assertEquals(external[c], now[c]-before[c], 1e-9*Math.max(1, before[c]));
         }
+    }
+
+    private void checkFrozenSlurryStock(PassiveNetwork graph) {
+        var nodes = new ArrayList<>(graph.reservoirs());
+        var junction = nodes.get(1);
+        var stock = junction.inventory();
+        // The circulating slurry has particles, while an older partition left almost all the carrier in reserve.
+        double retainedShare = .999999;
+        var originalAmounts = stock.moles();
+        var retained = originalAmounts.clone();
+        for (int c = 0; c < retained.length; c++) retained[c] *= retainedShare;
+        var state = junction.state();
+        double fluidEnergy = stock.internalEnergy()-stock.solids().moments().enthalpy(state.temperature(),state.pressure());
+        stock = stock.withReserve(new PassiveNetwork.JunctionReserve(retained,fluidEnergy*retainedShare));
+        nodes.set(1,new PassiveNetwork.Reservoir(junction.id(),junction.elevation(),state,junction.kind(),stock));
+        var frozen = new PassiveNetwork(nodes,graph.pipes());
+        var solver = new PassiveStepSolver(model);
+
+        int[] checkpoints = {0};
+        var interrupted = new IllegalStateException("reject the trial");
+        assertSame(interrupted,assertThrows(IllegalStateException.class,() -> solver.solve(frozen,.01,() -> {
+            if (++checkpoints[0] == 20) throw interrupted;
+        })));
+        var afterRejection = frozen.reservoirs().get(1).inventory();
+        assertArrayEquals(originalAmounts,afterRejection.moles(),0,"a rejected trial leaves the whole stock unchanged");
+        assertArrayEquals(retained,afterRejection.reserve().moles(),0,"a rejected trial leaves the reserve unchanged");
+        var rate = solver.solveRate(frozen,() -> {});
+        assertTrue(rate.massFlows()[0] > 0,"the rate solve uses the slurry's circulating carrier");
+        assertEquals(stock,rate.inventories().get(1),"a frozen result keeps the original reserve, particles and energy exactly");
     }
 
     @Test void filterCapturesEveryPopulationAndPassesOnlyFluid() {

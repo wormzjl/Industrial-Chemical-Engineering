@@ -276,7 +276,17 @@ public final class PassiveStepSolver {
     private List<PassiveNetwork.Pipe.Identity> beAcceptedPipes=List.of();
     private long[] beAcceptedNodeIds=new long[0];
     /** The interval solver accepted a step of this structure. */
-    void markBackwardEulerAccepted(PassiveNetwork graph,Result result){beAcceptedPipes=identitiesOf(graph);beAcceptedNodeIds=nodeIds(graph);rememberOpenings(graph,result.massFlows(),result.devicePressureChanges(),result.modes());}
+    void markBackwardEulerAccepted(PassiveNetwork graph,Result result) {
+        beAcceptedPipes=identitiesOf(graph);
+        beAcceptedNodeIds=nodeIds(graph);
+        rememberOpenings(graph,result.massFlows(),result.devicePressureChanges(),result.modes());
+        if(deliveryWindow==0)return;
+        deliveryElapsed+=result.deltaTime();
+        if(result.pipeTransfers().isEmpty())return;
+        if(deliveredInWindow==null&&graph.reservoirs().stream().anyMatch(n->n.junction()&&n.inventory().reserve()!=null))
+            deliveredInWindow=new double[graph.reservoirs().size()];
+        if(deliveredInWindow!=null)JunctionMixing.addDelivery(graph,result.pipeTransfers(),deliveredInWindow);
+    }
     /** Whether no step of this structure has been accepted yet: the cold start after compile, a topology change, or a job
      * start with no committed interval on this structure. */
     boolean backwardEulerCold(PassiveNetwork graph){return !(sameLines(beAcceptedPipes,identitiesOf(graph))&&Arrays.equals(beAcceptedNodeIds,nodeIds(graph)));}
@@ -393,15 +403,34 @@ public final class PassiveStepSolver {
     private Result solve(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {
         var entry=carry;
         try {
-            var mixing=JunctionMixing.begin(inputGraph);
+            var mixing=JunctionMixing.begin(inputGraph,model);
             if(mixing==null)return solvePasses(inputGraph,dt,checkpoint,rateOnly,acceptedEndpointModes);
+            var reopened=keepOpen;
             var result=solvePasses(mixing.working,dt,checkpoint,rateOnly,acceptedEndpointModes);
+            if(!rateOnly && !result.pipeTransfers().isEmpty()) {
+                var refined=mixing.resolveFront(result,deliveryWindow-deliveryElapsed,deliveredInWindow,model);
+                if(refined!=mixing) {
+                    carry=entry;
+                    keepOpen=reopened;
+                    mixing=refined;
+                    result=solvePasses(mixing.working,dt,checkpoint,false,acceptedEndpointModes);
+                }
+            }
             return new Result(result.states(),result.massFlows(),dt,result.numerical(),result.modes(),result.devicePressureChanges(),
-                    result.pumpWorkJoule(),result.externalMoles(),result.externalEnergyJoule(),mixing.book(result.inventories()),
+                    result.pumpWorkJoule(),result.externalMoles(),result.externalEnergyJoule(),mixing.book(result.inventories(),rateOnly),
                     result.boundaries(),result.pipeTransfers(),result.filters(),result.observations(),result.towers());
         }
         catch(RuntimeException failed){carry=entry;throw failed;}
     }
+    private double deliveryWindow;
+    private double deliveryElapsed;
+    private double[] deliveredInWindow;
+    void startDeliveryWindow(double duration) {
+        deliveryWindow=duration;
+        deliveryElapsed=0;
+        deliveredInWindow=null;
+    }
+    void clearDeliveryWindow(){startDeliveryWindow(0);}
     private Result solvePasses(PassiveNetwork inputGraph,double dt,Runnable checkpoint,boolean rateOnly,List<FlowControl.Mode> acceptedEndpointModes) {
         // A junction minted by its constructor and not yet sized to its connections is sized here (no-op otherwise).
         inputGraph=PassiveNetwork.sizeJunctionHoldups(inputGraph,model);
