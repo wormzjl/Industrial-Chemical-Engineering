@@ -495,6 +495,7 @@ public final class PassiveStepSolver {
         boolean[] keep=null;
         if(!keepOpen.isEmpty()&&!rateOnly){var ids=identitiesOf(graph);keep=new boolean[ids.size()];for(int i=0;i<keep.length;i++)keep[i]=keepOpen.contains(ids.get(i));keepOpen=Set.of();}
         closures.closeDeadHeads(graph,boundaryClosed,keep);
+        if(!rateOnly&&carryModes&&DeviceModes.resumesPriming(graph,modes,carry.modes(),boundaryClosed))carry=carry.withoutFlows();
         balanceLawFlows=null;
         if(needsBalance(graph)) {
             // Owner decision of 2026-10-19 (junction seeding): a solve without a carried point ({@link #carriedPoint}) starts from
