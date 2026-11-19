@@ -503,11 +503,13 @@ public final class PassiveStepSolver {
         // A mover's start mode reads its own lines only (owner decision D40 A): its setting, and the sealed sides of it
         // (relieveSealedPockets). A connection blocked elsewhere in the island changes neither.
         modes.addAll(devices.initialModes(graph));
+        boolean reseedOpeningPort=false;
         // At exactly its setpoint a regulating valve may carry positive flow and throttling head. Re-closing it at
         // every substep creates a different branch that must converge before it can reopen, coupled to phase draws.
         // This seed is passed per attempt by the interval controller; the carried modes can include failed trials.
         if(acceptedEndpointModes!=null) {
             if(acceptedEndpointModes.size()!=graph.pipes().size())throw new IllegalArgumentException("Accepted endpoint mode count differs from graph");
+            boolean committedCarry=!rateOnly&&carryModes&&carry.outputStates().isEmpty()&&carry.flows().length==modes.size();
             double[] bound=null;
             for(int edge=0;edge<modes.size();edge++)if(graph.pipes().get(edge).control() instanceof FlowControl.Valve valve&&!valve.bare()) {
                 var accepted=acceptedEndpointModes.get(edge);
@@ -523,11 +525,24 @@ public final class PassiveStepSolver {
                 // passes more. Regulating there asked the mover for its target: 50 kg/s of a 10 kg/s pump stood a thousand relief
                 // rises below its suction, where the thermo failed. Owner option 1 of FEED_STEP_HOLD_REVIEW.md: one whose supply holds
                 // nothing ({@link InletPhase#starved}, a drained drum) starts open too, as {@link DeviceModes#openStarved} opens it in a pass.
-                else if(accepted==FlowControl.Mode.VALVE_REGULATING&&!valve.pressureControl()) {
-                    if(bound==null)bound=devices.moverBounds(graph);
+                else if(!valve.pressureControl()) {
                     var pipe=graph.pipes().get(edge);
-                    if(valve.targetMassFlow(PortStreams.endDensity(model,graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume()))>bound[edge]
-                            ||InletPhase.starved(graph,edge,node->false))start=FlowControl.Mode.VALVE_OPEN;
+                    // A port plan can start feeding an idle circuit without changing its identity. Its zero-flow
+                    // endpoint can carry opposing circulation in heated branches and a pump at shutoff. Balance at
+                    // the new plan before those old rates and modes seed the coupled equations.
+                    boolean opening=committedCarry&&carry.flows()[edge]==0&&accepted!=FlowControl.Mode.VALVE_REGULATING
+                            &&pipe.effectiveBlockedDirections()!=3&&valve instanceof FlowControl.ControlValve port
+                            &&port.source()==FlowControl.ValveSource.MASS_FLOW&&PortPlan.COLUMN_SENSOR.equals(port.sensor())&&port.massTarget()>0;
+                    if(accepted==FlowControl.Mode.VALVE_REGULATING||opening) {
+                        if(bound==null)bound=devices.moverBounds(graph);
+                        double target=valve.targetMassFlow(PortStreams.endDensity(model,graph.reservoirs().get(pipe.first()).state(),pipe.firstPort(),pipe.volume()));
+                        boolean limited=target>bound[edge]||InletPhase.starved(graph,edge,node->false);
+                        if(opening&&!limited) {
+                            // Let the open law establish available flow, including centrifugal movers' runout.
+                            start=FlowControl.Mode.VALVE_OPEN;
+                            reseedOpeningPort=true;
+                        } else if(accepted==FlowControl.Mode.VALVE_REGULATING&&limited)start=FlowControl.Mode.VALVE_OPEN;
+                    }
                 }
                 modes.set(edge,start);
             }
@@ -539,7 +554,7 @@ public final class PassiveStepSolver {
         // Owner decision D16 A: a vapour-locked pump ({@link MoverSuction#vapourLocks}) already starts closed ({@link DeviceModes#initialModes}) and
         // the carry leaves it so; the carry reads no suction head of its own. The rise reads this solve's supply densities
         // ({@link SolveConstants}: the input graph and slice, NaN until read).
-        if(carryModes)for(int i=0;i<modes.size();i++) {
+        if(carryModes&&!reseedOpeningPort)for(int i=0;i<modes.size();i++) {
             var pipe=graph.pipes().get(i);
             if(!(pipe.control() instanceof FlowControl.Mover pump)||pump.targetVolumeFlow()==0||suctions.vapourLocked(i))continue;
             var carried=carry.modes().get(i);
@@ -568,8 +583,8 @@ public final class PassiveStepSolver {
         boolean[] keep=null;
         if(!keepOpen.isEmpty()&&!rateOnly){var ids=identitiesOf(graph);keep=new boolean[ids.size()];for(int i=0;i<keep.length;i++)keep[i]=keepOpen.contains(ids.get(i));keepOpen=Set.of();}
         closures.closeDeadHeads(graph,boundaryClosed,keep);
-        if(!rateOnly&&carryModes&&DeviceModes.resumesPriming(graph,modes,carry.modes(),boundaryClosed))carry=carry.withoutFlows();
-        balanceLawFlows=null;
+        if(reseedOpeningPort||!rateOnly&&carryModes&&DeviceModes.resumesPriming(graph,modes,carry.modes(),boundaryClosed))carry=carry.withoutFlows();
+        balancedStart=null;
         if(needsBalance(graph)) {
             // Owner decision of 2026-10-19 (junction seeding): a solve without a carried point ({@link #carriedPoint}) starts from
             // the island's quasi-steady balance ({@link BalanceStart#balanceStart}), the pump modes it decides included: the cold rate seed's
@@ -579,7 +594,7 @@ public final class PassiveStepSolver {
             BalanceStart.Start start;
             if(balanceFor==inputGraph&&balanceCache!=null&&Arrays.equals(balanceClosedFor,boundaryClosed))start=balanceCache;
             else{start=balance.balanceStart(graph,modes,boundaryClosed,keep,checkpoint);balanceFor=inputGraph;balanceCache=start;balanceClosedFor=boundaryClosed.clone();}
-            graph=start.graph();balanceLawFlows=start.lawFlows();
+            graph=start.graph();balancedStart=start;
             for(int i=0;i<modes.size();i++)modes.set(i,start.modes().get(i));
             carry=carry.withoutFlows();
             for(int i=0;i<boundaryClosed.length;i++)if(start.closed()[i])boundaryClosed[i]=true;
@@ -822,7 +837,7 @@ public final class PassiveStepSolver {
             // and where that fails too the failure goes to the failure branch like any other.
             if(deviceChange>=0&&deviceNext==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(deviceChange).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()) {
                 var regulated=balance.balanceStart(graph,new ArrayList<>(modes),boundaryClosed,keep,checkpoint);
-                if(regulated.converged()){seeds=states;balanceLawFlows=regulated.lawFlows();passStart=new PassStart(null,true,null);carry=carry.withModes(List.copyOf(modes));continue;}
+                if(regulated.converged()){seeds=states;balancedStart=regulated;passStart=new PassStart(null,true,null);carry=carry.withModes(List.copyOf(modes));continue;}
             }
             if(changed){seeds=states;carry=new CarriedPoint(pipeIdentities,nodeIds,inputStates,states,rateOnly,flows.clone(),lawFlows,heads.clone(),List.copyOf(modes));continue;}
             // Decision D11: the phase-port segments this pass froze must be the ones its own converged flows land in
@@ -1862,8 +1877,8 @@ public final class PassiveStepSolver {
         }
     }
     // ======== The balanced start: owner decision of 2026-10-19 (batch 2026-10-19-junction-seeding, JUNCTION_SEEDING_PLAN.md) ========
-    /** The balance's law flows for the solve in progress; null where none was run (the static estimate stands in). */
-    double[] balanceLawFlows;
+    /** The balance's starting point for the solve in progress; null where none was run (the static estimate stands in). */
+    BalanceStart.Start balancedStart;
     /** The last balance and the input graph it was computed for: every attempt of one step starts from the same graph. */
     private PassiveNetwork balanceFor;private BalanceStart.Start balanceCache;private boolean[] balanceClosedFor;
     /** Whether this solve starts from a carried point ({@link StartSeeds#startPoint}'s test) or needs the balance. */

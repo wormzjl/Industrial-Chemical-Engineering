@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.science.fluid.network;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.wormzjl.icheme.runtime.fluid.RetainedSolver;
 import com.wormzjl.icheme.science.fluid.diagnostics.SolverDiagnostics;
 import com.wormzjl.icheme.science.fluid.thermo.FluidThermodynamics;
 import com.wormzjl.icheme.science.material.MaterialCatalog;
@@ -90,6 +91,33 @@ class FlowControlTest {
                 long passes=SolverDiagnostics.sample().value("activeSetPasses");
                 if(previous==FlowControl.Mode.CLOSED)reference=passes;
                 else assertEquals(reference,passes,"the old opening must not trigger a flowing trial");
+            }
+        } finally {
+            SolverDiagnostics.ENABLED=enabled;
+            SolverDiagnostics.reset();
+        }
+    }
+    @Test void aPortReopeningFromZeroStartsWithAnOpenBalance() {
+        var line=line(300000,101325,0,FlowControl.ControlValve.unconfigured());
+        var supply=new PassiveNetwork.Reservoir(0,0,line.reservoirs().getFirst().state(),PassiveNetwork.NodeKind.GENERATOR);
+        var sink=new PassiveNetwork.Reservoir(1,0,line.reservoirs().getLast().state(),PassiveNetwork.NodeKind.VOID);
+        var graph=new PassiveNetwork(List.of(supply,sink),line.pipes());
+        double seconds=.1,target=.01;
+        var plan=new PortPlan(1,0,target,0,null);
+        boolean enabled=SolverDiagnostics.ENABLED;
+        try {
+            SolverDiagnostics.ENABLED=true;
+            for(var previous:List.of(FlowControl.Mode.CLOSED,FlowControl.Mode.VALVE_OPEN)) {
+                SolverDiagnostics.reset();
+                var carry=new PassiveIntervalSolver.Result(graph,seconds,new double[1],1,0,0,
+                        List.of(),Map.of(),List.of(previous),new double[1],new double[1],List.of());
+                var solver=new RetainedSolver();solver.committed(carry);
+                var result=solver.solve(model,graph,seconds,PassiveIntervalSolver.Settings.defaults(),()->{},Map.of(),Map.of(1L,plan));
+                assertEquals(FlowControl.Mode.VALVE_REGULATING,result.endpointModes().getFirst());
+                assertEquals(2,SolverDiagnostics.sample().value("activeSetPasses"),"open balance followed by the regulating pass");
+                var transfer=result.pipeTransfers().getFirst();
+                assertEquals(target*seconds,transfer.forward().massKg(),1e-12);
+                assertEquals(0,transfer.reverse().massKg());
             }
         } finally {
             SolverDiagnostics.ENABLED=enabled;

@@ -23,12 +23,12 @@ import java.util.*;
  * the node seeds of the first pass ({@link #initialPhaseSeeds}: each vessel's committed layout with what is about to
  * arrive, each junction laid out for its step's mixture, {@link #arrivingPhases}), and the junctions a vapour first
  * appears in seeded where their connections settle them ({@link #flashSeeds}). One per solver
- * ({@code PassiveStepSolver.seeding}), built with it; it reads the solver's carried point, balance law flows, solve
+ * ({@code PassiveStepSolver.seeding}), built with it; it reads the solver's carried point, balance start, solve
  * constants and laws through {@code solver} and holds no state of its own (S-01, batch 2026-11-13-codebase-review, D-S5:
  * moved out of the solver with every body unchanged but its qualifiers).
  */
 final class StartSeeds {
-    /** The solver whose passes this starts: its carried point, its balance law flows, its solve constants and its laws. */
+    /** The solver whose passes this starts: its carried point, its balance start, its solve constants and its laws. */
     private final PassiveStepSolver solver;
     /** The solver's thermodynamics, the same object. */
     private final FluidThermodynamics model;
@@ -249,7 +249,7 @@ final class StartSeeds {
      */
     private boolean stocked(int j,FluidThermodynamics.State seed,List<FluidThermodynamics.State> seeds,double heldMass,double mass) {
         var supplyGraph=solver.constants.supplyGraph;
-        return solver.balanceLawFlows!=null&&supplyGraph!=null&&j<supplyGraph.reservoirs().size()&&seed==seeds.get(j)
+        return solver.balancedStart!=null&&supplyGraph!=null&&j<supplyGraph.reservoirs().size()&&seed==seeds.get(j)
                 &&seed!=supplyGraph.reservoirs().get(j).state()&&heldMass>=mass-heldMass;
     }
     /**
@@ -284,9 +284,11 @@ final class StartSeeds {
                 ||graph.pipes().stream().anyMatch(pipe->phaseCode(graph.reservoirs().get(pipe.first()).state())!=phaseCode(graph.reservoirs().get(pipe.second()).state()));
         // At a job start the previous point is the committed interval's endpoint; see {@link PassiveStepSolver#replayStart}.
         boolean previousAvailable=!passStart.lawFlowsFromBalance()&&solver.carriedPoint(graph,pipeIdentities);
-        // The balance's law flows ({@link BalanceStart#balanceStart}) where this point has no history to start from (a solve without a
-        // carried point balances first); each connection's own law on its ends' states on an island the balance leaves alone.
-        double[] estimate=warmFlow&&!previousAvailable?(solver.balanceLawFlows!=null&&solver.balanceLawFlows.length==graph.pipes().size()?solver.balanceLawFlows:solver.lawFlows(graph)):null;
+        // With no carried point, use the balance's flows and any corresponding pump heads. On an island left alone by
+        // the balance, estimate each flow from its connection's law on the end states.
+        var balanced=solver.balancedStart;
+        if(balanced!=null&&balanced.lawFlows().length!=graph.pipes().size())balanced=null;
+        double[] estimate=warmFlow&&!previousAvailable?(balanced==null?solver.lawFlows(graph):balanced.lawFlows()):null;
         for(int i=0;i<graph.pipes().size();i++) {
             var pipe=graph.pipes().get(i);var a=graph.reservoirs().get(pipe.first());var b=graph.reservoirs().get(pipe.second());
             if(boundaryClosed[i]||modes.get(i)==FlowControl.Mode.CLOSED)continue;
@@ -309,6 +311,10 @@ final class StartSeeds {
             if(!warmFlow)continue;
             // Decision D54: a dry end gives nothing, so an estimate out of one starts at rest (A190's rule for a carried flow).
             flows[i]=outOfDryEnd(graph,pipe,estimate[i])?0:estimate[i];
+            if(balanced!=null&&balanced.pumpHeads()!=null&&modes.get(i)==FlowControl.Mode.MOVER_LAW&&Double.isFinite(balanced.pumpHeads()[i])) {
+                heads[i]=balanced.pumpHeads()[i]/1e5;
+                headSet[i]=true;
+            }
         }
         if(passStart.flashRestated()!=null&&seeds!=null)restateFlashFlows(graph,modes,boundaryClosed,seeds,flows,passStart.flashRestated());
         if(!hasSolids(graph)&&graph.pipes().stream().noneMatch(pipe->pipe.filter()!=null))return;
@@ -336,7 +342,8 @@ final class StartSeeds {
     /** The transported flow of connection {@code pipe} for the law's flow {@code lawFlow}: its saturation at the velocity
      * cap of the end it leaves, on that end's stream ({@link PassiveStepSolver#massFlowLimit}). */
     private double transported(PassiveNetwork graph,PassiveNetwork.Pipe pipe,double lawFlow) {
-        if(pipe.control() instanceof FlowControl.Mover)return lawFlow;
+        // The balanced pump seed carries the raw law flow. Other movers' estimates already carry the capped flow.
+        if(pipe.control() instanceof FlowControl.Mover&&!(pipe.control() instanceof FlowControl.Pump))return lawFlow;
         var donor=graph.reservoirs().get(lawFlow>=0?pipe.first():pipe.second()).state();
         return saturated(lawFlow,solver.massFlowLimit(pipe,donor,pipe.drawPort(lawFlow)));
     }
