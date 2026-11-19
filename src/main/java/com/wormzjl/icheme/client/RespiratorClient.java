@@ -1,6 +1,7 @@
 package com.wormzjl.icheme.client;
 
 import com.wormzjl.icheme.IChemE;
+import com.wormzjl.icheme.compat.curios.CuriosRespiratorClient;
 import com.wormzjl.icheme.registry.ModItems;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
@@ -66,7 +67,7 @@ public final class RespiratorClient {
     @SubscribeEvent
     public static void setup(FMLClientSetupEvent event) {
         if (ModList.get().isLoaded("curios")) {
-            event.enqueueWork(com.wormzjl.icheme.compat.curios.CuriosRespiratorClient::register);
+            event.enqueueWork(() -> CuriosRespiratorClient.register(() -> model().head, TEXTURE));
         }
     }
 }
