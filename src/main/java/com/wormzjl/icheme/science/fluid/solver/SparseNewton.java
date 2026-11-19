@@ -69,6 +69,8 @@ public final class SparseNewton {
          * returns.
          */
         default double residualNorm(double[] residual){return norm(residual);}
+        /** Describes the largest residual row at the last evaluated iterate, when diagnostics are enabled. */
+        default String failureDetail(double[] residual){return null;}
     }
     /**
      * The iteration limit of every Newton the fluid solver runs (a step's pass, its polish, a vessel's closure, the
@@ -92,23 +94,32 @@ public final class SparseNewton {
     public static final class Nonconvergence extends RuntimeException {
         private final double[] lastVariables;
         private final ThermoHold phaseHold;
+        private final String detail;
         public Nonconvergence(String message){this(message,null);}
         public Nonconvergence(String message,double[] lastVariables){this(message,lastVariables,null);}
         /** {@code phaseHold}: a phase hold stopped this solve ({@link ThermoHold}: a phase set the network cannot carry, or
          * one the engine could not converge inside the declared critical band) - the failing iteration's line search was
          * refused by it - and a rejection count or a held island should name it rather than the Newton symptom. */
         public Nonconvergence(String message,double[] lastVariables,ThermoHold phaseHold) {
-            super(message);this.lastVariables=lastVariables==null?null:lastVariables.clone();this.phaseHold=phaseHold;
+            this(message,lastVariables,phaseHold,null);
+        }
+        public Nonconvergence(String message,double[] lastVariables,ThermoHold phaseHold,String detail) {
+            super(message);this.lastVariables=lastVariables==null?null:lastVariables.clone();this.phaseHold=phaseHold;this.detail=detail;
         }
         public double[] lastVariables(){return lastVariables==null?null:lastVariables.clone();}
         /** The phase hold that stopped this solve, or {@code null} when the failure was numerical. */
         public ThermoHold phaseHold(){return phaseHold;}
+        /** Diagnostic evidence kept separate from the reason used to classify and count the rejection. */
+        public String detail(){return detail;}
+        private Nonconvergence withDetail(String detail) {
+            return detail==null?this:new Nonconvergence(getMessage(),lastVariables,phaseHold,detail);
+        }
         /** This failure with the hold that stopped it at a known network node ({@link ThermoHold#at}): a caller that knows
          * the node a failed solve belongs to names it as it names a hold. Itself where no hold stopped the solve or the
          * hold already names a node. */
         public Nonconvergence at(long node) {
             var named=phaseHold==null?null:phaseHold.at(node);
-            return named==phaseHold?this:new Nonconvergence(getMessage(),lastVariables,named);
+            return named==phaseHold?this:new Nonconvergence(getMessage(),lastVariables,named,detail);
         }
     }
     /** The phase hold a refusal stands for: the hold itself, or the one a failed solve carries; else null. */
@@ -264,16 +275,20 @@ public final class SparseNewton {
             boolean fresh=refresh;
             SolverDiagnostics.count(fresh?SolverDiagnostics.newtonIterationsFresh:SolverDiagnostics.newtonIterationsStale);
             if(refresh) {
-                calls+=differentiate(equations,x,f,settings.differenceStep(),checkpoint,workspace);
+                try{calls+=differentiate(equations,x,f,settings.differenceStep(),checkpoint,workspace);}
+                catch(Nonconvergence failure){
+                    if(!SolverDiagnostics.ENABLED)throw failure;
+                    throw failure.withDetail(equations.failureDetail(f));
+                }
                 lastNonzeros=workspace.matrix.nonzeroCount();refresh=false;iterationsSinceRefresh=0;
             }
             double[] rhs=new double[n];for(int row=0;row<n;row++)rhs[row]=-f[row];
             double[] direction;
             lastNonzeros=workspace.matrix.nonzeroCount();
             try{direction=workspace.factorization.solve(rhs,SparseLuSolver.Verification.UNTIL_VERIFIED);}
-            catch(SparseLuSolver.SolveFailure failure){if(!fresh){SolverDiagnostics.count(SolverDiagnostics.newtonRefreshesFailed);refresh=true;continue;}workspace.invalidate();throw new Nonconvergence("Singular Newton Jacobian: "+failure.getMessage(),x);}
+            catch(SparseLuSolver.SolveFailure failure){if(!fresh){SolverDiagnostics.count(SolverDiagnostics.newtonRefreshesFailed);refresh=true;continue;}workspace.invalidate();throw failed(equations,"Singular Newton Jacobian: "+failure.getMessage(),x,f,null);}
             double alpha=Math.min(1,equations.maximumStep(x,direction));boolean accepted=false;
-            if(!Double.isFinite(alpha)||alpha<=0)throw new Nonconvergence("No feasible Newton direction",x);
+            if(!Double.isFinite(alpha)||alpha<=0)throw failed(equations,"No feasible Newton direction",x,f,null);
             for(int backtrack=0;backtrack<settings.backtracks();backtrack++,alpha*=.5) {
                 checkpoint.run();if(backtrack>0)SolverDiagnostics.count(SolverDiagnostics.newtonBacktracks);
                 double[] candidate=x.clone();for(int i=0;i<n;i++)candidate[i]+=alpha*direction[i];
@@ -313,14 +328,17 @@ public final class SparseNewton {
                 try{workspace.factorization.verify(rhs,direction);}
                 catch(SparseLuSolver.SolveFailure failure) {
                     if(!fresh){SolverDiagnostics.count(SolverDiagnostics.newtonRefreshesFailed);refresh=true;continue;}
-                    workspace.invalidate();throw new Nonconvergence("Singular Newton Jacobian: "+failure.getMessage(),x);
+                    workspace.invalidate();throw failed(equations,"Singular Newton Jacobian: "+failure.getMessage(),x,f,null);
                 }
                 if(!fresh){SolverDiagnostics.count(SolverDiagnostics.newtonRefreshesFailed);refresh=true;continue;}
-                workspace.invalidate();throw new Nonconvergence("Newton line search stalled at residual "+norm,x,hold);
+                workspace.invalidate();throw failed(equations,"Newton line search stalled at residual "+norm,x,f,hold);
             }
         }
         workspace.invalidate();
-        throw new Nonconvergence("Newton iteration limit at residual "+norm,x,hold);
+        throw failed(equations,"Newton iteration limit at residual "+norm,x,f,hold);
+    }
+    private static Nonconvergence failed(Equations equations,String message,double[] x,double[] residual,ThermoHold hold) {
+        return new Nonconvergence(message,x,hold,SolverDiagnostics.ENABLED?equations.failureDetail(residual):null);
     }
     private static int differentiate(Equations equations,double[] x,double[] f,double differenceStep,Runnable checkpoint,Workspace workspace) {
         if(!SolverDiagnostics.ENABLED)return differentiate0(equations,x,f,differenceStep,checkpoint,workspace);

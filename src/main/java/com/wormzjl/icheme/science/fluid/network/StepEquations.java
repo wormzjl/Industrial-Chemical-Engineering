@@ -1264,6 +1264,49 @@ final class StepEquations implements SparseNewton.Equations {
         double maximum=0;for(int row=0;row<residual.length;row++)maximum=Math.max(maximum,rowWeights[row]*Math.abs(residual[row]));
         return maximum;
     }
+    /** The dominant row of the last valid iterate, using the same weights as the convergence test. */
+    @Override public String failureDetail(double[] residual) {
+        int dominant=0;
+        double maximum=0;
+        for(int row=0;row<residual.length;row++) {
+            double weighted=Math.abs(residual[row])*(rowWeights==null?1:rowWeights[row]);
+            if(weighted>maximum){dominant=row;maximum=weighted;}
+        }
+        return "dominant "+residualRow(dominant)+" row="+dominant+" residual="+residual[dominant]+" weighted="+maximum;
+    }
+    private String residualRow(int row) {
+        if(row<edgeOffset)for(int node=0;node<layout.length;node++) {
+            if(layout[node]==null||row<offsets[node]||row>=offsets[node]+layout[node].size())continue;
+            var reservoir=graph.reservoirs().get(node);
+            return "node "+reservoir.id()+" "+reservoir.kind()+" "+layout[node].residualRow(row-offsets[node],reservoir.junction(),retainedPressures[node]>0);
+        }
+        for(int edge=0;edge<graph.pipes().size();edge++) {
+            var pipe=graph.pipes().get(edge);
+            String equation;
+            if(row==edgeOffset+edge)equation="hydraulics";
+            else if(row==controlOffsets[edge])equation="actuator";
+            else if(row==filterOffsets[edge])equation="filter loading";
+            else if(row==weirOffsets[edge][0])equation="first-end weir";
+            else if(row==weirOffsets[edge][1])equation="second-end weir";
+            else continue;
+            return "pipe "+pipe.id()+" "+equation+" ("+modes.get(edge)+")";
+        }
+        return "equation";
+    }
+    /** The repeated layout's phases (phaseCode bits) by node and its open or closed control modes by pipe. */
+    String cycleDetail(int pass,int[] phases,String earlierFailure) {
+        var nodes=new StringJoiner(", ","[","]");
+        for(int i=0;i<phases.length;i++) {
+            if(!graph.reservoirs().get(i).fixed())nodes.add(graph.reservoirs().get(i).id()+"="+phases[i]);
+        }
+        var devices=new StringJoiner(", ","[","]");
+        for(int edge=0;edge<modes.size();edge++) {
+            if(modes.get(edge)==FlowControl.Mode.PASSIVE&&!boundaryClosed[edge])continue;
+            devices.add(graph.pipes().get(edge).id()+"="+(boundaryClosed[edge]?"boundary closed":modes.get(edge).name()));
+        }
+        String layout="repeated layout at pass "+pass+" phase masks "+nodes+" modes "+devices;
+        return earlierFailure==null?layout:layout+", earlier "+earlierFailure;
+    }
     /** {@link #rowWeights} from this pass's seeds and layouts. The amount {@code s} each balance row is stated over is read
      * off the row itself: its change when every target moves by one mole is {@code -1/s}. */
     private double[] rowWeights() {

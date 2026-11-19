@@ -170,6 +170,29 @@ public final class PhaseLayout {
         for(int index=0;index<components.length;index++)if(components[index]==component)return index;
         return -1;
     }
+    /** Names a diagnostic row in the order of {@link #balanceRows}, {@link #junctionRows} and {@link #equilibriumResidual}. */
+    public String residualRow(int row,boolean junction,boolean retainsPressure) {
+        if(junction) {
+            if(row<junctionBasis.length-1)return "mixing "+model.components().get(junctionBasis[row]);
+            if(row==junctionBasis.length-1)return retainsPressure?"retained pressure":"continuity";
+            if(row==junctionBasis.length)return "mixed enthalpy";
+            if(row==junctionBasis.length+1)return "amount normalization";
+        } else {
+            if(row<components.length)return "amount balance "+model.components().get(components[row]);
+            if(row==components.length)return "energy balance";
+            if(row==components.length+1)return "wall closure";
+        }
+        int extra=row-components.length-2;
+        if(solidIndex>=0) {
+            if(extra<3)return switch(extra){case 0->"solid mass";case 1->"solid volume";default->"solid heat capacity";};
+            extra-=3;
+        }
+        for(int component:components)for(int slot=0;slot<3;slot++) {
+            if(slotIndex[component][slot]>=0&&slot!=referenceSlot[component]&&extra--==0)
+                return "phase equilibrium "+model.components().get(component)+" (slot "+referenceSlot[component]+" to "+slot+")";
+        }
+        return "local row "+row;
+    }
     /** The amount a component's balance row is stated over ({@link #balanceRows}), mol. */
     public double componentScale(int component){return componentScales[component];}
     /** This layout's frozen support of a conserved component: its slot bits, 0 for an absent one. */

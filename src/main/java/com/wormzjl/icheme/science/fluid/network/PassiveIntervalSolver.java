@@ -235,6 +235,7 @@ public final class PassiveIntervalSolver {
         var pipeTransfers=new PipeTransfer.Accumulator();
         var rejectionReasons=new LinkedHashMap<String,Integer>();
         String lastRejection="";
+        String lastDiagnostic="";
         // A transition is declared rather than refined once the step that would contain it is this
         // short, so it is located to within one such step of where it physically is.
         double transitionFloor=Math.max(1e-6,1e-9*duration);
@@ -343,6 +344,7 @@ public final class PassiveIntervalSolver {
                 h=step*.5;
             }catch(SparseNewton.Nonconvergence|IllegalArgumentException|StateChangeRejection rejected) {
                 lastRejection=String.valueOf(rejected.getMessage());
+                lastDiagnostic=rejected instanceof SparseNewton.Nonconvergence failure&&failure.detail()!=null?"; diagnostic="+failure.detail():"";
                 if(!(rejected instanceof StateChangeRejection))SolverDiagnostics.attempt(attempt,step,false,diagnosticReason(rejected),Double.NaN);
                 // A trial a phase hold refused - directly, or a Newton pass whose failing line search it stopped - is
                 // counted under its own key (one per phase set; never folded into "Other"), so a checkpoint, a view and the
@@ -352,10 +354,10 @@ public final class PassiveIntervalSolver {
                 else count(rejectionReasons,String.valueOf(rejected.getMessage()).replaceAll("[-+]?[0-9]+(?:\\.[0-9]+)?(?:[Ee][-+]?[0-9]+)?","#"));
                 lastWasHold=hold!=null;
                 rejectedCount++;consecutiveRejects++;h=step*.5;
-                if(consecutiveRejects>=20||elapsed+h==elapsed)throw new SparseNewton.Nonconvergence("Substep refinement exhausted: "+rejected.getMessage()+"; reasons="+rejectionReasons,null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
+                if(consecutiveRejects>=20||elapsed+h==elapsed)throw new SparseNewton.Nonconvergence("Substep refinement exhausted: "+lastRejection+"; reasons="+rejectionReasons+lastDiagnostic,null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
             }
         }
-        if(declared==null&&elapsed<duration)throw new SparseNewton.Nonconvergence("Interval substep limit; no partial interval may commit: advanced="+elapsed+" of "+duration+" s, accepted="+acceptedCount+", rejected="+rejectedCount+", reasons="+rejectionReasons+", last="+lastRejection,
+        if(declared==null&&elapsed<duration)throw new SparseNewton.Nonconvergence("Interval substep limit; no partial interval may commit: advanced="+elapsed+" of "+duration+" s, accepted="+acceptedCount+", rejected="+rejectedCount+", reasons="+rejectionReasons+", last="+lastRejection+lastDiagnostic,
                 null,phaseHoldCause(lastWasHold,lastHold,holdRejections,rejectedCount));
         // A segment that ended on a declared transition hands the next one the estimate it held
         // before the search, not the micro-step the search finished on.

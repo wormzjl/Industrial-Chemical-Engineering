@@ -609,6 +609,7 @@ public final class PassiveStepSolver {
         var reachable=reachableComponents(graph,boundaryClosed);
         var seeded=seeding.initialPhaseSeeds(graph,dt,checkpoint,reachable,modes,boundaryClosed);var seeds=seeded.states();
         var seen=new HashSet<PassKey>();
+        Map<PassKey,String> failedPasses=null;
         // Constant for this solve: every pass keys on the same graph identity and component support.
         var pipeIdentities=identitiesOf(graph);int pipesHash=pipeIdentities.hashCode();
         long[] nodeIds=nodeIds(graph);
@@ -660,7 +661,11 @@ public final class PassiveStepSolver {
             // {@link PassKey}).
             var structure=new WorkspaceKey(0,nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,supportCodes(supports),
                     modeCodes,boundaryClosed.clone(),equations.junctionDonorFirst,equations.solidSupport,equations.hasWeirs);
-            if(!seen.add(new PassKey(structure,equations.segmentCodes(),equations.columnCodes(),foldedPhases.clone(),proposal==null?-1:proposal.node(),proposal==null?0:proposal.phases(),restarts)))throw new SparseNewton.Nonconvergence("Phase/device active-set cycle");
+            var passKey=new PassKey(structure,equations.segmentCodes(),equations.columnCodes(),foldedPhases.clone(),proposal==null?-1:proposal.node(),proposal==null?0:proposal.phases(),restarts);
+            if(!seen.add(passKey)) {
+                String detail=SolverDiagnostics.ENABLED?equations.cycleDetail(pass,phases,failedPasses==null?null:failedPasses.get(passKey)):null;
+                throw new SparseNewton.Nonconvergence("Phase/device active-set cycle",null,null,detail);
+            }
             var key=new WorkspaceKey(Double.doubleToLongBits(dt),nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,
                     structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors,structure.solidRows,structure.weirRows);
             var workspace=workspaces.get(key);
@@ -674,6 +679,10 @@ public final class PassiveStepSolver {
             double tolerance=NEWTON_TOLERANCE;
             try{numerical=SparseNewton.solve(equations,equations.initial(),new SparseNewton.Settings(SparseNewton.ITERATIONS,tolerance,1e-6,24),checkpoint,workspace);}
             catch(SparseNewton.Nonconvergence failure) {
+                if(failure.detail()!=null) {
+                    if(failedPasses==null)failedPasses=new HashMap<>();
+                    failedPasses.put(passKey,"pass "+pass+" "+failure.detail());
+                }
                 // At a finite vessel outlet the leading phase can run out within the step. Its receiver
                 // can restart on the mixed draw if the first Newton pass fails on its leading-phase guess.
                 if(pass==0 && !rateOnly) {
@@ -734,7 +743,7 @@ public final class PassiveStepSolver {
                 // Option B of VALVE_HOLD_TRACE.md (batch 2026-11-16-review-plant-sizing): where nothing else changed, a flow valve
                 // regulating in this pass is solved open, once per solve; asked for more than its line passes it has no root.
                 if(changedSeeds==null&&DeviceModes.openFailedRegulators(original,modes,openedOnFailure))continue;
-                if(changedSeeds==null)throw new SparseNewton.Nonconvergence(failure.getMessage()+"; active-set pass="+pass,failure.lastVariables(),failure.phaseHold());
+                if(changedSeeds==null)throw new SparseNewton.Nonconvergence(failure.getMessage()+"; active-set pass="+pass,failure.lastVariables(),failure.phaseHold(),failure.detail());
                 seeds=changedSeeds;continue;
             }
             // A pass that converges ends the proposal it was laid out with (D39 B): the network's closure kept it.
