@@ -1,6 +1,9 @@
 package com.wormzjl.icheme.science.equipment;
 
 import com.google.gson.JsonObject;
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn.Category;
+import com.wormzjl.icheme.client.gui.common.ConstructorColumn.Equipment;
+import com.wormzjl.icheme.science.tutorial.equipment.EquipmentInfo;
 import com.google.gson.JsonParser;
 import com.wormzjl.icheme.science.equipment.EquipmentShape.Kind;
 import org.junit.jupiter.api.Test;
@@ -26,15 +29,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * from x 8, its groups' rows 176) leaves 180 for the message display's line, which shows what the unit holds or the
  * status; 68 beside a stepped row's box for its label, in two lines at most, each word whole (else its group's labels
  * stand above their boxes, taller); 122 for the kind's name on the title plate before Change (else its short name
- * shows); 168 for a group's plate; 50 for a group's key, three a row, and 170 for a kind's, one a row, each its button
- * less 6. The datasheet's lines wrap on the vessel screen's glass (DialogColumns.glass); the limit keeps each line short,
+ * shows); 168 for a group's plate. The 272 px chooser stacks an overlong category row. With its scrollbar it has
+ * 230 px for a full button label (272 less 16 margins, 12 scrollbar, 8 group insets and 6 button padding). The datasheet's lines wrap on the vessel screen's glass (DialogColumns.glass); the limit keeps each line short,
  * at most the 427 pixels of an 854-pixel-wide window at GUI scale 2, less 16-pixel margins. Every language is measured
  * (batch 2026-11-03-localization), its lines over en_us as Minecraft falls back; a full-width glyph (CJK, kana, full-width
  * forms) is unifont's 16-pixel glyph at half scale plus its pixel of spacing, 9.
  */
 class UnitTextTest {
     private static final String C = "gui.icheme.equipment_constructor.", V = "gui.icheme.vessel.";
-    private static final int MIDDLE = 180, LABEL = 68, TITLE = 122, PLATE = 168, CATEGORY = 50, KIND = 170, DATASHEET = 411;
+    private static final int MIDDLE = 180, LABEL = 68, TITLE = 122, PLATE = 168, CHOOSER_LABEL = 230, DATASHEET = 411;
 
     /** A line's width in GUI pixels in the vanilla default font. */
     static int width(String text) {
@@ -114,8 +117,13 @@ class UnitTextTest {
     }
 
     private static void fitTheirScreens(JsonObject lang, ArrayList<String> over) {
-        for (String category : new String[]{"vessels", "heat", "machines", "reactors", "solid_fuel"})
-            fits(over, "category", text(lang, C + "category." + category), CATEGORY);
+        for (var category : Category.values())
+            fits(over, "category " + category, text(lang, C + "category." + category.key()), CHOOSER_LABEL);
+        for (var equipment : Equipment.values()) {
+            String label = text(lang, C + "equipment." + equipment.key());
+            if (EquipmentInfo.SHAPE_ONLY.contains(equipment.form.kind())) label = text(lang, C + "wip", label);
+            fits(over, equipment + " chooser button", label, CHOOSER_LABEL);
+        }
         for (var kind : Kind.values()) {
             if (!kind.designed()) continue;
             var design = UnitDesign.of(kind);
@@ -124,7 +132,6 @@ class UnitTextTest {
             String form = kind == Kind.TANK ? "floating_roof_tank" : name;
             String full = text(lang, C + "equipment." + form), shorter = text(lang, C + "equipment." + form + ".short");
             if (width(full) > TITLE) fits(over, kind + " short title", shorter, TITLE);
-            fits(over, kind + " kind button", shorter, KIND);
             for (String row : new String[]{design.sizeRow(), design.lengthRow(), design.supportRow()})
                 if (row != null) beside(over, kind + " row", text(lang, C + row), LABEL);
         }
