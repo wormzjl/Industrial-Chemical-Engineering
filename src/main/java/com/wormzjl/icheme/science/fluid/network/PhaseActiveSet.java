@@ -96,10 +96,17 @@ final class PhaseActiveSet {
             var node=graph.reservoirs().get(i);
             if(node.fixed())continue;
             var trial=iterate.get(i);
-            var folded=model.folded(trial,node.junction(),rigid(node),solver.constants.inputStates.get(i));
-            int removed=FluidThermodynamics.phaseBits(trial)&~FluidThermodynamics.phaseBits(folded);
-            if(removed==0)continue;
+            var start=solver.constants.inputStates.get(i);
             var seed=seeds.get(i);
+            var folded=model.folded(trial,node.junction(),rigid(node),start);
+            int removed=FluidThermodynamics.phaseBits(trial)&~FluidThermodynamics.phaseBits(folded);
+            if(node.junction()) {
+                // Arrival seeding can introduce a phase before any pass has established it. A failed solve can
+                // refute that provisional phase by driving it down from its seed, as for a converged proposal.
+                int introduced=FluidThermodynamics.phaseBits(seed)&~FluidThermodynamics.phaseBits(start);
+                if(introduced!=0)removed|=introduced&FluidThermodynamics.collapsing(seed,trial,false);
+            }
+            if(removed==0)continue;
             var next=model.folded(seed,rigid(node),removed);
             if(next==seed)continue;
             var corrected=new ArrayList<>(seeds);
