@@ -33,6 +33,27 @@ class SolidConservationTest {
         assertEquals(received.massKg()*800,received.moments().heatCapacity(),1e-8);
         assertTrue(graph.reservoirs().get(1).inventory().solids().empty());
     }
+    @Test void aRetainedSolverAddsRowsWhenAFeedFirstInjectsSolids() {
+        var gas=model.initialNitrogenCharge(1,298.15,150000,()->{});
+        var tank=new PassiveNetwork.Reservoir(1,0,gas);
+        int nitrogen=model.components().indexOf("Nitrogen");
+        var molesPerSecond=new double[model.componentCount()];
+        molesPerSecond[nitrogen]=.01;
+        double gasEnergyRate=gas.enthalpy()/tank.inventory().moles()[nitrogen]*molesPerSecond[nitrogen];
+        var solidsPerSecond=particles(.001);
+        double slurryEnergyRate=gasEnergyRate+gas.withSolids(solidsPerSecond).enthalpy()-gas.enthalpy();
+        var gasFeed=new PassiveNetwork(List.of(tank),List.of(),List.of(new ScheduledTransfer.Injection(9,0,molesPerSecond,gasEnergyRate)));
+        var slurryFeed=new PassiveNetwork(List.of(tank),List.of(),List.of(new ScheduledTransfer.Injection(9,0,molesPerSecond,slurryEnergyRate,solidsPerSecond)));
+        var solver=new PassiveStepSolver(model);
+
+        var first=solver.solve(gasFeed,1,()->{}).inventories().getFirst();
+        assertTrue(first.solids().empty());
+        var delivered=solver.solve(slurryFeed,1,()->{}).inventories().getFirst();
+        assertEquals(solidsPerSecond,delivered.solids());
+        assertArrayEquals(first.moles(),delivered.moles(),1e-12);
+        assertEquals(tank.inventory().internalEnergy()+slurryEnergyRate,delivered.internalEnergy(),1e-9);
+        assertEquals(first,solver.solve(gasFeed,1,()->{}).inventories().getFirst());
+    }
     @Test void adaptiveStagesAndPipeHistoryPreserveExactPopulations() {
         var source=water(160000).withSolids(particles(100));
         var graph=new PassiveNetwork(List.of(new PassiveNetwork.Reservoir(1,0,source,PassiveNetwork.NodeKind.GENERATOR),

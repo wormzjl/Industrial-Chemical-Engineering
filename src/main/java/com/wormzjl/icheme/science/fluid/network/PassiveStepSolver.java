@@ -603,9 +603,11 @@ public final class PassiveStepSolver {
             // means the pass sequence cannot make progress. The frozen junction donors, the phase-port segments and the static
             // columns belong to it for the same reason the modes do: they decide which equations this pass states (see
             // {@link PassKey}).
-            var structure=new WorkspaceKey(0,nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,supportCodes(supports),modeCodes,boundaryClosed.clone(),equations.junctionDonorFirst);
+            var structure=new WorkspaceKey(0,nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,supportCodes(supports),
+                    modeCodes,boundaryClosed.clone(),equations.junctionDonorFirst,equations.solidSupport,equations.hasWeirs);
             if(!seen.add(new PassKey(structure,equations.segmentCodes(),equations.columnCodes(),foldedPhases.clone(),proposal==null?-1:proposal.node(),proposal==null?0:proposal.phases(),restarts)))throw new SparseNewton.Nonconvergence("Phase/device active-set cycle");
-            var key=new WorkspaceKey(Double.doubleToLongBits(dt),nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors);
+            var key=new WorkspaceKey(Double.doubleToLongBits(dt),nodeIds,kinds,pipeIdentities,pipesHash,phases,componentMask,
+                    structure.supports,modeCodes,structure.boundaryClosed,structure.junctionDonors,structure.solidRows,structure.weirRows);
             var workspace=workspaces.get(key);
             SolverDiagnostics.count(workspace==null?SolverDiagnostics.workspaceBuilds:SolverDiagnostics.workspaceReuses);
             if(workspace==null){if(workspaces.size()>=4)workspaces.remove(workspaces.keySet().iterator().next());var previous=structures.get(structure);workspace=previous==null?new SparseNewton.Workspace(ownership):previous.forkPreconditioner();workspaces.put(key,workspace);}
@@ -949,12 +951,14 @@ public final class PassiveStepSolver {
      * to the key from construction on, so a caller must hand over a snapshot of anything it mutates.
      * {@code supports} is the per-node, per-component phase support flattened in node order: it
      * decides how many unknowns and rows each node block has, so the sparsity pattern, the colouring,
-     * the ordering and every retained factorization belong to it as much as to the phase code. */
+     * the ordering and every retained factorization belong to it as much as to the phase code. A scheduled injection can
+     * add solid rows before the stock contains any solid, and the same weir connection adds a row only in a time step. */
     private record WorkspaceKey(long stepBits,long[] nodeIds,byte[] kinds,List<PassiveNetwork.Pipe.Identity> pipes,int pipesHash,
                                 int[] phases,boolean[] componentMask,byte[] supports,byte[] modes,boolean[] boundaryClosed,
-                                boolean[] junctionDonors) {
+                                boolean[] junctionDonors,boolean solidRows,boolean weirRows) {
         @Override public boolean equals(Object other) {
-            return other instanceof WorkspaceKey key&&stepBits==key.stepBits&&Arrays.equals(nodeIds,key.nodeIds)
+            return other instanceof WorkspaceKey key&&stepBits==key.stepBits&&solidRows==key.solidRows&&weirRows==key.weirRows
+                    &&Arrays.equals(nodeIds,key.nodeIds)
                     &&Arrays.equals(kinds,key.kinds)&&pipesHash==key.pipesHash&&(pipes==key.pipes||pipes.equals(key.pipes))&&Arrays.equals(phases,key.phases)
                     &&Arrays.equals(componentMask,key.componentMask)&&Arrays.equals(supports,key.supports)
                     &&Arrays.equals(modes,key.modes)&&Arrays.equals(boundaryClosed,key.boundaryClosed)
@@ -966,7 +970,8 @@ public final class PassiveStepSolver {
             hash=31*(31*hash+Arrays.hashCode(phases))+Arrays.hashCode(componentMask);
             hash=31*hash+Arrays.hashCode(supports);
             hash=31*(31*hash+Arrays.hashCode(modes))+Arrays.hashCode(boundaryClosed);
-            return 31*hash+Arrays.hashCode(junctionDonors);
+            int optionalRows=(solidRows?1:0)+(weirRows?2:0);
+            return 31*hash+Arrays.hashCode(junctionDonors)+optionalRows;
         }
     }
     /**
