@@ -9,6 +9,69 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class JunctionLagTest {
+    @Test void aFlowingFeedValveRegulatesOnTheNewHeatedMixture() {
+        var model = FluidTestSupport.networkModel().on(List.of("Nitrogen", "Methane"), false);
+        var nitrogen = model.initialNitrogenCharge(1, 315, 300_000, () -> {});
+        var sink = model.initialNitrogenCharge(1, 315, 260_000, () -> {});
+        double[] methaneMoles = new double[model.componentCount()];
+        methaneMoles[model.components().indexOf("Methane")] = 1;
+        var methane = model.flashTP(330, 300_000, methaneMoles, () -> {});
+        var run = new PipeResistance.Geometry(120, .06, .000045, 0);
+        var coil = new FiredCoil(420, 2e6, 0, 0).withLimit(0);
+        var valve = new FlowControl.ControlValve(FlowControl.ValveSource.MASS_FLOW, 20, PortPlan.COLUMN_SENSOR, 0);
+        var graph = new PassiveNetwork(List.of(
+                new PassiveNetwork.Reservoir(1, 0, nitrogen, PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(2, 0, methane, PassiveNetwork.NodeKind.GENERATOR),
+                new PassiveNetwork.Reservoir(3, 0, sink, PassiveNetwork.NodeKind.JUNCTION),
+                new PassiveNetwork.Reservoir(4, 0, sink, PassiveNetwork.NodeKind.VOID)),
+                List.of(new PassiveNetwork.Pipe(5, 0, 2, run), new PassiveNetwork.Pipe(6, 1, 2, run).withHeat(coil),
+                        new PassiveNetwork.Pipe(7, 2, 3, run).withControl(valve)));
+        var open = new PassiveIntervalSolver(model).solve(graph, 4, PassiveIntervalSolver.Settings.defaults(), () -> {});
+        assertEquals(FlowControl.Mode.VALVE_OPEN, open.endpointModes().get(2));
+        assertTrue(open.endpointFlows()[2] > 0);
+
+        var warmed = new PassiveNetwork(open.graph().reservoirs(), List.of(open.graph().pipes().get(0),
+                open.graph().pipes().get(1).withHeat(coil.withLimit(1)), open.graph().pipes().get(2)));
+        assertTrue(PassiveStepSolver.sameLines(open.graph(), warmed));
+        var control = new PassiveStepSolver(model);
+        control.replayStart(warmed, open);
+        var warmOpen = control.solve(warmed, 4, () -> {}, open.endpointModes());
+        assertEquals(FlowControl.Mode.VALVE_OPEN, warmOpen.modes().get(2));
+        var equations = control.acceptedEquations();
+        double lawFlow = control.acceptedPoint()[equations.edgeOffset + 2];
+        double cap = control.massFlowLimit(warmed.pipes().get(2), warmOpen.states().get(2), PassiveNetwork.PhasePort.BULK);
+        double slope = PassiveStepSolver.saturationSlope(lawFlow, cap);
+        assertTrue(slope > .8, () -> "the heated open path is well below its velocity cap, slope " + slope);
+
+        double target = .8 * warmOpen.massFlows()[2];
+        var solver = new PassiveStepSolver(model);
+        var planned = solver.ports(warmed, Map.of(4L, new PortPlan(4, 3, target, 0, null)), () -> {});
+        solver.replayStart(planned, open);
+        var regulated = solver.solve(planned, 4, () -> {}, open.endpointModes());
+        assertEquals(FlowControl.Mode.VALVE_REGULATING, regulated.modes().get(2));
+        assertEquals(target, regulated.massFlows()[2], 1e-8 * target);
+        assertTrue(regulated.devicePressureChanges()[2] > 0, "the valve spends the available pressure drop");
+        assertTrue(regulated.massFlows()[0] > 0 && regulated.massFlows()[1] > 0, "both gas streams feed the column");
+        assertNull(solver.balancedStart, "the warm unchoked handoff does not rebalance from the old mixture");
+        assertTrue(regulated.states().get(2).temperature() > open.graph().reservoirs().get(2).state().temperature() + 30);
+
+        var before = planned.reservoirs().get(2).inventory();
+        var after = regulated.inventories().get(2);
+        double[] moved = new double[model.componentCount()];
+        double energy = 0, coilHeat = 0;
+        for (var transfer : regulated.boundaries()) {
+            double[] amounts = transfer.moles();
+            for (int c = 0; c < amounts.length; c++) moved[c] += amounts[c];
+            energy += transfer.totalEnergyJoule();
+            if (transfer.nodeId() == 6 && transfer.kind() == ConservativeTransport.BoundaryTransfer.Kind.HEAT) coilHeat += transfer.totalEnergyJoule();
+        }
+        assertTrue(coilHeat > 0, "the coil's heat is booked with the regulated feed");
+        assertEquals(before.internalEnergy() + energy, after.internalEnergy(), 1e-8 * Math.max(1, Math.abs(before.internalEnergy())));
+        var owned = before.moles();
+        for (int c = 0; c < owned.length; c++) owned[c] += moved[c];
+        assertArrayEquals(owned, after.moles(), 1e-9);
+    }
+
     @Test void windowDeliveryProjectsALateInletOnlyOverTheTimeLeft() {
         double windowSeconds=20,elapsedSeconds=19;
         assertEquals(1,JunctionMixing.windowDelivery(0,1,1,windowSeconds-elapsedSeconds),

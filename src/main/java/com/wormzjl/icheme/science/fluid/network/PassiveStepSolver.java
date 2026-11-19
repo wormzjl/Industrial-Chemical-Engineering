@@ -638,6 +638,7 @@ public final class PassiveStepSolver {
         boolean[] openedOnFailure=new boolean[graph.pipes().size()];
         // What the next pass's start point is handed (S-03): the first pass the junctions the seeds restated; each pass consumes it.
         var passStart=new PassStart(null,false,seeded.flashRestated());
+        int warmRegulator=-1;
         for(int pass=0;pass<maximumPasses;pass++) {
             checkpoint.run();SolverDiagnostics.count(SolverDiagnostics.activeSetPasses);
             graph=emptying==null?original:PhaseActiveSet.emptyingGraph(original,emptying);emptyings=emptying==null?null:phaseSet.emptyings(original,emptying,dt);
@@ -700,54 +701,70 @@ public final class PassiveStepSolver {
                     }
                 }
 
-                if(failure.lastVariables()==null)throw failure;
-                double[] trialFlows=Arrays.copyOfRange(failure.lastVariables(),equations.edgeOffset,equations.edgeOffset+graph.pipes().size());
-                // Owner decisions D59 (4) and D14: a pump whose law pulled its suction below the vapour pressure of the liquid
-                // it draws cavitates; the pass is solved again with it on its suction limit.
-                if(devices.cavitates(equations,failure.lastVariables(),modes,boundaryClosed,tolerance))continue;
-                // Batch 2026-11-10-rigid-reservoir: a rigid vessel holding no gas whose draw the iterate holds below its
-                // vapour pressure flashes; the pass is solved again with it laid out at its fixed-volume equilibrium.
-                var flashed=phaseSet.flashes(equations,failure.lastVariables(),seeds,flashedVessels,checkpoint);
-                if(flashed!=null){seeds=flashed;continue;}
-                // Decision D54: a vessel the failed iterate drained to nothing runs dry within the step. Its end state has no
-                // contents, so the pass laid out with them has no root (every step size fails the same way); it is solved
-                // again with the vessel as a junction holding its stock, which ends the step empty (emptyingGraph).
-                // The junction is laid out on its stock, the vessel's own start state (stockSeeds), not on what the failed
-                // passes folded out of it.
-                var drained=equations.runsDry(failure.lastVariables(),emptying);
-                if(drained!=null){seeds=PhaseActiveSet.stockSeeds(original,seeds,drained,emptying);emptying=drained;continue;}
-                // Owner option 1 of FEED_STEP_HOLD_REVIEW.md: a regulating flow valve fed only by vessels that hold nothing or that
-                // this pass runs dry cannot hold a target above what reaches it; its regulation row has no root at any step size
-                // (a drained level-loop drum held its island at residual = the valve's flow). It is solved again open, passing
-                // what reaches it; the converged open point regulates again where it passes more than the target.
-                if(DeviceModes.openStarved(original,modes,emptying))continue;
-                // A point the Newton never reached is not read as evidence about this pass's frozen junction donors or the
-                // junction basis they state (unlike the converged tests below): a diverged trial's flow sign handed a
-                // junction the tank's nitrogen as a seeded trace nothing delivers, and every swept pressure lost an interval
-                // by it (a tank settled at 399999.99971 Pa went to 399998.24 Pa). Owner decisions D28 A' and D39: the same
-                // holds for its phases; the iterate's check folds what the iterate empties and proposes nothing.
-                var iterate=equations.states(failure.lastVariables());
-                // Owner decision D39 B: the iterate is read for one thing more, the solve's own proposal. This pass is the
-                // network's closure of the layout the last converged point's check proposed, and a proposed phase it drives
-                // to nothing (vanishing from the proposal's seed, FluidThermodynamics.vanishing) is refuted: the pass is
-                // solved again from the point it was proposed at, the node laid out without it, and the refusal recorded
-                // (a tank on its bubble point proposed 3.4e-6 of its moles as vapour and stalled at every step size).
-                if(proposal!=null) {
-                    int refuted=proposal.phases()&FluidThermodynamics.collapsing(proposal.seed(),iterate.get(proposal.node()),PhaseActiveSet.rigid(graph.reservoirs().get(proposal.node())));
-                    if(refuted!=0){foldedPhases[proposal.node()]|=refuted;SolverDiagnostics.count(SolverDiagnostics.phaseRefusals);seeds=proposal.point();proposal=null;continue;}
+                List<FluidThermodynamics.State> changedSeeds=null;
+                double[] lastVariables=failure.lastVariables();
+                if(lastVariables!=null) {
+                    // Owner decisions D59 (4) and D14: a pump whose law pulled its suction below the vapour pressure of the liquid
+                    // it draws cavitates; the pass is solved again with it on its suction limit.
+                    if(devices.cavitates(equations,lastVariables,modes,boundaryClosed,tolerance))continue;
+                    // Batch 2026-11-10-rigid-reservoir: a rigid vessel holding no gas whose draw the iterate holds below its
+                    // vapour pressure flashes; the pass is solved again with it laid out at its fixed-volume equilibrium.
+                    var flashed=phaseSet.flashes(equations,lastVariables,seeds,flashedVessels,checkpoint);
+                    if(flashed!=null){seeds=flashed;continue;}
+                    // Decision D54: a vessel the failed iterate drained to nothing runs dry within the step. Its end state has no
+                    // contents, so the pass laid out with them has no root (every step size fails the same way); it is solved
+                    // again with the vessel as a junction holding its stock, which ends the step empty (emptyingGraph).
+                    // The junction is laid out on its stock, the vessel's own start state (stockSeeds), not on what the failed
+                    // passes folded out of it.
+                    var drained=equations.runsDry(lastVariables,emptying);
+                    if(drained!=null){seeds=PhaseActiveSet.stockSeeds(original,seeds,drained,emptying);emptying=drained;continue;}
+                    // Owner option 1 of FEED_STEP_HOLD_REVIEW.md: a regulating flow valve fed only by vessels that hold nothing or that
+                    // this pass runs dry cannot hold a target above what reaches it; its regulation row has no root at any step size
+                    // (a drained level-loop drum held its island at residual = the valve's flow). It is solved again open, passing
+                    // what reaches it; the converged open point regulates again where it passes more than the target.
+                    if(DeviceModes.openStarved(original,modes,emptying))continue;
+                    // A point the Newton never reached is not read as evidence about this pass's frozen junction donors or the
+                    // junction basis they state (unlike the converged tests below): a diverged trial's flow sign handed a
+                    // junction the tank's nitrogen as a seeded trace nothing delivers, and every swept pressure lost an interval
+                    // by it (a tank settled at 399999.99971 Pa went to 399998.24 Pa). Owner decisions D28 A' and D39: the same
+                    // holds for its phases; the iterate's check folds what the iterate empties and proposes nothing.
+                    var iterate=equations.states(lastVariables);
+                    // Owner decision D39 B: the iterate is read for one thing more, the solve's own proposal. This pass is the
+                    // network's closure of the layout the last converged point's check proposed, and a proposed phase it drives
+                    // to nothing (vanishing from the proposal's seed, FluidThermodynamics.vanishing) is refuted: the pass is
+                    // solved again from the point it was proposed at, the node laid out without it, and the refusal recorded
+                    // (a tank on its bubble point proposed 3.4e-6 of its moles as vapour and stalled at every step size).
+                    if(proposal!=null) {
+                        int refuted=proposal.phases()&FluidThermodynamics.collapsing(proposal.seed(),iterate.get(proposal.node()),PhaseActiveSet.rigid(graph.reservoirs().get(proposal.node())));
+                        if(refuted!=0){foldedPhases[proposal.node()]|=refuted;SolverDiagnostics.count(SolverDiagnostics.phaseRefusals);seeds=proposal.point();proposal=null;continue;}
+                    }
+                    changedSeeds=phaseSet.foldedIterate(graph,seeds,iterate);
+                    // Decision D11: a phase a vessel's ports draw at their full capacity leaves the vessel within the step; a
+                    // pass whose seed still holds it may have no root (see drainedSeeds).
+                    if(changedSeeds==null)changedSeeds=equations.drainedSeeds(checkpoint);
                 }
-                var changedSeeds=phaseSet.foldedIterate(graph,seeds,iterate);
-                // Decision D11: a phase a vessel's ports draw at their full capacity leaves the vessel within the step; a
-                // pass whose seed still holds it may have no root (see drainedSeeds).
-                if(changedSeeds==null)changedSeeds=equations.drainedSeeds(checkpoint);
+                // Try the original balance once if the same regulator's warm seed still has no root after the
+                // physical recoveries. A phase-only retry leaves this option available on its next pass.
+                if(changedSeeds==null&&warmRegulator>=0&&modes.get(warmRegulator)==FlowControl.Mode.VALVE_REGULATING&&failure.phaseHold()==null) {
+                    warmRegulator=-1;
+                    var regulated=balance.balanceStart(graph,new ArrayList<>(modes),boundaryClosed,keep,checkpoint);
+                    if(regulated.converged()) {
+                        balancedStart=regulated;
+                        passStart=new PassStart(null,true,null);
+                        restarts++;
+                        continue;
+                    }
+                }
+                if(lastVariables==null)throw failure;
                 // Option B of VALVE_HOLD_TRACE.md (batch 2026-11-16-review-plant-sizing): where nothing else changed, a flow valve
                 // regulating in this pass is solved open, once per solve; asked for more than its line passes it has no root.
                 if(changedSeeds==null&&DeviceModes.openFailedRegulators(original,modes,openedOnFailure))continue;
-                if(changedSeeds==null)throw new SparseNewton.Nonconvergence(failure.getMessage()+"; active-set pass="+pass,failure.lastVariables(),failure.phaseHold(),failure.detail());
+                if(changedSeeds==null)throw new SparseNewton.Nonconvergence(failure.getMessage()+"; active-set pass="+pass,lastVariables,failure.phaseHold(),failure.detail());
                 seeds=changedSeeds;continue;
             }
             // A pass that converges ends the proposal it was laid out with (D39 B): the network's closure kept it.
             proposal=null;
+            warmRegulator=-1;
             double[] x=numerical.variables();var states=equations.states(x);double[] flows=new double[graph.pipes().size()],heads=new double[flows.length];
             // The edge unknowns are the law flows; the transported flows are their saturation at the caps (saturated).
             double[] lawFlows=Arrays.copyOfRange(x,equations.edgeOffset,equations.edgeOffset+flows.length);
@@ -835,7 +852,10 @@ public final class PassiveStepSolver {
             // A confirmed emptying (keptEmptying) was decided on the network this active set states, so a mode or closure
             // change decides it again.
             if(changed)Arrays.fill(emptied,false);
-            // A flow valve leaving its open pass for regulation leaves that pass's flows behind: a choked line's law flow stands on the
+            // A flow valve leaving a well-conditioned open pass keeps that pass's warm point. The regulating row reads
+            // the transported flow without saturation, so its slope must still be close to that of the open flow.
+            // Restating heat and phase at the old graph's states can discard a very different converged stream.
+            // A choked line leaves the open pass's flows behind: its law flow stands on the
             // saturated law's plateau, where the full Newton step to the target crosses zero and lands further out (steam at 3.65 kg/s
             // through a valve set to 0.75: law flow 5.25, -75.9, then 48, slope 1e-11, at every step size). The regulated pass takes its
             // law flows from the balance on these modes ({@link BalanceStart#balanceStart}) and keeps its seeds: a junction still holding its old
@@ -845,8 +865,13 @@ public final class PassiveStepSolver {
             // never took a step): the regulated pass then starts from this pass's own flows, as every other change does (below),
             // and where that fails too the failure goes to the failure branch like any other.
             if(deviceChange>=0&&deviceNext==FlowControl.Mode.VALVE_REGULATING&&graph.pipes().get(deviceChange).control() instanceof FlowControl.Valve valve&&!valve.pressureControl()) {
-                var regulated=balance.balanceStart(graph,new ArrayList<>(modes),boundaryClosed,keep,checkpoint);
-                if(regulated.converged()){seeds=states;balancedStart=regulated;passStart=new PassStart(null,true,null);carry=carry.withModes(List.copyOf(modes));continue;}
+                double law=lawFlows[deviceChange],cap=equations.cap(deviceChange,law,equations.cachedTransport);
+                if(!rateOnly&&equations.modes.get(deviceChange)==FlowControl.Mode.VALVE_OPEN
+                        &&flows[deviceChange]>0&&chordHolds(1,saturationSlope(law,cap)))warmRegulator=deviceChange;
+                else {
+                    var regulated=balance.balanceStart(graph,new ArrayList<>(modes),boundaryClosed,keep,checkpoint);
+                    if(regulated.converged()){seeds=states;balancedStart=regulated;passStart=new PassStart(null,true,null);carry=carry.withModes(List.copyOf(modes));continue;}
+                }
             }
             if(changed){seeds=states;carry=new CarriedPoint(pipeIdentities,nodeIds,inputStates,states,rateOnly,flows.clone(),lawFlows,heads.clone(),List.copyOf(modes));continue;}
             // Decision D11: the phase-port segments this pass froze must be the ones its own converged flows land in
