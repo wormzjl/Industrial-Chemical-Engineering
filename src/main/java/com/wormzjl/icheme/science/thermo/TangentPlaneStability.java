@@ -78,8 +78,8 @@ public final class TangentPlaneStability {
      * @param trialComposition normalised over the kernel's basis; zero for every component the feed lacks
      * @param trials trial phases run
      * @param iterations accepted trial points over all trials
-     * @param kernelEvaluations every kernel call, value and derivative, including the feed's
-     * @param derivativeEvaluations the {@code evaluateDerivatives} calls among them
+     * @param kernelEvaluations value and derivative requests, including the feed's, before sharing work between roots
+     * @param derivativeEvaluations derivative requests among them, including a preferred root discarded after comparison
      * @param nearestStationaryDistance the smallest {@code sum_i (ln W_i - ln z_i)^2} of a trial that converged to a
      *        stationary point other than the feed without proving instability (an incipient phase that does not
      *        lower the Gibbs energy); positive infinity when no trial did. Near a critical point such a point lies
@@ -211,7 +211,8 @@ public final class TangentPlaneStability {
         w.feedRoot = PengRobinsonKernel.Root.VAPOR;
         boolean twoRoots = w.feedVapor.physicalRootCount() > 1;
         if (twoRoots) {
-            kernel.evaluate(temperatureKelvin, pressurePascal, w.feed, PengRobinsonKernel.Root.LIQUID, w.mixture, w.feedLiquid);
+            kernel.evaluateOtherRoot(temperatureKelvin, pressurePascal, PengRobinsonKernel.Root.LIQUID,
+                    w.mixture, w.feedVapor, w.feedLiquid);
             w.evaluations++;
             if (w.residualGibbs(w.feedLiquid, w.feed, 1.0) < w.residualGibbs(w.feedVapor, w.feed, 1.0)) {
                 feedEvaluation = w.feedLiquid;
@@ -488,7 +489,9 @@ public final class TangentPlaneStability {
     private boolean feedLocallyStable(Workspace w) {
         if (w.localStability == NOT_COMPUTED) {
             try {
-                kernel.evaluateDerivatives(w.temperature, w.pressure, w.feed, w.feedRoot, w.mixture,
+                var evaluation = w.feedDerivatives.evaluation();
+                kernel.evaluate(w.temperature, w.pressure, w.feed, w.feedRoot, w.mixture, evaluation);
+                kernel.differentiateComposition(w.temperature, w.pressure, w.feedRoot, w.mixture, evaluation,
                         w.feedDerivatives);
                 w.evaluations++;
                 w.derivativeEvaluations++;
@@ -537,41 +540,35 @@ public final class TangentPlaneStability {
         double t = w.temperature;
         double pressure = w.pressure;
         c.differentiated = false;
-        if (differentiate) {
-            try {
-                w.evaluations++;
-                w.derivativeEvaluations++;
-                kernel.evaluateDerivatives(t, pressure, c.amounts, preferred, w.mixture, c.derivatives);
-                c.differentiated = true;
-            } catch (IllegalStateException coalescing) {
-                // The root is too flat to differentiate; the value path below still evaluates it.
-            }
-        }
-        PengRobinsonKernel.Evaluation chosen;
-        if (c.differentiated) {
-            chosen = c.derivatives.evaluation();
-        } else {
-            kernel.evaluate(t, pressure, c.amounts, preferred, w.mixture, c.first);
-            w.evaluations++;
-            chosen = c.first;
-        }
+        kernel.evaluate(t, pressure, c.amounts, preferred, w.mixture, c.first);
+        w.evaluations++;
+        PengRobinsonKernel.Evaluation chosen = c.first;
         PengRobinsonKernel.Root root = preferred;
         if (!w.heldRoot && chosen.physicalRootCount() > 1) {
             PengRobinsonKernel.Root other = opposite(preferred);
-            kernel.evaluate(t, pressure, c.amounts, other, w.mixture, c.second);
+            kernel.evaluateOtherRoot(t, pressure, other, w.mixture, c.first, c.second);
             w.evaluations++;
             if (w.residualGibbs(c.second, c.amounts, total) < w.residualGibbs(chosen, c.amounts, total)) {
                 root = other;
                 chosen = c.second;
-                if (c.differentiated) {
-                    try {
-                        w.evaluations++;
-                        w.derivativeEvaluations++;
-                        kernel.evaluateDerivatives(t, pressure, c.amounts, other, w.mixture, c.derivatives);
-                        chosen = c.derivatives.evaluation();
-                    } catch (IllegalStateException coalescing) {
-                        c.differentiated = false;
-                    }
+            }
+        }
+        if (differentiate) {
+            // Preserve the preferred root's coalescence decision and the evaluation counts seen by callers.
+            // Only the selected root's composition block can enter the stability Hessian.
+            w.derivativeEvaluations++;
+            if (root != preferred && !kernel.hasRootDerivative(t, pressure, c.first)) {
+                w.evaluations++;
+            } else {
+                if (root != preferred) {
+                    w.evaluations++;
+                    w.derivativeEvaluations++;
+                }
+                try {
+                    kernel.differentiateComposition(t, pressure, root, w.mixture, chosen, c.derivatives);
+                    c.differentiated = true;
+                } catch (PengRobinsonKernel.RootCoalescence coalescing) {
+                    if (root == preferred) w.evaluations++;
                 }
             }
         }

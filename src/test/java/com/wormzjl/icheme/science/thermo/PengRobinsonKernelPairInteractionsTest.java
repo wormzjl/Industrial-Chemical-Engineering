@@ -331,8 +331,15 @@ class PengRobinsonKernelPairInteractionsTest {
         assertThrows(IllegalArgumentException.class, () -> kernel.prepareTemperature(200.0, workspace));
         kernel.prepareTemperature(400.0, workspace);
         assertTrue(Double.isFinite(PairInteractionsTest.kernelValues(kernel, model, workspace, 400.0, 0)[0]));
+        var before = kernel.newEvaluation();
+        double[] feed = {0.6, 0.4, 0.0, 0.0};
+        kernel.evaluate(400.0, 1.0e5, feed, PengRobinsonKernel.Root.VAPOR, workspace, before);
         assertThrows(IllegalArgumentException.class, () -> kernel.prepareTemperature(200.0, workspace),
                 "a refused temperature must not be cached");
+        var recovered = kernel.newEvaluation();
+        kernel.evaluate(400.0, 1.0e5, feed, PengRobinsonKernel.Root.VAPOR, workspace, recovered);
+        same(before.logFugacityCoefficientsView(), recovered.logFugacityCoefficientsView(), "ln phi after refusal");
+        same(before.residualEnthalpyJoulesPerMol(), recovered.residualEnthalpyJoulesPerMol(), "enthalpy after refusal");
     }
 
     // ---------------------------------------------------------------------------------------------------------------
